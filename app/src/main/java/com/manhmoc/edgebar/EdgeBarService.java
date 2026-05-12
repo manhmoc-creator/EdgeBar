@@ -107,9 +107,16 @@ public class EdgeBarService extends AccessibilityService {
         try {
             Intent intent = new Intent(Intent.ACTION_VOICE_COMMAND);
             intent.setPackage("com.google.android.googlequicksearchbox");
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
-        } catch (Exception e) { performGlobalAction(GLOBAL_ACTION_ASSIST); }
+        } catch (Exception e) { 
+            // Fix lỗi gọi biến không tồn tại
+            try {
+                Intent fallback = new Intent(Intent.ACTION_VOICE_COMMAND);
+                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(fallback);
+            } catch (Exception ex) {}
+        }
     }
 
     private void toggleFlash() {
