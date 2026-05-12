@@ -1,0 +1,2 @@
+# EdgeBar
+Pixelock gesture overlayy
