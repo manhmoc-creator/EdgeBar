@@ -1,5 +1,8 @@
 package com.manhmoc.edgebar;
 import android.accessibilityservice.AccessibilityService;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.Intent;
@@ -32,15 +35,29 @@ public class EdgeBarService extends AccessibilityService {
         cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         try { cameraId = cameraManager.getCameraIdList()[0]; } catch (Exception e) {}
 
+        startStatusNotification();
         setupGestureDetector();
         createFloatingBars();
+    }
+
+    private void startStatusNotification() {
+        String channelId = "edgebar_status";
+        NotificationChannel channel = new NotificationChannel(channelId, "EdgeBar Status", NotificationManager.IMPORTANCE_LOW);
+        getSystemService(NotificationManager.class).createNotificationChannel(channel);
+        
+        Notification notification = new Notification.Builder(this, channelId)
+                .setContentTitle("EdgeBar v7")
+                .setContentText("Trợ năng đang hoạt động")
+                .setSmallIcon(android.R.drawable.ic_lock_lock)
+                .setOngoing(true)
+                .build();
+        startForeground(1, notification);
     }
 
     private void setupGestureDetector() {
         gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onSingleTapConfirmed(MotionEvent e) {
-                // TẮT HẲN Ở MÀN HÌNH CHÍNH, CHỈ HOẠT ĐỘNG Ở LOCKSCREEN
                 if (keyguardManager != null && keyguardManager.isKeyguardLocked()) {
                     performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); 
                 }
@@ -48,7 +65,14 @@ public class EdgeBarService extends AccessibilityService {
             }
             @Override
             public boolean onDoubleTap(MotionEvent e) {
-                performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); 
+                if (keyguardManager != null && keyguardManager.isKeyguardLocked()) {
+                    performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); 
+                } else {
+                    // MÀN HÌNH CHÍNH -> TỰ TẮT TRỢ NĂNG (SMART TOGGLE)
+                    Intent intent = new Intent("com.manhmoc.edgebar.TOGGLE_ACTION");
+                    intent.setPackage(getPackageName());
+                    sendBroadcast(intent);
+                }
                 return true;
             }
             @Override
@@ -60,7 +84,6 @@ public class EdgeBarService extends AccessibilityService {
                 if (e1 == null || e2 == null) return false;
                 float diffY = e2.getY() - e1.getY();
                 float diffX = e2.getX() - e1.getX();
-                
                 if (Math.abs(diffX) > Math.abs(diffY)) {
                     if (Math.abs(diffX) > 40) {
                         if (diffX > 0) {
@@ -70,9 +93,9 @@ public class EdgeBarService extends AccessibilityService {
                         } else toggleFlash();
                     }
                 } else {
-                    if (Math.abs(diffY) > 40) {
-                        if (diffY < 0) performGlobalAction(GLOBAL_ACTION_HOME); // Vuốt lên
-                        else triggerGemini(); // VUỐT XUỐNG -> GỌI GEMINI
+                    if (Math.abs(diffY) > 40 && diffY < 0) {
+                        // CHỈ GIỮ VUỐT LÊN GỌI AI
+                        triggerGemini();
                     }
                 }
                 return true;
@@ -84,16 +107,9 @@ public class EdgeBarService extends AccessibilityService {
         try {
             Intent intent = new Intent(Intent.ACTION_VOICE_COMMAND);
             intent.setPackage("com.google.android.googlequicksearchbox");
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
-        } catch (Exception e) { 
-            // Fix lỗi: Gọi Intent Voice chung thay vì dùng biến không tồn tại
-            try {
-                Intent fallback = new Intent(Intent.ACTION_VOICE_COMMAND);
-                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(fallback);
-            } catch (Exception ex) {}
-        }
+        } catch (Exception e) { performGlobalAction(GLOBAL_ACTION_ASSIST); }
     }
 
     private void toggleFlash() {
@@ -104,20 +120,17 @@ public class EdgeBarService extends AccessibilityService {
         DisplayMetrics metrics = getResources().getDisplayMetrics();
         int gap = 250;
         int barWidth = (metrics.widthPixels - gap) / 2;
-
         leftBar = new View(this); rightBar = new View(this);
         leftBar.setBackgroundColor(Color.TRANSPARENT); rightBar.setBackgroundColor(Color.TRANSPARENT);
 
-        WindowManager.LayoutParams paramsLeft = new WindowManager.LayoutParams(barWidth, 80, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
-        paramsLeft.gravity = Gravity.BOTTOM | Gravity.LEFT;
+        WindowManager.LayoutParams p = new WindowManager.LayoutParams(barWidth, 80, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
+        
+        WindowManager.LayoutParams pL = new WindowManager.LayoutParams(); pL.copyFrom(p); pL.gravity = Gravity.BOTTOM | Gravity.LEFT;
+        WindowManager.LayoutParams pR = new WindowManager.LayoutParams(); pR.copyFrom(p); pR.gravity = Gravity.BOTTOM | Gravity.RIGHT;
 
-        WindowManager.LayoutParams paramsRight = new WindowManager.LayoutParams(barWidth, 80, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
-        paramsRight.gravity = Gravity.BOTTOM | Gravity.RIGHT;
-
-        View.OnTouchListener touchListener = (v, event) -> gestureDetector.onTouchEvent(event);
-        leftBar.setOnTouchListener(touchListener); rightBar.setOnTouchListener(touchListener);
-
-        windowManager.addView(leftBar, paramsLeft); windowManager.addView(rightBar, paramsRight);
+        View.OnTouchListener tl = (v, event) -> gestureDetector.onTouchEvent(event);
+        leftBar.setOnTouchListener(tl); rightBar.setOnTouchListener(tl);
+        windowManager.addView(leftBar, pL); windowManager.addView(rightBar, pR);
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {}

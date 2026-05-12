@@ -3,24 +3,24 @@
     <uses-permission android:name="android.permission.FLASHLIGHT" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
-    <application android:label="EdgeBar v6">
-        <service android:name=".EdgeBarService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
+    <application android:label="EdgeBar v7">
+        <service android:name=".EdgeBarService" 
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" 
+            android:exported="true">
             <intent-filter> <action android:name="android.accessibilityservice.AccessibilityService" /> </intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <service android:name=".EdgeBarTileService" android:label="Bật/Tắt EdgeBar" android:icon="@android:drawable/ic_menu_manage" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
+        <service android:name=".EdgeBarTileService" android:label="Bật/Tắt EdgeBar" 
+            android:icon="@android:drawable/ic_lock_lock" 
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
             <intent-filter> <action android:name="android.service.quicksettings.action.QS_TILE" /> </intent-filter>
         </service>
 
         <receiver android:name=".ToggleReceiver" android:exported="true">
             <intent-filter> <action android:name="com.manhmoc.edgebar.TOGGLE_ACTION" /> </intent-filter>
-        </receiver>
-
-        <receiver android:name=".ToggleWidget" android:exported="true" android:label="Tắt/Bật EdgeBar (Nút)">
-            <intent-filter> <action android:name="android.appwidget.action.APPWIDGET_UPDATE" /> </intent-filter>
-            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info" />
         </receiver>
     </application>
 </manifest>
