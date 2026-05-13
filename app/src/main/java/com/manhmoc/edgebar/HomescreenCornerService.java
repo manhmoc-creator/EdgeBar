@@ -5,14 +5,11 @@ public class HomescreenCornerService extends Service {
     private WindowManager wm; private View lHomeCorner, rHomeCorner; private FlashView fV; private CameraManager cm; private String cId; private boolean fOn = false; private SharedPreferences prefs; private KeyguardManager km;
     private class FlashView extends View { private Paint p = new Paint(); public FlashView(Context c) { super(c); p.setColor(Color.WHITE); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(4f); p.setAntiAlias(true); p.setShadowLayer(4f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); } @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); float off = p.getStrokeWidth()/2; canvas.drawRect(off, off, getWidth()-off, getHeight()-off, p); } }
 
-    private class AssistantCornerView extends View {
+    private class AssistantCurveView extends View {
         private Paint p; private boolean isLeft;
-        public AssistantCornerView(Context c, boolean left) { super(c); isLeft = left; p = new Paint(); p.setColor(Color.parseColor("#E6FFFFFF")); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(6f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); }
-        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = 6f; 
-            if(isLeft) { path.moveTo(pad, 0); path.quadTo(pad, h-pad, w, h-pad); } 
-            else { path.moveTo(w-pad, 0); path.quadTo(w-pad, h-pad, 0, h-pad); } 
-            canvas.drawPath(path, p); 
-        }
+        public AssistantCurveView(Context c, boolean left) { super(c); isLeft = left; p = new Paint(); p.setColor(Color.WHITE); p.setAlpha(200); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(5f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); }
+        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = 5f;
+            if(isLeft) { path.moveTo(pad, 0); path.quadTo(pad, h-pad, w, h-pad); } else { path.moveTo(w-pad, 0); path.quadTo(w-pad, h-pad, 0, h-pad); } canvas.drawPath(path, p); }
     }
 
     @Override public IBinder onBind(Intent intent) { return null; }
@@ -23,8 +20,8 @@ public class HomescreenCornerService extends Service {
         String cid = "eb_home"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar Home", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("EdgeBar V11 ADB Đang Chạy").setSmallIcon(android.R.drawable.ic_lock_lock).build(); startForeground(2, n);
         fV = new FlashView(this); fV.setAlpha(0f); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
 
-        WindowManager.LayoutParams hp = new WindowManager.LayoutParams(90, 90, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
-        lHomeCorner = new AssistantCornerView(this, true); rHomeCorner = new AssistantCornerView(this, false);
+        WindowManager.LayoutParams hp = new WindowManager.LayoutParams(70, 70, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
+        lHomeCorner = new AssistantCurveView(this, true); rHomeCorner = new AssistantCurveView(this, false);
         WindowManager.LayoutParams lpC = new WindowManager.LayoutParams(); lpC.copyFrom(hp); lpC.gravity = Gravity.BOTTOM | Gravity.LEFT;
         WindowManager.LayoutParams rpC = new WindowManager.LayoutParams(); rpC.copyFrom(hp); rpC.gravity = Gravity.BOTTOM | Gravity.RIGHT;
 

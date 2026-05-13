@@ -8,15 +8,12 @@ public class EdgeBarService extends AccessibilityService {
 
     private class FlashView extends View { private Paint p = new Paint(); public FlashView(Context c) { super(c); p.setColor(Color.WHITE); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(4f); p.setAntiAlias(true); p.setShadowLayer(4f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); } @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); float off = p.getStrokeWidth()/2; canvas.drawRect(off, off, getWidth()-off, getHeight()-off, p); } }
 
-    // THUẬT TOÁN ĐƯỜNG CONG GOOGLE ASSISTANT CHUẨN MỰC
-    private class AssistantCornerView extends View {
+    // THUẬT TOÁN ĐƯỜNG CONG VÁT CHÉO (ASSISTANT SWEEP CURVE)
+    private class AssistantCurveView extends View {
         private Paint p; private boolean isLeft;
-        public AssistantCornerView(Context c, boolean left) { super(c); isLeft = left; p = new Paint(); p.setColor(Color.parseColor("#E6FFFFFF")); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(6f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); }
-        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = 6f; 
-            if(isLeft) { path.moveTo(pad, 0); path.quadTo(pad, h-pad, w, h-pad); } // Cong mềm từ mép trái xuống đáy phải
-            else { path.moveTo(w-pad, 0); path.quadTo(w-pad, h-pad, 0, h-pad); } // Cong mềm từ mép phải xuống đáy trái
-            canvas.drawPath(path, p); 
-        }
+        public AssistantCurveView(Context c, boolean left) { super(c); isLeft = left; p = new Paint(); p.setColor(Color.WHITE); p.setAlpha(200); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(5f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); }
+        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = 5f;
+            if(isLeft) { path.moveTo(pad, 0); path.quadTo(pad, h-pad, w, h-pad); } else { path.moveTo(w-pad, 0); path.quadTo(w-pad, h-pad, 0, h-pad); } canvas.drawPath(path, p); }
     }
 
     @Override protected void onServiceConnected() {
@@ -32,8 +29,8 @@ public class EdgeBarService extends AccessibilityService {
         fV = new FlashView(this); fV.setAlpha(0f); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
         for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams initP = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], initP); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener(i)); } updateBarsLayout();
 
-        WindowManager.LayoutParams hp = new WindowManager.LayoutParams(90, 90, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, PixelFormat.TRANSLUCENT);
-        lLockCorner = new AssistantCornerView(this, true); rLockCorner = new AssistantCornerView(this, false);
+        WindowManager.LayoutParams hp = new WindowManager.LayoutParams(70, 70, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, PixelFormat.TRANSLUCENT);
+        lLockCorner = new AssistantCurveView(this, true); rLockCorner = new AssistantCurveView(this, false);
         WindowManager.LayoutParams lpC = new WindowManager.LayoutParams(); lpC.copyFrom(hp); lpC.gravity = Gravity.BOTTOM | Gravity.LEFT;
         WindowManager.LayoutParams rpC = new WindowManager.LayoutParams(); rpC.copyFrom(hp); rpC.gravity = Gravity.BOTTOM | Gravity.RIGHT;
         
@@ -42,9 +39,7 @@ public class EdgeBarService extends AccessibilityService {
     }
 
     private void updateBarsLayout() { for(int i=0; i<5; i++) updateBarLayout(i); }
-    private void updateBarLayout(int i) { if(bars[i] == null) return; boolean en = prefs.getBoolean(BARS[i]+"_en", i < 2); bars[i].setVisibility(en ? View.VISIBLE : View.GONE); if(!en) return; int alpha = prefs.getInt(BARS[i]+"_alpha", 50); int w = prefs.getInt(BARS[i]+"_w", 300); int h = prefs.getInt(BARS[i]+"_h", 60); int x = prefs.getInt(BARS[i]+"_x", 0); int y = prefs.getInt(BARS[i]+"_y", 0);
-        GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p);
-    }
+    private void updateBarLayout(int i) { if(bars[i] == null) return; boolean en = prefs.getBoolean(BARS[i]+"_en", i < 2); bars[i].setVisibility(en ? View.VISIBLE : View.GONE); if(!en) return; int alpha = prefs.getInt(BARS[i]+"_alpha", 50); int w = prefs.getInt(BARS[i]+"_w", 300); int h = prefs.getInt(BARS[i]+"_h", 60); int x = prefs.getInt(BARS[i]+"_x", 0); int y = prefs.getInt(BARS[i]+"_y", 0); GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); }
 
     private class SidebarTouchListener implements View.OnTouchListener { private int idx; private GestureDetector gd; public SidebarTouchListener(int i) { this.idx = i; this.gd = new GestureDetector(EdgeBarService.this, new GestureDetector.SimpleOnGestureListener() { @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction(BARS[idx] + "_tap"); return true; } @Override public boolean onDoubleTap(MotionEvent e) { handleAction(BARS[idx] + "_dtap"); return true; } @Override public void onLongPress(MotionEvent e) { handleAction(BARS[idx] + "_long"); } @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { if(e1==null||e2==null) return false; float dX = e2.getX()-e1.getX(), dY = e2.getY()-e1.getY(); if (Math.abs(dX) > Math.abs(dY)) handleAction(BARS[idx] + (dX > 0 ? "_right" : "_left")); else handleAction(BARS[idx] + (dY > 0 ? "_down" : "_up")); return true; } }); } @Override public boolean onTouch(View v, MotionEvent e) { gd.onTouchEvent(e); return true; } }
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {} @Override public void onInterrupt() {} @Override public void onDestroy() { super.onDestroy(); prefs.unregisterOnSharedPreferenceChangeListener(prefListener); for(int i=0; i<5; i++) if(bars[i] != null) wm.removeView(bars[i]); if (lLockCorner != null) wm.removeView(lLockCorner); if (rLockCorner != null) wm.removeView(rLockCorner); if (fV != null) wm.removeView(fV); }
