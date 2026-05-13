@@ -47,7 +47,7 @@ public class EdgeBarService extends AccessibilityService {
         String cid = "eb_v9";
         NotificationChannel c = new NotificationChannel(cid, "EdgeBar Status", NotificationManager.IMPORTANCE_LOW);
         getSystemService(NotificationManager.class).createNotificationChannel(c);
-        Notification n = new Notification.Builder(this, cid).setContentTitle("EdgeBar v9").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build();
+        Notification n = new Notification.Builder(this, cid).setContentTitle("EdgeBar v9 (Fix)").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build();
         startForeground(1, n);
     }
 
@@ -63,8 +63,18 @@ public class EdgeBarService extends AccessibilityService {
                 case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break;
                 case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break;
                 case "QR": 
-                    Intent qr = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("googleapp://lens"));
-                    qr.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(qr); break;
+                    // FIX QR: Gọi thẳng Package của Google Lens thay vì URL
+                    Intent lens = getPackageManager().getLaunchIntentForPackage("com.google.ar.lens");
+                    if (lens != null) {
+                        lens.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(lens);
+                    } else {
+                        // Dự phòng nếu máy chưa cài Lens app, gọi URL
+                        Intent fallbackQR = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://lens.google.com/"));
+                        fallbackQR.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(fallbackQR);
+                    }
+                    break;
                 case "INTENT_1": fireIntent("1"); break;
                 case "INTENT_2": fireIntent("2"); break;
                 case "INTENT_3": fireIntent("3"); break;
@@ -78,7 +88,6 @@ public class EdgeBarService extends AccessibilityService {
             String pkg = prefs.getString("i"+idx+"_pkg", "");
             Intent i;
 
-            // NẾU ĐỂ TRỐNG ACTION MÀ NHẬP PACKAGE -> TỰ ĐỘNG MỞ APP
             if (act.isEmpty() && !pkg.isEmpty()) {
                 i = getPackageManager().getLaunchIntentForPackage(pkg);
                 if (i == null) return;
@@ -105,15 +114,21 @@ public class EdgeBarService extends AccessibilityService {
         } catch (Exception e) {}
     }
 
-    private String getPrefix() {
-        int m = prefs.getInt("master_mode", 0);
-        if (m == 0) return "both";
-        return km.isKeyguardLocked() ? "lock" : "home";
-    }
-
+    // LOGIC ĐỘNG MỚI (DYNAMIC FALLBACK LOGIC)
     private void handleGesture(String side, String gesture) {
-        String pfx = getPrefix();
-        exec(prefs.getString(pfx + "_" + side + "_" + gesture, "NONE"));
+        boolean isLocked = km.isKeyguardLocked();
+        String specificPrefix = isLocked ? "lock" : "home";
+        
+        // Bước 1: Ưu tiên tìm trong cấu hình của màn hình hiện tại (Lock hoặc Home)
+        String action = prefs.getString(specificPrefix + "_" + side + "_" + gesture, "NONE");
+        
+        // Bước 2: Nếu không có (NONE), tìm trong cấu hình chung (CẢ HAI)
+        if (action.equals("NONE")) {
+            action = prefs.getString("both_" + side + "_" + gesture, "NONE");
+        }
+        
+        // Chạy
+        exec(action);
     }
 
     private void createFloatingBars() {
@@ -123,7 +138,6 @@ public class EdgeBarService extends AccessibilityService {
         WindowManager.LayoutParams pL = new WindowManager.LayoutParams(); pL.copyFrom(p); pL.gravity = Gravity.BOTTOM | Gravity.LEFT;
         WindowManager.LayoutParams pR = new WindowManager.LayoutParams(); pR.copyFrom(p); pR.gravity = Gravity.BOTTOM | Gravity.RIGHT;
         
-        // KHỞI TẠO CẢM BIẾN 1 LẦN DUY NHẤT
         gdL = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleGesture("l", "tap"); return true; }
             @Override public boolean onDoubleTap(MotionEvent e) { handleGesture("l", "dtap"); return true; }
@@ -146,9 +160,8 @@ public class EdgeBarService extends AccessibilityService {
             }
         });
 
+        // Bỏ logic chặn cứng ngắc, cho phép nhận cảm ứng để chạy Dynamic Fallback
         View.OnTouchListener touchLogic = (v, e) -> {
-            int md = prefs.getInt("master_mode", 0); boolean isLocked = km.isKeyguardLocked();
-            if ((md == 1 && !isLocked) || (md == 2 && isLocked)) return false;
             return v == lBar ? gdL.onTouchEvent(e) : gdR.onTouchEvent(e);
         };
 

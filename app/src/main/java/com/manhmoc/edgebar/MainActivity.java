@@ -24,20 +24,12 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212"));
         LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,40,40,100);
 
-        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v9 - Endgame"); title.setTextColor(Color.WHITE); title.setTextSize(24); title.setPadding(0,0,0,40); main.addView(title);
+        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v9 - The Real Endgame"); title.setTextColor(Color.WHITE); title.setTextSize(24); title.setPadding(0,0,0,40); main.addView(title);
 
-        // Nút chọn Chế độ chạy
-        main.addView(createSection("CHỌN ĐIỀU KIỆN HOẠT ĐỘNG CHÍNH"));
-        Spinner mode = createSpinner(); mode.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Áp dụng Cả hai", "Chỉ chạy Lockscreen", "Chỉ chạy Homescreen"}));
-        mode.setSelection(prefs.getInt("master_mode", 0));
-        mode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            public void onItemSelected(AdapterView<?> p, View v, int pos, long id) { prefs.edit().putInt("master_mode", pos).apply(); }
-            public void onNothingSelected(AdapterView<?> p) {}
-        });
-        main.addView(mode);
+        // Đã xóa phần Spinner Chọn Điều Kiện Hoạt Động Chính (Master Mode)
 
         // Thiết kế Tab
-        LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 40, 0, 20);
+        LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 20, 0, 20);
         Button btnBoth = createTabBtn("CẢ HAI"); Button btnLock = createTabBtn("LOCKSCREEN"); Button btnHome = createTabBtn("HOMESCREEN");
         tabContainer.addView(btnBoth); tabContainer.addView(btnLock); tabContainer.addView(btnHome);
         main.addView(tabContainer);
