@@ -1,33 +1,16 @@
-name: Build EdgeBar APK
-
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
-
+name: Build EdgeBar v10 APK
+on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v3
+      with: { distribution: 'temurin', java-version: '17' }
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
-      with:
-        gradle-version: '8.4'
-        
     - name: Build APK
-      run: gradle assembleDebug
-      
+      run: ./gradlew assembleDebug
     - name: Upload APK
       uses: actions/upload-artifact@v4
-      with:
-        name: EdgeBar-APK
-        path: app/build/outputs/apk/debug/app-debug.apk
+      with: { name: EdgeBar-v10-Pixel2XL, path: app/build/outputs/apk/debug/app-debug.apk }
