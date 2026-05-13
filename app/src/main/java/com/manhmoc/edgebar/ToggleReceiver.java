@@ -3,13 +3,13 @@ import android.content.BroadcastReceiver; import android.content.Context; import
 public class ToggleReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context c, Intent i) {
         try {
-            String srv = "com.manhmoc.edgebar.v10/com.manhmoc.edgebar.EdgeBarService";
+            String srv = "com.manhmoc.edgebar.v11/com.manhmoc.edgebar.EdgeBarService";
             String en = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES); if (en == null) en = "";
             boolean isEn = en.contains(srv);
             if (isEn) { en = en.replace(srv, "").replace("::", ":"); if (en.endsWith(":")) en = en.substring(0, en.length() - 1); } 
             else { en = en.isEmpty() ? srv : en + ":" + srv; Settings.Secure.putInt(c.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, 1); }
             Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, en);
-            Toast.makeText(c, isEn ? "Đã TẮT EdgeBar" : "Đã BẬT EdgeBar", Toast.LENGTH_SHORT).show();
+            Toast.makeText(c, isEn ? "Đã TẮT Trợ năng EdgeBar" : "Đã BẬT Trợ năng EdgeBar", Toast.LENGTH_SHORT).show();
         } catch (Exception e) { Toast.makeText(c, "LỖI: Chưa cấp quyền ADB WRITE_SECURE_SETTINGS", Toast.LENGTH_LONG).show(); }
     }
 }

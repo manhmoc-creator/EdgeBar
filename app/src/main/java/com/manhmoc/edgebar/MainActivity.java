@@ -10,12 +10,12 @@ public class MainActivity extends Activity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212")); LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,40,40,100);
-        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10.9 - Chân Lý Trọn Vẹn"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,20); main.addView(title);
+        TextView title = new TextView(this); title.setText("⚙️ EdgeBar V11 - Tuyệt Tác Cuối Cùng"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,20); main.addView(title);
         
         if (!Settings.canDrawOverlays(this)) { Button btnReq = new Button(this); btnReq.setText("⚠️ BẤM ĐỂ CẤP QUYỀN VẼ ĐÈ GÓC MÀN CHÍNH"); btnReq.setBackgroundColor(Color.RED); btnReq.setTextColor(Color.WHITE); btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))); main.addView(btnReq);
         } else { try { startService(new Intent(this, HomescreenCornerService.class)); } catch (Exception e) {} }
 
-        main.addView(createSection("🎨 TUỲ CHỈNH 5 THANH (BO TRÒN MỀM MẠI)"));
+        main.addView(createSection("🎨 TUỲ CHỈNH 5 THANH (BO TRÒN NHẸ)"));
         for(int i=0; i<5; i++) { CheckBox cb = new CheckBox(this); cb.setText("BẬT THANH: " + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(BARS[idx]+"_en", c).apply()); main.addView(cb); main.addView(createSlider("Độ trong", BARS[i]+"_alpha", 255, 50)); main.addView(createSlider("Ngang", BARS[i]+"_w", 1400, 300)); main.addView(createSlider("Dọc", BARS[i]+"_h", 1400, 60)); main.addView(createSlider("Toạ độ X", BARS[i]+"_x", 1000, 0)); main.addView(createSlider("Toạ độ Y", BARS[i]+"_y", 1000, 0)); }
         LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 40, 0, 20); Button btnBoth = createTabBtn("CẢ HAI"); Button btnLock = createTabBtn("LOCKSCREEN"); Button btnHome = createTabBtn("HOMESCREEN"); tabContainer.addView(btnBoth); tabContainer.addView(btnLock); tabContainer.addView(btnHome); main.addView(tabContainer);
         tabBoth = createConfigPage("both"); tabLock = createConfigPage("lock"); tabHome = createConfigPage("home"); main.addView(tabBoth); main.addView(tabLock); main.addView(tabHome); btnBoth.setOnClickListener(v -> switchTab(0)); btnLock.setOnClickListener(v -> switchTab(1)); btnHome.setOnClickListener(v -> switchTab(2)); switchTab(0);
