@@ -6,7 +6,7 @@ public class MainActivity extends Activity {
     private final String[] ACT_KEYS = {"NONE", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "QR", "NOTIFICATIONS", "INTENT_1", "INTENT_2", "INTENT_3", "INTENT_4", "INTENT_5"};
     private final String[] ACT_LABS = {"Không có", "Tắt màn hình", "Đèn pin", "Menu nguồn", "Âm lượng", "Chụp màn hình", "Camera an toàn", "Google Lens (QR)", "Thông báo", "Gửi Intent 1", "Gửi Intent 2", "Gửi Intent 3", "Gửi Intent 4", "Gửi Intent 5"};
     private final String[] BARS = {"b_l", "b_r", "t_l", "t_r", "t_c"};
-    private final String[] BAR_NAMES = {"ĐÁY TRÁI", "ĐÁY PHẢI", "ĐỈNH TRÁI", "ĐỈNH PHẢI", "ĐỈNH GIỮA"};
+    private final String[] BAR_NAMES = {"ĐÁY TRÁI", "ĐÁY PHẢI", "ĐỈNH TRÁI", "ĐỈNH PHẢI", "ĐỈNH GIỮA (STATUS BAR)"};
     private final String[] GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right"};
     private final String[] GESTURE_NAMES = {"1 Chạm", "2 Chạm", "Nhấn giữ", "Vuốt Lên", "Vuốt Xuống", "Vuốt Trái", "Vuốt Phải"};
     private LinearLayout tabBoth, tabLock, tabHome;
@@ -16,16 +16,28 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212"));
         LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,40,40,100);
         
-        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10.2 - Ngũ Hành Trận"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,40); main.addView(title);
+        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10.3 - The Ultimate Fix"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,40); main.addView(title);
+
+        main.addView(createSection("✨ ĐIỀU KIỆN HIỂN THỊ 2 VẠCH GÓC"));
+        Spinner spVis = createSpinner();
+        spVis.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Luôn hiển thị (Cả hai)", "Chỉ ở Màn hình Khoá", "Chỉ ở Màn hình Chính"}));
+        spVis.setSelection(prefs.getInt("corner_vis", 0));
+        spVis.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){ public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt("corner_vis", pos).apply();} public void onNothingSelected(AdapterView<?> p){} });
+        main.addView(spVis);
 
         main.addView(createSection("🎨 TUỲ CHỈNH 5 THANH ĐỘC LẬP (UI SỐNG)"));
         for(int i=0; i<5; i++) {
-            main.addView(createSection("▶ KÍCH THƯỚC: " + BAR_NAMES[i]));
+            CheckBox cb = new CheckBox(this); cb.setText("BẬT THANH: " + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setTextSize(16);
+            cb.setChecked(prefs.getBoolean(BARS[i]+"_en", i < 2)); final int idx = i;
+            cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(BARS[idx]+"_en", c).apply());
+            main.addView(cb);
+            
             main.addView(createSlider("Độ trong suốt", BARS[i]+"_alpha", 255, 50));
             main.addView(createSlider("Chiều ngang (Width)", BARS[i]+"_w", 1400, 300));
             main.addView(createSlider("Chiều dọc (Height)", BARS[i]+"_h", 1400, 60));
             main.addView(createSlider("Căn lề ngang (Offset X)", BARS[i]+"_x", 1000, 0));
             main.addView(createSlider("Căn lề dọc (Offset Y)", BARS[i]+"_y", 1000, 0));
+            View sep = new View(this); sep.setLayoutParams(new LinearLayout.LayoutParams(-1, 2)); sep.setBackgroundColor(Color.DKGRAY); main.addView(sep);
         }
 
         LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 40, 0, 20);
@@ -50,10 +62,7 @@ public class MainActivity extends Activity {
         LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10);
         TextView tv = new TextView(this); tv.setTextColor(Color.WHITE);
         SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); tv.setText(t + ": " + sb.getProgress());
-        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            public void onProgressChanged(SeekBar s, int p, boolean b){ tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); }
-            public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){}
-        });
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ public void onProgressChanged(SeekBar s, int p, boolean b){ tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); } public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){} });
         l.addView(tv); l.addView(sb); return l;
     }
 
