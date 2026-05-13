@@ -16,20 +16,14 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212"));
         LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,40,40,100);
         
-        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10.6 - Bất Tử"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,20); main.addView(title);
+        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10.7 - Chân Lý Trọn Vẹn"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,20); main.addView(title);
         
-        // CHECK QUYỀN VẼ ĐÈ ĐỂ CHỐNG CRASH
         if (!Settings.canDrawOverlays(this)) {
-            Button btnReq = new Button(this); btnReq.setText("⚠️ CẤP QUYỀN HIỂN THỊ GÓC (BẮT BUỘC)"); btnReq.setBackgroundColor(Color.RED); btnReq.setTextColor(Color.WHITE);
-            btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))));
-            main.addView(btnReq);
-        } else {
-            try { startService(new Intent(this, HomescreenCornerService.class)); } catch (Exception e) {}
-        }
+            Button btnReq = new Button(this); btnReq.setText("⚠️ CẤP QUYỀN ADB (VẼ ĐÈ) ĐỂ GÓC MÀN CHÍNH CHẠY ĐỘC LẬP"); btnReq.setBackgroundColor(Color.RED); btnReq.setTextColor(Color.WHITE);
+            btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))); main.addView(btnReq);
+        } else { try { startService(new Intent(this, HomescreenCornerService.class)); } catch (Exception e) {} }
 
-        TextView note = new TextView(this); note.setText("💡 Mẹo: Ở Tab Homescreen, gán Cử chỉ góc = Intent X. Sau đó cấu hình Slot Intent X -> Action: com.manhmoc.edgebar.TOGGLE_ACTION (Tích Broadcast) để bật tắt Trợ năng!"); note.setTextColor(Color.YELLOW); note.setPadding(0,20,0,40); main.addView(note);
-
-        main.addView(createSection("🎨 TUỲ CHỈNH 5 THANH (UI SỐNG)"));
+        main.addView(createSection("🎨 BẬT/TẮT & KÍCH THƯỚC (ÁP DỤNG CHUNG)"));
         for(int i=0; i<5; i++) {
             CheckBox cb = new CheckBox(this); cb.setText("BẬT THANH: " + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50"));
             cb.setChecked(prefs.getBoolean(BARS[i]+"_en", i < 2)); final int idx = i;
@@ -42,7 +36,6 @@ public class MainActivity extends Activity {
 
         tabBoth = createConfigPage("both"); tabLock = createConfigPage("lock"); tabHome = createConfigPage("home");
         main.addView(tabBoth); main.addView(tabLock); main.addView(tabHome);
-
         btnBoth.setOnClickListener(v -> switchTab(0)); btnLock.setOnClickListener(v -> switchTab(1)); btnHome.setOnClickListener(v -> switchTab(2)); switchTab(0);
 
         main.addView(createSection("🔧 CẤU HÌNH INTENT ENGINE (5 SLOTS)"));
@@ -60,8 +53,8 @@ public class MainActivity extends Activity {
     private Button createTabBtn(String t) { Button b = new Button(this); b.setText(t); b.setTextColor(Color.WHITE); b.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); b.setBackgroundColor(Color.parseColor("#333333")); return b; }
     private LinearLayout createConfigPage(String prefix) {
         LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL);
-        for(int i=0; i<5; i++) { page.addView(createSection("CỬ CHỈ: " + BAR_NAMES[i])); for(int j=0; j<7; j++) page.addView(createRow(GESTURE_NAMES[j], prefix + "_" + BARS[i] + "_" + GESTURES[j])); }
-        page.addView(createSection("2 GÓC ĐÁY (VUỐT CHÉO LÊN VÀO TRONG)")); page.addView(createRow("Góc Trái", prefix+"_l_corner")); page.addView(createRow("Góc Phải", prefix+"_r_corner")); return page;
+        for(int i=0; i<5; i++) { page.addView(createSection("CỬ CHỈ: " + BAR_NAMES[i] + " (" + prefix.toUpperCase() + ")")); for(int j=0; j<7; j++) page.addView(createRow(GESTURE_NAMES[j], prefix + "_" + BARS[i] + "_" + GESTURES[j])); }
+        page.addView(createSection("2 GÓC ĐÁY (" + prefix.toUpperCase() + ")")); page.addView(createRow("Góc Trái - Vuốt Chéo", prefix+"_l_corner")); page.addView(createRow("Góc Phải - Vuốt Chéo", prefix+"_r_corner")); return page;
     }
     private TextView createSection(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.GREEN); tv.setPadding(0,40,0,10); return tv; }
     private Spinner createSpinner() { Spinner sp = new Spinner(this); GradientDrawable g = new GradientDrawable(); g.setColor(Color.DKGRAY); g.setCornerRadius(10); sp.setBackground(g); sp.setPadding(10,10,10,10); return sp; }
