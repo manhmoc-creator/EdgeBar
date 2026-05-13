@@ -1,6 +1,6 @@
 package com.manhmoc.edgebar;
 
-import android.animation.ObjectAnimator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.app.KeyguardManager; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.IBinder; import android.provider.MediaStore; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager;
+import android.animation.ObjectAnimator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.app.KeyguardManager; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.IBinder; import android.provider.MediaStore; import android.provider.Settings; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager;
 
 public class HomescreenCornerService extends Service {
     private WindowManager wm; private View lHomeCorner, rHomeCorner; private FlashView fV; private CameraManager cm; private String cId; private boolean fOn = false; private SharedPreferences prefs; private KeyguardManager km;
@@ -13,21 +13,25 @@ public class HomescreenCornerService extends Service {
 
     private class CornerCurveView extends View {
         private Paint p; private boolean isLeft;
-        public CornerCurveView(Context c, boolean left) { super(c); isLeft = left; p = new Paint(); p.setColor(Color.argb(200, 255, 255, 255)); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(4f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); }
-        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = 4f, r = 40f; if(isLeft) { path.moveTo(pad, 0); path.lineTo(pad, h-r); path.quadTo(pad, h-pad, r, h-pad); path.lineTo(w, h-pad); } else { path.moveTo(w-pad, 0); path.lineTo(w-pad, h-r); path.quadTo(w-pad, h-pad, w-r, h-pad); path.lineTo(0, h-pad); } canvas.drawPath(path, p); }
+        public CornerCurveView(Context c, boolean left) { super(c); isLeft = left; p = new Paint(); p.setColor(Color.argb(220, 255, 255, 255)); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(8f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); }
+        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = 8f, r = 25f; if(isLeft) { path.moveTo(pad, 0); path.lineTo(pad, h-r); path.quadTo(pad, h-pad, r, h-pad); path.lineTo(w, h-pad); } else { path.moveTo(w-pad, 0); path.lineTo(w-pad, h-r); path.quadTo(w-pad, h-pad, w-r, h-pad); path.lineTo(0, h-pad); } canvas.drawPath(path, p); }
     }
 
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public void onCreate() {
         super.onCreate(); wm = (WindowManager) getSystemService(WINDOW_SERVICE); km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE); try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
         
+        // CHỐNG CRASH TẠI ĐÂY
+        if (!Settings.canDrawOverlays(this)) { stopSelf(); return; }
+
         String cid = "eb_home"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar Home", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c);
-        Notification n = new Notification.Builder(this, cid).setContentTitle("EdgeBar v10.5 ADB Đang Chạy").setSmallIcon(android.R.drawable.ic_lock_lock).build(); startForeground(2, n);
+        Notification n = new Notification.Builder(this, cid).setContentTitle("EdgeBar v10.6 ADB Đang Chạy").setSmallIcon(android.R.drawable.ic_lock_lock).build(); startForeground(2, n);
 
         fV = new FlashView(this); fV.setAlpha(0f);
-        WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); wm.addView(fV, fp);
+        WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); 
+        try { wm.addView(fV, fp); } catch(Exception e){}
 
-        WindowManager.LayoutParams hp = new WindowManager.LayoutParams(90, 90, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
+        WindowManager.LayoutParams hp = new WindowManager.LayoutParams(70, 70, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
         lHomeCorner = new CornerCurveView(this, true); rHomeCorner = new CornerCurveView(this, false);
         WindowManager.LayoutParams lpC = new WindowManager.LayoutParams(); lpC.copyFrom(hp); lpC.gravity = Gravity.BOTTOM | Gravity.LEFT;
         WindowManager.LayoutParams rpC = new WindowManager.LayoutParams(); rpC.copyFrom(hp); rpC.gravity = Gravity.BOTTOM | Gravity.RIGHT;
@@ -35,7 +39,7 @@ public class HomescreenCornerService extends Service {
         View.OnTouchListener homeCornerTouch = new View.OnTouchListener() {
             private float sx, sy;
             @Override public boolean onTouch(View v, MotionEvent e) {
-                if(km.isKeyguardLocked()) return false; // ADB nhường sân cho Trợ năng nếu đang ở Lockscreen
+                if(km.isKeyguardLocked()) return false; 
                 if(e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); return true; }
                 if(e.getAction() == MotionEvent.ACTION_UP) { float dx = e.getRawX()-sx, dy = e.getRawY()-sy; if(dy < -40 && Math.abs(dx) > 40) { 
                     ObjectAnimator.ofFloat(fV, "alpha", 0f, 0.5f, 0f).setDuration(1000).start(); 
@@ -43,7 +47,8 @@ public class HomescreenCornerService extends Service {
                 } return true; } return false;
             }
         };
-        lHomeCorner.setOnTouchListener(homeCornerTouch); rHomeCorner.setOnTouchListener(homeCornerTouch); wm.addView(lHomeCorner, lpC); wm.addView(rHomeCorner, rpC);
+        lHomeCorner.setOnTouchListener(homeCornerTouch); rHomeCorner.setOnTouchListener(homeCornerTouch); 
+        try { wm.addView(lHomeCorner, lpC); wm.addView(rHomeCorner, rpC); } catch(Exception e){}
     }
 
     private void handleAction(String suf) {

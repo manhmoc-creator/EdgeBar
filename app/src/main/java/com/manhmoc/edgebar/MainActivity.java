@@ -1,27 +1,33 @@
 package com.manhmoc.edgebar;
-import android.app.Activity; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Color; import android.graphics.drawable.GradientDrawable; import android.os.Bundle; import android.view.View; import android.widget.*;
+import android.app.Activity; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Color; import android.graphics.drawable.GradientDrawable; import android.os.Bundle; import android.provider.Settings; import android.net.Uri; import android.view.View; import android.widget.*;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private final String[] ACT_KEYS = {"NONE", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "QR", "NOTIFICATIONS", "INTENT_1", "INTENT_2", "INTENT_3", "INTENT_4", "INTENT_5"};
     private final String[] ACT_LABS = {"Không có", "Tắt màn hình", "Đèn pin", "Menu nguồn", "Âm lượng", "Chụp màn hình", "Camera an toàn", "Google Lens (QR)", "Thông báo", "Gửi Intent 1", "Gửi Intent 2", "Gửi Intent 3", "Gửi Intent 4", "Gửi Intent 5"};
     private final String[] BARS = {"b_l", "b_r", "t_l", "t_r", "t_c"};
-    private final String[] BAR_NAMES = {"ĐÁY TRÁI", "ĐÁY PHẢI", "ĐỈNH TRÁI", "ĐỈNH PHẢI", "ĐỈNH GIỮA (STATUS BAR)"};
+    private final String[] BAR_NAMES = {"ĐÁY TRÁI", "ĐÁY PHẢI", "ĐỈNH TRÁI", "ĐỈNH PHẢI", "ĐỈNH GIỮA"};
     private final String[] GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right"};
     private final String[] GESTURE_NAMES = {"1 Chạm", "2 Chạm", "Nhấn giữ", "Vuốt Lên", "Vuốt Xuống", "Vuốt Trái", "Vuốt Phải"};
     private LinearLayout tabBoth, tabLock, tabHome;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        
-        // Khởi động Service Màn Chính bằng ADB
-        try { startService(new Intent(this, HomescreenCornerService.class)); } catch (Exception e) {}
-
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212"));
         LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,40,40,100);
-        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10.5 - Absolute Legacy"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,20); main.addView(title);
         
-        TextView note = new TextView(this); note.setText("💡 Mẹo: Ở Tab Homescreen, gán Cử chỉ góc = Intent X. Sau đó cấu hình Slot Intent X -> Action: com.manhmoc.edgebar.TOGGLE_ACTION (Tích Broadcast) để bật tắt Trợ năng!"); note.setTextColor(Color.YELLOW); note.setPadding(0,0,0,40); main.addView(note);
+        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10.6 - Bất Tử"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,20); main.addView(title);
+        
+        // CHECK QUYỀN VẼ ĐÈ ĐỂ CHỐNG CRASH
+        if (!Settings.canDrawOverlays(this)) {
+            Button btnReq = new Button(this); btnReq.setText("⚠️ CẤP QUYỀN HIỂN THỊ GÓC (BẮT BUỘC)"); btnReq.setBackgroundColor(Color.RED); btnReq.setTextColor(Color.WHITE);
+            btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))));
+            main.addView(btnReq);
+        } else {
+            try { startService(new Intent(this, HomescreenCornerService.class)); } catch (Exception e) {}
+        }
+
+        TextView note = new TextView(this); note.setText("💡 Mẹo: Ở Tab Homescreen, gán Cử chỉ góc = Intent X. Sau đó cấu hình Slot Intent X -> Action: com.manhmoc.edgebar.TOGGLE_ACTION (Tích Broadcast) để bật tắt Trợ năng!"); note.setTextColor(Color.YELLOW); note.setPadding(0,20,0,40); main.addView(note);
 
         main.addView(createSection("🎨 TUỲ CHỈNH 5 THANH (UI SỐNG)"));
         for(int i=0; i<5; i++) {
