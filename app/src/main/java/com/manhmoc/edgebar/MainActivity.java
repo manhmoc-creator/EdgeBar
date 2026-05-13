@@ -3,8 +3,8 @@ import android.app.Activity; import android.content.SharedPreferences; import an
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs;
-    private final String[] ACT_KEYS = {"NONE", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "QR", "NOTIFICATIONS", "INTENT_1", "INTENT_2", "INTENT_3"};
-    private final String[] ACT_LABS = {"Không có", "Tắt màn hình", "Đèn pin", "Menu nguồn", "Âm lượng", "Chụp màn hình", "Camera an toàn", "Google Lens (QR)", "Thông báo", "Gửi Intent 1", "Gửi Intent 2", "Gửi Intent 3"};
+    private final String[] ACT_KEYS = {"NONE", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "QR", "NOTIFICATIONS", "INTENT_1", "INTENT_2", "INTENT_3", "INTENT_4", "INTENT_5"};
+    private final String[] ACT_LABS = {"Không có", "Tắt màn hình", "Đèn pin", "Menu nguồn", "Âm lượng", "Chụp màn hình", "Camera an toàn", "Google Lens (QR)", "Thông báo", "Gửi Intent 1", "Gửi Intent 2", "Gửi Intent 3", "Gửi Intent 4", "Gửi Intent 5"};
     private LinearLayout tabBoth, tabLock, tabHome;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -12,7 +12,7 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212"));
         LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,40,40,100);
         
-        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10 - Pixel 2XL Edition"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,40); main.addView(title);
+        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10.1 - Lưỡng Nghi Phân Hình"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,40); main.addView(title);
 
         main.addView(createSection("🎨 TUỲ CHỈNH 2 THANH BÊN (XÁM XANH)"));
         main.addView(createSlider("Độ trong suốt (Alpha 0-255)", "edge_alpha", 255, 50));
@@ -28,8 +28,8 @@ public class MainActivity extends Activity {
 
         btnBoth.setOnClickListener(v -> switchTab(0)); btnLock.setOnClickListener(v -> switchTab(1)); btnHome.setOnClickListener(v -> switchTab(2)); switchTab(0);
 
-        main.addView(createSection("🔧 CẤU HÌNH INTENT ENGINE (V9 LEGACY)"));
-        for (int i = 1; i <= 3; i++) {
+        main.addView(createSection("🔧 CẤU HÌNH INTENT ENGINE (5 SLOTS)"));
+        for (int i = 1; i <= 5; i++) {
             main.addView(createSection("Slot Intent " + i));
             main.addView(createInput("Action (VD: android.intent.action.VIEW)", "i"+i+"_act")); main.addView(createInput("Package", "i"+i+"_pkg")); main.addView(createInput("Class Name", "i"+i+"_cls")); main.addView(createInput("Data URI", "i"+i+"_data")); main.addView(createInput("Categories", "i"+i+"_cat")); main.addView(createInput("Flags (Số Integer)", "i"+i+"_flags"));
             CheckBox cb = new CheckBox(this); cb.setText("Gửi dạng Broadcast"); cb.setTextColor(Color.WHITE); cb.setChecked(prefs.getBoolean("i"+i+"_br", true)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("i"+idx+"_br", c).apply()); main.addView(cb);
@@ -53,10 +53,11 @@ public class MainActivity extends Activity {
     
     private LinearLayout createConfigPage(String prefix) {
         LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL);
-        page.addView(createSection("2 THANH BÊN (SIDEBAR)"));
-        page.addView(createRow("Trái - Vuốt Lên", prefix+"_l_up")); page.addView(createRow("Trái - Vuốt Xuống", prefix+"_l_down")); page.addView(createRow("Trái - Vuốt Trái/Phải", prefix+"_l_hor"));
-        page.addView(createRow("Phải - Vuốt Lên", prefix+"_r_up")); page.addView(createRow("Phải - Vuốt Xuống", prefix+"_r_down")); page.addView(createRow("Phải - Vuốt Trái/Phải", prefix+"_r_hor"));
-        page.addView(createSection("2 GÓC ĐÁY (GANIMA STYLE)"));
+        page.addView(createSection("CỬ CHỈ TRÁI (" + prefix.toUpperCase() + ")"));
+        page.addView(createRow("1 Chạm", prefix+"_l_tap")); page.addView(createRow("2 Chạm", prefix+"_l_dtap")); page.addView(createRow("Nhấn giữ", prefix+"_l_long")); page.addView(createRow("Vuốt Lên", prefix+"_l_up")); page.addView(createRow("Vuốt Xuống", prefix+"_l_down")); page.addView(createRow("Vuốt Trái", prefix+"_l_left")); page.addView(createRow("Vuốt Phải", prefix+"_l_right"));
+        page.addView(createSection("CỬ CHỈ PHẢI (" + prefix.toUpperCase() + ")"));
+        page.addView(createRow("1 Chạm", prefix+"_r_tap")); page.addView(createRow("2 Chạm", prefix+"_r_dtap")); page.addView(createRow("Nhấn giữ", prefix+"_r_long")); page.addView(createRow("Vuốt Lên", prefix+"_r_up")); page.addView(createRow("Vuốt Xuống", prefix+"_r_down")); page.addView(createRow("Vuốt Trái", prefix+"_r_left")); page.addView(createRow("Vuốt Phải", prefix+"_r_right"));
+        page.addView(createSection("2 GÓC ĐÁY (VUỐT CHÉO LÊN)"));
         page.addView(createRow("Góc Trái - Vuốt Chéo", prefix+"_l_corner"));
         page.addView(createRow("Góc Phải - Vuốt Chéo", prefix+"_r_corner"));
         return page;
