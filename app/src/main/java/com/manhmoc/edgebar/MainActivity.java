@@ -5,6 +5,10 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private final String[] ACT_KEYS = {"NONE", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "QR", "NOTIFICATIONS", "INTENT_1", "INTENT_2", "INTENT_3", "INTENT_4", "INTENT_5"};
     private final String[] ACT_LABS = {"Không có", "Tắt màn hình", "Đèn pin", "Menu nguồn", "Âm lượng", "Chụp màn hình", "Camera an toàn", "Google Lens (QR)", "Thông báo", "Gửi Intent 1", "Gửi Intent 2", "Gửi Intent 3", "Gửi Intent 4", "Gửi Intent 5"};
+    private final String[] BARS = {"b_l", "b_r", "t_l", "t_r", "t_c"};
+    private final String[] BAR_NAMES = {"ĐÁY TRÁI", "ĐÁY PHẢI", "ĐỈNH TRÁI", "ĐỈNH PHẢI", "ĐỈNH GIỮA"};
+    private final String[] GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right"};
+    private final String[] GESTURE_NAMES = {"1 Chạm", "2 Chạm", "Nhấn giữ", "Vuốt Lên", "Vuốt Xuống", "Vuốt Trái", "Vuốt Phải"};
     private LinearLayout tabBoth, tabLock, tabHome;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -12,14 +16,19 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212"));
         LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,40,40,100);
         
-        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10.1 - Lưỡng Nghi Phân Hình"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,40); main.addView(title);
+        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10.2 - Ngũ Hành Trận"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,40); main.addView(title);
 
-        main.addView(createSection("🎨 TUỲ CHỈNH 2 THANH BÊN (XÁM XANH)"));
-        main.addView(createSlider("Độ trong suốt (Alpha 0-255)", "edge_alpha", 255, 50));
-        main.addView(createSlider("Độ dày (Thickness)", "edge_thick", 300, 80));
-        main.addView(createSlider("Chiều dài (Size)", "edge_size", 1000, 400));
+        main.addView(createSection("🎨 TUỲ CHỈNH 5 THANH ĐỘC LẬP (UI SỐNG)"));
+        for(int i=0; i<5; i++) {
+            main.addView(createSection("▶ KÍCH THƯỚC: " + BAR_NAMES[i]));
+            main.addView(createSlider("Độ trong suốt", BARS[i]+"_alpha", 255, 50));
+            main.addView(createSlider("Chiều ngang (Width)", BARS[i]+"_w", 1400, 300));
+            main.addView(createSlider("Chiều dọc (Height)", BARS[i]+"_h", 1400, 60));
+            main.addView(createSlider("Căn lề ngang (Offset X)", BARS[i]+"_x", 1000, 0));
+            main.addView(createSlider("Căn lề dọc (Offset Y)", BARS[i]+"_y", 1000, 0));
+        }
 
-        LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 20, 0, 20);
+        LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 40, 0, 20);
         Button btnBoth = createTabBtn("CẢ HAI"); Button btnLock = createTabBtn("LOCKSCREEN"); Button btnHome = createTabBtn("HOMESCREEN");
         tabContainer.addView(btnBoth); tabContainer.addView(btnLock); tabContainer.addView(btnHome); main.addView(tabContainer);
 
@@ -53,15 +62,16 @@ public class MainActivity extends Activity {
     
     private LinearLayout createConfigPage(String prefix) {
         LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL);
-        page.addView(createSection("CỬ CHỈ TRÁI (" + prefix.toUpperCase() + ")"));
-        page.addView(createRow("1 Chạm", prefix+"_l_tap")); page.addView(createRow("2 Chạm", prefix+"_l_dtap")); page.addView(createRow("Nhấn giữ", prefix+"_l_long")); page.addView(createRow("Vuốt Lên", prefix+"_l_up")); page.addView(createRow("Vuốt Xuống", prefix+"_l_down")); page.addView(createRow("Vuốt Trái", prefix+"_l_left")); page.addView(createRow("Vuốt Phải", prefix+"_l_right"));
-        page.addView(createSection("CỬ CHỈ PHẢI (" + prefix.toUpperCase() + ")"));
-        page.addView(createRow("1 Chạm", prefix+"_r_tap")); page.addView(createRow("2 Chạm", prefix+"_r_dtap")); page.addView(createRow("Nhấn giữ", prefix+"_r_long")); page.addView(createRow("Vuốt Lên", prefix+"_r_up")); page.addView(createRow("Vuốt Xuống", prefix+"_r_down")); page.addView(createRow("Vuốt Trái", prefix+"_r_left")); page.addView(createRow("Vuốt Phải", prefix+"_r_right"));
-        page.addView(createSection("2 GÓC ĐÁY (VUỐT CHÉO LÊN)"));
-        page.addView(createRow("Góc Trái - Vuốt Chéo", prefix+"_l_corner"));
-        page.addView(createRow("Góc Phải - Vuốt Chéo", prefix+"_r_corner"));
+        for(int i=0; i<5; i++) {
+            page.addView(createSection("CỬ CHỈ: " + BAR_NAMES[i]));
+            for(int j=0; j<7; j++) page.addView(createRow(GESTURE_NAMES[j], prefix + "_" + BARS[i] + "_" + GESTURES[j]));
+        }
+        page.addView(createSection("2 GÓC ĐÁY (VUỐT CHÉO VÀO TRONG)"));
+        page.addView(createRow("Góc Trái - Vuốt Chéo Lên", prefix+"_l_corner"));
+        page.addView(createRow("Góc Phải - Vuốt Chéo Lên", prefix+"_r_corner"));
         return page;
     }
+
     private TextView createSection(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.GREEN); tv.setPadding(0,40,0,10); return tv; }
     private Spinner createSpinner() { Spinner sp = new Spinner(this); GradientDrawable g = new GradientDrawable(); g.setColor(Color.DKGRAY); g.setCornerRadius(10); sp.setBackground(g); sp.setPadding(10,10,10,10); return sp; }
     private EditText createInput(String h, String k) { EditText et = new EditText(this); et.setHint(h); et.setHintTextColor(Color.GRAY); et.setTextColor(Color.WHITE); et.setText(prefs.getString(k,"")); et.addTextChangedListener(new android.text.TextWatcher(){public void afterTextChanged(android.text.Editable s){prefs.edit().putString(k,s.toString()).apply();}public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}}); return et; }

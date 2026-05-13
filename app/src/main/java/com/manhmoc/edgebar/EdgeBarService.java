@@ -1,34 +1,34 @@
 package com.manhmoc.edgebar;
 
-import android.accessibilityservice.AccessibilityService; import android.animation.ObjectAnimator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.KeyguardManager; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.PixelFormat; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.provider.MediaStore; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager; import android.view.accessibility.AccessibilityEvent;
+import android.accessibilityservice.AccessibilityService; import android.animation.ObjectAnimator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.KeyguardManager; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.PixelFormat; import android.graphics.Path; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.provider.MediaStore; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager; import android.view.accessibility.AccessibilityEvent;
 
 public class EdgeBarService extends AccessibilityService {
-    private WindowManager wm; private View lBar, rBar, lCorner, rCorner; private FlashView fV; 
+    private WindowManager wm; private View[] bars = new View[5]; private View lCorner, rCorner; private FlashView fV; 
     private CameraManager cm; private String cId; private boolean fOn = false; 
-    private KeyguardManager km; private SharedPreferences prefs; private GestureDetector gdL, gdR;
+    private KeyguardManager km; private SharedPreferences prefs; private GestureDetector[] gds = new GestureDetector[5];
+    private final String[] BARS = {"b_l", "b_r", "t_l", "t_r", "t_c"};
+    private final int[] GRAV = {Gravity.BOTTOM|Gravity.LEFT, Gravity.BOTTOM|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     
-    private SharedPreferences.OnSharedPreferenceChangeListener prefListener = new SharedPreferences.OnSharedPreferenceChangeListener() {
-        @Override public void onSharedPreferenceChanged(SharedPreferences p, String k) { if(k != null && k.startsWith("edge_")) updateBarsLayout(); }
-    };
+    private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { if(k != null && (k.contains("_w") || k.contains("_h") || k.contains("_x") || k.contains("_y") || k.contains("_alpha"))) updateBarsLayout(); };
 
+    // Hiệu ứng Flash mỏng, thanh tao (Google Assistant Style)
     private class FlashView extends View {
         private Paint p = new Paint();
-        public FlashView(Context c) { super(c); p.setColor(Color.WHITE); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(12f); p.setAntiAlias(true); p.setShadowLayer(10f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); }
+        public FlashView(Context c) { super(c); p.setColor(Color.WHITE); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(5f); p.setAntiAlias(true); p.setShadowLayer(4f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); }
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); float off = p.getStrokeWidth()/2; canvas.drawRect(off, off, getWidth()-off, getHeight()-off, p); }
     }
 
+    // Vẽ đường cong L ôm sát góc viền vật lý màn hình Pixel
     private class CornerCurveView extends View {
         private Paint p; private boolean isLeft;
         public CornerCurveView(Context c, boolean left) {
             super(c); isLeft = left;
-            p = new Paint(); p.setColor(Color.argb(160, 255, 255, 255));
-            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(6f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND);
+            p = new Paint(); p.setColor(Color.argb(160, 255, 255, 255)); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(5f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND);
         }
         @Override protected void onDraw(Canvas canvas) {
-            super.onDraw(canvas); android.graphics.Path path = new android.graphics.Path();
-            float w = getWidth(), h = getHeight(), pad = 6f;
-            if(isLeft) { path.moveTo(pad, h); path.quadTo(pad, pad, w, pad); } // Trái: đường cong ôm từ dưới lên cạnh trái
-            else { path.moveTo(w-pad, h); path.quadTo(w-pad, pad, 0, pad); }  // Phải: đường cong ôm từ dưới lên cạnh phải
+            super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = 5f, r = 60f;
+            if(isLeft) { path.moveTo(pad, 0); path.lineTo(pad, h-r); path.quadTo(pad, h-pad, r, h-pad); path.lineTo(w, h-pad); } 
+            else { path.moveTo(w-pad, 0); path.lineTo(w-pad, h-r); path.quadTo(w-pad, h-pad, w-r, h-pad); path.lineTo(0, h-pad); }
             canvas.drawPath(path, p);
         }
     }
@@ -41,9 +41,8 @@ public class EdgeBarService extends AccessibilityService {
     }
 
     private void startStatusNotification() {
-        String cid = "eb_v10"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar v10", NotificationManager.IMPORTANCE_LOW);
-        getSystemService(NotificationManager.class).createNotificationChannel(c);
-        Notification n = new Notification.Builder(this, cid).setContentTitle("EdgeBar v10.1 Đang Chạy").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build(); startForeground(1, n);
+        String cid = "eb_v10"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar v10", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c);
+        Notification n = new Notification.Builder(this, cid).setContentTitle("EdgeBar 10.2 Ngũ Hành Đang Chạy").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build(); startForeground(1, n);
     }
 
     private void exec(String a) {
@@ -72,60 +71,52 @@ public class EdgeBarService extends AccessibilityService {
         } catch (Exception e) {}
     }
 
-    private void handleAction(String side, String gesture) {
-        String specificPrefix = km.isKeyguardLocked() ? "lock" : "home";
-        String action = prefs.getString(specificPrefix + "_" + side + "_" + gesture, "NONE");
-        if (action.equals("NONE")) action = prefs.getString("both_" + side + "_" + gesture, "NONE");
+    private void handleAction(String suffix) {
+        String state = km.isKeyguardLocked() ? "lock_" : "home_";
+        String action = prefs.getString(state + suffix, "NONE");
+        if (action.equals("NONE")) action = prefs.getString("both_" + suffix, "NONE");
         exec(action);
     }
 
-    private void triggerFlash() { ObjectAnimator.ofFloat(fV, "alpha", 0f, 1f, 0f).setDuration(500).start(); }
+    private void triggerFlash() { ObjectAnimator.ofFloat(fV, "alpha", 0f, 0.8f, 0f).setDuration(700).start(); }
 
     private void updateBarsLayout() {
-        if(lBar == null || rBar == null) return;
-        int alpha = prefs.getInt("edge_alpha", 50); int thick = prefs.getInt("edge_thick", 80); int size = prefs.getInt("edge_size", 400); int colorBlueGrey = Color.argb(alpha, 96, 125, 139);
-        lBar.setBackgroundColor(colorBlueGrey); rBar.setBackgroundColor(colorBlueGrey);
-        WindowManager.LayoutParams pL = (WindowManager.LayoutParams) lBar.getLayoutParams(); pL.width = thick; pL.height = size; wm.updateViewLayout(lBar, pL);
-        WindowManager.LayoutParams pR = (WindowManager.LayoutParams) rBar.getLayoutParams(); pR.width = thick; pR.height = size; wm.updateViewLayout(rBar, pR);
+        for(int i=0; i<5; i++) {
+            if(bars[i] == null) continue;
+            int alpha = prefs.getInt(BARS[i]+"_alpha", 50); int w = prefs.getInt(BARS[i]+"_w", 300); int h = prefs.getInt(BARS[i]+"_h", 60); int x = prefs.getInt(BARS[i]+"_x", 0); int y = prefs.getInt(BARS[i]+"_y", 0);
+            bars[i].setBackgroundColor(Color.argb(alpha, 96, 125, 139));
+            WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.width = w; p.height = h; p.x = x; p.y = y; wm.updateViewLayout(bars[i], p);
+        }
     }
 
     private void createFloatingBars() {
         fV = new FlashView(this); fV.setAlpha(0f);
         WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); wm.addView(fV, fp);
 
-        int alpha = prefs.getInt("edge_alpha", 50); int thick = prefs.getInt("edge_thick", 80); int size = prefs.getInt("edge_size", 400);
-        int colorBlueGrey = Color.argb(alpha, 96, 125, 139);
-        lBar = new View(this); rBar = new View(this); lBar.setBackgroundColor(colorBlueGrey); rBar.setBackgroundColor(colorBlueGrey);
-        WindowManager.LayoutParams p = new WindowManager.LayoutParams(thick, size, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, PixelFormat.TRANSLUCENT);
-        WindowManager.LayoutParams pL = new WindowManager.LayoutParams(); pL.copyFrom(p); pL.gravity = Gravity.BOTTOM | Gravity.LEFT; pL.y = 150; 
-        WindowManager.LayoutParams pR = new WindowManager.LayoutParams(); pR.copyFrom(p); pR.gravity = Gravity.BOTTOM | Gravity.RIGHT; pR.y = 150;
+        for(int i=0; i<5; i++) {
+            final int idx = i; bars[i] = new View(this);
+            int alpha = prefs.getInt(BARS[i]+"_alpha", 50); int w = prefs.getInt(BARS[i]+"_w", 300); int h = prefs.getInt(BARS[i]+"_h", 60); int x = prefs.getInt(BARS[i]+"_x", 0); int y = prefs.getInt(BARS[i]+"_y", 0);
+            bars[i].setBackgroundColor(Color.argb(alpha, 96, 125, 139));
+            WindowManager.LayoutParams p = new WindowManager.LayoutParams(w, h, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, PixelFormat.TRANSLUCENT);
+            p.gravity = GRAV[i]; p.x = x; p.y = y;
+            
+            gds[i] = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+                @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction(BARS[idx] + "_tap"); return true; }
+                @Override public boolean onDoubleTap(MotionEvent e) { handleAction(BARS[idx] + "_dtap"); return true; }
+                @Override public void onLongPress(MotionEvent e) { handleAction(BARS[idx] + "_long"); }
+                @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) {
+                    float dX = e2.getX()-e1.getX(), dY = e2.getY()-e1.getY();
+                    if (Math.abs(dX) > Math.abs(dY)) { handleAction(BARS[idx] + (dX > 0 ? "_right" : "_left")); } else { handleAction(BARS[idx] + (dY > 0 ? "_down" : "_up")); } return true;
+                }
+            });
+            bars[i].setOnTouchListener((v, e) -> gds[idx].onTouchEvent(e)); wm.addView(bars[i], p);
+        }
 
-        gdL = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
-            @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction("l", "tap"); return true; }
-            @Override public boolean onDoubleTap(MotionEvent e) { handleAction("l", "dtap"); return true; }
-            @Override public void onLongPress(MotionEvent e) { handleAction("l", "long"); }
-            @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) {
-                float dX = e2.getX()-e1.getX(), dY = e2.getY()-e1.getY();
-                if (Math.abs(dX) > Math.abs(dY)) { handleAction("l", dX > 0 ? "right" : "left"); } else { handleAction("l", dY > 0 ? "down" : "up"); } return true;
-            }
-        });
-        gdR = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
-            @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction("r", "tap"); return true; }
-            @Override public boolean onDoubleTap(MotionEvent e) { handleAction("r", "dtap"); return true; }
-            @Override public void onLongPress(MotionEvent e) { handleAction("r", "long"); }
-            @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) {
-                float dX = e2.getX()-e1.getX(), dY = e2.getY()-e1.getY();
-                if (Math.abs(dX) > Math.abs(dY)) { handleAction("r", dX > 0 ? "right" : "left"); } else { handleAction("r", dY > 0 ? "down" : "up"); } return true;
-            }
-        });
-
-        View.OnTouchListener mainTouch = (v, e) -> v == lBar ? gdL.onTouchEvent(e) : gdR.onTouchEvent(e);
-        lBar.setOnTouchListener(mainTouch); rBar.setOnTouchListener(mainTouch); wm.addView(lBar, pL); wm.addView(rBar, pR);
-
-        WindowManager.LayoutParams hp = new WindowManager.LayoutParams(100, 100, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, PixelFormat.TRANSLUCENT);
+        // 2 Góc: Chỉnh size vừa phải (120x120) ôm trọn góc
+        WindowManager.LayoutParams hp = new WindowManager.LayoutParams(120, 120, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, PixelFormat.TRANSLUCENT);
         lCorner = new CornerCurveView(this, true); rCorner = new CornerCurveView(this, false);
-        WindowManager.LayoutParams lpC = new WindowManager.LayoutParams(); lpC.copyFrom(hp); lpC.gravity = Gravity.BOTTOM | Gravity.LEFT; lpC.x = 0; lpC.y = 0;
-        WindowManager.LayoutParams rpC = new WindowManager.LayoutParams(); rpC.copyFrom(hp); rpC.gravity = Gravity.BOTTOM | Gravity.RIGHT; rpC.x = 0; rpC.y = 0;
+        WindowManager.LayoutParams lpC = new WindowManager.LayoutParams(); lpC.copyFrom(hp); lpC.gravity = Gravity.BOTTOM | Gravity.LEFT;
+        WindowManager.LayoutParams rpC = new WindowManager.LayoutParams(); rpC.copyFrom(hp); rpC.gravity = Gravity.BOTTOM | Gravity.RIGHT;
 
         View.OnTouchListener cornerTouch = new View.OnTouchListener() {
             private float sx, sy;
@@ -133,7 +124,9 @@ public class EdgeBarService extends AccessibilityService {
                 if(e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); return true; }
                 if(e.getAction() == MotionEvent.ACTION_UP) { 
                     float dx = e.getRawX()-sx, dy = e.getRawY()-sy; 
-                    if(Math.abs(dx) > 30 || Math.abs(dy) > 30) { triggerFlash(); handleAction(v == lCorner ? "l" : "r", "corner"); }
+                    // Vuốt vào trong: Trái vuốt chéo (Lên + Phải), Phải vuốt chéo (Lên + Trái)
+                    if(v == lCorner && dx > 40 && dy < -40) { triggerFlash(); handleAction("l_corner"); }
+                    if(v == rCorner && dx < -40 && dy < -40) { triggerFlash(); handleAction("r_corner"); }
                     return true; 
                 } return false;
             }
@@ -142,5 +135,5 @@ public class EdgeBarService extends AccessibilityService {
     }
     
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {} @Override public void onInterrupt() {} 
-    @Override public void onDestroy() { super.onDestroy(); prefs.unregisterOnSharedPreferenceChangeListener(prefListener); if (lBar != null) wm.removeView(lBar); if (rBar != null) wm.removeView(rBar); if (lCorner != null) wm.removeView(lCorner); if (rCorner != null) wm.removeView(rCorner); if (fV != null) wm.removeView(fV); }
+    @Override public void onDestroy() { super.onDestroy(); prefs.unregisterOnSharedPreferenceChangeListener(prefListener); for(int i=0; i<5; i++) if(bars[i] != null) wm.removeView(bars[i]); if (lCorner != null) wm.removeView(lCorner); if (rCorner != null) wm.removeView(rCorner); if (fV != null) wm.removeView(fV); }
 }
