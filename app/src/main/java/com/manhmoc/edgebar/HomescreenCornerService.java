@@ -1,6 +1,6 @@
 package com.manhmoc.edgebar;
 
-import android.animation.ObjectAnimator; import android.app.Service; import android.app.KeyguardManager; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.PixelFormat; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.IBinder; import android.provider.MediaStore; import android.provider.Settings; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager;
+import android.animation.ObjectAnimator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.app.KeyguardManager; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.PixelFormat; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.IBinder; import android.provider.MediaStore; import android.provider.Settings; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager;
 
 public class HomescreenCornerService extends Service {
     private WindowManager wm; private View lHomeCorner, rHomeCorner; private FlashView fV; private CameraManager cm; private String cId; private boolean fOn = false; private SharedPreferences prefs; private KeyguardManager km;
@@ -20,10 +20,11 @@ public class HomescreenCornerService extends Service {
         fV = new FlashView(this); fV.setAlpha(0f);
         WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
 
-        // VIÊN THUỐC GANIMA MỀM MẠI
+        GradientDrawable pill = new GradientDrawable(); pill.setColor(Color.parseColor("#B3FFFFFF")); pill.setCornerRadius(100f); // Bo tròn viên thuốc tự nhiên
+
         WindowManager.LayoutParams hp = new WindowManager.LayoutParams(80, 8, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
-        lHomeCorner = new View(this); lHomeCorner.setBackgroundResource(getResources().getIdentifier("white_handle", "drawable", getPackageName()));
-        rHomeCorner = new View(this); rHomeCorner.setBackgroundResource(getResources().getIdentifier("white_handle", "drawable", getPackageName()));
+        lHomeCorner = new View(this); lHomeCorner.setBackground(pill);
+        rHomeCorner = new View(this); rHomeCorner.setBackground(pill);
         
         WindowManager.LayoutParams lpC = new WindowManager.LayoutParams(); lpC.copyFrom(hp); lpC.gravity = Gravity.BOTTOM | Gravity.LEFT; lpC.x = 40; lpC.y = 40;
         WindowManager.LayoutParams rpC = new WindowManager.LayoutParams(); rpC.copyFrom(hp); rpC.gravity = Gravity.BOTTOM | Gravity.RIGHT; rpC.x = 40; rpC.y = 40;
@@ -31,7 +32,7 @@ public class HomescreenCornerService extends Service {
         View.OnTouchListener homeCornerTouch = new View.OnTouchListener() {
             private float sx, sy;
             @Override public boolean onTouch(View v, MotionEvent e) {
-                if(km.isKeyguardLocked()) return false; // Không đá sân Lockscreen của Trợ năng
+                if(km.isKeyguardLocked()) return false;
                 if(e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); return true; }
                 if(e.getAction() == MotionEvent.ACTION_UP) { float dx = e.getRawX()-sx, dy = e.getRawY()-sy; if(dy < -40 && Math.abs(dx) > 40) { 
                     ObjectAnimator.ofFloat(fV, "alpha", 0f, 0.5f, 0f).setDuration(1000).start(); 
@@ -43,7 +44,7 @@ public class HomescreenCornerService extends Service {
         try { wm.addView(lHomeCorner, lpC); wm.addView(rHomeCorner, rpC); } catch(Exception e){}
     }
 
-    private void handleAction(String suffix) { // suffix is "l_corner" or "r_corner"
+    private void handleAction(String suffix) { 
         String action = prefs.getString("home_" + suffix, "NONE");
         if (action.equals("NONE")) action = prefs.getString("both_" + suffix, "NONE");
         if (action.equals("NONE")) return;
