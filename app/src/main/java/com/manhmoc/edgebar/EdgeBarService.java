@@ -6,9 +6,11 @@ import android.app.NotificationManager;
 import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.hardware.camera2.CameraManager;
+import android.media.AudioManager;
 import android.provider.MediaStore;
 import android.util.DisplayMetrics;
 import android.view.GestureDetector;
@@ -17,134 +19,83 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
-
 public class EdgeBarService extends AccessibilityService {
-    private WindowManager windowManager;
-    private View leftBar, rightBar;
-    private GestureDetector gestureDetector;
-    private CameraManager cameraManager;
-    private String cameraId;
-    private boolean isFlashOn = false;
-    private KeyguardManager keyguardManager;
+    private WindowManager wm;
+    private View lBar, rBar;
+    private CameraManager cm;
+    private String cId;
+    private boolean fOn = false;
+    private KeyguardManager km;
+    private SharedPreferences prefs;
 
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
-        windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
-        keyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-        cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-        try { cameraId = cameraManager.getCameraIdList()[0]; } catch (Exception e) {}
-
-        startStatusNotification();
-        setupGestureDetector();
-        createFloatingBars();
+        wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+        cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
+        startStatusNotification(); createFloatingBars();
     }
 
     private void startStatusNotification() {
-        String channelId = "edgebar_status";
-        NotificationChannel channel = new NotificationChannel(channelId, "EdgeBar Status", NotificationManager.IMPORTANCE_LOW);
-        getSystemService(NotificationManager.class).createNotificationChannel(channel);
-        
-        Notification notification = new Notification.Builder(this, channelId)
-                .setContentTitle("EdgeBar v7")
-                .setContentText("Trợ năng đang hoạt động")
-                .setSmallIcon(android.R.drawable.ic_lock_lock)
-                .setOngoing(true)
-                .build();
-        startForeground(1, notification);
+        String cid = "eb_v8";
+        NotificationChannel c = new NotificationChannel(cid, "EdgeBar Status", NotificationManager.IMPORTANCE_LOW);
+        getSystemService(NotificationManager.class).createNotificationChannel(c);
+        Notification n = new Notification.Builder(this, cid).setContentTitle("EdgeBar v8").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build();
+        startForeground(1, n);
     }
 
-    private void setupGestureDetector() {
-        gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
-            @Override
-            public boolean onSingleTapConfirmed(MotionEvent e) {
-                if (keyguardManager != null && keyguardManager.isKeyguardLocked()) {
-                    performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); 
-                }
-                return true;
-            }
-            @Override
-            public boolean onDoubleTap(MotionEvent e) {
-                if (keyguardManager != null && keyguardManager.isKeyguardLocked()) {
-                    performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); 
-                } else {
-                    // MÀN HÌNH CHÍNH -> TỰ TẮT TRỢ NĂNG (SMART TOGGLE)
-                    Intent intent = new Intent("com.manhmoc.edgebar.TOGGLE_ACTION");
-                    intent.setPackage(getPackageName());
-                    sendBroadcast(intent);
-                }
-                return true;
-            }
-            @Override
-            public void onLongPress(MotionEvent e) {
-                performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT);
-            }
-            @Override
-            public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) {
-                if (e1 == null || e2 == null) return false;
-                float diffY = e2.getY() - e1.getY();
-                float diffX = e2.getX() - e1.getX();
-                if (Math.abs(diffX) > Math.abs(diffY)) {
-                    if (Math.abs(diffX) > 40) {
-                        if (diffX > 0) {
-                            Intent intent = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE);
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            startActivity(intent);
-                        } else toggleFlash();
-                    }
-                } else {
-                    if (Math.abs(diffY) > 40 && diffY < 0) {
-                        // CHỈ GIỮ VUỐT LÊN GỌI AI
-                        triggerGemini();
-                    }
-                }
-                return true;
-            }
-        });
-    }
-
-    private void triggerGemini() {
+    private void exec(String a) {
+        if (a == null || a.equals("NONE")) return;
         try {
-            Intent intent = new Intent(Intent.ACTION_VOICE_COMMAND);
-            intent.setPackage("com.google.android.googlequicksearchbox");
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            startActivity(intent);
-        } catch (Exception e) { 
-            // Fix lỗi gọi biến không tồn tại
-            try {
-                Intent fallback = new Intent(Intent.ACTION_VOICE_COMMAND);
-                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(fallback);
-            } catch (Exception ex) {}
-        }
-    }
-
-    private void toggleFlash() {
-        try { isFlashOn = !isFlashOn; cameraManager.setTorchMode(cameraId, isFlashOn); } catch (Exception e) {}
+            switch(a) {
+                case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break;
+                case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break;
+                case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break;
+                case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break;
+                case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break;
+                case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break;
+                case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break;
+                case "QR": Intent qr = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://lens.google.com/")); qr.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(qr); break;
+                case "INTENT":
+                    Intent i = new Intent(prefs.getString("i_act", ""));
+                    String pkg = prefs.getString("i_pkg", ""); if(!pkg.isEmpty()) i.setPackage(pkg);
+                    String data = prefs.getString("i_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data));
+                    if(prefs.getBoolean("i_br", true)) sendBroadcast(i);
+                    else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); }
+                    break;
+            }
+        } catch (Exception e) {}
     }
 
     private void createFloatingBars() {
-        DisplayMetrics metrics = getResources().getDisplayMetrics();
-        int gap = 250;
-        int barWidth = (metrics.widthPixels - gap) / 2;
-        leftBar = new View(this); rightBar = new View(this);
-        leftBar.setBackgroundColor(Color.TRANSPARENT); rightBar.setBackgroundColor(Color.TRANSPARENT);
-
-        WindowManager.LayoutParams p = new WindowManager.LayoutParams(barWidth, 80, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
-        
+        DisplayMetrics m = getResources().getDisplayMetrics(); int w = (m.widthPixels - 250) / 2;
+        lBar = new View(this); rBar = new View(this); lBar.setBackgroundColor(Color.TRANSPARENT); rBar.setBackgroundColor(Color.TRANSPARENT);
+        WindowManager.LayoutParams p = new WindowManager.LayoutParams(w, 80, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
         WindowManager.LayoutParams pL = new WindowManager.LayoutParams(); pL.copyFrom(p); pL.gravity = Gravity.BOTTOM | Gravity.LEFT;
         WindowManager.LayoutParams pR = new WindowManager.LayoutParams(); pR.copyFrom(p); pR.gravity = Gravity.BOTTOM | Gravity.RIGHT;
+        
+        lBar.setOnTouchListener((v, e) -> check(e, "l")); rBar.setOnTouchListener((v, e) -> check(e, "r"));
+        wm.addView(lBar, pL); wm.addView(rBar, pR);
+    }
 
-        View.OnTouchListener tl = (v, event) -> gestureDetector.onTouchEvent(event);
-        leftBar.setOnTouchListener(tl); rightBar.setOnTouchListener(tl);
-        windowManager.addView(leftBar, pL); windowManager.addView(rightBar, pR);
+    private GestureDetector gdL, gdR;
+    private boolean check(MotionEvent e, String side) {
+        int m = prefs.getInt("mode", 0); boolean lock = km.isKeyguardLocked();
+        if ((m == 1 && !lock) || (m == 2 && lock)) return false;
+        if (gdL == null) gdL = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override public boolean onSingleTapConfirmed(MotionEvent e) { exec(prefs.getString("l_tap", "NONE")); return true; }
+            @Override public boolean onDoubleTap(MotionEvent e) { exec(prefs.getString("l_dtap", "NONE")); return true; }
+        });
+        if (gdR == null) gdR = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override public boolean onSingleTapConfirmed(MotionEvent e) { exec(prefs.getString("r_tap", "NONE")); return true; }
+            @Override public boolean onDoubleTap(MotionEvent e) { exec(prefs.getString("r_dtap", "NONE")); return true; }
+        });
+        return side.equals("l") ? gdL.onTouchEvent(e) : gdR.onTouchEvent(e);
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {}
     @Override public void onInterrupt() {}
-    @Override public void onDestroy() {
-        super.onDestroy();
-        if (leftBar != null) windowManager.removeView(leftBar);
-        if (rightBar != null) windowManager.removeView(rightBar);
-    }
 }

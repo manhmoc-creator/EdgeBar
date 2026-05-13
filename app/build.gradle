@@ -3,10 +3,10 @@ android {
     namespace 'com.manhmoc.edgebar'
     compileSdk 34
     defaultConfig {
-        applicationId "com.manhmoc.edgebar.v7"
+        applicationId "com.manhmoc.edgebar.v8"
         minSdk 26
         targetSdk 34
-        versionCode 7
-        versionName "7.0"
+        versionCode 8
+        versionName "8.0"
     }
 }
