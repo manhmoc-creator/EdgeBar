@@ -2,5 +2,5 @@ plugins { id 'com.android.application' }
 android {
     namespace 'com.manhmoc.edgebar'
     compileSdk 34
-    defaultConfig { applicationId "com.manhmoc.edgebar.v11"; minSdk 26; targetSdk 34; versionCode 11; versionName "11.0" }
+    defaultConfig { applicationId "com.manhmoc.edgebar.v12"; minSdk 26; targetSdk 34; versionCode 12; versionName "12.0" }
 }
