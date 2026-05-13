@@ -1,5 +1,5 @@
 package com.manhmoc.edgebar;
-import android.app.Activity; import android.content.SharedPreferences; import android.graphics.Color; import android.graphics.drawable.GradientDrawable; import android.os.Bundle; import android.view.View; import android.widget.*;
+import android.app.Activity; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Color; import android.graphics.drawable.GradientDrawable; import android.os.Bundle; import android.view.View; import android.widget.*;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs;
@@ -13,12 +13,17 @@ public class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+        
+        // Khởi động Service Màn Chính bằng ADB
+        try { startService(new Intent(this, HomescreenCornerService.class)); } catch (Exception e) {}
+
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212"));
         LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,40,40,100);
+        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10.5 - Absolute Legacy"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,20); main.addView(title);
         
-        TextView title = new TextView(this); title.setText("⚙️ EdgeBar v10.4 - Endgame"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setPadding(0,0,0,40); main.addView(title);
+        TextView note = new TextView(this); note.setText("💡 Mẹo: Ở Tab Homescreen, gán Cử chỉ góc = Intent X. Sau đó cấu hình Slot Intent X -> Action: com.manhmoc.edgebar.TOGGLE_ACTION (Tích Broadcast) để bật tắt Trợ năng!"); note.setTextColor(Color.YELLOW); note.setPadding(0,0,0,40); main.addView(note);
 
-        main.addView(createSection("🎨 TUỲ CHỈNH 5 THANH (LIVE UI & FIXED)"));
+        main.addView(createSection("🎨 TUỲ CHỈNH 5 THANH (UI SỐNG)"));
         for(int i=0; i<5; i++) {
             CheckBox cb = new CheckBox(this); cb.setText("BẬT THANH: " + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50"));
             cb.setChecked(prefs.getBoolean(BARS[i]+"_en", i < 2)); final int idx = i;
@@ -34,12 +39,9 @@ public class MainActivity extends Activity {
 
         btnBoth.setOnClickListener(v -> switchTab(0)); btnLock.setOnClickListener(v -> switchTab(1)); btnHome.setOnClickListener(v -> switchTab(2)); switchTab(0);
 
-        TextView note = new TextView(this); note.setText("💡 LƯU Ý: Cử chỉ góc màn chính cần chạy quyền ADB SYSTEM_ALERT_WINDOW để không phụ thuộc Trợ năng."); note.setTextColor(Color.YELLOW); note.setPadding(0,40,0,10); main.addView(note);
-
         main.addView(createSection("🔧 CẤU HÌNH INTENT ENGINE (5 SLOTS)"));
         for (int i = 1; i <= 5; i++) {
-            main.addView(createSection("Slot Intent " + i));
-            main.addView(createInput("Action", "i"+i+"_act")); main.addView(createInput("Package", "i"+i+"_pkg")); main.addView(createInput("Class Name", "i"+i+"_cls")); main.addView(createInput("Data URI", "i"+i+"_data")); main.addView(createInput("Categories", "i"+i+"_cat")); main.addView(createInput("Flags", "i"+i+"_flags"));
+            main.addView(createSection("Slot Intent " + i)); main.addView(createInput("Action", "i"+i+"_act")); main.addView(createInput("Package", "i"+i+"_pkg")); main.addView(createInput("Class Name", "i"+i+"_cls")); main.addView(createInput("Data URI", "i"+i+"_data")); main.addView(createInput("Categories", "i"+i+"_cat")); main.addView(createInput("Flags", "i"+i+"_flags"));
             CheckBox cb = new CheckBox(this); cb.setText("Gửi Broadcast"); cb.setTextColor(Color.WHITE); cb.setChecked(prefs.getBoolean("i"+i+"_br", true)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("i"+idx+"_br", c).apply()); main.addView(cb);
         } scroll.addView(main); setContentView(scroll);
     }
@@ -48,16 +50,12 @@ public class MainActivity extends Activity {
         LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10);
         TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); tv.setText(t + ": " + sb.getProgress()); sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ public void onProgressChanged(SeekBar s, int p, boolean b){ tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); } public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){} }); l.addView(tv); l.addView(sb); return l;
     }
-    private void switchTab(int index) { 
-        tabBoth.setVisibility(index==0?View.VISIBLE:View.GONE); 
-        tabLock.setVisibility(index==1?View.VISIBLE:View.GONE); 
-        tabHome.setVisibility(index==2?View.VISIBLE:View.GONE); 
-    }
+    private void switchTab(int index) { tabBoth.setVisibility(index==0?View.VISIBLE:View.GONE); tabLock.setVisibility(index==1?View.VISIBLE:View.GONE); tabHome.setVisibility(index==2?View.VISIBLE:View.GONE); }
     private Button createTabBtn(String t) { Button b = new Button(this); b.setText(t); b.setTextColor(Color.WHITE); b.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); b.setBackgroundColor(Color.parseColor("#333333")); return b; }
     private LinearLayout createConfigPage(String prefix) {
         LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL);
         for(int i=0; i<5; i++) { page.addView(createSection("CỬ CHỈ: " + BAR_NAMES[i])); for(int j=0; j<7; j++) page.addView(createRow(GESTURE_NAMES[j], prefix + "_" + BARS[i] + "_" + GESTURES[j])); }
-        page.addView(createSection("2 GÓC ĐÁY (VUỐT CHÉO LÊN)")); page.addView(createRow("Góc Trái - Vuốt Chéo Lên", prefix+"_l_corner")); page.addView(createRow("Góc Phải - Vuốt Chéo Lên", prefix+"_r_corner")); return page;
+        page.addView(createSection("2 GÓC ĐÁY (VUỐT CHÉO LÊN VÀO TRONG)")); page.addView(createRow("Góc Trái", prefix+"_l_corner")); page.addView(createRow("Góc Phải", prefix+"_r_corner")); return page;
     }
     private TextView createSection(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.GREEN); tv.setPadding(0,40,0,10); return tv; }
     private Spinner createSpinner() { Spinner sp = new Spinner(this); GradientDrawable g = new GradientDrawable(); g.setColor(Color.DKGRAY); g.setCornerRadius(10); sp.setBackground(g); sp.setPadding(10,10,10,10); return sp; }

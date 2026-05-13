@@ -15,19 +15,10 @@ public class EdgeBarService extends AccessibilityService {
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); float off = p.getStrokeWidth()/2; canvas.drawRect(off, off, getWidth()-off, getHeight()-off, p); }
     }
 
-    // Vẽ bo góc đậm hơn (argb 200), ngắn hơn (r 40f) ôm sát viền
     private class CornerCurveView extends View {
         private Paint p; private boolean isLeft;
-        public CornerCurveView(Context c, boolean left) {
-            super(c); isLeft = left;
-            p = new Paint(); p.setColor(Color.argb(200, 255, 255, 255)); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(5f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND);
-        }
-        @Override protected void onDraw(Canvas canvas) {
-            super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = 5f, r = 40f;
-            if(isLeft) { path.moveTo(pad, 0); path.lineTo(pad, h-r); path.quadTo(pad, h-pad, r, h-pad); path.lineTo(w, h-pad); } 
-            else { path.moveTo(w-pad, 0); path.lineTo(w-pad, h-r); path.quadTo(w-pad, h-pad, w-r, h-pad); path.lineTo(0, h-pad); }
-            canvas.drawPath(path, p);
-        }
+        public CornerCurveView(Context c, boolean left) { super(c); isLeft = left; p = new Paint(); p.setColor(Color.argb(200, 255, 255, 255)); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(4f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); }
+        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = 4f, r = 40f; if(isLeft) { path.moveTo(pad, 0); path.lineTo(pad, h-r); path.quadTo(pad, h-pad, r, h-pad); path.lineTo(w, h-pad); } else { path.moveTo(w-pad, 0); path.lineTo(w-pad, h-r); path.quadTo(w-pad, h-pad, w-r, h-pad); path.lineTo(0, h-pad); } canvas.drawPath(path, p); }
     }
 
     @Override protected void onServiceConnected() {
@@ -72,21 +63,21 @@ public class EdgeBarService extends AccessibilityService {
 
     private void startStatusNotification() {
         String cid = "eb_v10"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar v10", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c);
-        Notification n = new Notification.Builder(this, cid).setContentTitle("EdgeBar v10.4 Endgame Đang Chạy").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build(); startForeground(1, n);
-        // Bật kèm service Ngược đời cho màn chính
-        startService(new Intent(this, HomescreenCornerService.class));
+        Notification n = new Notification.Builder(this, cid).setContentTitle("EdgeBar v10.5 Accessibility Đang Chạy").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build(); startForeground(1, n);
     }
 
     private void createFloatingBars() {
         fV = new FlashView(this); fV.setAlpha(0f);
         WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); wm.addView(fV, fp);
 
+        // Khởi tạo Views trước khi Update để chống Crash
         for(int i=0; i<5; i++) {
-            bars[i] = new View(this); updateBarLayout(i);
-            bars[i].setOnTouchListener(new SidebarTouchListener(i)); wm.addView(bars[i], bars[i].getLayoutParams());
+            bars[i] = new View(this);
+            WindowManager.LayoutParams initP = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, PixelFormat.TRANSLUCENT);
+            wm.addView(bars[i], initP); bars[i].setOnTouchListener(new SidebarTouchListener(i));
         }
+        updateBarsLayout();
 
-        // CHỈ VẼ GÓC MÀN KHOÁ (Độc lập, bám viền, nhỏ gọn)
         WindowManager.LayoutParams hp = new WindowManager.LayoutParams(90, 90, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, PixelFormat.TRANSLUCENT);
         lLockCorner = new CornerCurveView(this, true); rLockCorner = new CornerCurveView(this, false);
         WindowManager.LayoutParams lpC = new WindowManager.LayoutParams(); lpC.copyFrom(hp); lpC.gravity = Gravity.BOTTOM | Gravity.LEFT;
@@ -95,10 +86,9 @@ public class EdgeBarService extends AccessibilityService {
         View.OnTouchListener lockCornerTouch = new View.OnTouchListener() {
             private float sx, sy;
             @Override public boolean onTouch(View v, MotionEvent e) {
-                if(!km.isKeyguardLocked()) return false;
+                if(!km.isKeyguardLocked()) return false; // Trợ năng nhường sân cho ADB nếu không ở Lockscreen
                 if(e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); return true; }
-                if(e.getAction() == MotionEvent.ACTION_UP) { float dx = e.getRawX()-sx, dy = e.getRawY()-sy; if(dy < -40 && Math.abs(dx) > 40) { ObjectAnimator.ofFloat(fV, "alpha", 0f, 0.5f, 0f).setDuration(1000).start(); handleAction(v == lLockCorner ? "l_corner" : "r_corner"); } return true; }
-                return false;
+                if(e.getAction() == MotionEvent.ACTION_UP) { float dx = e.getRawX()-sx, dy = e.getRawY()-sy; if(dy < -40 && Math.abs(dx) > 40) { ObjectAnimator.ofFloat(fV, "alpha", 0f, 0.5f, 0f).setDuration(1000).start(); handleAction(v == lLockCorner ? "l_corner" : "r_corner"); } return true; } return false;
             }
         };
         lLockCorner.setOnTouchListener(lockCornerTouch); rLockCorner.setOnTouchListener(lockCornerTouch); wm.addView(lLockCorner, lpC); wm.addView(rLockCorner, rpC);
@@ -111,8 +101,7 @@ public class EdgeBarService extends AccessibilityService {
         if(!en) return;
         int alpha = prefs.getInt(BARS[i]+"_alpha", 50); int w = prefs.getInt(BARS[i]+"_w", 300); int h = prefs.getInt(BARS[i]+"_h", 60); int x = prefs.getInt(BARS[i]+"_x", 0); int y = prefs.getInt(BARS[i]+"_y", 0);
         bars[i].setBackgroundColor(Color.argb(alpha, 96, 125, 139));
-        WindowManager.LayoutParams p = new WindowManager.LayoutParams(w, h, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, PixelFormat.TRANSLUCENT); p.gravity = GRAV[i]; p.x = x; p.y = y;
-        wm.updateViewLayout(bars[i], p);
+        WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p);
     }
 
     private class SidebarTouchListener implements View.OnTouchListener {
@@ -131,5 +120,5 @@ public class EdgeBarService extends AccessibilityService {
     }
     
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {} @Override public void onInterrupt() {} 
-    @Override public void onDestroy() { super.onDestroy(); stopService(new Intent(this, HomescreenCornerService.class)); prefs.unregisterOnSharedPreferenceChangeListener(prefListener); for(int i=0; i<5; i++) if(bars[i] != null) wm.removeView(bars[i]); if (lLockCorner != null) wm.removeView(lLockCorner); if (rLockCorner != null) wm.removeView(rLockCorner); if (fV != null) wm.removeView(fV); }
+    @Override public void onDestroy() { super.onDestroy(); prefs.unregisterOnSharedPreferenceChangeListener(prefListener); for(int i=0; i<5; i++) if(bars[i] != null) wm.removeView(bars[i]); if (lLockCorner != null) wm.removeView(lLockCorner); if (rLockCorner != null) wm.removeView(rLockCorner); if (fV != null) wm.removeView(fV); }
 }
