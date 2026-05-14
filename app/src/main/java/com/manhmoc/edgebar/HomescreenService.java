@@ -2,37 +2,28 @@ package com.manhmoc.edgebar;
 import android.animation.ObjectAnimator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.IBinder; import android.provider.MediaStore; import android.provider.Settings; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager;
 
 public class HomescreenService extends Service {
-    private WindowManager wm; private View[] bars = new View[5]; private View lHomeCorner, rHomeCorner; private FlashView fV; private CameraManager cm; private String cId; private boolean fOn = false, isKbd = false, isBl = false, isScreenOn = true; private SharedPreferences prefs; private KeyguardManager km;
+    public static boolean isRunning = false; // Cờ kiểm tra cho V16 Ghost Mode
+    private WindowManager wm; private View[] bars = new View[5]; private View lHomeCorner, rHomeCorner; private FlashView fV; private CameraManager cm; private String cId; private boolean fOn = false, isKbd = false, isBl = false; private SharedPreferences prefs; private KeyguardManager km;
     private final String[] BARS = {"l", "r", "t_l", "t_r", "t_c"}; private final int[] GRAV = {Gravity.BOTTOM|Gravity.LEFT, Gravity.BOTTOM|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { if(k != null) updateVisibility(); };
-    
-    // THE GOD MODE: Nhận diện chính xác Tắt/Sáng màn hình
-    private BroadcastReceiver stateReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { 
-        if(Intent.ACTION_SCREEN_OFF.equals(i.getAction())) isScreenOn = false;
-        else if(Intent.ACTION_SCREEN_ON.equals(i.getAction())) isScreenOn = true;
-        updateVisibility(); 
-    } };
-    
     private BroadcastReceiver syncReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if(i.getAction().equals("com.manhmoc.edgebar.SYNC_STATE")) { isKbd = i.getBooleanExtra("isKbd", false); isBl = i.getBooleanExtra("isBl", false); } updateVisibility(); } };
 
     private class FlashView extends View { private Paint p = new Paint(); public FlashView(Context c) { super(c); p.setColor(Color.WHITE); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(4f); p.setAntiAlias(true); p.setShadowLayer(4f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); } @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); float off = p.getStrokeWidth()/2; canvas.drawRect(off, off, getWidth()-off, getHeight()-off, p); } }
     private class AssistantCurveView extends View { private Paint p; private boolean isLeft; public AssistantCurveView(Context c, boolean left) { super(c); isLeft = left; p = new Paint(); p.setColor(Color.WHITE); p.setAlpha(200); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(5f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); } @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = 5f; if(isLeft) { path.moveTo(pad, 0); path.quadTo(pad, h-pad, w, h-pad); } else { path.moveTo(w-pad, 0); path.quadTo(w-pad, h-pad, 0, h-pad); } canvas.drawPath(path, p); } }
 
     @Override public IBinder onBind(Intent intent) { return null; }
-    @Override public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
+    @Override public int onStartCommand(Intent intent, int flags, int startId) { isRunning = true; return START_STICKY; }
 
     @Override public void onCreate() {
-        super.onCreate(); wm = (WindowManager) getSystemService(WINDOW_SERVICE); km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE); try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
+        super.onCreate(); isRunning = true; wm = (WindowManager) getSystemService(WINDOW_SERVICE); km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE); try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return; }
         
         prefs.registerOnSharedPreferenceChangeListener(prefListener); 
-        IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); registerReceiver(stateReceiver, filter);
-        
-        IntentFilter kbdF = new IntentFilter("com.manhmoc.edgebar.SYNC_STATE");
-        if(android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(syncReceiver, kbdF, Context.RECEIVER_NOT_EXPORTED); else registerReceiver(syncReceiver, kbdF);
+        IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.SYNC_STATE");
+        if(android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED); else registerReceiver(syncReceiver, filter);
 
-        String cid = "eb_v16_home"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar V16 Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("V16 Bất Tử Đang Chạy").setSmallIcon(android.R.drawable.ic_lock_lock).build(); startForeground(2, n);
+        String cid = "eb_v16_home"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar V16 Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("V16 Lớp phủ ADB (Màn chính)").setSmallIcon(android.R.drawable.ic_lock_lock).build(); startForeground(2, n);
         
         fV = new FlashView(this); fV.setAlpha(0f); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
         for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams initP = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], initP); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener(i)); }
@@ -46,12 +37,9 @@ public class HomescreenService extends Service {
     }
 
     private void updateVisibility() {
-        // ĐIỀU KIỆN TỐI THƯỢNG: Chỉ hiện khi (Sáng màn hình AND Đã mở khoá AND Không vướng Bàn phím AND Không dính Blacklist)
-        boolean isUnlocked = !km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); 
-        boolean shouldShow = isScreenOn && isUnlocked && !(avoidKbd && isKbd) && !isBl;
-        
-        for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean(BARS[i]+"_en", i < 2); bars[i].setVisibility((en && shouldShow) ? View.VISIBLE : View.GONE); if(en && shouldShow) { int alpha = prefs.getInt(BARS[i]+"_alpha", 50); int w = prefs.getInt(BARS[i]+"_w", 300); int h = prefs.getInt(BARS[i]+"_h", 60); int x = prefs.getInt(BARS[i]+"_x", 0); int y = prefs.getInt(BARS[i]+"_y", 0); GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); } }
-        boolean cornEn = prefs.getBoolean("home_corner_en", true); int cornVis = (cornEn && shouldShow) ? View.VISIBLE : View.GONE;
+        boolean isUnlocked = !km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl;
+        for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean(BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(en && isUnlocked) { int alpha = prefs.getInt(BARS[i]+"_alpha", 50); int w = prefs.getInt(BARS[i]+"_w", 300); int h = prefs.getInt(BARS[i]+"_h", 60); int x = prefs.getInt(BARS[i]+"_x", 0); int y = prefs.getInt(BARS[i]+"_y", 0); GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); } }
+        boolean cornEn = prefs.getBoolean("home_corner_en", true); int cornVis = (cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE;
         if (lHomeCorner != null) lHomeCorner.setVisibility(cornVis); if (rHomeCorner != null) rHomeCorner.setVisibility(cornVis);
     }
 
@@ -67,5 +55,5 @@ public class HomescreenService extends Service {
     private void fireIntent(String idx) { try { String act = prefs.getString("i"+idx+"_act", ""); String pkg = prefs.getString("i"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("i"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("i"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("i"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("i"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("i"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     
     private class SidebarTouchListener implements View.OnTouchListener { private int idx; private GestureDetector gd; public SidebarTouchListener(int i) { this.idx = i; this.gd = new GestureDetector(HomescreenService.this, new GestureDetector.SimpleOnGestureListener() { @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction(BARS[idx] + "_tap"); return true; } @Override public boolean onDoubleTap(MotionEvent e) { handleAction(BARS[idx] + "_dtap"); return true; } @Override public void onLongPress(MotionEvent e) { handleAction(BARS[idx] + "_long"); } @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { if(e1==null||e2==null) return false; float dX = e2.getX()-e1.getX(), dY = e2.getY()-e1.getY(); if (Math.abs(dX) > Math.abs(dY)) handleAction(BARS[idx] + (dX > 0 ? "_right" : "_left")); else handleAction(BARS[idx] + (dY > 0 ? "_down" : "_up")); return true; } }); } @Override public boolean onTouch(View v, MotionEvent e) { gd.onTouchEvent(e); return true; } }
-    @Override public void onDestroy() { super.onDestroy(); try{unregisterReceiver(stateReceiver); unregisterReceiver(syncReceiver);}catch(Exception e){} prefs.unregisterOnSharedPreferenceChangeListener(prefListener); for(int i=0; i<5; i++) if(bars[i] != null) wm.removeView(bars[i]); if (lHomeCorner != null) wm.removeView(lHomeCorner); if (rHomeCorner != null) wm.removeView(rHomeCorner); if (fV != null) wm.removeView(fV); }
+    @Override public void onDestroy() { super.onDestroy(); isRunning = false; try{unregisterReceiver(syncReceiver);}catch(Exception e){} prefs.unregisterOnSharedPreferenceChangeListener(prefListener); for(int i=0; i<5; i++) if(bars[i] != null) wm.removeView(bars[i]); if (lHomeCorner != null) wm.removeView(lHomeCorner); if (rHomeCorner != null) wm.removeView(rHomeCorner); if (fV != null) wm.removeView(fV); }
 }

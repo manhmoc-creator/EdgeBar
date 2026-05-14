@@ -12,13 +12,13 @@ public class MainActivity extends Activity {
         String[] bK = {"NONE", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "QR", "NOTIFICATIONS"}; String[] bL = {"Không có", "Tắt màn hình", "Đèn pin", "Menu nguồn", "Âm lượng", "Chụp màn hình", "Camera an toàn", "Google Lens (QR)", "Thông báo"};
         for(int i=0; i<9; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; } for(int i=1; i<=15; i++) { ACT_KEYS[8+i]="INTENT_"+i; ACT_LABS[8+i]="Gửi Intent "+i; }
 
-        // Khởi tạo List CH Play tránh kẹt mặc định
-        if(!prefs.contains("blacklist")) prefs.edit().putString("blacklist", "com.android.vending, com.google.android.packageinstaller").apply();
+        // Bổ sung com.google.android.gms vào Blacklist để đổi tài khoản không bị chặn
+        if(!prefs.contains("blacklist")) prefs.edit().putString("blacklist", "com.android.vending, com.google.android.packageinstaller, com.google.android.gms").apply();
 
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212")); LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,40,40,100);
-        TextView title = new TextView(this); title.setText("⚙️ EdgeBar V15 - The Phantom"); title.setTextColor(Color.WHITE); title.setTextSize(24); title.setPadding(0,0,0,20); main.addView(title);
+        TextView title = new TextView(this); title.setText("⚙️ EdgeBar V16 - The Ghost"); title.setTextColor(Color.WHITE); title.setTextSize(24); title.setPadding(0,0,0,20); main.addView(title);
         
-        if (!Settings.canDrawOverlays(this)) { Button btnReq = new Button(this); btnReq.setText("⚠️ CẤP QUYỀN VẼ ĐÈ GÓC MÀN CHÍNH"); btnReq.setBackgroundColor(Color.RED); btnReq.setTextColor(Color.WHITE); btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))); main.addView(btnReq); } else { try { startService(new Intent(this, HomescreenService.class)); } catch (Exception e) {} }
+        if (!Settings.canDrawOverlays(this)) { Button btnReq = new Button(this); btnReq.setText("⚠️ CẤP QUYỀN VẼ ĐÈ GÓC MÀN CHÍNH"); btnReq.setBackgroundColor(Color.RED); btnReq.setTextColor(Color.WHITE); btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))); main.addView(btnReq); } else { try { if(!HomescreenService.isRunning) startService(new Intent(this, HomescreenService.class)); } catch (Exception e) {} }
 
         LinearLayout nav = new LinearLayout(this); nav.setOrientation(LinearLayout.HORIZONTAL); nav.setPadding(0, 0, 0, 40);
         btnNavDes = createNavBtn("THIẾT KẾ"); btnNavGes = createNavBtn("CỬ CHỈ"); btnNavInt = createNavBtn("INTENTS");
@@ -27,7 +27,7 @@ public class MainActivity extends Activity {
 
         pageDesign.addView(createSection("🎯 THUẬT TOÁN BẢO MẬT & KBD"));
         CheckBox cbKbd = new CheckBox(this); cbKbd.setText("Ẩn tự động khi Bàn phím (Gboard) hiện"); cbKbd.setTextColor(Color.parseColor("#FFC107")); cbKbd.setChecked(prefs.getBoolean("avoid_kbd", true)); cbKbd.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("avoid_kbd", c).apply()); pageDesign.addView(cbKbd);
-        pageDesign.addView(createSection("🚫 DANH SÁCH ĐEN (TỰ ẨN ĐỂ PLAY PROTECT CHẠY)"));
+        pageDesign.addView(createSection("🚫 DANH SÁCH ĐEN (TỰ ẨN LỚP PHỦ)"));
         pageDesign.addView(createInput("Nhập Package Names (cách nhau dấu phẩy)", "blacklist"));
 
         pageDesign.addView(createSection("✨ ĐIỀU KIỆN 2 GÓC VÁT (ASSISTANT)"));

@@ -13,21 +13,16 @@ public class EdgeBarService extends AccessibilityService {
     @Override protected void onServiceConnected() {
         super.onServiceConnected(); wm = (WindowManager) getSystemService(WINDOW_SERVICE); km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE); try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
         prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); registerReceiver(stateReceiver, filter);
-        String cid = "eb_v15_acc"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar V15 Lock", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("V15 Trợ Năng Đang Quét (Màn Khoá)").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build(); startForeground(1, n); createFloatingBars();
+        String cid = "eb_v16_acc"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar V16 Lock", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("V16 Trợ Năng Đang Quét").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build(); startForeground(1, n); createFloatingBars();
     }
 
-    // QUÉT BÀN PHÍM VÀ BLACKLIST, PHÁT TÍN HIỆU CHO MÀN CHÍNH
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
         if(event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             String cName = event.getClassName() != null ? event.getClassName().toString() : "";
             isKbd = cName.contains("InputWindow") || cName.contains("keyboard") || cName.contains("Keyboard");
-            
-            String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
-            String bl = prefs.getString("blacklist", "");
+            String pName = event.getPackageName() != null ? event.getPackageName().toString() : ""; String bl = prefs.getString("blacklist", "");
             isBl = !pName.isEmpty() && bl.contains(pName);
-
-            updateVisibility(); 
-            Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); i.putExtra("isKbd", isKbd); i.putExtra("isBl", isBl); sendBroadcast(i);
+            updateVisibility(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); i.putExtra("isKbd", isKbd); i.putExtra("isBl", isBl); sendBroadcast(i);
         }
     }
 
