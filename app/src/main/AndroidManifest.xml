@@ -22,7 +22,7 @@
             <intent-filter> <action android:name="com.manhmoc.edgebar.TOGGLE_ACTION" /> </intent-filter>
         </receiver>
 
-        <service android:name=".OverlayTileService" android:label="Bật/Tắt Lớp Phủ (ADB)" android:icon="@android:drawable/ic_menu_layers" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
+        <service android:name=".OverlayTileService" android:label="Bật/Tắt Lớp Phủ (ADB)" android:icon="@android:drawable/ic_secure" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
             <intent-filter> <action android:name="android.service.quicksettings.action.QS_TILE" /> </intent-filter>
         </service>
         <receiver android:name=".OverlayToggleReceiver" android:exported="true">
