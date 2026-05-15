@@ -1,5 +1,5 @@
 package com.manhmoc.edgebar;
-import android.animation.ObjectAnimator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.Build; import android.os.VibrationEffect; import android.os.Vibrator; import android.os.IBinder; import android.provider.MediaStore; import android.provider.Settings; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager;
+import android.animation.ObjectAnimator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.graphics.LinearGradient; import android.graphics.Shader; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.Build; import android.os.VibrationEffect; import android.os.Vibrator; import android.os.IBinder; import android.provider.MediaStore; import android.provider.Settings; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager;
 
 public class HomescreenService extends Service {
     public static boolean isRunning = false; 
@@ -8,10 +8,16 @@ public class HomescreenService extends Service {
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { if(k != null) { updateVisibility(); if(fV != null) fV.updateStyle(); } };
     private BroadcastReceiver syncReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if(i.getAction().equals("com.manhmoc.edgebar.SYNC_STATE")) { isKbd = i.getBooleanExtra("isKbd", false); isBl = i.getBooleanExtra("isBl", false); } updateVisibility(); } };
 
+    // V19 GRADIENT ANIMATION RENDERER
     private class FlashView extends View { 
-        private Paint p = new Paint(); float radius = 40f;
-        public FlashView(Context c) { super(c); p.setColor(Color.WHITE); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); p.setShadowLayer(8f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); } 
-        public void updateStyle() { p.setStrokeWidth(prefs.getInt("anim_thick", 12)); radius = prefs.getInt("anim_rad", 40); invalidate(); }
+        private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE";
+        public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); p.setShadowLayer(8f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); } 
+        public void updateStyle() { p.setStrokeWidth(prefs.getInt("anim_thick", 12)); radius = prefs.getInt("anim_rad", 40); cTheme = prefs.getString("anim_color", "WHITE"); invalidate(); }
+        @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w, h, oldw, oldh); applyGradient(w, h); }
+        private void applyGradient(int w, int h) {
+            int[] colors; switch(cTheme) { case "NEON": colors = new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF")}; break; case "CYBERPUNK": colors = new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700")}; break; case "LAVA": colors = new int[]{Color.parseColor("#FF4500"), Color.parseColor("#FF8C00")}; break; case "OCEAN": colors = new int[]{Color.parseColor("#00BFFF"), Color.parseColor("#1E90FF")}; break; case "MATRIX": colors = new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000")}; break; case "SUNSET": colors = new int[]{Color.parseColor("#FF1493"), Color.parseColor("#FF8C00")}; break; default: p.setShader(null); p.setColor(Color.WHITE); p.setShadowLayer(8f, 0, 0, Color.WHITE); return; }
+            p.setShader(new LinearGradient(0, 0, w, h, colors, null, Shader.TileMode.CLAMP)); p.setShadowLayer(8f, 0, 0, colors[0]);
+        }
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); float off = p.getStrokeWidth()/2; canvas.drawRoundRect(off, off, getWidth()-off, getHeight()-off, radius, radius, p); } 
     }
     private class AssistantCurveView extends View { private Paint p; private boolean isLeft; public AssistantCurveView(Context c, boolean left) { super(c); isLeft = left; p = new Paint(); p.setColor(Color.WHITE); p.setAlpha(200); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(8f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); } @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = 8f; if(isLeft) { path.moveTo(pad, 0); path.quadTo(pad, h-pad, w, h-pad); } else { path.moveTo(w-pad, 0); path.quadTo(w-pad, h-pad, 0, h-pad); } canvas.drawPath(path, p); } }
@@ -25,7 +31,7 @@ public class HomescreenService extends Service {
         prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.SYNC_STATE");
         if(Build.VERSION.SDK_INT >= 33) registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED); else registerReceiver(syncReceiver, filter);
 
-        String cid = "eb_v18_home"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar V18 Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("V18 Lớp phủ ADB (Màn chính)").setSmallIcon(android.R.drawable.ic_dialog_info).build(); startForeground(2, n);
+        String cid = "eb_v19_home"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar V19 Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("V19 Lớp phủ ADB (Màn chính)").setSmallIcon(android.R.drawable.ic_dialog_info).build(); startForeground(2, n);
         
         fV = new FlashView(this); fV.setAlpha(0f); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
         for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams initP = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], initP); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener(i)); }
@@ -44,7 +50,7 @@ public class HomescreenService extends Service {
     private void handleAction(String suffix) {
         String key = "home_" + suffix; String action = prefs.getString(key, "NONE"); if (action.equals("NONE")) { key = "both_" + suffix; action = prefs.getString(key, "NONE"); }
         if (!action.equals("NONE")) {
-            if (prefs.getBoolean(key + "_anim", true)) { ObjectAnimator.ofFloat(fV, "alpha", 0f, 0.4f, 0f).setDuration(prefs.getInt("anim_dur", 1500)).start(); }
+            if (prefs.getBoolean(key + "_anim", true)) { ObjectAnimator.ofFloat(fV, "alpha", 0f, 0.5f, 0f).setDuration(prefs.getInt("anim_dur", 1500)).start(); }
             try { switch(action) { 
                 case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": 
                     Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", action); sendBroadcast(ipc); break;
