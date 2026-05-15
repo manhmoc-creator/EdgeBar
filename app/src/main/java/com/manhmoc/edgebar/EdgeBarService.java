@@ -8,25 +8,13 @@ public class EdgeBarService extends AccessibilityService {
     private BroadcastReceiver stateReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { updateVisibility(); } };
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) { exec(i.getStringExtra("act")); } } };
 
-    // V19 GRADIENT ANIMATION RENDERER
     private class FlashView extends View { 
         private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE";
         public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); p.setShadowLayer(8f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); } 
-        public void updateStyle() { 
-            p.setStrokeWidth(prefs.getInt("anim_thick", 12)); radius = prefs.getInt("anim_rad", 40); cTheme = prefs.getString("anim_color", "WHITE"); invalidate(); 
-        }
+        public void updateStyle() { p.setStrokeWidth(prefs.getInt("anim_thick", 12)); radius = prefs.getInt("anim_rad", 40); cTheme = prefs.getString("anim_color", "WHITE"); invalidate(); }
         @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w, h, oldw, oldh); applyGradient(w, h); }
         private void applyGradient(int w, int h) {
-            int[] colors;
-            switch(cTheme) {
-                case "NEON": colors = new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF")}; break;
-                case "CYBERPUNK": colors = new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700")}; break;
-                case "LAVA": colors = new int[]{Color.parseColor("#FF4500"), Color.parseColor("#FF8C00")}; break;
-                case "OCEAN": colors = new int[]{Color.parseColor("#00BFFF"), Color.parseColor("#1E90FF")}; break;
-                case "MATRIX": colors = new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000")}; break;
-                case "SUNSET": colors = new int[]{Color.parseColor("#FF1493"), Color.parseColor("#FF8C00")}; break;
-                default: p.setShader(null); p.setColor(Color.WHITE); p.setShadowLayer(8f, 0, 0, Color.WHITE); return;
-            }
+            int[] colors; switch(cTheme) { case "NEON": colors = new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF")}; break; case "CYBERPUNK": colors = new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700")}; break; case "LAVA": colors = new int[]{Color.parseColor("#FF4500"), Color.parseColor("#FF8C00")}; break; case "OCEAN": colors = new int[]{Color.parseColor("#00BFFF"), Color.parseColor("#1E90FF")}; break; case "MATRIX": colors = new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000")}; break; case "SUNSET": colors = new int[]{Color.parseColor("#FF1493"), Color.parseColor("#FF8C00")}; break; default: p.setShader(null); p.setColor(Color.WHITE); p.setShadowLayer(8f, 0, 0, Color.WHITE); return; }
             p.setShader(new LinearGradient(0, 0, w, h, colors, null, Shader.TileMode.CLAMP)); p.setShadowLayer(8f, 0, 0, colors[0]);
         }
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); float off = p.getStrokeWidth()/2; canvas.drawRoundRect(off, off, getWidth()-off, getHeight()-off, radius, radius, p); } 
@@ -37,10 +25,9 @@ public class EdgeBarService extends AccessibilityService {
         super.onServiceConnected(); wm = (WindowManager) getSystemService(WINDOW_SERVICE); km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE); vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE); try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
         prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); registerReceiver(stateReceiver, filter);
         if(Build.VERSION.SDK_INT >= 33) registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"), Context.RECEIVER_NOT_EXPORTED); else registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"));
-        String cid = "eb_v19_acc"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar V19 Lock", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("V19 Trợ Năng Màn Khoá").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build(); startForeground(1, n); createFloatingBars();
+        String cid = "eb_19_acc"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar V19 Lock", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar v19 Trợ Năng").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build(); startForeground(1, n); createFloatingBars();
     }
 
-    // V19 RADAR: Sửa lỗi Gboard bằng cách quét sâu Package Name
     @Override public void onAccessibilityEvent(AccessibilityEvent event) { 
         if(event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) { 
             String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
@@ -53,7 +40,6 @@ public class EdgeBarService extends AccessibilityService {
 
     private void exec(String a) { if (a == null || a.equals("NONE")) return; try { switch(a) { case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break; case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break; case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break; case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; case "QR": Intent lens = getPackageManager().getLaunchIntentForPackage("com.google.ar.lens"); if (lens != null) { lens.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(lens); } else { Intent fb = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://lens.google.com/")); fb.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(fb); } break; default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
     private void fireIntent(String idx) { try { String act = prefs.getString("i"+idx+"_act", ""); String pkg = prefs.getString("i"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("i"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("i"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("i"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("i"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("i"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
-    
     private void handleAction(String suffix) { String key = "lock_" + suffix; String action = prefs.getString(key, "NONE"); if (action.equals("NONE")) { key = "both_" + suffix; action = prefs.getString(key, "NONE"); } if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_anim", true)) { ObjectAnimator.ofFloat(fV, "alpha", 0f, 0.5f, 0f).setDuration(prefs.getInt("anim_dur", 1500)).start(); } exec(action); } }
     private void doVibrate() { try { if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(30); } catch(Exception e){} }
 

@@ -1,13 +1,11 @@
 package com.manhmoc.edgebar;
-import android.app.Activity; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Color; import android.graphics.drawable.GradientDrawable; import android.os.Bundle; import android.os.Environment; import android.provider.Settings; import android.net.Uri; import android.view.Gravity; import android.view.View; import android.widget.*; import org.json.JSONObject; import java.io.File; import java.util.Iterator;
+import android.app.Activity; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Color; import android.graphics.drawable.GradientDrawable; import android.os.Bundle; import android.provider.Settings; import android.net.Uri; import android.view.Gravity; import android.view.View; import android.widget.*; import org.json.JSONObject; import java.util.Iterator;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs; private String[] ACT_KEYS = new String[24]; private String[] ACT_LABS = new String[24];
     private final String[] BARS = {"l", "r", "t_l", "t_r", "t_c"}; private final String[] BAR_NAMES = {"ĐÁY TRÁI", "ĐÁY PHẢI", "ĐỈNH TRÁI", "ĐỈNH PHẢI", "ĐỈNH GIỮA"}; 
     private final String[] GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold"}; 
     private final String[] GESTURE_NAMES = {"1 Chạm", "2 Chạm", "Nhấn giữ", "Vuốt Lên", "Vuốt Xuống", "Vuốt Trái", "Vuốt Phải", "Vuốt Lên + Giữ", "Vuốt Xuống + Giữ", "Vuốt Trái + Giữ", "Vuốt Phải + Giữ"};
-    
-    // BỘ MÀU GRADIENT V19
     private final String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET"};
     private final String[] COLOR_NAMES = {"Trắng Tinh Khiết", "Neon (Hồng - Xanh)", "Cyberpunk (Tím - Vàng)", "Lava (Đỏ - Cam)", "Đại Dương (Xanh - Lam)", "Matrix (Xanh Lá Đậm)", "Hoàng Hôn (Tím - Cam)"};
 
@@ -22,7 +20,7 @@ public class MainActivity extends Activity {
         if(!prefs.contains("blacklist")) prefs.edit().putString("blacklist", "com.android.vending, com.google.android.packageinstaller, com.google.android.gms").apply();
 
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212")); LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,40,40,100);
-        TextView title = new TextView(this); title.setText("⚙️ EdgeBar V19 - Perfection"); title.setTextColor(Color.WHITE); title.setTextSize(24); title.setPadding(0,0,0,20); main.addView(title);
+        TextView title = new TextView(this); title.setText("⚙️ Edge Bar v19 - Kỷ nguyên Phú Thọ"); title.setTextColor(Color.WHITE); title.setTextSize(24); title.setPadding(0,0,0,20); main.addView(title);
         
         if (!Settings.canDrawOverlays(this)) { Button btnReq = new Button(this); btnReq.setText("⚠️ CẤP QUYỀN VẼ ĐÈ GÓC MÀN CHÍNH"); btnReq.setBackgroundColor(Color.RED); btnReq.setTextColor(Color.WHITE); btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))); main.addView(btnReq); }
 
@@ -71,7 +69,7 @@ public class MainActivity extends Activity {
         if(res == RESULT_OK && data != null && data.getData() != null) {
             try {
                 if(req == 101) { java.io.OutputStream os = getContentResolver().openOutputStream(data.getData()); os.write(new JSONObject(prefs.getAll()).toString().getBytes()); os.close(); Toast.makeText(this, "Đã sao lưu file thành công!", Toast.LENGTH_SHORT).show(); } 
-                else if(req == 102) { java.io.InputStream is = getContentResolver().openInputStream(data.getData()); java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(is)); StringBuilder s = new StringBuilder(); String line; while((line=r.readLine())!=null) s.append(line); r.close(); JSONObject j = new JSONObject(s.toString()); SharedPreferences.Editor ed = prefs.edit(); Iterator<String> k = j.keys(); while(k.hasNext()) { String key = k.next(); Object v = j.get(key); if(v instanceof Boolean) ed.putBoolean(key, (Boolean)v); else if (v instanceof Integer) ed.putInt(key, (Integer)v); else if (v instanceof String) ed.putString(key, (String)v); } ed.apply(); Toast.makeText(this, "Đã nhập cấu hình! Khởi động lại EdgeBar nhé.", Toast.LENGTH_LONG).show(); }
+                else if(req == 102) { java.io.InputStream is = getContentResolver().openInputStream(data.getData()); java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(is)); StringBuilder s = new StringBuilder(); String line; while((line=r.readLine())!=null) s.append(line); r.close(); JSONObject j = new JSONObject(s.toString()); SharedPreferences.Editor ed = prefs.edit(); Iterator<String> k = j.keys(); while(k.hasNext()) { String key = k.next(); Object v = j.get(key); if(v instanceof Boolean) ed.putBoolean(key, (Boolean)v); else if (v instanceof Integer) ed.putInt(key, (Integer)v); else if (v instanceof String) ed.putString(key, (String)v); } ed.apply(); Toast.makeText(this, "Đã nhập cấu hình! Vuốt Quick Settings TẮT/BẬT LỚP PHỦ để tải lại UI.", Toast.LENGTH_LONG).show(); }
             } catch(Exception e) { Toast.makeText(this, "Lỗi File", Toast.LENGTH_LONG).show(); }
         }
     }
@@ -80,7 +78,6 @@ public class MainActivity extends Activity {
         designSliderContainer.removeAllViews(); 
         if(designTabState == 2) {
             designSliderContainer.addView(createSection("CẤU HÌNH NHÁY ANIMATION"));
-            // BẢNG MÀU GRADIENT V19
             LinearLayout lC = new LinearLayout(this); lC.setOrientation(LinearLayout.HORIZONTAL); lC.setPadding(0,10,0,10);
             TextView tC = new TextView(this); tC.setText("Màu sắc / Gradient:"); tC.setTextColor(Color.WHITE); tC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
             Spinner sC = createSpinner(); sC.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, COLOR_NAMES));
@@ -107,7 +104,6 @@ public class MainActivity extends Activity {
     private Button createNavBtn(String t) { Button b = new Button(this); b.setText(t); b.setTextColor(Color.GRAY); b.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); b.setBackgroundColor(Color.TRANSPARENT); return b; }
     private Button createTabBtn(String t) { Button b = new Button(this); b.setText(t); b.setTextColor(Color.WHITE); b.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); b.setBackgroundColor(Color.parseColor("#333333")); return b; }
     
-    // UI SLIDER MỚI CÓ DẤU CỘNG TRỪ
     private LinearLayout createSlider(String t, String k, int max, int def) { 
         LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); 
         TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv);
@@ -115,11 +111,8 @@ public class MainActivity extends Activity {
         Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.WHITE); btnMinus.setBackgroundColor(Color.DKGRAY);
         Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.WHITE); btnPlus.setBackgroundColor(Color.DKGRAY);
         SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        
         sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ public void onProgressChanged(SeekBar s, int p, boolean b){ tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); } public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){} }); 
-        btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); });
-        btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) sb.setProgress(p+1); });
-        
+        btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); }); btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) sb.setProgress(p+1); });
         row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); return l; 
     }
 
