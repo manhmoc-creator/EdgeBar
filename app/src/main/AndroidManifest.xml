@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <application android:label="EdgeBar V17" android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+    <application android:label="EdgeBar V18" android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter> <action android:name="android.intent.action.MAIN" /> <category android:name="android.intent.category.LAUNCHER" /> </intent-filter>
         </activity>
@@ -15,14 +15,12 @@
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config" />
         </service>
         <service android:name=".HomescreenService" android:exported="false" />
-        
         <service android:name=".EdgeBarTileService" android:label="Bật/Tắt Trợ Năng" android:icon="@android:drawable/ic_lock_lock" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
             <intent-filter> <action android:name="android.service.quicksettings.action.QS_TILE" /> </intent-filter>
         </service>
         <receiver android:name=".ToggleReceiver" android:exported="true">
             <intent-filter> <action android:name="com.manhmoc.edgebar.TOGGLE_ACTION" /> </intent-filter>
         </receiver>
-
         <service android:name=".OverlayTileService" android:label="Bật/Tắt Lớp Phủ" android:icon="@android:drawable/ic_dialog_info" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
             <intent-filter> <action android:name="android.service.quicksettings.action.QS_TILE" /> </intent-filter>
         </service>

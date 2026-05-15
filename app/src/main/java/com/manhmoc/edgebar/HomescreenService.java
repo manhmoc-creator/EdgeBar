@@ -5,10 +5,15 @@ public class HomescreenService extends Service {
     public static boolean isRunning = false; 
     private WindowManager wm; private View[] bars = new View[5]; private View lHomeCorner, rHomeCorner; private FlashView fV; private CameraManager cm; private String cId; private boolean fOn = false, isKbd = false, isBl = false; private SharedPreferences prefs; private KeyguardManager km; private Vibrator vibrator;
     private final String[] BARS = {"l", "r", "t_l", "t_r", "t_c"}; private final int[] GRAV = {Gravity.BOTTOM|Gravity.LEFT, Gravity.BOTTOM|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
-    private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { if(k != null) updateVisibility(); };
+    private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { if(k != null) { updateVisibility(); if(fV != null) fV.updateStyle(); } };
     private BroadcastReceiver syncReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if(i.getAction().equals("com.manhmoc.edgebar.SYNC_STATE")) { isKbd = i.getBooleanExtra("isKbd", false); isBl = i.getBooleanExtra("isBl", false); } updateVisibility(); } };
 
-    private class FlashView extends View { private Paint p = new Paint(); public FlashView(Context c) { super(c); p.setColor(Color.WHITE); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(12f); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); p.setShadowLayer(8f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); } @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); float off = p.getStrokeWidth()/2; canvas.drawRoundRect(off, off, getWidth()-off, getHeight()-off, 40f, 40f, p); } }
+    private class FlashView extends View { 
+        private Paint p = new Paint(); float radius = 40f;
+        public FlashView(Context c) { super(c); p.setColor(Color.WHITE); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); p.setShadowLayer(8f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); } 
+        public void updateStyle() { p.setStrokeWidth(prefs.getInt("anim_thick", 12)); radius = prefs.getInt("anim_rad", 40); invalidate(); }
+        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); float off = p.getStrokeWidth()/2; canvas.drawRoundRect(off, off, getWidth()-off, getHeight()-off, radius, radius, p); } 
+    }
     private class AssistantCurveView extends View { private Paint p; private boolean isLeft; public AssistantCurveView(Context c, boolean left) { super(c); isLeft = left; p = new Paint(); p.setColor(Color.WHITE); p.setAlpha(200); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(8f); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); } @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = 8f; if(isLeft) { path.moveTo(pad, 0); path.quadTo(pad, h-pad, w, h-pad); } else { path.moveTo(w-pad, 0); path.quadTo(w-pad, h-pad, 0, h-pad); } canvas.drawPath(path, p); } }
 
     @Override public IBinder onBind(Intent intent) { return null; }
@@ -20,7 +25,7 @@ public class HomescreenService extends Service {
         prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.SYNC_STATE");
         if(Build.VERSION.SDK_INT >= 33) registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED); else registerReceiver(syncReceiver, filter);
 
-        String cid = "eb_v17_home"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar V17 Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("V17 Lớp phủ ADB (Màn chính)").setSmallIcon(android.R.drawable.ic_dialog_info).build(); startForeground(2, n);
+        String cid = "eb_v18_home"; NotificationChannel c = new NotificationChannel(cid, "EdgeBar V18 Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("V18 Lớp phủ ADB (Màn chính)").setSmallIcon(android.R.drawable.ic_dialog_info).build(); startForeground(2, n);
         
         fV = new FlashView(this); fV.setAlpha(0f); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
         for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams initP = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], initP); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener(i)); }
@@ -39,10 +44,9 @@ public class HomescreenService extends Service {
     private void handleAction(String suffix) {
         String key = "home_" + suffix; String action = prefs.getString(key, "NONE"); if (action.equals("NONE")) { key = "both_" + suffix; action = prefs.getString(key, "NONE"); }
         if (!action.equals("NONE")) {
-            if (prefs.getBoolean(key + "_anim", true)) { ObjectAnimator.ofFloat(fV, "alpha", 0f, 0.4f, 0f).setDuration(1500).start(); }
+            if (prefs.getBoolean(key + "_anim", true)) { ObjectAnimator.ofFloat(fV, "alpha", 0f, 0.4f, 0f).setDuration(prefs.getInt("anim_dur", 1500)).start(); }
             try { switch(action) { 
                 case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": 
-                    // GỬI LỆNH MƯỢN TAY TRỢ NĂNG (IPC)
                     Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", action); sendBroadcast(ipc); break;
                 case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; case "QR": Intent lens = getPackageManager().getLaunchIntentForPackage("com.google.ar.lens"); lens.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(lens); break; default: if(action.startsWith("INTENT_")) fireIntent(action.split("_")[1]); break; 
             } } catch (Exception e) {}
