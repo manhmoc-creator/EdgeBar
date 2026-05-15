@@ -1,6 +1,5 @@
 package com.manhmoc.edgebar;
 import android.content.Intent; import android.service.quicksettings.Tile; import android.service.quicksettings.TileService;
-// V16 GHOST MODE: QUICK SETTING CHO LỚP PHỦ MÀN CHÍNH
 public class OverlayTileService extends TileService {
     @Override public void onClick() { super.onClick(); Intent sInt = new Intent(this, HomescreenService.class);
         if (HomescreenService.isRunning) { stopService(sInt); getQsTile().setState(Tile.STATE_INACTIVE); } 
