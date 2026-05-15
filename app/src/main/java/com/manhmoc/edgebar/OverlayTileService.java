@@ -1,8 +1,1 @@
-package com.manhmoc.edgebar;
-import android.content.Intent; import android.service.quicksettings.Tile; import android.service.quicksettings.TileService;
-public class OverlayTileService extends TileService {
-    @Override public void onClick() { super.onClick(); Intent sInt = new Intent(this, HomescreenService.class);
-        if (HomescreenService.isRunning) { stopService(sInt); getQsTile().setState(Tile.STATE_INACTIVE); } 
-        else { if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(sInt); else startService(sInt); getQsTile().setState(Tile.STATE_ACTIVE); } getQsTile().updateTile(); }
-    @Override public void onStartListening() { super.onStartListening(); Tile t = getQsTile(); t.setState(HomescreenService.isRunning ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE); t.updateTile(); }
-}
+package com.manhmoc.edgebar; import android.content.Intent; import android.service.quicksettings.Tile; import android.service.quicksettings.TileService; public class OverlayTileService extends TileService { @Override public void onClick() { super.onClick(); Intent sInt = new Intent(this, HomescreenService.class); if (HomescreenService.isRunning) { stopService(sInt); getQsTile().setState(Tile.STATE_INACTIVE); } else { if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(sInt); else startService(sInt); getQsTile().setState(Tile.STATE_ACTIVE); } getQsTile().updateTile(); } @Override public void onStartListening() { super.onStartListening(); getQsTile().setState(HomescreenService.isRunning ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE); getQsTile().updateTile(); } }
