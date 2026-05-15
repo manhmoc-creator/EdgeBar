@@ -12,7 +12,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabBoth, tabLock, tabHome; private Button btnBoth, btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
     private int designTabState = 0; 
-    private final String CURRENT_VERSION = "V19.3";
+    private final String CURRENT_VERSION = "V19.4"; // CẬP NHẬT LÊN 19.4
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
 
@@ -70,7 +70,7 @@ public class MainActivity extends Activity {
         pageDesign.addView(wrapCard(secVisual)); btnEditLock.performClick();
 
         LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 20, 0, 20); 
-        btnBoth = createTabBtn("BOTH"); btnLock = createTabBtn("LOCK"); btnHome = createTabBtn("HOME"); // CẬP NHẬT TÊN NGẮN
+        btnBoth = createTabBtn("BOTH"); btnLock = createTabBtn("LOCK"); btnHome = createTabBtn("HOME");
         btnBoth.setLayoutParams(bp); btnLock.setLayoutParams(mP); btnHome.setLayoutParams(rp); tabContainer.addView(btnBoth); tabContainer.addView(btnLock); tabContainer.addView(btnHome); pageGestures.addView(tabContainer);
         tabBoth = createConfigPage("both"); tabLock = createConfigPage("lock"); tabHome = createConfigPage("home"); pageGestures.addView(tabBoth); pageGestures.addView(tabLock); pageGestures.addView(tabHome); btnBoth.setOnClickListener(v -> switchGesTab(0)); btnLock.setOnClickListener(v -> switchGesTab(1)); btnHome.setOnClickListener(v -> switchGesTab(2)); switchGesTab(0);
 
@@ -85,7 +85,6 @@ public class MainActivity extends Activity {
         btnEditAnim.setBackground(getRounded(designTabState==2 ? "#00E5FF" : "#222222", 20f)); btnEditAnim.setTextColor(designTabState==2 ? Color.BLACK : Color.WHITE);
     }
 
-    // TỰ ĐỘNG TẢI VÀ MỞ BẢNG CÀI ĐẶT (NEWPIPE STYLE)
     private void checkUpdate() {
         Toast.makeText(this, "Checking GitHub...", Toast.LENGTH_SHORT).show();
         new Thread(() -> { try {
