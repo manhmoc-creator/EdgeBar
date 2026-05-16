@@ -1,5 +1,5 @@
 package com.manhmoc.edgebar;
-import android.accessibilityservice.AccessibilityService; import android.animation.ValueAnimator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.*; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.Build; import android.os.VibrationEffect; import android.os.Vibrator; import android.provider.MediaStore; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager; import android.view.accessibility.AccessibilityEvent;
+import android.accessibilityservice.AccessibilityService; import android.animation.ValueAnimator; import android.animation.AnimatorListenerAdapter; import android.animation.Animator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.graphics.LinearGradient; import android.graphics.SweepGradient; import android.graphics.Matrix; import android.graphics.Shader; import android.graphics.DashPathEffect; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.Build; import android.os.VibrationEffect; import android.os.Vibrator; import android.provider.MediaStore; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager; import android.view.accessibility.AccessibilityEvent;
 
 public class EdgeBarService extends AccessibilityService {
     private WindowManager wm; private View[] bars = new View[5]; private View[] corners = new View[4]; private FlashView fV; private CameraManager cm; private String cId; private boolean fOn = false, isKbd = false, isBl = false; private KeyguardManager km; private SharedPreferences prefs; private Vibrator vibrator;
@@ -9,7 +9,6 @@ public class EdgeBarService extends AccessibilityService {
     private BroadcastReceiver stateReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { updateVisibility(); } };
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) { exec(i.getStringExtra("act")); } } };
 
-    // V19.6 BUTTERY SMOOTH ANIMATION ENGINE (DASH PATH)
     private class FlashView extends View { 
         private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phase = 0f;
         public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); p.setShadowLayer(8f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); } 
@@ -26,17 +25,12 @@ public class EdgeBarService extends AccessibilityService {
         } 
     }
     
-    // V19.6: 4 CORNER FRAME VIEW
     private class CornerView extends View { 
         private Paint p; private int type; 
         public CornerView(Context c, int type) { super(c); this.type = type; p = new Paint(); p.setColor(Color.WHITE); p.setAlpha(200); p.setStyle(Paint.Style.STROKE); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); } 
         public void updateProps(int thick, int alpha) { p.setStrokeWidth(thick); p.setAlpha(alpha); invalidate(); }
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = p.getStrokeWidth()/2; float rad = prefs.getInt("lock_corner_rad", 40);
-            if(type==0) { path.moveTo(pad, h); path.lineTo(pad, rad); path.quadTo(pad, pad, rad, pad); path.lineTo(w, pad); } // TL
-            else if(type==1) { path.moveTo(0, pad); path.lineTo(w-rad, pad); path.quadTo(w-pad, pad, w-pad, rad); path.lineTo(w-pad, h); } // TR
-            else if(type==2) { path.moveTo(pad, 0); path.lineTo(pad, h-rad); path.quadTo(pad, h-pad, rad, h-pad); path.lineTo(w, h-pad); } // BL
-            else if(type==3) { path.moveTo(0, h-pad); path.lineTo(w-rad, h-pad); path.quadTo(w-pad, h-pad, w-pad, h-rad); path.lineTo(w-pad, 0); } // BR
-            canvas.drawPath(path, p); 
+            if(type==0) { path.moveTo(pad, h); path.lineTo(pad, rad); path.quadTo(pad, pad, rad, pad); path.lineTo(w, pad); } else if(type==1) { path.moveTo(0, pad); path.lineTo(w-rad, pad); path.quadTo(w-pad, pad, w-pad, rad); path.lineTo(w-pad, h); } else if(type==2) { path.moveTo(pad, 0); path.lineTo(pad, h-rad); path.quadTo(pad, h-pad, rad, h-pad); path.lineTo(w, h-pad); } else if(type==3) { path.moveTo(0, h-pad); path.lineTo(w-rad, h-pad); path.quadTo(w-pad, h-pad, w-pad, h-rad); path.lineTo(w-pad, 0); } canvas.drawPath(path, p); 
         } 
     }
 
@@ -58,7 +52,7 @@ public class EdgeBarService extends AccessibilityService {
             if (prefs.getBoolean(key + "_anim", true)) { 
                 int style = prefs.getInt("anim_style", 0); int dur = prefs.getInt("anim_dur", 1500); 
                 if(style == 0) { ValueAnimator anim = ValueAnimator.ofFloat(0f, 0.5f, 0f); anim.setDuration(dur); anim.addUpdateListener(a -> fV.setAlpha((float)a.getAnimatedValue())); anim.start(); } 
-                else { fV.setAlpha(1f); float p = 2 * (fV.getWidth() + fV.getHeight()); ValueAnimator anim = ValueAnimator.ofFloat(0f, -p); anim.setDuration(dur); anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue())); anim.start(); } 
+                else { fV.setAlpha(1f); float p = 2 * (fV.getWidth() + fV.getHeight()); ValueAnimator anim = ValueAnimator.ofFloat(0f, -p); anim.setDuration(dur); anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue())); anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); } }); anim.start(); } 
             } exec(action); 
         } 
     }
