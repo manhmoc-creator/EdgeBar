@@ -20,8 +20,12 @@ public class HomescreenService extends Service {
         }
         public void setPhase(float ph) { this.phase = ph; invalidate(); }
         @Override protected void onDraw(Canvas canvas) { 
-            if(aStyle > 0) { float perim = 2 * (getWidth() + getHeight()); float len = (aStyle==1) ? perim/4f : (aStyle==2) ? perim/8f : perim/16f; float gap = (aStyle==1) ? perim*3f/4f : (aStyle==2) ? perim*3f/8f : perim*3f/16f; p.setPathEffect(new DashPathEffect(new float[]{len, gap}, phase)); } else { p.setPathEffect(null); }
-            float off = p.getStrokeWidth()/2; canvas.drawRoundRect(off, off, getWidth()-off, getHeight()-off, radius, radius, p); 
+            float w = getWidth(), h = getHeight();
+            if(aStyle > 0 && w > 0 && h > 0) { 
+                float perim = 2 * (w + h); float len = (aStyle==1) ? perim/4f : (aStyle==2) ? perim/8f : perim/16f; float gap = (aStyle==1) ? perim*3f/4f : (aStyle==2) ? perim*3f/8f : perim*3f/16f; 
+                if (len > 0 && gap > 0) p.setPathEffect(new DashPathEffect(new float[]{len, gap}, phase)); else p.setPathEffect(null);
+            } else { p.setPathEffect(null); }
+            float off = p.getStrokeWidth()/2; canvas.drawRoundRect(off, off, w-off, h-off, radius, radius, p); 
         } 
     }
     
@@ -43,7 +47,7 @@ public class HomescreenService extends Service {
         prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.SYNC_STATE");
         if(Build.VERSION.SDK_INT >= 33) registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED); else registerReceiver(syncReceiver, filter);
 
-        String cid = "eb_19_home"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar Lớp phủ ADB").setSmallIcon(android.R.drawable.ic_dialog_info).build(); startForeground(2, n);
+        String cid = "eb_20_home"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar Lớp phủ ADB").setSmallIcon(android.R.drawable.ic_dialog_info).build(); startForeground(2, n);
         
         fV = new FlashView(this); fV.setAlpha(0f); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
         for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams initP = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], initP); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener(i)); }
@@ -58,7 +62,7 @@ public class HomescreenService extends Service {
     
     private void doVibrate(int dur) { if(dur<=0) return; try { if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
 
-    private void handleAction(String prefixKey, String actionKey) {
+    private void handleAction(String actionKey) {
         String action = prefs.getString(actionKey, "NONE");
         if (!action.equals("NONE")) {
             if (prefs.getBoolean(actionKey + "_vib", true)) { doVibrate(prefs.getInt("vib_dur", 30)); }
@@ -75,13 +79,13 @@ public class HomescreenService extends Service {
     
     private class CornerTouchListener implements View.OnTouchListener {
         private int idx; private float sx, sy; private long st; public CornerTouchListener(int i) { this.idx = i; }
-        @Override public boolean onTouch(View v, MotionEvent e) { if (e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis(); } else if (e.getAction() == MotionEvent.ACTION_UP) { float dx = e.getRawX() - sx, dy = e.getRawY() - sy; if (Math.abs(dx) > 40 && Math.abs(dy) > 40) { boolean isHold = (System.currentTimeMillis() - st) > prefs.getInt("hold_dur", 600); handleAction("home_corner_" + CORNERS[idx], "home_corner_" + CORNERS[idx] + "_" + (isHold ? "hold" : "swipe")); return true; } } return true; }
+        @Override public boolean onTouch(View v, MotionEvent e) { if (e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis(); } else if (e.getAction() == MotionEvent.ACTION_UP) { float dx = e.getRawX() - sx, dy = e.getRawY() - sy; if (Math.abs(dx) > 40 && Math.abs(dy) > 40) { boolean isHold = (System.currentTimeMillis() - st) > prefs.getInt("hold_dur", 600); handleAction("home_corner_" + CORNERS[idx] + "_" + (isHold ? "hold" : "swipe")); return true; } } return true; }
     }
 
     private class SidebarTouchListener implements View.OnTouchListener { 
         private int idx; private GestureDetector gd; private float sx, sy; private long st;
-        public SidebarTouchListener(int i) { this.idx = i; this.gd = new GestureDetector(HomescreenService.this, new GestureDetector.SimpleOnGestureListener() { @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction("home_" + BARS[idx], "home_" + BARS[idx] + "_tap"); return true; } @Override public boolean onDoubleTap(MotionEvent e) { handleAction("home_" + BARS[idx], "home_" + BARS[idx] + "_dtap"); return true; } @Override public void onLongPress(MotionEvent e) { handleAction("home_" + BARS[idx], "home_" + BARS[idx] + "_long"); } @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { return false; } }); } 
-        @Override public boolean onTouch(View v, MotionEvent e) { gd.onTouchEvent(e); if (e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis(); } else if (e.getAction() == MotionEvent.ACTION_UP) { float dx = e.getRawX() - sx, dy = e.getRawY() - sy; if (Math.abs(dx) > 50 || Math.abs(dy) > 50) { long duration = System.currentTimeMillis() - st; boolean isHold = duration > prefs.getInt("hold_dur", 600); String dir = ""; if (Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? "right" : "left"; else dir = dy > 0 ? "down" : "up"; String actionName = dir + (isHold ? "_hold" : ""); handleAction("home_" + BARS[idx], "home_" + BARS[idx] + "_" + actionName); return true; } } return true; } 
+        public SidebarTouchListener(int i) { this.idx = i; this.gd = new GestureDetector(HomescreenService.this, new GestureDetector.SimpleOnGestureListener() { @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction("home_" + BARS[idx] + "_tap"); return true; } @Override public boolean onDoubleTap(MotionEvent e) { handleAction("home_" + BARS[idx] + "_dtap"); return true; } @Override public void onLongPress(MotionEvent e) { handleAction("home_" + BARS[idx] + "_long"); } @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { return false; } }); } 
+        @Override public boolean onTouch(View v, MotionEvent e) { gd.onTouchEvent(e); if (e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis(); } else if (e.getAction() == MotionEvent.ACTION_UP) { float dx = e.getRawX() - sx, dy = e.getRawY() - sy; if (Math.abs(dx) > 50 || Math.abs(dy) > 50) { long duration = System.currentTimeMillis() - st; boolean isHold = duration > prefs.getInt("hold_dur", 600); String dir = ""; if (Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? "right" : "left"; else dir = dy > 0 ? "down" : "up"; String actionName = dir + (isHold ? "_hold" : ""); handleAction("home_" + BARS[idx] + "_" + actionName); return true; } } return true; } 
     }
     @Override public void onDestroy() { super.onDestroy(); isRunning = false; try{unregisterReceiver(syncReceiver);}catch(Exception e){} prefs.unregisterOnSharedPreferenceChangeListener(prefListener); for(int i=0; i<5; i++) if(bars[i] != null) wm.removeView(bars[i]); for(int i=0; i<4; i++) if(corners[i] != null) wm.removeView(corners[i]); if (fV != null) wm.removeView(fV); }
 }

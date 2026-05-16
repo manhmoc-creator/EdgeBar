@@ -16,17 +16,12 @@ android {
         applicationId "com.manhmoc.edgebar"
         minSdk 26
         targetSdk 34
-        versionCode 31
-        versionName "19.10" 
+        versionCode 32
+        versionName "20.0" 
     }
     
     buildTypes {
-        debug {
-            signingConfig signingConfigs.edge19
-        }
-        release {
-            signingConfig signingConfigs.edge19
-            minifyEnabled false
-        }
+        debug { signingConfig signingConfigs.edge19 }
+        release { signingConfig signingConfigs.edge19; minifyEnabled false }
     }
 }
