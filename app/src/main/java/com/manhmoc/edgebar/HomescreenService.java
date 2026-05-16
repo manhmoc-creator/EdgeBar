@@ -46,6 +46,7 @@ public class HomescreenService extends Service {
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return; }
         prefs.registerOnSharedPreferenceChangeListener(prefListener); 
         IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.SYNC_STATE");
+        
         registerReceiver(syncReceiver, filter);
 
         String cid = "eb_20_home"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar Lớp phủ ADB").setSmallIcon(android.R.drawable.ic_dialog_info).build(); startForeground(2, n);
