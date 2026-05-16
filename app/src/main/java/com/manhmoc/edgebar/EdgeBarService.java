@@ -9,7 +9,6 @@ public class EdgeBarService extends AccessibilityService {
     private BroadcastReceiver stateReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { updateVisibility(); } };
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) { exec(i.getStringExtra("act")); } } };
 
-    // V19.7 COLOR & MULTI-DASH ENGINE
     private class FlashView extends View { 
         private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phase = 0f;
         public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); p.setShadowLayer(15f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); } 
@@ -21,12 +20,7 @@ public class EdgeBarService extends AccessibilityService {
         }
         public void setPhase(float ph) { this.phase = ph; invalidate(); }
         @Override protected void onDraw(Canvas canvas) { 
-            if(aStyle > 0) { 
-                float perim = 2 * (getWidth() + getHeight()); 
-                float len = (aStyle==1) ? perim/4f : (aStyle==2) ? perim/8f : perim/16f; 
-                float gap = (aStyle==1) ? perim*3f/4f : (aStyle==2) ? perim*3f/8f : perim*3f/16f;
-                p.setPathEffect(new DashPathEffect(new float[]{len, gap}, phase)); 
-            } else { p.setPathEffect(null); }
+            if(aStyle > 0) { float perim = 2 * (getWidth() + getHeight()); float len = (aStyle==1) ? perim/4f : (aStyle==2) ? perim/8f : perim/16f; float gap = (aStyle==1) ? perim*3f/4f : (aStyle==2) ? perim*3f/8f : perim*3f/16f; p.setPathEffect(new DashPathEffect(new float[]{len, gap}, phase)); } else { p.setPathEffect(null); }
             float off = p.getStrokeWidth()/2; canvas.drawRoundRect(off, off, getWidth()-off, getHeight()-off, radius, radius, p); 
         } 
     }
@@ -77,9 +71,8 @@ public class EdgeBarService extends AccessibilityService {
         for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE); if(en && isLocked) { int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("lock_"+BARS[i]+"_w", 300); int h = prefs.getInt("lock_"+BARS[i]+"_h", 60); int x = prefs.getInt("lock_"+BARS[i]+"_x", 0); int y = prefs.getInt("lock_"+BARS[i]+"_y", 0); GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; 
         if(!prefs.getBoolean("lock_"+BARS[i]+"_block", true)) p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         wm.updateViewLayout(bars[i], p); } } 
-        boolean cornEn = prefs.getBoolean("lock_corner_en", true); boolean cornInv = prefs.getBoolean("lock_corner_invis", false);
-        for(int i=0; i<4; i++) { if(corners[i] == null) continue; corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isLocked) { ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), cornInv ? 0 : 200); WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.gravity = C_GRAV[i]; p.x = prefs.getInt("lock_corner_w", 0); p.y = prefs.getInt("lock_corner_h", 0); 
-        if(!prefs.getBoolean("lock_corner_block", true)) p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        for(int i=0; i<4; i++) { if(corners[i] == null) continue; boolean cEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", true); boolean cInv = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_invis", false); corners[i].setVisibility((cEn && isLocked && !hide) ? View.VISIBLE : View.GONE); if(cEn && isLocked) { ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), cInv ? 0 : 200); WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.gravity = C_GRAV[i]; p.x = prefs.getInt("lock_corner_w", 0); p.y = prefs.getInt("lock_corner_h", 0); 
+        if(!prefs.getBoolean("lock_corner_"+CORNERS[i]+"_block", true)) p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         wm.updateViewLayout(corners[i], p); } }
     }
 
