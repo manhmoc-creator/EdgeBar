@@ -2,7 +2,6 @@ plugins { id 'com.android.application' }
 android {
     namespace 'com.manhmoc.edgebar'
     compileSdk 34
-    
     signingConfigs {
         edge19 {
             storeFile file("../edge.keystore")
@@ -11,15 +10,13 @@ android {
             keyPassword "edge19"
         }
     }
-    
     defaultConfig { 
         applicationId "com.manhmoc.edgebar"
         minSdk 26
         targetSdk 34
-        versionCode 33
-        versionName "20.1" 
+        versionCode 34
+        versionName "20.2" 
     }
-    
     buildTypes {
         debug { signingConfig signingConfigs.edge19 }
         release { signingConfig signingConfigs.edge19; minifyEnabled false }
