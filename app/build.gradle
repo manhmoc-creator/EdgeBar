@@ -3,9 +3,9 @@ android {
     namespace 'com.manhmoc.edgebar'
     compileSdk 34
     
-    // Đã đổi tên thành "edgeKey" để không đụng hàng với hàm hệ thống
+    // KHOÁ CỨNG CHỮ KÝ BẰNG FILE KEYSTORE CỦA BẠN
     signingConfigs {
-        edgeKey {
+        edge19 {
             storeFile file("../edge.keystore")
             storePassword "edge19"
             keyAlias "edge19"
@@ -13,10 +13,10 @@ android {
         }
     }
     
-    defaultConfig { applicationId "com.manhmoc.edgebar"; minSdk 26; targetSdk 34; versionCode 27; versionName "19.7" }
+    defaultConfig { applicationId "com.manhmoc.edgebar"; minSdk 26; targetSdk 34; versionCode 28; versionName "19.7" }
     
     buildTypes {
-        debug { signingConfig signingConfigs.edgeKey }
-        release { signingConfig signingConfigs.edgeKey; minifyEnabled false }
+        debug { signingConfig signingConfigs.edge19 }
+        release { signingConfig signingConfigs.edge19; minifyEnabled false }
     }
 }
