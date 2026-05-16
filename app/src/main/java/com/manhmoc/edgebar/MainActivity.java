@@ -15,7 +15,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabLock, tabHome; private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
-    private int designTabState = 0; private final String CURRENT_VERSION = "V19.7"; 
+    private int designTabState = 0; private final String CURRENT_VERSION = "V19.8"; 
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
 
@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212")); LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,40,40,100);
         
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(Gravity.CENTER_VERTICAL); header.setPadding(0,0,0,30);
-        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe Seamless"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe Flawless"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         Button btnLang = new Button(this); btnLang.setText(isVi ? "🇻🇳 VI" : "🇺🇸 EN"); btnLang.setTextColor(Color.WHITE); btnLang.setBackground(getRounded("#2E7D32", 20f)); LinearLayout.LayoutParams lpL = new LinearLayout.LayoutParams(-2, -2); lpL.setMargins(0,0,15,0); btnLang.setLayoutParams(lpL); btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
         Button btnUpdate = new Button(this); btnUpdate.setText(T("CHECK\nUPDATE", "CẬP\nNHẬT")); btnUpdate.setTextColor(Color.parseColor("#00E5FF")); btnUpdate.setBackground(getRounded("#1E1E1E", 25f)); btnUpdate.setPadding(30,20,30,20);
         btnUpdate.setOnClickListener(v -> checkUpdate()); header.addView(title); header.addView(btnLang); header.addView(btnUpdate); main.addView(header);
@@ -92,7 +92,7 @@ public class MainActivity extends Activity {
         for(int i=0; i<5; i++) { 
             LinearLayout opt = new LinearLayout(this); opt.setOrientation(LinearLayout.HORIZONTAL);
             CheckBox cb = new CheckBox(this); cb.setText(T("ENABLE: ","BẬT: ") + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_en", c).apply()); opt.addView(cb); 
-            CheckBox cbBlock = new CheckBox(this); cbBlock.setText(T("Block OS","Khoá Nền")); cbBlock.setTextColor(Color.parseColor("#FFC107")); cbBlock.setChecked(prefs.getBoolean(prefix+BARS[i]+"_block", true)); cbBlock.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_block", c).apply()); opt.addView(cbBlock); designSliderContainer.addView(opt);
+            CheckBox cbBlock = new CheckBox(this); cbBlock.setText(T("Block OS Touch","Khoá Nền")); cbBlock.setTextColor(Color.parseColor("#FFC107")); cbBlock.setChecked(prefs.getBoolean(prefix+BARS[i]+"_block", true)); cbBlock.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_block", c).apply()); opt.addView(cbBlock); designSliderContainer.addView(opt);
             designSliderContainer.addView(createSlider(T("Opacity","Độ trong suốt"), prefix+BARS[i]+"_alpha", 255, 50)); designSliderContainer.addView(createSlider(T("Width","Chiều ngang"), prefix+BARS[i]+"_w", 1400, 300)); designSliderContainer.addView(createSlider(T("Height","Chiều dọc"), prefix+BARS[i]+"_h", 1400, 60)); designSliderContainer.addView(createSlider(T("Pos X","Toạ độ X"), prefix+BARS[i]+"_x", 1000, 0)); designSliderContainer.addView(createSlider(T("Pos Y","Toạ độ Y"), prefix+BARS[i]+"_y", 1000, 0)); 
         } 
         designSliderContainer.addView(createSection(T("4 FRAME CORNERS (Symmetrical)","4 GÓC VIỀN THỰC THỂ (Đối Xứng)")));
@@ -123,9 +123,9 @@ public class MainActivity extends Activity {
             LinearLayout cWrap = new LinearLayout(this); cWrap.setOrientation(LinearLayout.VERTICAL);
             cWrap.addView(createHeaderWithToggles(CORNER_NAMES[i], prefix + "_corner_" + CORNERS[i])); 
             LinearLayout opts = new LinearLayout(this); opts.setOrientation(LinearLayout.HORIZONTAL);
-            CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable","Bật")); cbEn.setTextColor(Color.parseColor("#4CAF50")); cbEn.setChecked(prefs.getBoolean(prefix+"_corner_"+CORNERS[i]+"_en", true)); final int cIdx = i; cbEn.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"_corner_"+CORNERS[cIdx]+"_en", c).apply()); opts.addView(cbEn);
-            CheckBox cbInv = new CheckBox(this); cbInv.setText(T("Invis","Tàng hình")); cbInv.setTextColor(Color.parseColor("#FFC107")); cbInv.setChecked(prefs.getBoolean(prefix+"_corner_"+CORNERS[i]+"_invis", false)); cbInv.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"_corner_"+CORNERS[cIdx]+"_invis", c).apply()); opts.addView(cbInv);
-            CheckBox cbBlk = new CheckBox(this); cbBlk.setText(T("Block OS","Khoá Nền")); cbBlk.setTextColor(Color.parseColor("#FFC107")); cbBlk.setChecked(prefs.getBoolean(prefix+"_corner_"+CORNERS[i]+"_block", true)); cbBlk.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"_corner_"+CORNERS[cIdx]+"_block", c).apply()); opts.addView(cbBlk);
+            CheckBox cbEn = new CheckBox(this); cbEn.setText(T("En","Bật")); cbEn.setTextColor(Color.parseColor("#4CAF50")); cbEn.setChecked(prefs.getBoolean(prefix+"_corner_"+CORNERS[i]+"_en", true)); final int cIdx = i; cbEn.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"_corner_"+CORNERS[cIdx]+"_en", c).apply()); opts.addView(cbEn);
+            CheckBox cbInv = new CheckBox(this); cbInv.setText(T("Inv","Tàng hình")); cbInv.setTextColor(Color.parseColor("#FFC107")); cbInv.setChecked(prefs.getBoolean(prefix+"_corner_"+CORNERS[i]+"_invis", false)); cbInv.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"_corner_"+CORNERS[cIdx]+"_invis", c).apply()); opts.addView(cbInv);
+            CheckBox cbBlk = new CheckBox(this); cbBlk.setText(T("Block","Khoá Nền")); cbBlk.setTextColor(Color.parseColor("#FFC107")); cbBlk.setChecked(prefs.getBoolean(prefix+"_corner_"+CORNERS[i]+"_block", true)); cbBlk.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"_corner_"+CORNERS[cIdx]+"_block", c).apply()); opts.addView(cbBlk);
             cWrap.addView(opts);
             for(int j=0; j<2; j++) cWrap.addView(createRow(C_GESTURE_NAMES[j], prefix + "_corner_" + CORNERS[i] + "_" + C_GESTURES[j])); 
             secC.addView(cWrap);

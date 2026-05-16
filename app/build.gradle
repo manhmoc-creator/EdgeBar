@@ -3,7 +3,6 @@ android {
     namespace 'com.manhmoc.edgebar'
     compileSdk 34
     
-    // KHOÁ CỨNG CHỮ KÝ BẰNG FILE KEYSTORE CỦA BẠN
     signingConfigs {
         edge19 {
             storeFile file("../edge.keystore")
@@ -13,7 +12,7 @@ android {
         }
     }
     
-    defaultConfig { applicationId "com.manhmoc.edgebar"; minSdk 26; targetSdk 34; versionCode 28; versionName "19.7" }
+    defaultConfig { applicationId "com.manhmoc.edgebar"; minSdk 26; targetSdk 34; versionCode 29; versionName "19.8" }
     
     buildTypes {
         debug { signingConfig signingConfigs.edge19 }
