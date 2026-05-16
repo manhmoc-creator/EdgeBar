@@ -29,12 +29,21 @@ public class EdgeBarService extends AccessibilityService {
         } 
     }
     
+    // TẠO VÙNG CHẠM GÓC KHỐI XÁM
     private class CornerView extends View { 
-        private Paint p; private int type; 
-        public CornerView(Context c, int type) { super(c); this.type = type; p = new Paint(); p.setColor(Color.WHITE); p.setStyle(Paint.Style.STROKE); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); } 
-        public void updateProps(int thick, int alpha) { p.setStrokeWidth(thick); p.setAlpha(alpha); invalidate(); }
-        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = p.getStrokeWidth()/2; float rad = prefs.getInt("lock_corner_rad", 40);
-            if(type==0) { path.moveTo(pad, h); path.lineTo(pad, rad); path.quadTo(pad, pad, rad, pad); path.lineTo(w, pad); } else if(type==1) { path.moveTo(0, pad); path.lineTo(w-rad, pad); path.quadTo(w-pad, pad, w-pad, rad); path.lineTo(w-pad, h); } else if(type==2) { path.moveTo(pad, 0); path.lineTo(pad, h-rad); path.quadTo(pad, h-pad, rad, h-pad); path.lineTo(w, h-pad); } else if(type==3) { path.moveTo(0, h-pad); path.lineTo(w-rad, h-pad); path.quadTo(w-pad, h-pad, w-pad, h-rad); path.lineTo(w-pad, 0); } canvas.drawPath(path, p); 
+        private Paint pStroke, pFill; private int type; 
+        public CornerView(Context c, int type) { super(c); this.type = type; 
+            pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); 
+            pFill = new Paint(); pFill.setColor(Color.parseColor("#33888888")); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true);
+        } 
+        public void updateProps(int thick, int alpha, boolean invis) { pStroke.setStrokeWidth(thick); pStroke.setAlpha(alpha); pFill.setAlpha(invis ? 0 : 50); invalidate(); }
+        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); 
+            Path path = new Path(); Path hitBox = new Path(); float w = getWidth(), h = getHeight(), pad = pStroke.getStrokeWidth()/2; float rad = prefs.getInt("lock_corner_rad", 40);
+            if(type==0) { path.moveTo(pad, h); path.lineTo(pad, rad); path.quadTo(pad, pad, rad, pad); path.lineTo(w, pad); hitBox.moveTo(0, h); hitBox.lineTo(0, 0); hitBox.lineTo(w, 0); hitBox.lineTo(0, h); } // TL
+            else if(type==1) { path.moveTo(0, pad); path.lineTo(w-rad, pad); path.quadTo(w-pad, pad, w-pad, rad); path.lineTo(w-pad, h); hitBox.moveTo(0, 0); hitBox.lineTo(w, 0); hitBox.lineTo(w, h); hitBox.lineTo(0, 0); } // TR
+            else if(type==2) { path.moveTo(pad, 0); path.lineTo(pad, h-rad); path.quadTo(pad, h-pad, rad, h-pad); path.lineTo(w, h-pad); hitBox.moveTo(0, 0); hitBox.lineTo(0, h); hitBox.lineTo(w, h); hitBox.lineTo(0, 0); } // BL
+            else if(type==3) { path.moveTo(0, h-pad); path.lineTo(w-rad, h-pad); path.quadTo(w-pad, h-pad, w-pad, h-rad); path.lineTo(w-pad, 0); hitBox.moveTo(w, 0); hitBox.lineTo(w, h); hitBox.lineTo(0, h); hitBox.lineTo(w, 0); } // BR
+            canvas.drawPath(hitBox, pFill); canvas.drawPath(path, pStroke); 
         } 
     }
 
@@ -43,7 +52,7 @@ public class EdgeBarService extends AccessibilityService {
         prefs.registerOnSharedPreferenceChangeListener(prefListener); 
         IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); 
         registerReceiver(stateReceiver, filter); registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"));
-        createFloatingBars();
+        String cid = "eb_20_acc"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar Trợ Năng", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar đang chạy nền").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build(); startForeground(1, n); createFloatingBars();
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) { if(event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) { String pName = event.getPackageName() != null ? event.getPackageName().toString() : ""; String cName = event.getClassName() != null ? event.getClassName().toString() : ""; isKbd = pName.contains("inputmethod") || cName.contains("InputWindow") || cName.contains("keyboard") || cName.contains("Keyboard"); String bl = prefs.getString("blacklist", ""); isBl = !pName.isEmpty() && bl.contains(pName); updateVisibility(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); i.putExtra("isKbd", isKbd); i.putExtra("isBl", isBl); sendBroadcast(i); } }
@@ -74,7 +83,7 @@ public class EdgeBarService extends AccessibilityService {
     private void updateVisibility() { 
         boolean isLocked = km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
         for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE); if(en && isLocked) { int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha", 50); boolean block = prefs.getBoolean("lock_"+BARS[i]+"_block", true); if(block && alpha == 0) alpha = 1; int w = prefs.getInt("lock_"+BARS[i]+"_w", 300); int h = prefs.getInt("lock_"+BARS[i]+"_h", 60); int x = prefs.getInt("lock_"+BARS[i]+"_x", 0); int y = prefs.getInt("lock_"+BARS[i]+"_y", 0); GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); if(p==null) continue; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; if(!block) p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; try { wm.updateViewLayout(bars[i], p); } catch(Exception e){} } } 
-        for(int i=0; i<4; i++) { if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", true); boolean cornInv = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_invis", false); boolean cornBlk = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_block", true); corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isLocked) { int alpha = cornInv ? (cornBlk ? 1 : 0) : 200; ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), alpha); WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); if(p==null) continue; p.gravity = C_GRAV[i]; p.x = prefs.getInt("lock_corner_w", 0); p.y = prefs.getInt("lock_corner_h", 0); if(!cornBlk) p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; try { wm.updateViewLayout(corners[i], p); } catch(Exception e){} } }
+        for(int i=0; i<4; i++) { if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", true); boolean cornInv = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_invis", false); boolean cornBlk = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_block", true); corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isLocked) { int alpha = cornInv ? (cornBlk ? 1 : 0) : 200; ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), alpha, cornInv); WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); if(p==null) continue; p.gravity = C_GRAV[i]; p.x = prefs.getInt("lock_corner_w", 0); p.y = prefs.getInt("lock_corner_h", 0); if(!cornBlk) p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; try { wm.updateViewLayout(corners[i], p); } catch(Exception e){} } }
     }
 
     private class CornerTouchListener implements View.OnTouchListener {
