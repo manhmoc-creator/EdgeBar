@@ -9,13 +9,13 @@ public class MainActivity extends Activity {
     private String[] BARS = {"l", "r", "t_l", "t_r", "t_c"}; private String[] BAR_NAMES; 
     private String[] CORNERS = {"tl", "tr", "bl", "br"}; private String[] CORNER_NAMES;
     private String[] GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold"}; 
-    private String[] GESTURE_NAMES; private String[] C_GESTURES = {"swipe", "hold"}; private String[] C_GESTURE_NAMES;
+    private String[] GESTURE_NAMES; 
     private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE"};
     private String[] COLOR_NAMES;
 
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabLock, tabHome; private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
-    private int designTabState = 0; private final String CURRENT_VERSION = "V19.11"; 
+    private int designTabState = 0; private final String CURRENT_VERSION = "V19.11.1"; 
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
 
@@ -24,7 +24,6 @@ public class MainActivity extends Activity {
         BAR_NAMES = new String[]{T("LEFT BOTTOM", "ĐÁY TRÁI"), T("RIGHT BOTTOM", "ĐÁY PHẢI"), T("LEFT TOP", "ĐỈNH TRÁI"), T("RIGHT TOP", "ĐỈNH PHẢI"), T("CENTER TOP", "ĐỈNH GIỮA")};
         CORNER_NAMES = new String[]{T("Top Left Corner", "Góc Đỉnh Trái"), T("Top Right Corner", "Góc Đỉnh Phải"), T("Bottom Left Corner", "Góc Đáy Trái"), T("Bottom Right Corner", "Góc Đáy Phải")};
         GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ")};
-        C_GESTURE_NAMES = new String[]{T("Swipe Diagonal", "Vuốt Chéo"), T("Swipe + Hold", "Vuốt Chéo + Giữ")};
         COLOR_NAMES = new String[]{T("Pure White", "Trắng Tinh Khiết"), "Neon (Pink-Cyan)", "Cyberpunk (Purple-Gold)", "Lava (Red-Orange)", "Ocean (Blue-Cyan)", "Matrix (Green)", "Sunset (Purple-Orange)", "Google (4 Colors)"};
 
         String[] bK = {"NONE", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "QR", "NOTIFICATIONS"}; 
@@ -34,7 +33,7 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212")); LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(20,40,20,100); 
         
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(Gravity.CENTER_VERTICAL); header.setPadding(0,0,0,30);
-        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe Finale"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe Ubiki-Killer"); title.setTextColor(Color.WHITE); title.setTextSize(21); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         Button btnLang = new Button(this); btnLang.setText(isVi ? "🇻🇳 VI" : "🇺🇸 EN"); btnLang.setTextColor(Color.WHITE); btnLang.setBackground(getRounded("#2E7D32", 20f)); LinearLayout.LayoutParams lpL = new LinearLayout.LayoutParams(-2, -2); lpL.setMargins(0,0,15,0); btnLang.setLayoutParams(lpL); btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
         Button btnUpdate = new Button(this); btnUpdate.setText(T("CHECK\nUPDATE", "CẬP\nNHẬT")); btnUpdate.setTextColor(Color.parseColor("#00E5FF")); btnUpdate.setBackground(getRounded("#1E1E1E", 25f)); btnUpdate.setPadding(30,20,30,20); btnUpdate.setOnClickListener(v -> checkUpdate());
         header.addView(title); header.addView(btnLang); header.addView(btnUpdate); main.addView(header);
@@ -97,10 +96,7 @@ public class MainActivity extends Activity {
         designSliderContainer.addView(createSectionTitle(T("5 EDGE BARS","5 THANH CẠNH")));
         for(int i=0; i<5; i++) { 
             CheckBox cb = new CheckBox(this); cb.setText(T("ENABLE: ","BẬT: ") + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_en", c).apply()); designSliderContainer.addView(cb); 
-            
-            // V19.11: NÚT KHOÁ ƯU TIÊN RIÊNG CHO TỪNG THANH BAR (MÀN KHOÁ)
-            if(designTabState == 0) { CheckBox cbPri = new CheckBox(this); cbPri.setText(T("Lock Priority: ","Ưu tiên chạm (Khoá Cử Chỉ): ") + BAR_NAMES[i]); cbPri.setTextColor(Color.parseColor("#E91E63")); cbPri.setChecked(prefs.getBoolean("lock_"+BARS[i]+"_pri", true)); cbPri.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("lock_"+BARS[idx]+"_pri", c).apply()); designSliderContainer.addView(cbPri); }
-
+            if(designTabState == 0) { CheckBox cbPri = new CheckBox(this); cbPri.setText(T("Lock Priority: ","Ưu tiên chạm (Khoá Cử Chỉ OS): ") + BAR_NAMES[i]); cbPri.setTextColor(Color.parseColor("#E91E63")); cbPri.setChecked(prefs.getBoolean("lock_"+BARS[i]+"_pri", true)); cbPri.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("lock_"+BARS[idx]+"_pri", c).apply()); designSliderContainer.addView(cbPri); }
             designSliderContainer.addView(createSlider(T("Opacity","Độ trong suốt"), prefix+BARS[i]+"_alpha", 255, 50)); designSliderContainer.addView(createSlider(T("Width","Chiều ngang"), prefix+BARS[i]+"_w", 1400, 300)); designSliderContainer.addView(createSlider(T("Height","Chiều dọc"), prefix+BARS[i]+"_h", 1400, 60)); designSliderContainer.addView(createSlider(T("Pos X","Toạ độ X"), prefix+BARS[i]+"_x", 1000, 0)); designSliderContainer.addView(createSlider(T("Pos Y","Toạ độ Y"), prefix+BARS[i]+"_y", 1000, 0)); 
         } 
         
@@ -108,13 +104,21 @@ public class MainActivity extends Activity {
         for(int i=0; i<4; i++) { 
             CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable: ","Bật: ") + CORNER_NAMES[i]); cbEn.setTextColor(Color.parseColor("#4CAF50")); cbEn.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_en", true)); final int idxEn = i; cbEn.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_en", c).apply()); designSliderContainer.addView(cbEn);
 
-            // V19.11: NÚT KHOÁ ƯU TIÊN RIÊNG CHO TỪNG GÓC VIỀN (MÀN KHOÁ)
-            if(designTabState == 0) { CheckBox cbPri = new CheckBox(this); cbPri.setText(T("Lock Priority: ","Ưu tiên chạm (Khoá Cử Chỉ): ") + CORNER_NAMES[i]); cbPri.setTextColor(Color.parseColor("#E91E63")); cbPri.setChecked(prefs.getBoolean("lock_corner_"+CORNERS[i]+"_pri", true)); cbPri.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("lock_corner_"+CORNERS[idxEn]+"_pri", c).apply()); designSliderContainer.addView(cbPri); }
+            if(designTabState == 0) { CheckBox cbPri = new CheckBox(this); cbPri.setText(T("Lock Priority: ","Ưu tiên chạm (Khoá Cử Chỉ OS): ") + CORNER_NAMES[i]); cbPri.setTextColor(Color.parseColor("#E91E63")); cbPri.setChecked(prefs.getBoolean("lock_corner_"+CORNERS[i]+"_pri", true)); cbPri.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("lock_corner_"+CORNERS[idxEn]+"_pri", c).apply()); designSliderContainer.addView(cbPri); }
 
-            CheckBox cbInv = new CheckBox(this); cbInv.setText(T("Invisible: ","Tàng hình: ") + CORNER_NAMES[i]); cbInv.setTextColor(Color.parseColor("#FFC107")); cbInv.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_invis", false)); final int idxInv = i; cbInv.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxInv]+"_invis", c).apply()); designSliderContainer.addView(cbInv); 
+            // V19.11.1: HIỆU ỨNG GOOGLE ASSISTANT (AUTO-HIDE & FLASH)
+            CheckBox cbAuto = new CheckBox(this); cbAuto.setText(T("Auto-Hide (Google Assistant Flash)","Hiệu ứng Tàng hình thông minh (Nháy sáng khi chạm)")); cbAuto.setTextColor(Color.parseColor("#00E5FF")); cbAuto.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_auto", false)); cbAuto.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_auto", c).apply()); designSliderContainer.addView(cbAuto); 
         }
 
-        designSliderContainer.addView(createSlider(T("Moon Opacity","Độ mờ vùng Không gian Trăng non"), prefix+"corner_alpha", 255, 180)); designSliderContainer.addView(createSlider(T("Frame Width (X)","Kéo giãn Ngang (X)"), prefix+"corner_w", 1000, 0)); designSliderContainer.addView(createSlider(T("Frame Height (Y)","Kéo giãn Dọc (Y)"), prefix+"corner_h", 1000, 0)); designSliderContainer.addView(createSlider(T("Stroke Thickness","Độ đậm viền"), prefix+"corner_thick", 50, 8)); designSliderContainer.addView(createSlider(T("Curve Radius","Độ cong góc"), prefix+"corner_rad", 100, 40));
+        // V19.11.1: TÁCH ALPHA TRĂNG NON VÀ ALPHA VIỀN GÓC. THÊM SLIDER OFFSET TẠO ĐỘ DÀI.
+        designSliderContainer.addView(createSlider(T("Moon Fill Opacity","Độ mờ vùng TRĂNG NON (Ruột)"), prefix+"corner_moon_alpha", 255, 100)); 
+        designSliderContainer.addView(createSlider(T("Corner Stroke Opacity","Độ mờ VIỀN GÓC (Vỏ)"), prefix+"corner_stroke_alpha", 255, 200)); 
+        designSliderContainer.addView(createSlider(T("Length X (Extend Edge)","Kéo giãn Ngang (X)"), prefix+"corner_w", 1000, 0)); 
+        designSliderContainer.addView(createSlider(T("Length Y (Extend Edge)","Kéo giãn Dọc (Y)"), prefix+"corner_h", 1000, 0)); 
+        designSliderContainer.addView(createSlider(T("Position Offset X","Dịch chuyển vị trí Ngang (X)"), prefix+"corner_off_x", 1000, 0)); 
+        designSliderContainer.addView(createSlider(T("Position Offset Y","Dịch chuyển vị trí Dọc (Y)"), prefix+"corner_off_y", 1000, 0)); 
+        designSliderContainer.addView(createSlider(T("Stroke Thickness","Độ đậm viền"), prefix+"corner_thick", 50, 8)); 
+        designSliderContainer.addView(createSlider(T("Moon Curve (0=Straight)","Độ cong vòng cung Trăng non (0=Đường chéo thẳng)"), prefix+"corner_rad", 200, 80));
         } }
 
     private LinearLayout wrapCard(View content) { LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 40f)); card.setPadding(40,40,40,40); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,40); card.setLayoutParams(lp); card.addView(content); return card; }
@@ -125,7 +129,9 @@ public class MainActivity extends Activity {
     
     private LinearLayout createSlider(String t, String k, int max, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv); LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ public void onProgressChanged(SeekBar s, int p, boolean b){ tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); } public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){} }); btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); }); btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) sb.setProgress(p+1); }); row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); return l; }
 
-    private LinearLayout createConfigPage(String prefix) { LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); for(int i=0; i<5; i++) { LinearLayout sec = new LinearLayout(this); sec.setOrientation(LinearLayout.VERTICAL); sec.addView(createGestureHeader(BAR_NAMES[i])); for(int j=0; j<GESTURES.length; j++) sec.addView(createRow(GESTURE_NAMES[j], prefix + "_" + BARS[i] + "_" + GESTURES[j])); page.addView(wrapCard(sec)); } LinearLayout secC = new LinearLayout(this); secC.setOrientation(LinearLayout.VERTICAL); secC.addView(createSectionTitle(T("4 FRAME CORNERS","4 GÓC VIỀN"))); for(int i=0; i<4; i++) { secC.addView(createGestureHeader(CORNER_NAMES[i])); for(int j=0; j<2; j++) secC.addView(createRow(C_GESTURE_NAMES[j], prefix + "_corner_" + CORNERS[i] + "_" + C_GESTURES[j])); } page.addView(wrapCard(secC)); return page; }
+    private LinearLayout createConfigPage(String prefix) { LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); for(int i=0; i<5; i++) { LinearLayout sec = new LinearLayout(this); sec.setOrientation(LinearLayout.VERTICAL); sec.addView(createGestureHeader(BAR_NAMES[i])); for(int j=0; j<GESTURES.length; j++) sec.addView(createRow(GESTURE_NAMES[j], prefix + "_" + BARS[i] + "_" + GESTURES[j])); page.addView(wrapCard(sec)); } LinearLayout secC = new LinearLayout(this); secC.setOrientation(LinearLayout.VERTICAL); secC.addView(createSectionTitle(T("4 FRAME CORNERS","4 GÓC VIỀN"))); for(int i=0; i<4; i++) { secC.addView(createGestureHeader(CORNER_NAMES[i])); 
+        // V19.11.1: ÁP DỤNG ĐẦY ĐỦ 11 GESTURE CHO 4 GÓC VIỀN THAY VÌ 2
+        for(int j=0; j<GESTURES.length; j++) secC.addView(createRow(GESTURE_NAMES[j], prefix + "_corner_" + CORNERS[i] + "_" + GESTURES[j])); } page.addView(wrapCard(secC)); return page; }
     private TextView createSectionTitle(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.parseColor("#00E5FF")); tv.setPadding(0,10,0,20); return tv; }
     private LinearLayout createGestureHeader(String titleText) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL); l.setGravity(Gravity.CENTER_VERTICAL); l.setPadding(0,10,0,20); TextView tv = new TextView(this); tv.setText(titleText); tv.setTextColor(Color.parseColor("#00E5FF")); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); TextView tAnim = new TextView(this); tAnim.setText("✨"); tAnim.setPadding(10,0,20,0); TextView tVib = new TextView(this); tVib.setText("📳"); tVib.setPadding(10,0,10,0); l.addView(tv); l.addView(tAnim); l.addView(tVib); return l; }
     private Spinner createSpinner() { Spinner sp = new Spinner(this); sp.setBackground(getRounded("#2C2C2C", 20f)); sp.setPadding(20,20,20,20); return sp; }
