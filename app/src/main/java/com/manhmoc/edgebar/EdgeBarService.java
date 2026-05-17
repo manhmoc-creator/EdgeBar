@@ -24,7 +24,8 @@ public class EdgeBarService extends AccessibilityService {
                 case "SUNSET": cArr=new int[]{Color.parseColor("#FF1493"), Color.parseColor("#FF8C00"), Color.parseColor("#FF1493")}; break; 
                 case "GOOGLE": cArr=new int[]{Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4"), Color.parseColor("#EA4335")}; break; 
                 case "AURORA": cArr=new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#B388FF"), Color.parseColor("#FF4081")}; break;
-                // V19.11.3.1: THÊM 6 MÀU MỚI
+                // V19.11.4: Thêm màu ABYSS rực rỡ thay COSMIC
+                case "ABYSS": cArr=new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#1DE9B6"), Color.parseColor("#2979FF")}; break;
                 case "COSMIC": cArr=new int[]{Color.parseColor("#4A148C"), Color.parseColor("#E91E63"), Color.parseColor("#FFD700")}; break;
                 case "FOREST": cArr=new int[]{Color.parseColor("#1B5E20"), Color.parseColor("#4CAF50"), Color.parseColor("#FFEB3B")}; break;
                 case "FLAME": cArr=new int[]{Color.parseColor("#B71C1C"), Color.parseColor("#FF9800"), Color.parseColor("#FFEB3B")}; break;
@@ -49,22 +50,28 @@ public class EdgeBarService extends AccessibilityService {
     private class CornerView extends View { 
         private Paint pFill, pStroke; private int type; 
         private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
+        private boolean isInv = false; // Vô hình vĩnh viễn
         
         public CornerView(Context c, int type) { super(c); this.type = type; 
             pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); 
-            pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); 
+            pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); 
+            // V19.11.4 Bo tròn hoàn toàn 2 đầu của đường viền góc
+            pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND);
         } 
         
-        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay) { 
+        // V19.11.4 Nhận thêm thông số 'inv' - vô hình vĩnh viễn
+        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) { 
             pStroke.setStrokeWidth(thick); 
-            this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha; this.isAutoHiding = autoHide; this.hideDelay = delay;
+            this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
             if(!autoHide) { pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); pStroke.setAlpha(strokeAlpha); }
-            else { triggerFlash(); } 
+            else triggerFlash(); 
+            // Nếu vô hình vĩnh viễn thì set alpha 0 ngay lập tức, nhưng vẫn touch được
+            if(inv) { pFill.setAlpha(0); pStroke.setAlpha(0); }
             invalidate(); 
         }
         
         public void triggerFlash() {
-            if(!isAutoHiding) return;
+            if(!isAutoHiding || isInv) return; // Nếu vô hình vĩnh viễn thì không Flash
             autoHideHandler.removeCallbacksAndMessages(null);
             pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha + 50), 96, 125, 139)); pStroke.setAlpha(Math.min(255, baseStrokeAlpha + 50)); invalidate();
             autoHideHandler.postDelayed(() -> {
@@ -75,25 +82,59 @@ public class EdgeBarService extends AccessibilityService {
         }
 
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); 
-            float w = getWidth(), h = getHeight(), pad = pStroke.getStrokeWidth()/2; 
-            float rad = prefs.getInt("lock_corner_rad", 80); 
-            float cw = (w > rad) ? rad : w; float ch = (h > rad) ? rad : h; 
+            float w = getWidth(), h = getHeight(), thick = pStroke.getStrokeWidth(); 
+            float pad = thick/2; // Offset nét vỏ lùi vào 1/2 độ dày để không bị cắt.
+            float radSlider = prefs.getInt("lock_corner_rad", 80); 
+            
+            // V19.11.4 THUẬT TOÁN ĐƯỜNG CONG BÉZIER BẬC HAI - Trăng non thoải dần và mở rộng vùng touch khi thẳng
+            float flatFactor = radSlider / 1000f; // 0 = Rất cong, 1 = Thẳng hoàn toàn
             
             Path moonPath = new Path(); Path strokePath = new Path();
-            if(type==0) { 
-                moonPath.moveTo(pad, h); moonPath.lineTo(pad, ch); moonPath.quadTo(pad, pad, cw, pad); moonPath.lineTo(w, pad); moonPath.lineTo(w, h); 
-                strokePath.moveTo(pad, h); strokePath.lineTo(pad, ch); strokePath.quadTo(pad, pad, cw, pad); strokePath.lineTo(w, pad); 
-            } else if(type==1) { 
-                moonPath.moveTo(0, pad); moonPath.lineTo(w-cw, pad); moonPath.quadTo(w-pad, pad, w-pad, ch); moonPath.lineTo(w-pad, h); moonPath.lineTo(0, h);
-                strokePath.moveTo(0, pad); strokePath.lineTo(w-cw, pad); strokePath.quadTo(w-pad, pad, w-pad, ch); strokePath.lineTo(w-pad, h); 
-            } else if(type==2) { 
-                moonPath.moveTo(pad, 0); moonPath.lineTo(pad, h-ch); moonPath.quadTo(pad, h-pad, cw, h-pad); moonPath.lineTo(w, h-pad); moonPath.lineTo(w, 0);
-                strokePath.moveTo(pad, 0); strokePath.lineTo(pad, h-ch); strokePath.quadTo(pad, h-pad, cw, h-pad); strokePath.lineTo(w, h-pad); 
-            } else if(type==3) { 
-                moonPath.moveTo(0, h-pad); moonPath.lineTo(w-cw, h-pad); moonPath.quadTo(w-pad, h-pad, w-pad, h-ch); moonPath.lineTo(w-pad, 0); moonPath.lineTo(0, 0);
-                strokePath.moveTo(0, h-pad); strokePath.lineTo(w-cw, h-pad); strokePath.quadTo(w-pad, h-pad, w-pad, h-ch); strokePath.lineTo(w-pad, 0); 
+
+            // Tính toán Điểm đầu (Start), Điểm cuối (End) và Điểm điều khiển (Control) dựa trên flatFactor
+            if(type==0) { // Top Left
+                float startX = pad, startY = h-pad, endX = w-pad, endY = pad;
+                // Khi flatFactor tăng (thẳng), điểm điều khiển lùi dần về phía đường thẳng nối start-end
+                float ctrlX = pad + (1f - flatFactor) * (w*0.7f); float ctrlY = pad + (1f - flatFactor) * (h*0.7f);
+                if(flatFactor > 0.99) { // Thẳng hoàn toàn thì lấp đầy vùng lõi
+                    moonPath.moveTo(pad, pad); moonPath.lineTo(w, pad); moonPath.lineTo(pad, h); moonPath.close(); 
+                    strokePath.moveTo(w-pad, pad); strokePath.lineTo(pad, h-pad);
+                } else {
+                    moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w, pad); moonPath.lineTo(w, h); moonPath.lineTo(pad, h); moonPath.close(); 
+                    strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY);
+                }
+            } else if(type==1) { // Top Right
+                float startX = pad, startY = pad, endX = w-pad, endY = h-pad;
+                float ctrlX = w-pad - (1f - flatFactor) * (w*0.7f); float ctrlY = pad + (1f - flatFactor) * (h*0.7f);
+                if(flatFactor > 0.99) { 
+                    moonPath.moveTo(w-pad, pad); moonPath.lineTo(0, pad); moonPath.lineTo(w, h); moonPath.close(); 
+                    strokePath.moveTo(0+pad, pad); strokePath.lineTo(w-pad, h-pad);
+                } else {
+                    moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w-pad, h); moonPath.lineTo(0, h); moonPath.lineTo(0, pad); moonPath.close();
+                    strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY);
+                }
+            } else if(type==2) { // Bottom Left
+                float startX = pad, startY = pad, endX = w-pad, endY = h-pad;
+                float ctrlX = pad + (1f - flatFactor) * (w*0.7f); float ctrlY = h-pad - (1f - flatFactor) * (h*0.7f);
+                if(flatFactor > 0.99) {
+                    moonPath.moveTo(pad, h-pad); moonPath.lineTo(w, h); moonPath.lineTo(pad, 0); moonPath.close();
+                    strokePath.moveTo(w-pad, h-pad); strokePath.lineTo(pad, 0+pad);
+                } else {
+                    moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w, h-pad); moonPath.lineTo(w, 0); moonPath.lineTo(pad, 0); moonPath.close();
+                    strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY);
+                }
+            } else if(type==3) { // Bottom Right
+                float startX = w-pad, startY = pad, endX = pad, endY = h-pad;
+                float ctrlX = w-pad - (1f - flatFactor) * (w*0.7f); float ctrlY = h-pad - (1f - flatFactor) * (h*0.7f);
+                if(flatFactor > 0.99) {
+                    moonPath.moveTo(w-pad, h-pad); moonPath.lineTo(0, h); moonPath.lineTo(w, 0); moonPath.close();
+                    strokePath.moveTo(0+pad, h-pad); strokePath.lineTo(w-pad, 0+pad);
+                } else {
+                    moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(0, h-pad); moonPath.lineTo(0, 0); moonPath.lineTo(w-pad, 0); moonPath.close();
+                    strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY);
+                }
             }
-            if(rad > 0) canvas.drawPath(moonPath, pFill); 
+            if(radSlider < 990) canvas.drawPath(moonPath, pFill); // Không vẽ lõi khi bẻ thẳng 100% để tối ưu
             canvas.drawPath(strokePath, pStroke); 
         } 
     }
@@ -107,9 +148,7 @@ public class EdgeBarService extends AccessibilityService {
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) { if(event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) { String pName = event.getPackageName() != null ? event.getPackageName().toString() : ""; String cName = event.getClassName() != null ? event.getClassName().toString() : ""; isKbd = pName.contains("inputmethod") || cName.contains("InputWindow") || cName.contains("keyboard") || cName.contains("Keyboard"); String bl = prefs.getString("blacklist", ""); isBl = !pName.isEmpty() && bl.contains(pName); updateVisibility(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); i.putExtra("isKbd", isKbd); i.putExtra("isBl", isBl); sendBroadcast(i); } }
 
-    private void exec(String a) { if (a == null || a.equals("NONE")) return; try { switch(a) { case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break; case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break; case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break; case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; 
-    // V19.11.3.1: Đã tháo bỏ case QR hoàn toàn
-    default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
+    private void exec(String a) { if (a == null || a.equals("NONE")) return; try { switch(a) { case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break; case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break; case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break; case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
     private void fireIntent(String idx) { try { String act = prefs.getString("i"+idx+"_act", ""); String pkg = prefs.getString("i"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("i"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("i"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("i"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("i"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("i"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     
     private void playAnim() {
@@ -129,28 +168,31 @@ public class EdgeBarService extends AccessibilityService {
 
     private void updateVisibility() { 
         boolean isLocked = km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
-        for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE); if(en && isLocked) { int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("lock_"+BARS[i]+"_w", 300); int h = prefs.getInt("lock_"+BARS[i]+"_h", 60); int x = prefs.getInt("lock_"+BARS[i]+"_x", 0); int y = prefs.getInt("lock_"+BARS[i]+"_y", 0); GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); boolean isPri = prefs.getBoolean("lock_"+BARS[i]+"_pri", true); int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; if(isPri) baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); else baseFlags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE; WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); } } 
+        for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE); if(en && isLocked) { int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha", 50); 
+            // Max Width/Height Bar 3000
+            int w = prefs.getInt("lock_"+BARS[i]+"_w", 300); int h = prefs.getInt("lock_"+BARS[i]+"_h", 60); 
+            int x = prefs.getInt("lock_"+BARS[i]+"_x", 0); int y = prefs.getInt("lock_"+BARS[i]+"_y", 0); GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); boolean isPri = prefs.getBoolean("lock_"+BARS[i]+"_pri", true); int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; if(isPri) baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); else baseFlags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE; WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); } } 
         
         for(int i=0; i<4; i++) { 
             if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isLocked) { 
                 int moonAlpha = prefs.getInt("lock_corner_moon_alpha", 100); int strokeAlpha = prefs.getInt("lock_corner_stroke_alpha", 200); boolean isAuto = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_auto", false); int hideDelay = prefs.getInt("lock_corner_hide_dur", 2500); 
-                ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay); 
+                boolean inv = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_inv", false); // Vô hình vĩnh viễn
+
+                ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, inv); 
+                
                 boolean isPri = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_pri", true); int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; if(isPri) baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); else baseFlags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE; WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.flags = baseFlags; p.gravity = C_GRAV[i]; 
                 
+                // Inherit Global/Top/Bot X/Y from v19.11.3.1
                 int widthPref = (i < 2) ? prefs.getInt("lock_corner_top_w", 0) : prefs.getInt("lock_corner_bot_w", 0);
                 int heightPref = (i < 2) ? prefs.getInt("lock_corner_top_h", 0) : prefs.getInt("lock_corner_bot_h", 0);
                 p.width = (widthPref > 0) ? widthPref : 70; p.height = (heightPref > 0) ? heightPref : 70;
-                
-                // V19.11.3.1: Áp dụng Toạ độ Khối Thống nhất (Global Shift)
-                int gX = prefs.getInt("lock_corner_global_x", 500) - 500;
-                int gY = prefs.getInt("lock_corner_global_y", 500) - 500;
+                int gX = prefs.getInt("lock_corner_global_x", 500) - 500; int gY = prefs.getInt("lock_corner_global_y", 500) - 500;
                 int offX = prefs.getInt("lock_corner_off_x", 0); int offY = prefs.getInt("lock_corner_off_y", 0);
                 
-                if(i == 0) { p.x = offX + gX; p.y = offY + gY; }      // Top Left
-                else if(i == 1) { p.x = offX - gX; p.y = offY + gY; } // Top Right
-                else if(i == 2) { p.x = offX + gX; p.y = offY - gY; } // Bottom Left
-                else if(i == 3) { p.x = offX - gX; p.y = offY - gY; } // Bottom Right
-                
+                if(i == 0) { p.x = offX + gX; p.y = offY + gY; }
+                else if(i == 1) { p.x = offX - gX; p.y = offY + gY; }
+                else if(i == 2) { p.x = offX + gX; p.y = offY - gY; }
+                else if(i == 3) { p.x = offX - gX; p.y = offY - gY; }
                 wm.updateViewLayout(corners[i], p); } 
         }
     }
