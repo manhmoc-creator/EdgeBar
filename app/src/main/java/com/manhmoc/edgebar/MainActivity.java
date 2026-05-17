@@ -15,13 +15,13 @@ public class MainActivity extends Activity {
 
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabLock, tabHome; private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
-    private int designTabState = 0; private final String CURRENT_VERSION = "V19.10"; 
+    private int designTabState = 0; private final String CURRENT_VERSION = "V19.11"; 
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); isVi = prefs.getBoolean("lang_vi", true); 
-        BAR_NAMES = new String[]{T("LEFT BOTTOM", "ĐÁY TRÁI"), T("RIGHT BOTTOM", "ĐÁY PHẢI"), T("LEFT TOP", "ĐỈNH Trái"), T("RIGHT TOP", "ĐỈNH PHẢI"), T("CENTER TOP", "ĐỈNH GIỮA")};
+        BAR_NAMES = new String[]{T("LEFT BOTTOM", "ĐÁY TRÁI"), T("RIGHT BOTTOM", "ĐÁY PHẢI"), T("LEFT TOP", "ĐỈNH TRÁI"), T("RIGHT TOP", "ĐỈNH PHẢI"), T("CENTER TOP", "ĐỈNH GIỮA")};
         CORNER_NAMES = new String[]{T("Top Left Corner", "Góc Đỉnh Trái"), T("Top Right Corner", "Góc Đỉnh Phải"), T("Bottom Left Corner", "Góc Đáy Trái"), T("Bottom Right Corner", "Góc Đáy Phải")};
         GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ")};
         C_GESTURE_NAMES = new String[]{T("Swipe Diagonal", "Vuốt Chéo"), T("Swipe + Hold", "Vuốt Chéo + Giữ")};
@@ -34,7 +34,7 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212")); LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(20,40,20,100); 
         
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(Gravity.CENTER_VERTICAL); header.setPadding(0,0,0,30);
-        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe Ambition"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe Finale"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         Button btnLang = new Button(this); btnLang.setText(isVi ? "🇻🇳 VI" : "🇺🇸 EN"); btnLang.setTextColor(Color.WHITE); btnLang.setBackground(getRounded("#2E7D32", 20f)); LinearLayout.LayoutParams lpL = new LinearLayout.LayoutParams(-2, -2); lpL.setMargins(0,0,15,0); btnLang.setLayoutParams(lpL); btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
         Button btnUpdate = new Button(this); btnUpdate.setText(T("CHECK\nUPDATE", "CẬP\nNHẬT")); btnUpdate.setTextColor(Color.parseColor("#00E5FF")); btnUpdate.setBackground(getRounded("#1E1E1E", 25f)); btnUpdate.setPadding(30,20,30,20); btnUpdate.setOnClickListener(v -> checkUpdate());
         header.addView(title); header.addView(btnLang); header.addView(btnUpdate); main.addView(header);
@@ -95,17 +95,27 @@ public class MainActivity extends Activity {
         designSliderContainer.addView(createSlider(T("Hold Gesture Time (ms)","Thời gian Vuốt+Giữ"), "hold_dur", 2000, 600)); 
         designSliderContainer.addView(createSlider(T("Vibration (ms)","Độ rung (ms)"), "vib_dur", 100, 30)); } else { String prefix = designTabState == 1 ? "home_" : "lock_"; 
         designSliderContainer.addView(createSectionTitle(T("5 EDGE BARS","5 THANH CẠNH")));
-        for(int i=0; i<5; i++) { CheckBox cb = new CheckBox(this); cb.setText(T("ENABLE: ","BẬT: ") + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_en", c).apply()); designSliderContainer.addView(cb); designSliderContainer.addView(createSlider(T("Opacity","Độ trong suốt"), prefix+BARS[i]+"_alpha", 255, 50)); designSliderContainer.addView(createSlider(T("Width","Chiều ngang"), prefix+BARS[i]+"_w", 1400, 300)); designSliderContainer.addView(createSlider(T("Height","Chiều dọc"), prefix+BARS[i]+"_h", 1400, 60)); designSliderContainer.addView(createSlider(T("Pos X","Toạ độ X"), prefix+BARS[i]+"_x", 1000, 0)); designSliderContainer.addView(createSlider(T("Pos Y","Toạ độ Y"), prefix+BARS[i]+"_y", 1000, 0)); } 
+        for(int i=0; i<5; i++) { 
+            CheckBox cb = new CheckBox(this); cb.setText(T("ENABLE: ","BẬT: ") + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_en", c).apply()); designSliderContainer.addView(cb); 
+            
+            // V19.11: NÚT KHOÁ ƯU TIÊN RIÊNG CHO TỪNG THANH BAR (MÀN KHOÁ)
+            if(designTabState == 0) { CheckBox cbPri = new CheckBox(this); cbPri.setText(T("Lock Priority: ","Ưu tiên chạm (Khoá Cử Chỉ): ") + BAR_NAMES[i]); cbPri.setTextColor(Color.parseColor("#E91E63")); cbPri.setChecked(prefs.getBoolean("lock_"+BARS[i]+"_pri", true)); cbPri.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("lock_"+BARS[idx]+"_pri", c).apply()); designSliderContainer.addView(cbPri); }
+
+            designSliderContainer.addView(createSlider(T("Opacity","Độ trong suốt"), prefix+BARS[i]+"_alpha", 255, 50)); designSliderContainer.addView(createSlider(T("Width","Chiều ngang"), prefix+BARS[i]+"_w", 1400, 300)); designSliderContainer.addView(createSlider(T("Height","Chiều dọc"), prefix+BARS[i]+"_h", 1400, 60)); designSliderContainer.addView(createSlider(T("Pos X","Toạ độ X"), prefix+BARS[i]+"_x", 1000, 0)); designSliderContainer.addView(createSlider(T("Pos Y","Toạ độ Y"), prefix+BARS[i]+"_y", 1000, 0)); 
+        } 
         
         designSliderContainer.addView(createSectionTitle(T("4 FRAME CORNERS","4 GÓC VIỀN THỰC THỂ (TRĂNG NON)")));
-        for(int i=0; i<4; i++) { CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable: ","Bật: ") + CORNER_NAMES[i]); cbEn.setTextColor(Color.parseColor("#4CAF50")); cbEn.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_en", true)); final int idxEn = i; cbEn.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_en", c).apply()); designSliderContainer.addView(cbEn);
+        for(int i=0; i<4; i++) { 
+            CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable: ","Bật: ") + CORNER_NAMES[i]); cbEn.setTextColor(Color.parseColor("#4CAF50")); cbEn.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_en", true)); final int idxEn = i; cbEn.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_en", c).apply()); designSliderContainer.addView(cbEn);
 
-        CheckBox cbInv = new CheckBox(this); cbInv.setText(T("Invisible: ","Tàng hình: ") + CORNER_NAMES[i]); cbInv.setTextColor(Color.parseColor("#FFC107")); cbInv.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_invis", false)); final int idxInv = i; cbInv.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxInv]+"_invis", c).apply()); designSliderContainer.addView(cbInv); }
+            // V19.11: NÚT KHOÁ ƯU TIÊN RIÊNG CHO TỪNG GÓC VIỀN (MÀN KHOÁ)
+            if(designTabState == 0) { CheckBox cbPri = new CheckBox(this); cbPri.setText(T("Lock Priority: ","Ưu tiên chạm (Khoá Cử Chỉ): ") + CORNER_NAMES[i]); cbPri.setTextColor(Color.parseColor("#E91E63")); cbPri.setChecked(prefs.getBoolean("lock_corner_"+CORNERS[i]+"_pri", true)); cbPri.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("lock_corner_"+CORNERS[idxEn]+"_pri", c).apply()); designSliderContainer.addView(cbPri); }
 
-        designSliderContainer.addView(createSlider(T("Moon Opacity","Độ mờ Trăng non"), prefix+"corner_alpha", 255, 180)); designSliderContainer.addView(createSlider(T("Frame Width (X)","Kéo giãn Ngang (X)"), prefix+"corner_w", 1000, 0)); designSliderContainer.addView(createSlider(T("Frame Height (Y)","Kéo giãn Dọc (Y)"), prefix+"corner_h", 1000, 0)); designSliderContainer.addView(createSlider(T("Stroke Thickness","Độ đậm viền"), prefix+"corner_thick", 50, 8)); designSliderContainer.addView(createSlider(T("Curve Radius","Độ cong góc"), prefix+"corner_rad", 100, 40));
-        
-        // V19.10: THÊM Ô CHỌN KHOÁ CỨNG QUYỀN HIỂN THỊ (Lớp phủ Trợ Năng) - CHỈ CHO MÀN KHOÁ
-        if(designTabState == 0) { CheckBox cbPriority = new CheckBox(this); cbPriority.setText(T("Lock priority (Block System Gestures)","Khoá cứng quyền hiển thị (Ưu tiên chạm)")); cbPriority.setTextColor(Color.parseColor("#E91E63")); cbPriority.setChecked(prefs.getBoolean(prefix+"enable_priority", true)); cbPriority.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"enable_priority", c).apply()); designSliderContainer.addView(cbPriority); } } }
+            CheckBox cbInv = new CheckBox(this); cbInv.setText(T("Invisible: ","Tàng hình: ") + CORNER_NAMES[i]); cbInv.setTextColor(Color.parseColor("#FFC107")); cbInv.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_invis", false)); final int idxInv = i; cbInv.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxInv]+"_invis", c).apply()); designSliderContainer.addView(cbInv); 
+        }
+
+        designSliderContainer.addView(createSlider(T("Moon Opacity","Độ mờ vùng Không gian Trăng non"), prefix+"corner_alpha", 255, 180)); designSliderContainer.addView(createSlider(T("Frame Width (X)","Kéo giãn Ngang (X)"), prefix+"corner_w", 1000, 0)); designSliderContainer.addView(createSlider(T("Frame Height (Y)","Kéo giãn Dọc (Y)"), prefix+"corner_h", 1000, 0)); designSliderContainer.addView(createSlider(T("Stroke Thickness","Độ đậm viền"), prefix+"corner_thick", 50, 8)); designSliderContainer.addView(createSlider(T("Curve Radius","Độ cong góc"), prefix+"corner_rad", 100, 40));
+        } }
 
     private LinearLayout wrapCard(View content) { LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 40f)); card.setPadding(40,40,40,40); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,40); card.setLayoutParams(lp); card.addView(content); return card; }
     private void switchMainTab(int idx) { pageDesign.setVisibility(idx==0?View.VISIBLE:View.GONE); pageGestures.setVisibility(idx==1?View.VISIBLE:View.GONE); pageIntents.setVisibility(idx==2?View.VISIBLE:View.GONE); btnNavDes.setBackground(getRounded(idx==0?"#222222":"#00000000", 20f)); btnNavDes.setTextColor(idx==0?Color.parseColor("#00E5FF"):Color.GRAY); btnNavGes.setBackground(getRounded(idx==1?"#222222":"#00000000", 20f)); btnNavGes.setTextColor(idx==1?Color.parseColor("#00E5FF"):Color.GRAY); btnNavInt.setBackground(getRounded(idx==2?"#222222":"#00000000", 20f)); btnNavInt.setTextColor(idx==2?Color.parseColor("#00E5FF"):Color.GRAY); }

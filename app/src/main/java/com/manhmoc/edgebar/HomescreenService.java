@@ -37,12 +37,29 @@ public class HomescreenService extends Service {
     }
     
     private class CornerView extends View { 
-        private Paint p; private int type; 
-        public CornerView(Context c, int type) { super(c); this.type = type; p = new Paint(); p.setColor(Color.WHITE); p.setStyle(Paint.Style.STROKE); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); } 
-        // V19.10: TRĂNG NON SYNC MÀU VÀ OPACITY VỚI 10 BAR MÀN CHÍNH
-        public void updateProps(int thick, int barAlpha) { p.setStrokeWidth(thick); p.setAlpha(barAlpha); invalidate(); }
-        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = p.getStrokeWidth()/2; float rad = prefs.getInt("home_corner_rad", 40);
-            if(type==0) { path.moveTo(pad, h); path.lineTo(pad, rad); path.quadTo(pad, pad, rad, pad); path.lineTo(w, pad); } else if(type==1) { path.moveTo(0, pad); path.lineTo(w-rad, pad); path.quadTo(w-pad, pad, w-pad, rad); path.lineTo(w-pad, h); } else if(type==2) { path.moveTo(pad, 0); path.lineTo(pad, h-rad); path.quadTo(pad, h-pad, rad, h-pad); path.lineTo(w, h-pad); } else if(type==3) { path.moveTo(0, h-pad); path.lineTo(w-rad, h-pad); path.quadTo(w-pad, h-pad, w-pad, h-rad); path.lineTo(w-pad, 0); } canvas.drawPath(path, p); 
+        private Paint pFill, pStroke; private int type; 
+        public CornerView(Context c, int type) { super(c); this.type = type; 
+            pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); 
+            pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); 
+        } 
+        public void updateProps(int thick, int moonAlpha) { 
+            pStroke.setStrokeWidth(thick); pStroke.setAlpha(moonAlpha); 
+            pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); invalidate(); 
+        }
+        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); 
+            float w = getWidth(), h = getHeight(), pad = pStroke.getStrokeWidth()/2; float rad = prefs.getInt("home_corner_rad", 40);
+            Path moonPath = new Path();
+            if(type==0) { moonPath.moveTo(w, 0); moonPath.quadTo(0, 0, 0, h); moonPath.lineTo(0, 0); } 
+            else if(type==1) { moonPath.moveTo(0, 0); moonPath.quadTo(w, 0, w, h); moonPath.lineTo(w, 0); } 
+            else if(type==2) { moonPath.moveTo(w, h); moonPath.quadTo(0, h, 0, 0); moonPath.lineTo(0, h); } 
+            else if(type==3) { moonPath.moveTo(0, h); moonPath.quadTo(w, h, w, 0); moonPath.lineTo(w, h); }
+            moonPath.close(); canvas.drawPath(moonPath, pFill);
+            Path strokePath = new Path();
+            if(type==0) { strokePath.moveTo(pad, h); strokePath.lineTo(pad, rad); strokePath.quadTo(pad, pad, rad, pad); strokePath.lineTo(w, pad); } 
+            else if(type==1) { strokePath.moveTo(0, pad); strokePath.lineTo(w-rad, pad); strokePath.quadTo(w-pad, pad, w-pad, rad); strokePath.lineTo(w-pad, h); } 
+            else if(type==2) { strokePath.moveTo(pad, 0); strokePath.lineTo(pad, h-rad); strokePath.quadTo(pad, h-pad, rad, h-pad); strokePath.lineTo(w, h-pad); } 
+            else if(type==3) { strokePath.moveTo(0, h-pad); strokePath.lineTo(w-rad, h-pad); strokePath.quadTo(w-pad, h-pad, w-pad, h-rad); strokePath.lineTo(w-pad, 0); } 
+            canvas.drawPath(strokePath, pStroke); 
         } 
     }
 
@@ -65,17 +82,7 @@ public class HomescreenService extends Service {
     private void updateVisibility() { 
         boolean isUnlocked = !km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
         for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("home_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(en && isUnlocked) { int alpha = prefs.getInt("home_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("home_"+BARS[i]+"_w", 300); int h = prefs.getInt("home_"+BARS[i]+"_h", 60); int x = prefs.getInt("home_"+BARS[i]+"_x", 0); int y = prefs.getInt("home_"+BARS[i]+"_y", 0); GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); } } 
-        
-        for(int i=0; i<4; i++) { 
-            if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("home_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { 
-                int generalCornAlpha = prefs.getInt("home_corner_alpha", 180); 
-                boolean cornPerInvis = prefs.getBoolean("home_corner_"+CORNERS[i]+"_invis", false); 
-                ((CornerView)corners[i]).updateProps(prefs.getInt("home_corner_thick", 8), cornPerInvis ? 0 : generalCornAlpha); 
-                WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.gravity = C_GRAV[i]; p.x = prefs.getInt("home_corner_w", 0); p.y = prefs.getInt("home_corner_h", 0); 
-                
-                // V19.10: TRĂNG NON màn chính per-corner invisible mode
-                wm.updateViewLayout(corners[i], p); } 
-        }
+        for(int i=0; i<4; i++) { if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("home_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { int generalCornAlpha = prefs.getInt("home_corner_alpha", 180); boolean cornPerInvis = prefs.getBoolean("home_corner_"+CORNERS[i]+"_invis", false); ((CornerView)corners[i]).updateProps(prefs.getInt("home_corner_thick", 8), cornPerInvis ? 0 : generalCornAlpha); WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.gravity = C_GRAV[i]; p.x = prefs.getInt("home_corner_w", 0); p.y = prefs.getInt("home_corner_h", 0); wm.updateViewLayout(corners[i], p); } }
     }
     
     private void playAnim() {
