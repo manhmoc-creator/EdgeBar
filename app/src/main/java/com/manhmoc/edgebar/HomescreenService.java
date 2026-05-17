@@ -39,7 +39,8 @@ public class HomescreenService extends Service {
     private class CornerView extends View { 
         private Paint p; private int type; 
         public CornerView(Context c, int type) { super(c); this.type = type; p = new Paint(); p.setColor(Color.WHITE); p.setStyle(Paint.Style.STROKE); p.setAntiAlias(true); p.setStrokeCap(Paint.Cap.ROUND); } 
-        public void updateProps(int thick, int alpha) { p.setStrokeWidth(thick); p.setAlpha(alpha); invalidate(); }
+        // V19.10: TRĂNG NON SYNC MÀU VÀ OPACITY VỚI 10 BAR MÀN CHÍNH
+        public void updateProps(int thick, int barAlpha) { p.setStrokeWidth(thick); p.setAlpha(barAlpha); invalidate(); }
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); Path path = new Path(); float w = getWidth(), h = getHeight(), pad = p.getStrokeWidth()/2; float rad = prefs.getInt("home_corner_rad", 40);
             if(type==0) { path.moveTo(pad, h); path.lineTo(pad, rad); path.quadTo(pad, pad, rad, pad); path.lineTo(w, pad); } else if(type==1) { path.moveTo(0, pad); path.lineTo(w-rad, pad); path.quadTo(w-pad, pad, w-pad, rad); path.lineTo(w-pad, h); } else if(type==2) { path.moveTo(pad, 0); path.lineTo(pad, h-rad); path.quadTo(pad, h-pad, rad, h-pad); path.lineTo(w, h-pad); } else if(type==3) { path.moveTo(0, h-pad); path.lineTo(w-rad, h-pad); path.quadTo(w-pad, h-pad, w-pad, h-rad); path.lineTo(w-pad, 0); } canvas.drawPath(path, p); 
         } 
@@ -56,7 +57,6 @@ public class HomescreenService extends Service {
 
         String cid = "eb_19_home"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar Lớp phủ ADB").setSmallIcon(android.R.drawable.ic_menu_crop).build(); startForeground(2, n);
         
-        // V19.9: THÊM CỜ FLAG_LAYOUT_NO_LIMITS CHO MÀN CHÍNH
         fV = new FlashView(this); fV.setAlpha(0f); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
         for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams initP = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], initP); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener(i)); }
         for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i); WindowManager.LayoutParams cp = new WindowManager.LayoutParams(70, 70, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], cp); } catch(Exception e){} corners[i].setOnTouchListener(new CornerTouchListener(i)); } updateVisibility();
@@ -65,8 +65,17 @@ public class HomescreenService extends Service {
     private void updateVisibility() { 
         boolean isUnlocked = !km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
         for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("home_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(en && isUnlocked) { int alpha = prefs.getInt("home_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("home_"+BARS[i]+"_w", 300); int h = prefs.getInt("home_"+BARS[i]+"_h", 60); int x = prefs.getInt("home_"+BARS[i]+"_x", 0); int y = prefs.getInt("home_"+BARS[i]+"_y", 0); GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); } } 
-        boolean cornInv = prefs.getBoolean("home_corner_invis", false);
-        for(int i=0; i<4; i++) { if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("home_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { ((CornerView)corners[i]).updateProps(prefs.getInt("home_corner_thick", 8), cornInv ? 0 : prefs.getInt("home_corner_alpha", 180)); WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.gravity = C_GRAV[i]; p.x = prefs.getInt("home_corner_w", 0); p.y = prefs.getInt("home_corner_h", 0); wm.updateViewLayout(corners[i], p); } }
+        
+        for(int i=0; i<4; i++) { 
+            if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("home_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { 
+                int generalCornAlpha = prefs.getInt("home_corner_alpha", 180); 
+                boolean cornPerInvis = prefs.getBoolean("home_corner_"+CORNERS[i]+"_invis", false); 
+                ((CornerView)corners[i]).updateProps(prefs.getInt("home_corner_thick", 8), cornPerInvis ? 0 : generalCornAlpha); 
+                WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.gravity = C_GRAV[i]; p.x = prefs.getInt("home_corner_w", 0); p.y = prefs.getInt("home_corner_h", 0); 
+                
+                // V19.10: TRĂNG NON màn chính per-corner invisible mode
+                wm.updateViewLayout(corners[i], p); } 
+        }
     }
     
     private void playAnim() {
