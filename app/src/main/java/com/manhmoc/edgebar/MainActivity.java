@@ -18,7 +18,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabLock, tabHome; private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
-    private int designTabState = 0; private final String CURRENT_VERSION = "V19.11.4.3"; 
+    private int designTabState = 0; private final String CURRENT_VERSION = "V19.11.5"; 
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
 
@@ -39,7 +39,7 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212")); LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(20,40,20,100); 
         
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(Gravity.CENTER_VERTICAL); header.setPadding(0,0,0,30);
-        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe Ghost"); title.setTextColor(Color.WHITE); title.setTextSize(19); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe System Hacker"); title.setTextColor(Color.WHITE); title.setTextSize(19); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         Button btnLang = new Button(this); btnLang.setText(isVi ? "🇻🇳 VI" : "🇺🇸 EN"); btnLang.setTextColor(Color.WHITE); btnLang.setBackground(getRounded("#2E7D32", 20f)); LinearLayout.LayoutParams lpL = new LinearLayout.LayoutParams(-2, -2); lpL.setMargins(0,0,15,0); btnLang.setLayoutParams(lpL); btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
         Button btnUpdate = new Button(this); btnUpdate.setText(T("CHECK", "UPDATE")); btnUpdate.setTextColor(Color.parseColor("#00E5FF")); btnUpdate.setBackground(getRounded("#1E1E1E", 25f)); btnUpdate.setPadding(30,20,30,20); btnUpdate.setOnClickListener(v -> checkUpdate());
         header.addView(title); header.addView(btnLang); header.addView(btnUpdate); main.addView(header);
@@ -82,7 +82,7 @@ public class MainActivity extends Activity {
         main.addView(pageDesign); main.addView(pageGestures); main.addView(pageIntents); btnNavDes.setOnClickListener(v->switchMainTab(0)); btnNavGes.setOnClickListener(v->switchMainTab(1)); btnNavInt.setOnClickListener(v->switchMainTab(2)); switchMainTab(1);
         scroll.addView(main); setContentView(scroll);
     }
-    
+
     private void checkUpdate() { Toast.makeText(this, T("Checking GitHub...", "Đang kiểm tra Github..."), Toast.LENGTH_SHORT).show(); new Thread(() -> { try { URL url = new URL("https://api.github.com/repos/manhmoc-creator/EdgeBar/releases/latest"); HttpURLConnection conn = (HttpURLConnection) url.openConnection(); conn.setRequestMethod("GET"); BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream())); StringBuilder sb = new StringBuilder(); String line; while((line=reader.readLine())!=null) sb.append(line); reader.close(); JSONObject json = new JSONObject(sb.toString()); String latestTag = json.getString("tag_name"); String downloadUrl = json.getJSONArray("assets").getJSONObject(0).getString("browser_download_url"); runOnUiThread(() -> { if(!latestTag.contains(CURRENT_VERSION)) { new AlertDialog.Builder(this).setTitle(T("Update Available!","Có bản cập nhật!")).setMessage(T("Latest version is ","Bản mới nhất là ") + latestTag + ".\n" + T("Download & Install now?","Tải và Cài đặt ngay?")).setPositiveButton("YES", (d,w) -> downloadAndInstall(downloadUrl)).setNegativeButton("NO", null).show(); } else { Toast.makeText(this, T("You are on the latest version!","Bạn đang ở bản mới nhất!"), Toast.LENGTH_LONG).show(); } }); } catch(Exception e) { runOnUiThread(() -> Toast.makeText(this, T("Check failed.","Lỗi kết nối Github."), Toast.LENGTH_LONG).show()); } }).start(); }
     private void downloadAndInstall(String url) { Toast.makeText(this, T("Downloading...", "Đang tải xuống..."), Toast.LENGTH_LONG).show(); DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url)); request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "EdgeBar_Update.apk"); request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED); DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE); long downloadId = manager.enqueue(request); BroadcastReceiver onComplete = new BroadcastReceiver() { public void onReceive(Context ctxt, Intent intent) { long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1); if (id == downloadId) { try { Uri apkUri = manager.getUriForDownloadedFile(downloadId); Intent install = new Intent(Intent.ACTION_VIEW); install.setDataAndType(apkUri, "application/vnd.android.package-archive"); install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); install.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(install); } catch (Exception e) { Toast.makeText(MainActivity.this, T("Download complete. Open File Manager to install.","Tải xong. Hãy mở trình quản lý file để cài."), Toast.LENGTH_LONG).show(); } try { unregisterReceiver(this); } catch(Exception e){} } } }; if(android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(onComplete, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED); else registerReceiver(onComplete, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)); }
     @Override public void onActivityResult(int req, int res, Intent data) { super.onActivityResult(req, res, data); if(res == RESULT_OK && data != null && data.getData() != null) { try { if(req == 101) { java.io.OutputStream os = getContentResolver().openOutputStream(data.getData()); os.write(new JSONObject(prefs.getAll()).toString().getBytes()); os.close(); Toast.makeText(this, T("Backup Saved!", "Đã Lưu Cấu Hình!"), Toast.LENGTH_SHORT).show(); } else if(req == 102) { java.io.InputStream is = getContentResolver().openInputStream(data.getData()); java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(is)); StringBuilder s = new StringBuilder(); String line; while((line=r.readLine())!=null) s.append(line); r.close(); JSONObject j = new JSONObject(s.toString()); SharedPreferences.Editor ed = prefs.edit(); Iterator<String> k = j.keys(); while(k.hasNext()) { String key = k.next(); Object v = j.get(key); if(v instanceof Boolean) ed.putBoolean(key, (Boolean)v); else if (v instanceof Integer) ed.putInt(key, (Integer)v); else if (v instanceof String) ed.putString(key, (String)v); } ed.apply(); Toast.makeText(this, T("Restored!", "Đã Khôi Phục!"), Toast.LENGTH_LONG).show(); } } catch(Exception e) { Toast.makeText(this, "File Error", Toast.LENGTH_LONG).show(); } } }
@@ -117,34 +117,24 @@ public class MainActivity extends Activity {
         designSliderContainer.addView(createSectionTitle(T("5 EDGE BARS","5 THANH CẠNH")));
         for(int i=0; i< BAR_NAMES.length; i++) { 
             LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30);
-            
             CheckBox cb = new CheckBox(this); cb.setText(T("ENABLE: ","BẬT: ") + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_en", c).apply()); drawerContent.addView(cb); 
-            
             CheckBox cbPri = new CheckBox(this); cbPri.setText(T("Lock Priority","Ưu tiên chạm (Khoá Cử Chỉ OS)")); cbPri.setTextColor(Color.parseColor("#E91E63")); cbPri.setChecked(prefs.getBoolean(prefix+BARS[i]+"_pri", true)); cbPri.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_pri", c).apply()); drawerContent.addView(cbPri); 
-            
             CheckBox cbPass = new CheckBox(this); cbPass.setText(T("Pass-through Touch","Xuyên thấu cảm ứng (Nhường OS)")); cbPass.setTextColor(Color.parseColor("#99FFFFFF")); cbPass.setChecked(prefs.getBoolean(prefix+BARS[i]+"_pass", false)); cbPass.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_pass", c).apply()); drawerContent.addView(cbPass); 
-            
             drawerContent.addView(createSlider(T("Opacity","Độ trong suốt"), prefix+BARS[i]+"_alpha", 255, 50)); drawerContent.addView(createSlider(T("Width","Chiều ngang"), prefix+BARS[i]+"_w", 3000, 300)); drawerContent.addView(createSlider(T("Height","Chiều dọc"), prefix+BARS[i]+"_h", 3000, 60)); drawerContent.addView(createSlider(T("Pos X","Toạ độ X"), prefix+BARS[i]+"_x", 1000, 0)); drawerContent.addView(createSlider(T("Pos Y","Toạ độ Y"), prefix+BARS[i]+"_y", 1000, 0)); 
-            
             designSliderContainer.addView(createDrawer(BAR_NAMES[i], drawerContent));
         } 
         
         designSliderContainer.addView(createSectionTitle(T("4 FRAME CORNERS","4 GÓC VIỀN THỰC THỂ (TRĂNG NON)")));
         for(int i=0; i<4; i++) { 
             LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30);
-            
             CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable: ","Bật: ") + CORNER_NAMES[i]); cbEn.setTextColor(Color.parseColor("#4CAF50")); cbEn.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_en", true)); final int idxEn = i; cbEn.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_en", c).apply()); drawerContent.addView(cbEn);
-
             CheckBox cbPri = new CheckBox(this); cbPri.setText(T("Lock Priority","Ưu tiên chạm (Khoá Cử Chỉ OS)")); cbPri.setTextColor(Color.parseColor("#E91E63")); cbPri.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_pri", true)); cbPri.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_pri", c).apply()); drawerContent.addView(cbPri); 
-            
             CheckBox cbPass = new CheckBox(this); cbPass.setText(T("Pass-through Touch","Xuyên thấu cảm ứng (Nhường OS)")); cbPass.setTextColor(Color.parseColor("#99FFFFFF")); cbPass.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_pass", false)); cbPass.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_pass", c).apply()); drawerContent.addView(cbPass); 
-
             CheckBox cbAuto = new CheckBox(this); cbAuto.setText(T("Smart Auto-Hide","Tàng hình thông minh (Nháy sáng khi chạm)")); cbAuto.setTextColor(Color.parseColor("#00E5FF")); cbAuto.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_auto", false)); cbAuto.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_auto", c).apply()); drawerContent.addView(cbAuto); 
-
             CheckBox cbInv = new CheckBox(this); cbInv.setText(T("Completely Invisible","Ẩn hoàn toàn (Vô hình)")); cbInv.setTextColor(Color.parseColor("#99FFFFFF")); cbInv.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_inv", false)); cbInv.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_inv", c).apply()); drawerContent.addView(cbInv); 
             
-            // V19.11.4.3: CHECKBOX TÁCH VỎ LÕI (CHỈ VẼ VỎ Ở VÒNG CUNG)
-            CheckBox cbSplit = new CheckBox(this); cbSplit.setText(T("Only draw arc stroke (Expand Moon)","Chỉ vẽ vỏ ở vòng cung (Mở rộng lõi)")); cbSplit.setTextColor(Color.parseColor("#FFC107")); cbSplit.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_split", false)); cbSplit.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_split", c).apply()); drawerContent.addView(cbSplit);
+            // V19.11.5: THÊM TÙY CHỌN MỞ RỘNG LÕI ĐỘC LẬP
+            CheckBox cbEx = new CheckBox(this); cbEx.setText(T("Independent Moon Expand","Mở rộng Lõi Trăng non (Chỉ vẽ vỏ vòng cung)")); cbEx.setTextColor(Color.parseColor("#FF9800")); cbEx.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_expand", false)); cbEx.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_expand", c).apply()); drawerContent.addView(cbEx); 
 
             designSliderContainer.addView(createDrawer(CORNER_NAMES[i], drawerContent));
         }
@@ -162,7 +152,11 @@ public class MainActivity extends Activity {
         globalDrawer.addView(createSlider(T("Local Position X","Dịch chuyển tiểu tiết Ngang (X)"), prefix+"corner_off_x", 2500, 0)); 
         globalDrawer.addView(createSlider(T("Local Position Y","Dịch chuyển tiểu tiết Dọc (Y)"), prefix+"corner_off_y", 2500, 0)); 
         globalDrawer.addView(createSlider(T("Stroke Thickness","Độ đậm viền"), prefix+"corner_thick", 50, 8)); 
-        globalDrawer.addView(createSlider(T("Moon Curve (0=Straight)","Độ cong vòng cung Trăng non (0=Thẳng)"), prefix+"corner_rad", 1000, 80));
+        
+        // V19.11.5: TÁCH ĐỘ CONG VÀ LÊN MAX 1000
+        globalDrawer.addView(createSlider(T("Top Moon Curve (0=Straight)","Độ cong vòng cung ĐỈNH (0=Thẳng)"), prefix+"corner_top_rad", 1000, 80));
+        globalDrawer.addView(createSlider(T("Bottom Moon Curve (0=Straight)","Độ cong vòng cung ĐÁY (0=Thẳng)"), prefix+"corner_bot_rad", 1000, 80));
+        
         designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", globalDrawer));
         } }
 
