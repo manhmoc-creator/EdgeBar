@@ -38,9 +38,10 @@ public class HomescreenService extends Service {
         public void setPhase(float ph) { this.phase = ph; invalidate(); }
         @Override protected void onDraw(Canvas canvas) { 
             float wPref = prefs.getInt("anim_w", 0); float hPref = prefs.getInt("anim_h", 0);
-            float drawW = (wPref > 0) ? wPref : getWidth(); float drawH = (hPref > 0) ? hPref : getHeight();
+            android.util.DisplayMetrics metrics = new android.util.DisplayMetrics(); wm.getDefaultDisplay().getRealMetrics(metrics);
+            float drawW = (wPref > 0) ? wPref : metrics.widthPixels; float drawH = (hPref > 0) ? hPref : metrics.heightPixels; 
             float off = p.getStrokeWidth()/2; 
-            float left = (getWidth() - drawW) / 2f + off; float top = (getHeight() - drawH) / 2f + off;
+            float left = (metrics.widthPixels - drawW) / 2f + off; float top = (metrics.heightPixels - drawH) / 2f + off;
             float right = left + drawW - 2*off; float bottom = top + drawH - 2*off;
             p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND);
             if(aStyle > 0) { float perim = 2 * (drawW + drawH); if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, phase)); else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, phase)); else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, phase)); } else { p.setPathEffect(null); }
@@ -136,7 +137,7 @@ public class HomescreenService extends Service {
 
     private void updateVisibility() { 
         boolean isUnlocked = !km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
-        if(hide && fV != null) fV.setVisibility(View.GONE);
+        if(hide && fV != null) { fV.setVisibility(View.GONE); WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams(); fp.width = 0; fp.height = 0; wm.updateViewLayout(fV, fp); }
         for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("home_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(en && isUnlocked) { int alpha = prefs.getInt("home_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("home_"+BARS[i]+"_w", 300); int h = prefs.getInt("home_"+BARS[i]+"_h", 60); int x = prefs.getInt("home_"+BARS[i]+"_x", 0); int y = prefs.getInt("home_"+BARS[i]+"_y", 0); GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); boolean isPri = prefs.getBoolean("home_"+BARS[i]+"_pri", true); boolean isPass = prefs.getBoolean("home_"+BARS[i]+"_pass", false); int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; if(isPass) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else if(isPri) baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && bars[i].getVisibility() == View.VISIBLE && !isPass) { Rect rect = new Rect(0, 0, w, h); bars[i].setSystemGestureExclusionRects(Collections.singletonList(rect)); } } } 
         for(int i=0; i<4; i++) { if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("home_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { 
             int moonAlpha = prefs.getInt("home_corner_moon_alpha", 100); int strokeAlpha = prefs.getInt("home_corner_stroke_alpha", 200); boolean isAuto = prefs.getBoolean("home_corner_"+CORNERS[i]+"_auto", false); int hideDelay = prefs.getInt("home_corner_hide_dur", 2500); 
@@ -160,8 +161,14 @@ public class HomescreenService extends Service {
         int style = prefs.getInt("anim_style", 0); int dur = prefs.getInt("anim_dur", 1500); 
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams(); fp.width = WindowManager.LayoutParams.MATCH_PARENT; fp.height = WindowManager.LayoutParams.MATCH_PARENT; wm.updateViewLayout(fV, fp);
         fV.setVisibility(View.VISIBLE); fV.setAlpha(1f);
+        
+        float wPref = prefs.getInt("anim_w", 0); float hPref = prefs.getInt("anim_h", 0);
+        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics(); wm.getDefaultDisplay().getRealMetrics(metrics);
+        float drawW = (wPref > 0) ? wPref : metrics.widthPixels; float drawH = (hPref > 0) ? hPref : metrics.heightPixels; 
+        float p = 2 * (drawW + drawH); 
+
         if(style == 0) { ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f, 0f); anim.setDuration(dur); anim.addUpdateListener(a -> { float val = (float)a.getAnimatedValue(); fV.setAlpha(val); }); anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); fp.width = 0; fp.height = 0; wm.updateViewLayout(fV, fp); } }); anim.start(); } 
-        else { float wPref = prefs.getInt("anim_w", 0); float hPref = prefs.getInt("anim_h", 0); float drawW = (wPref > 0) ? wPref : fV.getWidth(); float drawH = (hPref > 0) ? hPref : fV.getHeight(); float p = 2 * (drawW + drawH); ValueAnimator anim = ValueAnimator.ofFloat(0f, -p); anim.setDuration(dur); anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue())); anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); fp.width = 0; fp.height = 0; wm.updateViewLayout(fV, fp); } }); anim.start(); } 
+        else { ValueAnimator anim = ValueAnimator.ofFloat(0f, -p); anim.setDuration(dur); anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue())); anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); fp.width = 0; fp.height = 0; wm.updateViewLayout(fV, fp); } }); anim.start(); } 
     }
 
     private void handleAction(String key) { String action = prefs.getString(key, "NONE"); if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30)); if (prefs.getBoolean(key + "_anim", true)) playAnim(); try { switch(action) { case "BACK": case "HOME": case "RECENTS": case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", action); sendBroadcast(ipc); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; default: if(action.startsWith("INTENT_")) fireIntent(action.split("_")[1]); break; } } catch (Exception e) {} } }

@@ -8,7 +8,6 @@ public class MainActivity extends Activity {
     private String[] ACT_KEYS = new String[26]; private String[] ACT_LABS = new String[26];
     private String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; private String[] BAR_NAMES; 
     private String[] CORNERS = {"br", "bl", "tr", "tl"}; private String[] CORNER_NAMES;
-    
     private String[] GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold"}; 
     private String[] GESTURE_NAMES; 
     private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold"}; 
@@ -18,7 +17,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabLock, tabHome; private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
-    private int designTabState = 0; private final String CURRENT_VERSION = "V19.11.5"; 
+    private int designTabState = 0; private final String CURRENT_VERSION = "V19.11.5.1"; 
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
 
@@ -27,7 +26,6 @@ public class MainActivity extends Activity {
         
         BAR_NAMES = new String[]{T("Right bottom", "Đáy phải"), T("Left bottom", "Đáy trái"), T("Right top", "Đỉnh phải"), T("Left top", "Đỉnh trái"), T("Center top", "Đỉnh giữa")};
         CORNER_NAMES = new String[]{T("Bottom right corner", "Góc đáy phải"), T("Bottom left corner", "Góc đáy trái"), T("Top right corner", "Góc đỉnh phải"), T("Top left corner", "Góc đỉnh trái")};
-        
         GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ")};
         C_GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ"), T("Swipe Diagonal", "Vuốt Chéo"), T("Diag + Hold", "Vuốt Chéo + Giữ")};
         COLOR_NAMES = new String[]{T("Pure White", "Trắng Tinh Khiết"), "Neon (Pink-Cyan)", "Cyberpunk (Purple-Gold)", "Lava (Red-Orange)", "Ocean (Blue-Cyan)", "Matrix (Green)", "Sunset (Purple-Orange)", "Google (4 Colors)", "Aurora (Cyan-Purple)", T("Abyss (Teal-Green-Blue)","Abyss (Lục lam-Xanh biển)"), "Forest (Dark/Light Green)", "Flame (Red-Orange-Yellow)", "Midnight (Blue-Purple)", "Tropical (Teal-Green-Orange)", "Candy (Pink-Cyan-Yellow)"};
@@ -39,7 +37,7 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212")); LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(20,40,20,100); 
         
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(Gravity.CENTER_VERTICAL); header.setPadding(0,0,0,30);
-        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe System Hacker"); title.setTextColor(Color.WHITE); title.setTextSize(19); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe Final Polish"); title.setTextColor(Color.WHITE); title.setTextSize(19); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         Button btnLang = new Button(this); btnLang.setText(isVi ? "🇻🇳 VI" : "🇺🇸 EN"); btnLang.setTextColor(Color.WHITE); btnLang.setBackground(getRounded("#2E7D32", 20f)); LinearLayout.LayoutParams lpL = new LinearLayout.LayoutParams(-2, -2); lpL.setMargins(0,0,15,0); btnLang.setLayoutParams(lpL); btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
         Button btnUpdate = new Button(this); btnUpdate.setText(T("CHECK", "UPDATE")); btnUpdate.setTextColor(Color.parseColor("#00E5FF")); btnUpdate.setBackground(getRounded("#1E1E1E", 25f)); btnUpdate.setPadding(30,20,30,20); btnUpdate.setOnClickListener(v -> checkUpdate());
         header.addView(title); header.addView(btnLang); header.addView(btnUpdate); main.addView(header);
@@ -132,10 +130,7 @@ public class MainActivity extends Activity {
             CheckBox cbPass = new CheckBox(this); cbPass.setText(T("Pass-through Touch","Xuyên thấu cảm ứng (Nhường OS)")); cbPass.setTextColor(Color.parseColor("#99FFFFFF")); cbPass.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_pass", false)); cbPass.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_pass", c).apply()); drawerContent.addView(cbPass); 
             CheckBox cbAuto = new CheckBox(this); cbAuto.setText(T("Smart Auto-Hide","Tàng hình thông minh (Nháy sáng khi chạm)")); cbAuto.setTextColor(Color.parseColor("#00E5FF")); cbAuto.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_auto", false)); cbAuto.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_auto", c).apply()); drawerContent.addView(cbAuto); 
             CheckBox cbInv = new CheckBox(this); cbInv.setText(T("Completely Invisible","Ẩn hoàn toàn (Vô hình)")); cbInv.setTextColor(Color.parseColor("#99FFFFFF")); cbInv.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_inv", false)); cbInv.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_inv", c).apply()); drawerContent.addView(cbInv); 
-            
-            // V19.11.5: THÊM TÙY CHỌN MỞ RỘNG LÕI ĐỘC LẬP
             CheckBox cbEx = new CheckBox(this); cbEx.setText(T("Independent Moon Expand","Mở rộng Lõi Trăng non (Chỉ vẽ vỏ vòng cung)")); cbEx.setTextColor(Color.parseColor("#FF9800")); cbEx.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_expand", false)); cbEx.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_expand", c).apply()); drawerContent.addView(cbEx); 
-
             designSliderContainer.addView(createDrawer(CORNER_NAMES[i], drawerContent));
         }
 
@@ -152,11 +147,8 @@ public class MainActivity extends Activity {
         globalDrawer.addView(createSlider(T("Local Position X","Dịch chuyển tiểu tiết Ngang (X)"), prefix+"corner_off_x", 2500, 0)); 
         globalDrawer.addView(createSlider(T("Local Position Y","Dịch chuyển tiểu tiết Dọc (Y)"), prefix+"corner_off_y", 2500, 0)); 
         globalDrawer.addView(createSlider(T("Stroke Thickness","Độ đậm viền"), prefix+"corner_thick", 50, 8)); 
-        
-        // V19.11.5: TÁCH ĐỘ CONG VÀ LÊN MAX 1000
         globalDrawer.addView(createSlider(T("Top Moon Curve (0=Straight)","Độ cong vòng cung ĐỈNH (0=Thẳng)"), prefix+"corner_top_rad", 1000, 80));
         globalDrawer.addView(createSlider(T("Bottom Moon Curve (0=Straight)","Độ cong vòng cung ĐÁY (0=Thẳng)"), prefix+"corner_bot_rad", 1000, 80));
-        
         designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", globalDrawer));
         } }
 
