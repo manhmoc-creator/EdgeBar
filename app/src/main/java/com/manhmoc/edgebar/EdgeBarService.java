@@ -6,7 +6,7 @@ public class EdgeBarService extends AccessibilityService {
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"}; private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { if(k != null) { updateVisibility(); if(fV != null) fV.updateStyle(); } };
-    private BroadcastReceiver stateReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) { playAnim(); } else updateVisibility(); } };
+    private BroadcastReceiver stateReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) { playAnim(null); } else updateVisibility(); } };
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) { exec(i.getStringExtra("act")); } } };
 
     private class FlashView extends View { 
@@ -36,12 +36,9 @@ public class EdgeBarService extends AccessibilityService {
         }
         public void setPhase(float ph) { this.phase = ph; invalidate(); }
         @Override protected void onDraw(Canvas canvas) { 
-            float wPref = prefs.getInt("anim_w", 0); float hPref = prefs.getInt("anim_h", 0);
-            float drawW = (wPref > 0) ? wPref : getWidth(); float drawH = (hPref > 0) ? hPref : getHeight();
             float off = p.getStrokeWidth()/2; 
-            float left = (getWidth() - drawW) / 2f + off; float top = (getHeight() - drawH) / 2f + off;
-            float right = left + drawW - 2*off; float bottom = top + drawH - 2*off;
-            if(aStyle > 0) { float perim = 2 * (drawW + drawH); if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, phase)); else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, phase)); else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, phase)); } else { p.setPathEffect(null); }
+            float left = off, top = off, right = getWidth() - off, bottom = getHeight() - off;
+            if(aStyle > 0) { float perim = 2 * (getWidth() + getHeight()); if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, phase)); else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, phase)); else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, phase)); } else { p.setPathEffect(null); }
             canvas.drawRoundRect(left, top, right, bottom, radius, radius, p); 
         } 
     }
@@ -49,7 +46,7 @@ public class EdgeBarService extends AccessibilityService {
     private class CornerView extends View { 
         private Paint pFill, pStroke; private int type; 
         private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
-        private boolean isInv = false;
+        private boolean isInv = false; private boolean isCurveOnly = false;
         
         public CornerView(Context c, int type) { super(c); this.type = type; 
             pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); 
@@ -57,9 +54,9 @@ public class EdgeBarService extends AccessibilityService {
             pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND);
         } 
         
-        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) { 
+        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv, boolean curveOnly) { 
             pStroke.setStrokeWidth(thick); 
-            this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
+            this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv; this.isCurveOnly = curveOnly;
             if(!autoHide) { pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); pStroke.setAlpha(strokeAlpha); }
             else triggerFlash(); 
             if(inv) { pFill.setAlpha(0); pStroke.setAlpha(0); }
@@ -81,29 +78,55 @@ public class EdgeBarService extends AccessibilityService {
             float w = getWidth(), h = getHeight(), thick = pStroke.getStrokeWidth(); 
             float pad = thick/2;
             float radSlider = prefs.getInt("lock_corner_rad", 80); 
+            
             float flatFactor = radSlider / 1000f; 
             Path moonPath = new Path(); Path strokePath = new Path();
 
-            if(type==0) { 
+            // V19.11.5: THUẬT TOÁN TÁCH VỎ VÀ LÕI - LÕI MỞ RỘNG RA TOÀN BỘ W/H, VỎ CHỈ GIỮ LẠI ĐƯỜNG CONG
+            if(type==0) { // Bottom Right
                 float startX = w-pad, startY = pad, endX = pad, endY = h-pad;
                 float ctrlX = w-pad - (1f - flatFactor) * (w*0.7f); float ctrlY = h-pad - (1f - flatFactor) * (h*0.7f);
-                if(flatFactor > 0.99) { moonPath.moveTo(w-pad, h-pad); moonPath.lineTo(0, h); moonPath.lineTo(w, 0); moonPath.close(); strokePath.moveTo(0+pad, h-pad); strokePath.lineTo(w-pad, 0+pad);
-                } else { moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(0, h-pad); moonPath.lineTo(0, 0); moonPath.lineTo(w-pad, 0); moonPath.close(); strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); }
-            } else if(type==1) { 
+                if(flatFactor > 0.99) { 
+                    moonPath.moveTo(w-pad, h-pad); moonPath.lineTo(0, h); moonPath.lineTo(w, 0); moonPath.close(); 
+                    if(!isCurveOnly) { strokePath.moveTo(0+pad, h-pad); strokePath.lineTo(w-pad, 0+pad); } 
+                } else { 
+                    moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(0, h-pad); moonPath.lineTo(0, 0); moonPath.lineTo(w-pad, 0); moonPath.close(); 
+                    strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY);
+                    if(!isCurveOnly) { strokePath.lineTo(0, h-pad); strokePath.moveTo(startX, startY); strokePath.lineTo(w-pad, 0); }
+                }
+            } else if(type==1) { // Bottom Left
                 float startX = pad, startY = pad, endX = w-pad, endY = h-pad;
                 float ctrlX = pad + (1f - flatFactor) * (w*0.7f); float ctrlY = h-pad - (1f - flatFactor) * (h*0.7f);
-                if(flatFactor > 0.99) { moonPath.moveTo(pad, h-pad); moonPath.lineTo(w, h); moonPath.lineTo(pad, 0); moonPath.close(); strokePath.moveTo(w-pad, h-pad); strokePath.lineTo(pad, 0+pad);
-                } else { moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w, h-pad); moonPath.lineTo(w, 0); moonPath.lineTo(pad, 0); moonPath.close(); strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); }
-            } else if(type==2) { 
+                if(flatFactor > 0.99) { 
+                    moonPath.moveTo(pad, h-pad); moonPath.lineTo(w, h); moonPath.lineTo(pad, 0); moonPath.close(); 
+                    if(!isCurveOnly) { strokePath.moveTo(w-pad, h-pad); strokePath.lineTo(pad, 0+pad); }
+                } else { 
+                    moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w, h-pad); moonPath.lineTo(w, 0); moonPath.lineTo(pad, 0); moonPath.close(); 
+                    strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); 
+                    if(!isCurveOnly) { strokePath.lineTo(w, h-pad); strokePath.moveTo(startX, startY); strokePath.lineTo(pad, 0); }
+                }
+            } else if(type==2) { // Top Right
                 float startX = pad, startY = pad, endX = w-pad, endY = h-pad;
                 float ctrlX = w-pad - (1f - flatFactor) * (w*0.7f); float ctrlY = pad + (1f - flatFactor) * (h*0.7f);
-                if(flatFactor > 0.99) { moonPath.moveTo(w-pad, pad); moonPath.lineTo(0, pad); moonPath.lineTo(w, h); moonPath.close(); strokePath.moveTo(0+pad, pad); strokePath.lineTo(w-pad, h-pad);
-                } else { moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w-pad, h); moonPath.lineTo(0, h); moonPath.lineTo(0, pad); moonPath.close(); strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); }
-            } else if(type==3) { 
+                if(flatFactor > 0.99) { 
+                    moonPath.moveTo(w-pad, pad); moonPath.lineTo(0, pad); moonPath.lineTo(w, h); moonPath.close(); 
+                    if(!isCurveOnly) { strokePath.moveTo(0+pad, pad); strokePath.lineTo(w-pad, h-pad); }
+                } else { 
+                    moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w-pad, h); moonPath.lineTo(0, h); moonPath.lineTo(0, pad); moonPath.close(); 
+                    strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); 
+                    if(!isCurveOnly) { strokePath.lineTo(w-pad, h); strokePath.moveTo(startX, startY); strokePath.lineTo(0, pad); }
+                }
+            } else if(type==3) { // Top Left
                 float startX = pad, startY = h-pad, endX = w-pad, endY = pad;
                 float ctrlX = pad + (1f - flatFactor) * (w*0.7f); float ctrlY = pad + (1f - flatFactor) * (h*0.7f);
-                if(flatFactor > 0.99) { moonPath.moveTo(pad, pad); moonPath.lineTo(w, pad); moonPath.lineTo(pad, h); moonPath.close(); strokePath.moveTo(w-pad, pad); strokePath.lineTo(pad, h-pad);
-                } else { moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w, pad); moonPath.lineTo(w, h); moonPath.lineTo(pad, h); moonPath.close(); strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); }
+                if(flatFactor > 0.99) { 
+                    moonPath.moveTo(pad, pad); moonPath.lineTo(w, pad); moonPath.lineTo(pad, h); moonPath.close(); 
+                    if(!isCurveOnly) { strokePath.moveTo(w-pad, pad); strokePath.lineTo(pad, h-pad); }
+                } else { 
+                    moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w, pad); moonPath.lineTo(w, h); moonPath.lineTo(pad, h); moonPath.close(); 
+                    strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); 
+                    if(!isCurveOnly) { strokePath.lineTo(w, pad); strokePath.moveTo(startX, startY); strokePath.lineTo(pad, h); }
+                }
             }
             if(radSlider < 990) canvas.drawPath(moonPath, pFill); 
             canvas.drawPath(strokePath, pStroke); 
@@ -119,51 +142,43 @@ public class EdgeBarService extends AccessibilityService {
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) { if(event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) { String pName = event.getPackageName() != null ? event.getPackageName().toString() : ""; String cName = event.getClassName() != null ? event.getClassName().toString() : ""; isKbd = pName.contains("inputmethod") || cName.contains("InputWindow") || cName.contains("keyboard") || cName.contains("Keyboard"); String bl = prefs.getString("blacklist", ""); isBl = !pName.isEmpty() && bl.contains(pName); updateVisibility(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); i.putExtra("isKbd", isKbd); i.putExtra("isBl", isBl); sendBroadcast(i); } }
 
-    private void exec(String a) { if (a == null || a.equals("NONE")) return; try { switch(a) { 
-        // V19.11.4.2 Bổ sung BACK, HOME, RECENTS
-        case "BACK": performGlobalAction(GLOBAL_ACTION_BACK); break;
-        case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break;
-        case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break;
-        case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break; 
-        case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break; 
-        case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break; 
-        case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break; 
-        case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; 
-        case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; 
-        case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; 
-        default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
-        
+    private void exec(String a) { if (a == null || a.equals("NONE")) return; try { switch(a) { case "BACK": performGlobalAction(GLOBAL_ACTION_BACK); break; case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break; case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break; case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break; case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break; case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break; case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
     private void fireIntent(String idx) { try { String act = prefs.getString("i"+idx+"_act", ""); String pkg = prefs.getString("i"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("i"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("i"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("i"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("i"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("i"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     
-    private void playAnim() {
+    // V19.11.5: THUẬT TOÁN ANTI-TAPJACKING BẰNG CÁCH THU NHỎ LỚP PHỦ XUỐNG BẰNG ĐÚNG TARGET VIEW
+    private void playAnim(View target) {
+        if (target != null && target.getLayoutParams() instanceof WindowManager.LayoutParams) {
+            WindowManager.LayoutParams tLp = (WindowManager.LayoutParams) target.getLayoutParams();
+            WindowManager.LayoutParams fvLp = (WindowManager.LayoutParams) fV.getLayoutParams();
+            fvLp.x = tLp.x; fvLp.y = tLp.y; fvLp.width = tLp.width; fvLp.height = tLp.height; fvLp.gravity = tLp.gravity;
+            wm.updateViewLayout(fV, fvLp);
+        }
+        
         int style = prefs.getInt("anim_style", 0); int dur = prefs.getInt("anim_dur", 1500); fV.setVisibility(View.VISIBLE); fV.setAlpha(1f);
-        if(style == 0) { ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f, 0f); anim.setDuration(dur); anim.addUpdateListener(a -> { float val = (float)a.getAnimatedValue(); fV.setAlpha(val); }); anim.start(); } 
-        else { float wPref = prefs.getInt("anim_w", 0); float hPref = prefs.getInt("anim_h", 0); float drawW = (wPref > 0) ? wPref : fV.getWidth(); float drawH = (hPref > 0) ? hPref : fV.getHeight(); float p = 2 * (drawW + drawH); ValueAnimator anim = ValueAnimator.ofFloat(0f, -p); anim.setDuration(dur); anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue())); anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); } }); anim.start(); } 
+        if(style == 0) { ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f, 0f); anim.setDuration(dur); anim.addUpdateListener(a -> { float val = (float)a.getAnimatedValue(); fV.setAlpha(val); }); 
+            anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); } }); anim.start(); } 
+        else { float wPref = prefs.getInt("anim_w", 0); float hPref = prefs.getInt("anim_h", 0); float drawW = (wPref > 0) ? wPref : fV.getWidth(); float drawH = (hPref > 0) ? hPref : fV.getHeight(); float p = 2 * (drawW + drawH); ValueAnimator anim = ValueAnimator.ofFloat(0f, -p); anim.setDuration(dur); anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue())); 
+            anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); } }); anim.start(); } 
     }
 
-    private void handleAction(String key) { String action = prefs.getString(key, "NONE"); if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_vib", true)) { doVibrate(prefs.getInt("vib_dur", 30)); } if (prefs.getBoolean(key + "_anim", true)) { playAnim(); } exec(action); } }
+    private void handleAction(String key, View target) { String action = prefs.getString(key, "NONE"); if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_vib", true)) { doVibrate(prefs.getInt("vib_dur", 30)); } if (prefs.getBoolean(key + "_anim", true)) { playAnim(target); } exec(action); } }
     private void doVibrate(int dur) { if(dur<=0) return; try { if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
 
     private void createFloatingBars() {
-        fV = new FlashView(this); fV.setAlpha(0f); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
-        for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], p); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener("lock_" + BARS[i], null)); } 
+        fV = new FlashView(this); fV.setAlpha(0f); fV.setVisibility(View.GONE); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
+        for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], p); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener("lock_" + BARS[i], bars[i])); } 
         for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], p); } catch(Exception e){} corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_" + CORNERS[i], corners[i])); } updateVisibility();
     }
 
     private void updateVisibility() { 
         boolean isLocked = km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
+        if(hide && fV != null) fV.setVisibility(View.GONE);
         for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE); if(en && isLocked) { 
             int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("lock_"+BARS[i]+"_w", 300); int h = prefs.getInt("lock_"+BARS[i]+"_h", 60); int x = prefs.getInt("lock_"+BARS[i]+"_x", 0); int y = prefs.getInt("lock_"+BARS[i]+"_y", 0); 
             GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); 
-            
-            boolean isPri = prefs.getBoolean("lock_"+BARS[i]+"_pri", true); 
-            boolean isPass = prefs.getBoolean("lock_"+BARS[i]+"_pass", false);
-            
+            boolean isPri = prefs.getBoolean("lock_"+BARS[i]+"_pri", true); boolean isPass = prefs.getBoolean("lock_"+BARS[i]+"_pass", false);
             int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; 
-            if(isPass) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-            else if(isPri) baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); 
-            else baseFlags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE; 
-            
+            if(isPass) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else if(isPri) baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); else baseFlags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE; 
             WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); } 
         } 
         
@@ -171,24 +186,19 @@ public class EdgeBarService extends AccessibilityService {
             if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isLocked) { 
                 int moonAlpha = prefs.getInt("lock_corner_moon_alpha", 100); int strokeAlpha = prefs.getInt("lock_corner_stroke_alpha", 200); boolean isAuto = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_auto", false); int hideDelay = prefs.getInt("lock_corner_hide_dur", 2500); 
                 boolean inv = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_inv", false);
-                ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, inv); 
+                boolean isCurveOnly = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_curve_only", false);
+                ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, inv, isCurveOnly); 
                 
-                boolean isPri = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_pri", true); 
-                boolean isPass = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_pass", false);
-                
+                boolean isPri = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_pri", true); boolean isPass = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_pass", false);
                 int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; 
-                if(isPass) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                else if(isPri) baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); 
-                else baseFlags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE; 
+                if(isPass) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else if(isPri) baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); else baseFlags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE; 
                 
                 WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.flags = baseFlags; p.gravity = C_GRAV[i]; 
-                
                 int widthPref = (i < 2) ? prefs.getInt("lock_corner_bot_w", 100) : prefs.getInt("lock_corner_top_w", 100);
                 int heightPref = (i < 2) ? prefs.getInt("lock_corner_bot_h", 100) : prefs.getInt("lock_corner_top_h", 100);
                 p.width = Math.max(10, widthPref); p.height = Math.max(10, heightPref);
                 int gX = prefs.getInt("lock_corner_global_x", 500) - 500; int gY = prefs.getInt("lock_corner_global_y", 500) - 500;
                 int offX = prefs.getInt("lock_corner_off_x", 0); int offY = prefs.getInt("lock_corner_off_y", 0);
-                
                 if(i == 0) { p.x = offX - gX; p.y = offY - gY; }      
                 else if(i == 1) { p.x = offX + gX; p.y = offY - gY; } 
                 else if(i == 2) { p.x = offX - gX; p.y = offY + gY; } 
@@ -199,7 +209,7 @@ public class EdgeBarService extends AccessibilityService {
 
     private class SidebarTouchListener implements View.OnTouchListener { 
         private String prefKeyBase; private View myView; private GestureDetector gd; private float sx, sy; private long st;
-        public SidebarTouchListener(String keyBase, View v) { this.prefKeyBase = keyBase; this.myView = v; this.gd = new GestureDetector(EdgeBarService.this, new GestureDetector.SimpleOnGestureListener() { @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction(prefKeyBase + "_tap"); return true; } @Override public boolean onDoubleTap(MotionEvent e) { handleAction(prefKeyBase + "_dtap"); return true; } @Override public void onLongPress(MotionEvent e) { handleAction(prefKeyBase + "_long"); } @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { return false; } }); } 
+        public SidebarTouchListener(String keyBase, View v) { this.prefKeyBase = keyBase; this.myView = v; this.gd = new GestureDetector(EdgeBarService.this, new GestureDetector.SimpleOnGestureListener() { @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction(prefKeyBase + "_tap", myView); return true; } @Override public boolean onDoubleTap(MotionEvent e) { handleAction(prefKeyBase + "_dtap", myView); return true; } @Override public void onLongPress(MotionEvent e) { handleAction(prefKeyBase + "_long", myView); } @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { return false; } }); } 
         @Override public boolean onTouch(View v, MotionEvent e) { 
             if(myView != null && myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             gd.onTouchEvent(e); if (e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis(); } else if (e.getAction() == MotionEvent.ACTION_UP) { 
@@ -208,7 +218,7 @@ public class EdgeBarService extends AccessibilityService {
                     long duration = System.currentTimeMillis() - st; boolean isHold = duration > prefs.getInt("hold_dur", 600); String actionName = ""; 
                     if (myView instanceof CornerView && Math.abs(dx) > 40 && Math.abs(dy) > 40) { actionName = "diag" + (isHold ? "_hold" : ""); } 
                     else { if (Math.abs(dx) > Math.abs(dy)) actionName = dx > 0 ? "right" : "left"; else actionName = dy > 0 ? "down" : "up"; if (isHold) actionName += "_hold"; }
-                    handleAction(prefKeyBase + "_" + actionName); return true; 
+                    handleAction(prefKeyBase + "_" + actionName, myView); return true; 
                 } 
             } return true; } 
     }
