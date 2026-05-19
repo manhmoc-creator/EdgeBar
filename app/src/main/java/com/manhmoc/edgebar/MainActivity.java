@@ -18,9 +18,17 @@ public class MainActivity extends Activity {
 
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabLock, tabHome; private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
-    private int designTabState = 0; private final String CURRENT_VERSION = "V19.12.1.1"; 
+    private int designTabState = 0; private final String CURRENT_VERSION = "V19.12.1.2"; 
+
+    // V19.12.1.2: State Trackers cho Live Preview
+    private int currentMainTab = 1; private int currentGesTab = 0;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
+
+    // V19.12.1.2: Logic cập nhật trạng thái Preview
+    private void refreshPreview() { boolean p = (currentMainTab==0 && designTabState==0) || (currentMainTab==1 && currentGesTab==0); prefs.edit().putBoolean("preview_lock", p).apply(); }
+    @Override protected void onResume() { super.onResume(); refreshPreview(); }
+    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).apply(); }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); isVi = prefs.getBoolean("lang_vi", true); 
@@ -39,7 +47,7 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212")); LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(20,40,20,100); 
         
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(Gravity.CENTER_VERTICAL); header.setPadding(0,0,0,30);
-        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe Architect"); title.setTextColor(Color.WHITE); title.setTextSize(21); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe Live Architect"); title.setTextColor(Color.WHITE); title.setTextSize(21); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         Button btnLang = new Button(this); btnLang.setText(isVi ? "🇻🇳 VI" : "🇺🇸 EN"); btnLang.setTextColor(Color.WHITE); btnLang.setBackground(getRounded("#2E7D32", 20f)); LinearLayout.LayoutParams lpL = new LinearLayout.LayoutParams(-2, -2); lpL.setMargins(0,0,15,0); btnLang.setLayoutParams(lpL); btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
         Button btnUpdate = new Button(this); btnUpdate.setText(T("CHECK", "UPDATE")); btnUpdate.setTextColor(Color.parseColor("#00E5FF")); btnUpdate.setBackground(getRounded("#1E1E1E", 25f)); btnUpdate.setPadding(30,20,30,20); btnUpdate.setOnClickListener(v -> checkUpdate());
         header.addView(title); header.addView(btnLang); header.addView(btnUpdate); main.addView(header);
@@ -64,7 +72,12 @@ public class MainActivity extends Activity {
         LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL);
         btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(bp); btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(rp);
         designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
-        btnEditLock.setOnClickListener(v -> { designTabState=0; updateVisTabs(); renderSliders(); }); btnEditHome.setOnClickListener(v -> { designTabState=1; updateVisTabs(); renderSliders(); }); btnEditAnim.setOnClickListener(v -> { designTabState=2; updateVisTabs(); renderSliders(); });
+        
+        // V19.12.1.2: Gắn logic Live Preview vào các tab chuyển đổi
+        btnEditLock.setOnClickListener(v -> { designTabState=0; refreshPreview(); updateVisTabs(); renderSliders(); }); 
+        btnEditHome.setOnClickListener(v -> { designTabState=1; refreshPreview(); updateVisTabs(); renderSliders(); }); 
+        btnEditAnim.setOnClickListener(v -> { designTabState=2; refreshPreview(); updateVisTabs(); renderSliders(); });
+        
         toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addView(btnEditAnim); secVisual.addView(toggleRow); secVisual.addView(designSliderContainer); pageDesign.addView(wrapCard(secVisual)); btnEditLock.performClick();
 
         LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 20, 0, 20); 
@@ -161,8 +174,11 @@ public class MainActivity extends Activity {
         } }
 
     private LinearLayout wrapCard(View content) { LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 40f)); card.setPadding(40,40,40,40); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,40); card.setLayoutParams(lp); card.addView(content); return card; }
-    private void switchMainTab(int idx) { pageDesign.setVisibility(idx==0?View.VISIBLE:View.GONE); pageGestures.setVisibility(idx==1?View.VISIBLE:View.GONE); pageIntents.setVisibility(idx==2?View.VISIBLE:View.GONE); btnNavDes.setBackground(getRounded(idx==0?"#222222":"#00000000", 20f)); btnNavDes.setTextColor(idx==0?Color.parseColor("#00E5FF"):Color.GRAY); btnNavGes.setBackground(getRounded(idx==1?"#222222":"#00000000", 20f)); btnNavGes.setTextColor(idx==1?Color.parseColor("#00E5FF"):Color.GRAY); btnNavInt.setBackground(getRounded(idx==2?"#222222":"#00000000", 20f)); btnNavInt.setTextColor(idx==2?Color.parseColor("#00E5FF"):Color.GRAY); }
-    private void switchGesTab(int idx) { tabLock.setVisibility(idx==0?View.VISIBLE:View.GONE); tabHome.setVisibility(idx==1?View.VISIBLE:View.GONE); btnLock.setBackground(getRounded(idx==0?"#00E5FF":"#222222", 20f)); btnLock.setTextColor(idx==0?Color.BLACK:Color.WHITE); btnHome.setBackground(getRounded(idx==1?"#00E5FF":"#222222", 20f)); btnHome.setTextColor(idx==1?Color.BLACK:Color.WHITE); }
+    
+    // V19.12.1.2: Cập nhật Tab Tracker
+    private void switchMainTab(int idx) { currentMainTab = idx; refreshPreview(); pageDesign.setVisibility(idx==0?View.VISIBLE:View.GONE); pageGestures.setVisibility(idx==1?View.VISIBLE:View.GONE); pageIntents.setVisibility(idx==2?View.VISIBLE:View.GONE); btnNavDes.setBackground(getRounded(idx==0?"#222222":"#00000000", 20f)); btnNavDes.setTextColor(idx==0?Color.parseColor("#00E5FF"):Color.GRAY); btnNavGes.setBackground(getRounded(idx==1?"#222222":"#00000000", 20f)); btnNavGes.setTextColor(idx==1?Color.parseColor("#00E5FF"):Color.GRAY); btnNavInt.setBackground(getRounded(idx==2?"#222222":"#00000000", 20f)); btnNavInt.setTextColor(idx==2?Color.parseColor("#00E5FF"):Color.GRAY); }
+    private void switchGesTab(int idx) { currentGesTab = idx; refreshPreview(); tabLock.setVisibility(idx==0?View.VISIBLE:View.GONE); tabHome.setVisibility(idx==1?View.VISIBLE:View.GONE); btnLock.setBackground(getRounded(idx==0?"#00E5FF":"#222222", 20f)); btnLock.setTextColor(idx==0?Color.BLACK:Color.WHITE); btnHome.setBackground(getRounded(idx==1?"#00E5FF":"#222222", 20f)); btnHome.setTextColor(idx==1?Color.BLACK:Color.WHITE); }
+    
     private Button createNavBtn(String t) { Button b = new Button(this); b.setText(t); b.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); return b; }
     private Button createTabBtn(String t) { Button b = new Button(this); b.setText(t); return b; }
     
