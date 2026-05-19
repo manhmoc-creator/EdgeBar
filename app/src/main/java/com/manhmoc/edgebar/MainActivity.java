@@ -18,7 +18,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabLock, tabHome; private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
-    private int designTabState = 0; private final String CURRENT_VERSION = "V19.12.1"; 
+    private int designTabState = 0; private final String CURRENT_VERSION = "V19.12.1.1"; 
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
 
