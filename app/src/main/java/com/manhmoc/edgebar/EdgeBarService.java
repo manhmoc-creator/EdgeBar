@@ -36,7 +36,6 @@ public class EdgeBarService extends AccessibilityService {
         }
         public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
         @Override protected void onDraw(Canvas canvas) { 
-            // V19.12: FIX LỖI TIA SÁNG CHẾT ĐỨNG BẰNG CÁCH TÍNH DYNAMIC
             float drawW = getWidth(); float drawH = getHeight();
             if(drawW <= 0 || drawH <= 0) return;
             float off = p.getStrokeWidth()/2; 
@@ -87,46 +86,33 @@ public class EdgeBarService extends AccessibilityService {
 
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); 
             float w = getWidth(), h = getHeight(), thick = pStroke.getStrokeWidth(); float pad = thick/2;
-            
-            // V19.12: ĐỌC RIÊNG CÁC THÔNG SỐ VỎ VÀ LÕI TỪNG GÓC
             int shapeMode = prefs.getInt("lock_corner_"+CORNERS[type]+"_shape", 0); 
             float sRad = prefs.getInt("lock_corner_"+CORNERS[type]+"_rad", 80) / 1000f; 
             float mRad = prefs.getInt("lock_corner_"+CORNERS[type]+"_moon_rad", 80) / 1000f; 
-            
             float mw = prefs.getInt("lock_corner_"+CORNERS[type]+"_moon_w", 100); 
             float mh = prefs.getInt("lock_corner_"+CORNERS[type]+"_moon_h", 100);
             
             Path moonPath = new Path(); Path strokePath = new Path();
-
-            // Tính toán Điểm VỎ (Stroke)
             float sStartX=0, sStartY=0, sEndX=0, sEndY=0, sCtrlX=0, sCtrlY=0;
             if(type==0) { sStartX = w-pad; sStartY = pad; sEndX = pad; sEndY = h-pad; sCtrlX = w-pad - (1f - sRad)*(w*0.7f); sCtrlY = h-pad - (1f - sRad)*(h*0.7f); } // BR
             else if(type==1) { sStartX = pad; sStartY = pad; sEndX = w-pad; sEndY = h-pad; sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = h-pad - (1f - sRad)*(h*0.7f); } // BL
             else if(type==2) { sStartX = w-pad; sStartY = h-pad; sEndX = pad; sEndY = pad; sCtrlX = w-pad - (1f - sRad)*(w*0.7f); sCtrlY = pad + (1f - sRad)*(h*0.7f); } // TR
             else if(type==3) { sStartX = pad; sStartY = h-pad; sEndX = w-pad; sEndY = pad; sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = pad + (1f - sRad)*(h*0.7f); } // TL
             
-            // Ép dáng Vỏ (Thẳng ngang / Thẳng dọc)
             if(shapeMode == 1) { sStartY = (type==0||type==1) ? h-pad : pad; sEndY = sStartY; sStartX = pad; sEndX = w-pad; strokePath.moveTo(sStartX, sStartY); strokePath.lineTo(sEndX, sEndY); }
             else if(shapeMode == 2) { sStartX = (type==0||type==2) ? w-pad : pad; sEndX = sStartX; sStartY = pad; sEndY = h-pad; strokePath.moveTo(sStartX, sStartY); strokePath.lineTo(sEndX, sEndY); }
             else { strokePath.moveTo(sStartX, sStartY); strokePath.quadTo(sCtrlX, sCtrlY, sEndX, sEndY); }
 
-            // Tính toán Điểm LÕI (Moon)
             float mStartX=0, mStartY=0, mEndX=0, mEndY=0, mCtrlX=0, mCtrlY=0, rootX=0, rootY=0;
             if(type==0) { mStartX = mw; mStartY = 0; mEndX = 0; mEndY = mh; mCtrlX = mw - (1f - mRad)*(mw*0.7f); mCtrlY = mh - (1f - mRad)*(mh*0.7f); rootX = w; rootY = h; } 
             else if(type==1) { mStartX = 0; mStartY = 0; mEndX = mw; mEndY = mh; mCtrlX = (1f - mRad)*(mw*0.7f); mCtrlY = mh - (1f - mRad)*(mh*0.7f); rootX = 0; rootY = h; } 
             else if(type==2) { mStartX = mw; mStartY = mh; mEndX = 0; mEndY = 0; mCtrlX = mw - (1f - mRad)*(mw*0.7f); mCtrlY = (1f - mRad)*(mh*0.7f); rootX = w; rootY = 0; } 
             else if(type==3) { mStartX = 0; mStartY = mh; mEndX = mw; mEndY = 0; mCtrlX = (1f - mRad)*(mw*0.7f); mCtrlY = (1f - mRad)*(mh*0.7f); rootX = 0; rootY = 0; } 
 
-            // Căn chỉnh tọa độ Lõi theo kích thước Vỏ để nó luôn nằm đúng góc
-            float offX = (type==0||type==2) ? w - mw : 0;
-            float offY = (type==0||type==1) ? h - mh : 0;
-            
-            moonPath.moveTo(mStartX + offX, mStartY + offY);
-            moonPath.quadTo(mCtrlX + offX, mCtrlY + offY, mEndX + offX, mEndY + offY);
-            moonPath.lineTo(rootX, rootY); moonPath.close();
+            float offX = (type==0||type==2) ? w - mw : 0; float offY = (type==0||type==1) ? h - mh : 0;
+            moonPath.moveTo(mStartX + offX, mStartY + offY); moonPath.quadTo(mCtrlX + offX, mCtrlY + offY, mEndX + offX, mEndY + offY); moonPath.lineTo(rootX, rootY); moonPath.close();
 
-            canvas.drawPath(moonPath, pFill); 
-            canvas.drawPath(strokePath, pStroke); 
+            canvas.drawPath(moonPath, pFill); canvas.drawPath(strokePath, pStroke); 
         } 
     }
 
@@ -144,18 +130,21 @@ public class EdgeBarService extends AccessibilityService {
     private void fireIntent(String idx) { try { String act = prefs.getString("i"+idx+"_act", ""); String pkg = prefs.getString("i"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("i"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("i"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("i"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("i"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("i"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     
     private void playAnim() {
-        int style = prefs.getInt("anim_style", 0); int dur = prefs.getInt("anim_dur", 1500); 
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams(); fp.width = WindowManager.LayoutParams.MATCH_PARENT; fp.height = WindowManager.LayoutParams.MATCH_PARENT; wm.updateViewLayout(fV, fp);
         fV.setVisibility(View.VISIBLE);
-        ValueAnimator anim;
-        if(style == 0) { anim = ValueAnimator.ofFloat(0f, 1f, 0f); anim.addUpdateListener(a -> fV.setAlpha((float)a.getAnimatedValue())); } 
-        else { fV.setAlpha(1f); anim = ValueAnimator.ofFloat(0f, 1f); anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue())); } 
-        anim.setDuration(dur);
-        anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); fp.width = 0; fp.height = 0; wm.updateViewLayout(fV, fp); } }); 
-        anim.start();
+        // V19.12.1: POST ĐỂ ĐẢM BẢO FV CÓ KÍCH THƯỚC TRƯỚC KHI TÍNH TOÁN
+        fV.post(() -> {
+            int style = prefs.getInt("anim_style", 0); int dur = prefs.getInt("anim_dur", 1500); 
+            ValueAnimator anim;
+            if(style == 0) { anim = ValueAnimator.ofFloat(0f, 1f, 0f); anim.addUpdateListener(a -> fV.setAlpha((float)a.getAnimatedValue())); } 
+            else { fV.setAlpha(1f); anim = ValueAnimator.ofFloat(0f, 1f); anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue())); } 
+            anim.setDuration(dur);
+            anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); fp.width = 0; fp.height = 0; wm.updateViewLayout(fV, fp); } }); 
+            anim.start();
+        });
     }
 
-    private void handleAction(String key) { String action = prefs.getString(key, "NONE"); if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30)); if (prefs.getBoolean(key + "_anim", true)) playAnim(); exec(action); } }
+    private void handleAction(String key) { String action = prefs.getString(key, "NONE"); if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_vib", true)) { doVibrate(prefs.getInt("vib_dur", 30)); } if (prefs.getBoolean(key + "_anim", true)) { playAnim(); } exec(action); } }
     private void doVibrate(int dur) { if(dur<=0) return; try { if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
 
     private void createFloatingBars() {

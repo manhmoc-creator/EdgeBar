@@ -18,7 +18,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabLock, tabHome; private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
-    private int designTabState = 0; private final String CURRENT_VERSION = "V19.12"; 
+    private int designTabState = 0; private final String CURRENT_VERSION = "V19.12.1"; 
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
 
@@ -32,8 +32,8 @@ public class MainActivity extends Activity {
         C_GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ"), T("Swipe Diagonal", "Vuốt Chéo"), T("Diag + Hold", "Vuốt Chéo + Giữ")};
         COLOR_NAMES = new String[]{T("Pure White", "Trắng Tinh Khiết"), "Neon (Pink-Cyan)", "Cyberpunk (Purple-Gold)", "Lava (Red-Orange)", "Ocean (Blue-Cyan)", "Matrix (Green)", "Sunset (Purple-Orange)", "Google (4 Colors)", "Aurora (Cyan-Purple)", T("Abyss (Teal-Green-Blue)","Abyss (Lục lam-Xanh biển)"), "Forest (Dark/Light Green)", "Flame (Red-Orange-Yellow)", "Midnight (Blue-Purple)", "Tropical (Teal-Green-Orange)", "Candy (Pink-Cyan-Yellow)"};
 
-        String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "QR"}; 
-        String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn hình chính"), T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume Panel", "Menu Âm Lượng"), T("Screenshot", "Chụp ảnh màn hình"), "Camera", "Mở QR Scanner"};
+        String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS"}; 
+        String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn hình chính"), T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume Panel", "Menu Âm Lượng"), T("Screenshot", "Chụp ảnh màn hình"), "Camera", T("Notifications", "Mở Thông Báo")};
         for(int i=0; i<11; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; } for(int i=1; i<=15; i++) { ACT_KEYS[10+i]="INTENT_"+i; ACT_LABS[10+i]=T("Fire Intent ", "Gửi Intent ")+i; }
 
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212")); LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(20,40,20,100); 
@@ -74,7 +74,7 @@ public class MainActivity extends Activity {
 
         for (int i = 1; i <= 15; i++) { 
             LinearLayout sInt = new LinearLayout(this); sInt.setOrientation(LinearLayout.VERTICAL); sInt.setPadding(30,10,30,30);
-            sInt.addView(createInput("Action", "i"+i+"_act")); sInt.addView(createInput("Package", "i"+i+"_pkg")); sInt.addView(createInput("Class Name", "i"+i+"_cls")); sInt.addView(createInput("Data URI", "i"+i+"_data")); sInt.addView(createInput("Categories", "i"+i+"_cat")); sInt.addView(createInput("Flags", "i"+i+"_flags")); 
+            sInt.addView(createInput("Action (com.google.zxing.client.android.SCAN)", "i"+i+"_act")); sInt.addView(createInput("Package (com.google.android.gms)", "i"+i+"_pkg")); sInt.addView(createInput("Class Name (com.manhmoc.edgebar.ToggleReceiver)", "i"+i+"_cls")); sInt.addView(createInput("Data URI", "i"+i+"_data")); sInt.addView(createInput("Categories", "i"+i+"_cat")); sInt.addView(createInput("Flags", "i"+i+"_flags")); 
             CheckBox cb = new CheckBox(this); cb.setText(T("Send as Broadcast", "Gửi dạng Broadcast")); cb.setTextColor(Color.WHITE); cb.setChecked(prefs.getBoolean("i"+i+"_br", true)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("i"+idx+"_br", c).apply()); sInt.addView(cb); 
             pageIntents.addView(createDrawer("Intent Slot " + i, sInt)); 
         }
@@ -126,7 +126,6 @@ public class MainActivity extends Activity {
             LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30);
             CheckBox cb = new CheckBox(this); cb.setText(T("ENABLE: ","BẬT: ") + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_en", c).apply()); drawerContent.addView(cb); 
             
-            // Toggle Touch Mode
             drawerContent.addView(createComboDropdown(T("Touch Mode", "Chế độ Cảm ứng"), prefix+BARS[i]+"_pri_mode", new String[]{T("Lock Priority (EB)", "Ưu tiên Edge Bar (Khoá cứng)"), T("Pass-through (OS)", "Nhường OS (Xuyên thấu)")}, 0));
 
             drawerContent.addView(createSlider(T("Opacity","Độ trong suốt"), prefix+BARS[i]+"_alpha", 255, 50)); drawerContent.addView(createSlider(T("Width","Chiều ngang"), prefix+BARS[i]+"_w", 3000, 300)); drawerContent.addView(createSlider(T("Height","Chiều dọc"), prefix+BARS[i]+"_h", 3000, 60)); drawerContent.addView(createSlider(T("Pos X","Toạ độ X"), prefix+BARS[i]+"_x", 1000, 0)); drawerContent.addView(createSlider(T("Pos Y","Toạ độ Y"), prefix+BARS[i]+"_y", 1000, 0)); 
@@ -137,14 +136,10 @@ public class MainActivity extends Activity {
         for(int i=0; i<4; i++) { 
             LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30);
             
-            // Toggle Visibility Mode
             drawerContent.addView(createComboDropdown(T("Visibility", "Hiển thị"), prefix+"corner_"+CORNERS[i]+"_vis_mode", new String[]{T("Visible", "Hiện hoàn toàn"), T("Smart Auto-Hide", "Tàng hình (Nháy sáng)"), T("Invisible", "Ẩn hoàn toàn (Vô hình)")}, 0));
-            // Toggle Touch Mode
             drawerContent.addView(createComboDropdown(T("Touch Mode", "Chế độ Cảm ứng"), prefix+"corner_"+CORNERS[i]+"_pri_mode", new String[]{T("Lock Priority (EB)", "Ưu tiên Edge Bar (Khoá cứng)"), T("Pass-through (OS)", "Nhường OS (Xuyên thấu)")}, 0));
-            // Toggle Shape Mode
             drawerContent.addView(createComboDropdown(T("Corner Shape", "Hình dáng Góc"), prefix+"corner_"+CORNERS[i]+"_shape", new String[]{T("Curve", "Bo Cong"), T("Flat Horizontal", "Thẳng Ngang"), T("Flat Vertical", "Thẳng Dọc")}, 0));
 
-            // V19.12: KÉO DÀI / DI CHUYỂN / LÕI TRĂNG NON ĐỘC LẬP
             drawerContent.addView(createSlider(T("Extend X","Kéo giãn Ngang Vỏ (X)"), prefix+"corner_"+CORNERS[i]+"_w", 2500, 100)); 
             drawerContent.addView(createSlider(T("Extend Y","Kéo giãn Dọc Vỏ (Y)"), prefix+"corner_"+CORNERS[i]+"_h", 2500, 100)); 
             drawerContent.addView(createSlider(T("Offset X","Di chuyển Ngang (X)"), prefix+"corner_"+CORNERS[i]+"_x", 2500, 0)); 
@@ -157,7 +152,6 @@ public class MainActivity extends Activity {
             designSliderContainer.addView(createDrawer(CORNER_NAMES[i], drawerContent));
         }
 
-        // V19.12: TÙY CHỈNH CHUNG CHỈ CÒN 4 MỤC
         LinearLayout globalDrawer = new LinearLayout(this); globalDrawer.setOrientation(LinearLayout.VERTICAL); globalDrawer.setPadding(30,10,30,30);
         globalDrawer.addView(createSlider(T("Auto-Hide Delay (ms)","Thời gian chờ tắt tàng hình (ms)"), prefix+"corner_hide_dur", 5000, 2500)); 
         globalDrawer.addView(createSlider(T("Moon Fill Opacity","Độ mờ vùng TRĂNG NON (Đậm/Nhạt)"), prefix+"corner_moon_alpha", 255, 100)); 

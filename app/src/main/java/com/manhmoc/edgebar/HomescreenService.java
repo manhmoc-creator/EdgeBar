@@ -112,6 +112,7 @@ public class HomescreenService extends Service {
 
             float offX = (type==0||type==2) ? w - mw : 0; float offY = (type==0||type==1) ? h - mh : 0;
             moonPath.moveTo(mStartX + offX, mStartY + offY); moonPath.quadTo(mCtrlX + offX, mCtrlY + offY, mEndX + offX, mEndY + offY); moonPath.lineTo(rootX, rootY); moonPath.close();
+
             canvas.drawPath(moonPath, pFill); canvas.drawPath(strokePath, pStroke); 
         } 
     }
@@ -165,15 +166,17 @@ public class HomescreenService extends Service {
     }
     
     private void playAnim() {
-        int style = prefs.getInt("anim_style", 0); int dur = prefs.getInt("anim_dur", 1500); 
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams(); fp.width = WindowManager.LayoutParams.MATCH_PARENT; fp.height = WindowManager.LayoutParams.MATCH_PARENT; wm.updateViewLayout(fV, fp);
         fV.setVisibility(View.VISIBLE);
-        ValueAnimator anim;
-        if(style == 0) { anim = ValueAnimator.ofFloat(0f, 1f, 0f); anim.addUpdateListener(a -> fV.setAlpha((float)a.getAnimatedValue())); } 
-        else { fV.setAlpha(1f); anim = ValueAnimator.ofFloat(0f, 1f); anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue())); } 
-        anim.setDuration(dur);
-        anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); fp.width = 0; fp.height = 0; wm.updateViewLayout(fV, fp); } }); 
-        anim.start();
+        fV.post(() -> {
+            int style = prefs.getInt("anim_style", 0); int dur = prefs.getInt("anim_dur", 1500); 
+            ValueAnimator anim;
+            if(style == 0) { anim = ValueAnimator.ofFloat(0f, 1f, 0f); anim.addUpdateListener(a -> fV.setAlpha((float)a.getAnimatedValue())); } 
+            else { fV.setAlpha(1f); anim = ValueAnimator.ofFloat(0f, 1f); anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue())); } 
+            anim.setDuration(dur);
+            anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); fp.width = 0; fp.height = 0; wm.updateViewLayout(fV, fp); } }); 
+            anim.start();
+        });
     }
 
     private void handleAction(String key) { String action = prefs.getString(key, "NONE"); if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30)); if (prefs.getBoolean(key + "_anim", true)) playAnim(); try { switch(action) { case "BACK": case "HOME": case "RECENTS": case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", action); sendBroadcast(ipc); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; default: if(action.startsWith("INTENT_")) fireIntent(action.split("_")[1]); break; } } catch (Exception e) {} } }
