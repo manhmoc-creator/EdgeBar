@@ -18,14 +18,12 @@ public class MainActivity extends Activity {
 
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabLock, tabHome; private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
-    private int designTabState = 0; private final String CURRENT_VERSION = "V19.12.1.3"; 
+    private int designTabState = 0; private final String CURRENT_VERSION = "V19.12.1.4"; 
 
-    // V19.12.1.2: State Trackers cho Live Preview
     private int currentMainTab = 1; private int currentGesTab = 0;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
 
-    // V19.12.1.2: Logic cập nhật trạng thái Preview
     private void refreshPreview() { boolean p = (currentMainTab==0 && designTabState==0) || (currentMainTab==1 && currentGesTab==0); prefs.edit().putBoolean("preview_lock", p).apply(); }
     @Override protected void onResume() { super.onResume(); refreshPreview(); }
     @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).apply(); }
@@ -73,7 +71,6 @@ public class MainActivity extends Activity {
         btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(bp); btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(rp);
         designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
         
-        // V19.12.1.2: Gắn logic Live Preview vào các tab chuyển đổi
         btnEditLock.setOnClickListener(v -> { designTabState=0; refreshPreview(); updateVisTabs(); renderSliders(); }); 
         btnEditHome.setOnClickListener(v -> { designTabState=1; refreshPreview(); updateVisTabs(); renderSliders(); }); 
         btnEditAnim.setOnClickListener(v -> { designTabState=2; refreshPreview(); updateVisTabs(); renderSliders(); });
@@ -87,7 +84,7 @@ public class MainActivity extends Activity {
 
         for (int i = 1; i <= 15; i++) { 
             LinearLayout sInt = new LinearLayout(this); sInt.setOrientation(LinearLayout.VERTICAL); sInt.setPadding(30,10,30,30);
-            sInt.addView(createInput("Action (com.google.zxing.client.android.SCAN)", "i"+i+"_act")); sInt.addView(createInput("Package (com.google.android.gms)", "i"+i+"_pkg")); sInt.addView(createInput("Class Name (com.manhmoc.edgebar.ToggleReceiver)", "i"+i+"_cls")); sInt.addView(createInput("Data URI", "i"+i+"_data")); sInt.addView(createInput("Categories", "i"+i+"_cat")); sInt.addView(createInput("Flags", "i"+i+"_flags")); 
+            sInt.addView(createInput("Action", "i"+i+"_act")); sInt.addView(createInput("Package", "i"+i+"_pkg")); sInt.addView(createInput("Class Name", "i"+i+"_cls")); sInt.addView(createInput("Data URI", "i"+i+"_data")); sInt.addView(createInput("Categories", "i"+i+"_cat")); sInt.addView(createInput("Flags", "i"+i+"_flags")); 
             CheckBox cb = new CheckBox(this); cb.setText(T("Send as Broadcast", "Gửi dạng Broadcast")); cb.setTextColor(Color.WHITE); cb.setChecked(prefs.getBoolean("i"+i+"_br", true)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("i"+idx+"_br", c).apply()); sInt.addView(cb); 
             pageIntents.addView(createDrawer("Intent Slot " + i, sInt)); 
         }
@@ -138,9 +135,7 @@ public class MainActivity extends Activity {
         for(int i=0; i< BAR_NAMES.length; i++) { 
             LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30);
             CheckBox cb = new CheckBox(this); cb.setText(T("ENABLE: ","BẬT: ") + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_en", c).apply()); drawerContent.addView(cb); 
-            
             drawerContent.addView(createComboDropdown(T("Touch Mode", "Chế độ Cảm ứng"), prefix+BARS[i]+"_pri_mode", new String[]{T("Lock Priority (EB)", "Ưu tiên Edge Bar (Khoá cứng)"), T("Pass-through (OS)", "Nhường OS (Xuyên thấu)")}, 0));
-
             drawerContent.addView(createSlider(T("Opacity","Độ trong suốt"), prefix+BARS[i]+"_alpha", 255, 50)); drawerContent.addView(createSlider(T("Width","Chiều ngang"), prefix+BARS[i]+"_w", 3000, 300)); drawerContent.addView(createSlider(T("Height","Chiều dọc"), prefix+BARS[i]+"_h", 3000, 60)); drawerContent.addView(createSlider(T("Pos X","Toạ độ X"), prefix+BARS[i]+"_x", 1000, 0)); drawerContent.addView(createSlider(T("Pos Y","Toạ độ Y"), prefix+BARS[i]+"_y", 1000, 0)); 
             designSliderContainer.addView(createDrawer(BAR_NAMES[i], drawerContent));
         } 
@@ -157,8 +152,14 @@ public class MainActivity extends Activity {
             drawerContent.addView(createSlider(T("Extend Y","Kéo giãn Dọc Vỏ (Y)"), prefix+"corner_"+CORNERS[i]+"_h", 2500, 100)); 
             drawerContent.addView(createSlider(T("Offset X","Di chuyển Ngang (X)"), prefix+"corner_"+CORNERS[i]+"_x", 2500, 0)); 
             drawerContent.addView(createSlider(T("Offset Y","Di chuyển Dọc (Y)"), prefix+"corner_"+CORNERS[i]+"_y", 2500, 0)); 
+            
             drawerContent.addView(createSlider(T("Moon Core X","Kéo giãn Ngang Lõi Trăng Non (X)"), prefix+"corner_"+CORNERS[i]+"_moon_w", 2500, 100)); 
             drawerContent.addView(createSlider(T("Moon Core Y","Kéo giãn Dọc Lõi Trăng Non (Y)"), prefix+"corner_"+CORNERS[i]+"_moon_h", 2500, 100)); 
+            
+            // V19.12.1.4: 2 Thanh kéo vị trí X Y độc lập cho Lõi Trăng Non
+            drawerContent.addView(createSlider(T("Moon Offset X (1250=Center)", "Di chuyển Trăng Non Ngang (X) (1250=Giữa)"), prefix+"corner_"+CORNERS[i]+"_moon_x", 2500, 1250));
+            drawerContent.addView(createSlider(T("Moon Offset Y (1250=Center)", "Di chuyển Trăng Non Dọc (Y) (1250=Giữa)"), prefix+"corner_"+CORNERS[i]+"_moon_y", 2500, 1250));
+            
             drawerContent.addView(createSlider(T("Stroke Radius (1000=Flat)","Độ cong BO VIỀN (Vỏ) (1000=Thẳng)"), prefix+"corner_"+CORNERS[i]+"_rad", 1000, 80));
             drawerContent.addView(createSlider(T("Moon Radius (1000=Flat)","Độ cong TRĂNG NON (Lõi) (1000=Thẳng)"), prefix+"corner_"+CORNERS[i]+"_moon_rad", 1000, 80));
 
@@ -175,7 +176,6 @@ public class MainActivity extends Activity {
 
     private LinearLayout wrapCard(View content) { LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 40f)); card.setPadding(40,40,40,40); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,40); card.setLayoutParams(lp); card.addView(content); return card; }
     
-    // V19.12.1.2: Cập nhật Tab Tracker
     private void switchMainTab(int idx) { currentMainTab = idx; refreshPreview(); pageDesign.setVisibility(idx==0?View.VISIBLE:View.GONE); pageGestures.setVisibility(idx==1?View.VISIBLE:View.GONE); pageIntents.setVisibility(idx==2?View.VISIBLE:View.GONE); btnNavDes.setBackground(getRounded(idx==0?"#222222":"#00000000", 20f)); btnNavDes.setTextColor(idx==0?Color.parseColor("#00E5FF"):Color.GRAY); btnNavGes.setBackground(getRounded(idx==1?"#222222":"#00000000", 20f)); btnNavGes.setTextColor(idx==1?Color.parseColor("#00E5FF"):Color.GRAY); btnNavInt.setBackground(getRounded(idx==2?"#222222":"#00000000", 20f)); btnNavInt.setTextColor(idx==2?Color.parseColor("#00E5FF"):Color.GRAY); }
     private void switchGesTab(int idx) { currentGesTab = idx; refreshPreview(); tabLock.setVisibility(idx==0?View.VISIBLE:View.GONE); tabHome.setVisibility(idx==1?View.VISIBLE:View.GONE); btnLock.setBackground(getRounded(idx==0?"#00E5FF":"#222222", 20f)); btnLock.setTextColor(idx==0?Color.BLACK:Color.WHITE); btnHome.setBackground(getRounded(idx==1?"#00E5FF":"#222222", 20f)); btnHome.setTextColor(idx==1?Color.BLACK:Color.WHITE); }
     
