@@ -17,7 +17,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, listEco, designSliderContainer, navMain, fabEcoContainer; 
     private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim, fabRule;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.2.6"; private RelativeLayout rootLayout;
+    private final String CURRENT_VERSION = "V19.12.2.7"; private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     private void refreshPreview() { boolean p = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); prefs.edit().putBoolean("preview_lock", p).apply(); }
@@ -79,15 +79,16 @@ public class MainActivity extends Activity {
         fabRule = new Button(this); fabRule.setText("+ NEW EB"); fabRule.setTextColor(Color.BLACK); fabRule.setBackground(getRounded("#00E5FF", 100f));
         LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, -1); fLp.setMargins(10,0,10,0); fabRule.setLayoutParams(fLp); fabRule.setPadding(40,0,40,0); 
         
-        // V19.12.2.6: VIÊN THUỐC 3 NGĂN (I | QS | M)
-        fabEcoContainer = new LinearLayout(this); fabEcoContainer.setOrientation(LinearLayout.HORIZONTAL); fabEcoContainer.setLayoutParams(fLp); fabEcoContainer.setGravity(Gravity.CENTER);
-        fabEcoContainer.setBackground(getRounded("#333333", 100f)); // Khung vỏ viên thuốc
+        // V19.12.2.7: Bóp nhỏ viên thuốc bằng kích thước cố định thay vì weight
+        fabEcoContainer = new LinearLayout(this); fabEcoContainer.setOrientation(LinearLayout.HORIZONTAL); 
+        LinearLayout.LayoutParams ecoLp = new LinearLayout.LayoutParams(-2, -1); ecoLp.setMargins(10,0,10,0); fabEcoContainer.setLayoutParams(ecoLp);
+        fabEcoContainer.setGravity(Gravity.CENTER); fabEcoContainer.setBackground(getRounded("#333333", 100f));
         
-        Button fabI = new Button(this); fabI.setText("I"); fabI.setTextColor(Color.parseColor("#E53935")); fabI.setBackgroundColor(Color.TRANSPARENT); fabI.setLayoutParams(new LinearLayout.LayoutParams(0, -1, 1f));
-        View div1 = new View(this); div1.setBackgroundColor(Color.parseColor("#555555")); div1.setLayoutParams(new LinearLayout.LayoutParams(2, -1));
-        Button fabQ = new Button(this); fabQ.setText("QS"); fabQ.setTextColor(Color.parseColor("#43A047")); fabQ.setBackgroundColor(Color.TRANSPARENT); fabQ.setLayoutParams(new LinearLayout.LayoutParams(0, -1, 1f));
-        View div2 = new View(this); div2.setBackgroundColor(Color.parseColor("#555555")); div2.setLayoutParams(new LinearLayout.LayoutParams(2, -1));
-        Button fabM = new Button(this); fabM.setText("M"); fabM.setTextColor(Color.parseColor("#1E88E5")); fabM.setBackgroundColor(Color.TRANSPARENT); fabM.setLayoutParams(new LinearLayout.LayoutParams(0, -1, 1f));
+        Button fabI = new Button(this); fabI.setText("I"); fabI.setTextColor(Color.parseColor("#E53935")); fabI.setBackgroundColor(Color.TRANSPARENT); fabI.setLayoutParams(new LinearLayout.LayoutParams(100, -1)); fabI.setPadding(0,0,0,0);
+        View div1 = new View(this); div1.setBackgroundColor(Color.parseColor("#555555")); div1.setLayoutParams(new LinearLayout.LayoutParams(2, 60));
+        Button fabQ = new Button(this); fabQ.setText("QS"); fabQ.setTextColor(Color.parseColor("#43A047")); fabQ.setBackgroundColor(Color.TRANSPARENT); fabQ.setLayoutParams(new LinearLayout.LayoutParams(120, -1)); fabQ.setPadding(0,0,0,0);
+        View div2 = new View(this); div2.setBackgroundColor(Color.parseColor("#555555")); div2.setLayoutParams(new LinearLayout.LayoutParams(2, 60));
+        Button fabM = new Button(this); fabM.setText("M"); fabM.setTextColor(Color.parseColor("#1E88E5")); fabM.setBackgroundColor(Color.TRANSPARENT); fabM.setLayoutParams(new LinearLayout.LayoutParams(100, -1)); fabM.setPadding(0,0,0,0);
         
         fabEcoContainer.addView(fabI); fabEcoContainer.addView(div1); fabEcoContainer.addView(fabQ); fabEcoContainer.addView(div2); fabEcoContainer.addView(fabM);
 
@@ -124,9 +125,7 @@ public class MainActivity extends Activity {
         btnLock.performClick();
     }
     
-    private void buildEcosystemSpace() { 
-        listEco = new LinearLayout(this); listEco.setOrientation(LinearLayout.VERTICAL); pageEcosystem.addView(listEco); 
-    }
+    private void buildEcosystemSpace() { listEco = new LinearLayout(this); listEco.setOrientation(LinearLayout.VERTICAL); pageEcosystem.addView(listEco); }
 
     private void renderRulesList() {
         listRules.removeAllViews(); String prefix = currentGesTab == 0 ? "lock_" : "home_";
@@ -248,15 +247,20 @@ public class MainActivity extends Activity {
 
         LinearLayout secSys = new LinearLayout(this); secSys.setOrientation(LinearLayout.VERTICAL); secSys.addView(createSectionTitle(T("SYSTEM BEHAVIOR", "HÀNH VI HỆ THỐNG"))); CheckBox cbKbd = new CheckBox(this); cbKbd.setText(T("Hide on Keyboard", "Tự ẩn khi hiện Bàn Phím")); cbKbd.setTextColor(Color.WHITE); cbKbd.setChecked(prefs.getBoolean("avoid_kbd", true)); cbKbd.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("avoid_kbd", c).apply()); secSys.addView(cbKbd); secSys.addView(createSectionTitle(T("BLACKLIST", "DANH SÁCH ĐEN"))); secSys.addView(createInput("Packages (com.ex.app)", "blacklist")); pageDesign.addView(wrapCard(secSys));
         
-        // V19.12.2.6: Dời nút thử YTDLnis sang Không gian Thiết kế
+        // V19.12.2.7: Dialog Tìm kiếm YTDLnis
         LinearLayout ytdlSys = new LinearLayout(this); ytdlSys.setOrientation(LinearLayout.VERTICAL); ytdlSys.addView(createSectionTitle(T("INTEGRATION TEST", "KIỂM TRA LIÊN KẾT NGOÀI")));
-        Button btnYtdl = new Button(this); btnYtdl.setText("🔍 THỬ GỌI APP YTDLnis"); btnYtdl.setBackground(getRounded("#FF9800", 20f)); btnYtdl.setTextColor(Color.BLACK);
+        Button btnYtdl = new Button(this); btnYtdl.setText("🔍 TÌM KIẾM BÀI HÁT YTDLnis"); btnYtdl.setBackground(getRounded("#FF9800", 20f)); btnYtdl.setTextColor(Color.BLACK);
         btnYtdl.setOnClickListener(v -> {
-            try { 
-                Intent intent = new Intent(Intent.ACTION_SEND); intent.setType("text/plain"); intent.putExtra(Intent.EXTRA_TEXT, "nhạc lofi"); intent.setPackage("com.deniscerri.ytdl"); startActivity(intent); Toast.makeText(this, "Đã gọi YTDLnis dạng Share", Toast.LENGTH_SHORT).show(); 
-            } catch(Exception e) { 
-                try { Intent launch = getPackageManager().getLaunchIntentForPackage("com.deniscerri.ytdl"); startActivity(launch); Toast.makeText(this, "Đã gọi YTDLnis dạng Mở App", Toast.LENGTH_SHORT).show(); } catch (Exception ex) { Toast.makeText(this, "Lỗi: Không tìm thấy YTDLnis trên máy", Toast.LENGTH_SHORT).show(); }
-            }
+            AlertDialog.Builder b = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+            b.setTitle("Tìm kiếm qua YTDLnis");
+            final EditText input = new EditText(this); input.setHint("Nhập tên bài hát / Link YouTube..."); input.setTextColor(Color.WHITE);
+            b.setView(input);
+            b.setPositiveButton("TÌM NGAY", (dialog, which) -> {
+                String q = input.getText().toString();
+                try { Intent intent = new Intent(Intent.ACTION_SEND); intent.setType("text/plain"); intent.putExtra(Intent.EXTRA_TEXT, q); intent.setPackage("com.deniscerri.ytdl"); startActivity(intent); } 
+                catch(Exception e) { Toast.makeText(this, "Lỗi: Không tìm thấy App YTDLnis", Toast.LENGTH_SHORT).show(); }
+            });
+            b.setNegativeButton("HỦY", null); b.show();
         });
         ytdlSys.addView(btnYtdl); pageDesign.addView(wrapCard(ytdlSys));
 
@@ -269,7 +273,7 @@ public class MainActivity extends Activity {
         Button btnTestRec = new Button(this); btnTestRec.setText("▶ BẮT ĐẦU GHI ÂM"); btnTestRec.setBackground(getRounded("#E91E63", 20f)); btnTestRec.setTextColor(Color.WHITE); btnTestRec.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
         Button btnStopRec = new Button(this); btnStopRec.setText("⏹ DỪNG LẠI"); btnStopRec.setBackground(getRounded("#333333", 20f)); btnStopRec.setTextColor(Color.WHITE); LinearLayout.LayoutParams tbLp2 = new LinearLayout.LayoutParams(0,-2,1f); tbLp2.setMargins(15,0,0,0); btnStopRec.setLayoutParams(tbLp2);
         
-        btnTestRec.setOnClickListener(v -> { try { Intent i = new Intent(this, RecorderService.class); if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i); } catch(Exception e) { Toast.makeText(this, "Lỗi gọi Service: " + e.getMessage(), Toast.LENGTH_LONG).show(); } });
+        btnTestRec.setOnClickListener(v -> { try { Intent i = new Intent(this, RecorderService.class); if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i); } catch(Exception e) { Toast.makeText(this, "Lỗi gọi Service", Toast.LENGTH_SHORT).show(); } });
         btnStopRec.setOnClickListener(v -> { try { Intent i = new Intent(this, RecorderService.class); stopService(i); } catch(Exception e) {} });
         recBtns.addView(btnTestRec); recBtns.addView(btnStopRec); recSys.addView(recBtns);
         pageDesign.addView(wrapCard(recSys));
@@ -292,7 +296,14 @@ public class MainActivity extends Activity {
         } 
     }
 
-    private void showPremiumDialog() { new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT").setMessage("Lệnh ADB:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow").setPositiveButton("OK", null).show(); }
+    // V19.12.2.7: Premium Dialog cập nhật ĐẶC QUYỀN VƯỢT RÀO
+    private void showPremiumDialog() { 
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle("👑 PREMIUM ARCHITECT")
+        .setMessage("ĐẶC QUYỀN VƯỢT RÀO OS:\n- Tắt Trợ Năng, lớp phủ vẫn chạy 100% mượt mà ở Màn hình khoá.\n- Tích hợp Trình Ghi Âm tàng hình độc lập không bị OS chặn.\n- Bypass Tapjacking hoàn hảo.\n\nLỆNH ADB KÍCH HOẠT (Chỉ 1 lần duy nhất):\n1. Cho phép tự động Bật/Tắt Trợ Năng & Lớp phủ:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Cấp quyền vẽ xuyên không gian vô hạn:\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow")
+        .setPositiveButton("OK", null).show(); 
+    }
+
     private LinearLayout createDrawer(String title, View content) { LinearLayout container = new LinearLayout(this); container.setOrientation(LinearLayout.VERTICAL); container.setBackground(getRounded("#222222", 20f)); LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1,-2); clp.setMargins(0,0,0,20); container.setLayoutParams(clp); TextView header = new TextView(this); header.setText(title); header.setTextColor(Color.parseColor("#00E5FF")); header.setPadding(30,30,30,30); header.setTextSize(16); content.setVisibility(View.GONE); header.setOnClickListener(v -> { boolean isClosed = content.getVisibility() == View.GONE; content.setVisibility(isClosed ? View.VISIBLE : View.GONE); header.setBackground(getRounded(isClosed ? "#333333" : "#222222", 20f)); }); container.addView(header); container.addView(content); return container; }
     private LinearLayout createComboDropdown(String title, String key, String[] items, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL); l.setGravity(Gravity.CENTER_VERTICAL); l.setPadding(0,10,0,20); TextView tv = new TextView(this); tv.setText(title); tv.setTextColor(Color.parseColor("#E91E63")); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sp = createSpinner(); sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items)); sp.setSelection(prefs.getInt(key, def)); sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt(key,pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sp.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.2f)); l.addView(tv); l.addView(sp); return l; }
     private Button createNavBtn(String t) { Button b = new Button(this); b.setText(t); b.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); return b; }
