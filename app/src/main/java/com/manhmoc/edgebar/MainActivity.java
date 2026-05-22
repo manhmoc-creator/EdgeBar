@@ -15,7 +15,10 @@ public class MainActivity extends Activity {
     private String[] C_GESTURE_NAMES = {"1 Chạm", "2 Chạm", "Nhấn Giữ", "Vuốt Lên", "Vuốt Xuống", "Vuốt Trái", "Vuốt Phải", "Vuốt Lên + Giữ", "Vuốt Xuống + Giữ", "Vuốt Trái + Giữ", "Vuốt Phải + Giữ", "Vuốt Chéo", "Vuốt Chéo + Giữ"};
 
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, listEco, designSliderContainer, navMain; 
-    private Button btnLock, btnHome, btnNavCond, btnNavAdv;
+    
+    // FIX LỖI BUILD: Đã bổ sung lại btnEditLock, btnEditHome, btnEditAnim
+    private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim;
+    
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
     private final String CURRENT_VERSION = "V19.12.2.1"; 
     private RelativeLayout rootLayout;
