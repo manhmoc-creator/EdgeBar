@@ -1,4 +1,5 @@
 package com.manhmoc.edgebar;
+import android.widget.Toast;
 import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.provider.Settings; import android.os.Build;
 public class ToggleReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context c, Intent i) {
