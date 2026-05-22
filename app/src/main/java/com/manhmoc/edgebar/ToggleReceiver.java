@@ -7,7 +7,7 @@ public class ToggleReceiver extends BroadcastReceiver {
         } else if ("com.manhmoc.edgebar.TOGGLE_HOME".equals(i.getAction())) {
             Intent s = new Intent(c, HomescreenService.class); if (HomescreenService.isRunning) c.stopService(s); else { if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(s); else c.startService(s); }
         } else if ("com.manhmoc.edgebar.TOGGLE_MACRO".equals(i.getAction())) {
-            String list = i.getStringExtra("services");
+            if(i.hasExtra("macro_idx") && !c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE).getBoolean("macro_"+i.getIntExtra("macro_idx", -1)+"_on", true)) {Toast.makeText(c, "Macro đang tắt!", 0).show(); return;} String list = i.getStringExtra("services");
             if(list != null && !list.isEmpty()) {
                 String[] svcs = list.split(",");
                 String cur = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
