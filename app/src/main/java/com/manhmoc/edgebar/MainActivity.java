@@ -84,6 +84,7 @@ public class MainActivity extends Activity {
 
         fabRule = new Button(this); fabRule.setText("+ NEW EB"); fabRule.setTextColor(Color.BLACK); fabRule.setBackground(getRounded("#00E5FF", 100f)); LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, -1); fLp.setMargins(10,0,10,0); fabRule.setLayoutParams(fLp); fabRule.setPadding(40,0,40,0); 
         
+        // V19.12.2.12: Tách thành 3 ô tròn rời rạc
         fabEcoContainer = new LinearLayout(this); fabEcoContainer.setOrientation(LinearLayout.HORIZONTAL); 
         fabI = createCircleBtn("I", "#333333", "#E53935"); 
         fabQ = createCircleBtn("QS", "#333333", "#43A047"); 
@@ -97,6 +98,7 @@ public class MainActivity extends Activity {
         btnNavCond.setOnClickListener(v->switchMainTab(1)); btnNavAdv.setOnClickListener(v->switchMainTab(2)); 
         fabRule.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1));
         
+        // Gọi dialog cho CHỈ 1 SLOT TRỐNG ĐẦU TIÊN
         fabI.setOnClickListener(v -> { switchEcoTab(0); handleEcoFabClick(0); }); 
         fabQ.setOnClickListener(v -> { switchEcoTab(1); handleEcoFabClick(1); }); 
         fabM.setOnClickListener(v -> { switchEcoTab(2); handleEcoFabClick(2); });
@@ -167,6 +169,7 @@ public class MainActivity extends Activity {
         if(count == 0) { TextView empty = new TextView(this); empty.setText(T("No rules yet.\nPress + NEW EB to create.", "Chưa có quy tắc nào.\nBấm + NEW EB để tạo.")); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); listRules.addView(empty); }
     }
 
+    // V19.12.2.12: KHỐI RENDER HỆ SINH THÁI (2 CỘT)
     private void renderEcosystemList() {
         pageIntents.removeAllViews(); pageTiles.removeAllViews(); pageMacros.removeAllViews(); reloadActionLabels(); 
         int countI = 0, countQ = 0, countM = 0; LinearLayout rowI = null, rowQ = null, rowM = null;
@@ -237,6 +240,7 @@ public class MainActivity extends Activity {
         return card;
     }
 
+    // V19.12.2.12: DIALOG ĐƠN NHIỆM CHỈ DÀNH CHO 1 SLOT DUY NHẤT
     private void openEcoItemDialog(int type, int slotIndex) {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30, 80, 30, 30);
@@ -327,6 +331,7 @@ public class MainActivity extends Activity {
         public BreathView(Context c) { super(c); pDraw = new Paint(); pDraw.setAntiAlias(true); pDraw.setStyle(Paint.Style.STROKE); pDraw.setStrokeCap(Paint.Cap.ROUND); pText = new Paint(); pText.setAntiAlias(true); pText.setColor(Color.WHITE); pText.setTextSize(35f); pText.setShadowLayer(5, 0, 0, Color.BLACK); shape = prefs.getInt("breath_shape", 0); w = prefs.getInt("breath_w", 0); h = prefs.getInt("breath_h", 0); thick = prefs.getInt("breath_thick", 12); dotSize = prefs.getInt("breath_dot_size", 40); pDraw.setStrokeWidth(thick); String cTheme = prefs.getString("anim_color", "WHITE"); color = Color.WHITE; for(int i=0; i<COLOR_KEYS.length; i++) if(COLOR_KEYS[i].equals(cTheme)) color = Color.parseColor(COLOR_VALS[i]); if(shape == 1) { pDraw.setStyle(Paint.Style.FILL); pDraw.setColor(color); } else { pDraw.setColor(color); } }
         public void setAnimAlpha(float a) { this.animAlpha = a; invalidate(); } public void setTime(String t) { this.timeStr = t; invalidate(); }
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); pDraw.setAlpha((int)(animAlpha * prefs.getInt("breath_alpha", 255))); float cx = getWidth() / 2f; float cy = getHeight() / 2f; 
+        // V19.12.2.12: Vá lỗi cắt chữ ở DOT. Đưa cx, cy về góc trái trên thay vì giữa màn.
         if (shape == 1) { cx = dotSize + 10; cy = dotSize + 10; canvas.drawCircle(cx, cy, dotSize, pDraw); canvas.drawText(timeStr, cx + dotSize + 25, cy + 12, pText); 
         } else { float drawW = (w > 0) ? w : getWidth(); float drawH = (h > 0) ? h : getHeight(); float off = thick / 2f; float left = (getWidth() - drawW) / 2f + off; float top = (getHeight() - drawH) / 2f + off; canvas.drawRoundRect(new RectF(left, top, left + drawW - 2*off, top + drawH - 2*off), 40, 40, pDraw); canvas.drawText(timeStr, cx - 40, top + drawH + 40, pText); } }
     }
@@ -335,6 +340,7 @@ public class MainActivity extends Activity {
         if (!Settings.canDrawOverlays(this)) { Toast.makeText(this, "Cấp quyền Lớp phủ trước!", Toast.LENGTH_SHORT).show(); return; }
         WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE); BreathView bv = new BreathView(this);
         int shape = prefs.getInt("breath_shape", 0); int w = prefs.getInt("breath_w", 0); int h = prefs.getInt("breath_h", 0); int dotSize = prefs.getInt("breath_dot_size", 40); int bX = prefs.getInt("breath_dot_x", 0); int bY = prefs.getInt("breath_dot_y", 0);
+        // V19.12.2.12: Nới rộng LayoutParams cho Dot để text không bị cắt.
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(shape == 1 ? (int)(dotSize*2 + 300) : (w > 0 ? w : -1), shape == 1 ? (int)(dotSize*2 + 50) : (h > 0 ? h : 100), Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
         if (shape == 1) { params.gravity = Gravity.TOP | Gravity.LEFT; params.x = bX; params.y = bY; } else { params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL; }
         ObjectAnimator anim = ObjectAnimator.ofFloat(bv, "animAlpha", 0.1f, 1f, 0.1f); anim.setDuration(prefs.getInt("breath_delay", 1500)); anim.setRepeatCount(ValueAnimator.INFINITE); anim.start();
@@ -349,6 +355,7 @@ public class MainActivity extends Activity {
         LinearLayout lS = new LinearLayout(this); lS.setOrientation(LinearLayout.HORIZONTAL); lS.setPadding(0,10,0,10); TextView tS = new TextView(this); tS.setText("Kiểu chạy:"); tS.setTextColor(Color.WHITE); tS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sS = createSpinner(); sS.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Nhấp Nháy", "1 Tia sáng nối đuôi", "2 Tia sáng đối xứng", "3 Tia sáng đều nhau"})); sS.setSelection(prefs.getInt("anim_style", 0)); sS.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt("anim_style", pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lS.addView(tS); lS.addView(sS); designSliderContainer.addView(lS); 
         designSliderContainer.addView(createSlider("Chiều ngang Hiệu ứng (0=Full)", "anim_w", 2000, 0)); designSliderContainer.addView(createSlider("Chiều dọc Hiệu ứng (0=Full)", "anim_h", 3500, 0)); designSliderContainer.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255)); designSliderContainer.addView(createSlider("Độ dày viền", "anim_thick", 50, 12)); designSliderContainer.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500)); designSliderContainer.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600)); designSliderContainer.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30)); 
         
+        // V19.12.2.12: CHUYỂN KHẨU RECORDER VỀ KHÔNG GIAN ANIMA
         LinearLayout recSys = new LinearLayout(this); recSys.setOrientation(LinearLayout.VERTICAL); recSys.addView(createSectionTitle("🎤 THIẾT KẾ HƠI THỞ GHI ÂM"));
         Button btnTestBreath = new Button(this); btnTestBreath.setText("▶ THỬ ANIMATION HƠI THỞ"); btnTestBreath.setBackground(getRounded("#E91E63", 20f)); btnTestBreath.setTextColor(Color.WHITE); btnTestBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp2 = new LinearLayout.LayoutParams(-1,-2); testLp2.setMargins(0,0,0,20); btnTestBreath.setLayoutParams(testLp2); btnTestBreath.setOnClickListener(v -> testBreathAnimation()); recSys.addView(btnTestBreath);
         recSys.addView(createComboDropdown("Chất lượng Ghi âm (kbps)", "rec_kbps", new String[]{"64 kbps", "128 kbps", "256 kbps", "320 kbps (High)"}, 1));
