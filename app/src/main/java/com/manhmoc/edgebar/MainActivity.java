@@ -1,5 +1,6 @@
 package com.manhmoc.edgebar;
 import android.Manifest; import android.animation.ObjectAnimator; import android.animation.ValueAnimator; import android.app.Activity; import android.app.AlertDialog; import android.app.Dialog; import android.content.ComponentName; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.content.pm.PackageManager; import android.graphics.Color; import android.graphics.drawable.GradientDrawable; import android.os.Build; import android.os.Bundle; import android.os.Handler; import android.provider.Settings; import android.net.Uri; import android.text.TextUtils; import android.view.Gravity; import android.view.View; import android.view.WindowManager; import android.widget.*; import org.json.JSONObject; import java.util.ArrayList; import java.util.Iterator;
+import android.graphics.PixelFormat;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs; private boolean isVi;
@@ -18,7 +19,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, listEco, designSliderContainer, navMain, fabEcoContainer; 
     private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim, fabRule, fabI, fabQ, fabM;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; private int currentEcoTab = 0;
-    private final String CURRENT_VERSION = "V19.12.2.12"; private RelativeLayout rootLayout;
+    private final String CURRENT_VERSION = "V19.12.2.13"; private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     private void refreshPreview() { boolean p = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); prefs.edit().putBoolean("preview_lock", p).apply(); }
