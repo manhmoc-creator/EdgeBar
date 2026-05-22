@@ -19,7 +19,15 @@ public class RecorderService extends Service {
             recorder.setAudioEncodingBitRate(kbps * 1000); recorder.setAudioSamplingRate(44100); recorder.setOutputFile(audioFile.getAbsolutePath());
             recorder.prepare(); recorder.start(); isRecording = true;
             if(vibrator != null) vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE));
-            Notification n = new Notification.Builder(this, "EB_REC").setContentTitle("Edge Bar").setContentText("Đang ghi âm ngầm...").setSmallIcon(android.R.drawable.ic_btn_speak_now).build();
+            
+            // FIX CRASH: Bắt buộc tạo Notification Channel cho Android 8.0+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationChannel chan = new NotificationChannel("EB_REC", "EdgeBar Recorder", NotificationManager.IMPORTANCE_LOW);
+                NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if(manager != null) manager.createNotificationChannel(chan);
+            }
+            
+            Notification n = new Notification.Builder(this, "EB_REC").setContentTitle("Edge Bar").setContentText("Đang ghi âm ngầm...").setSmallIcon(android.R.drawable.ic_dialog_info).build();
             startForeground(1912, n);
         } catch (Exception e) { Toast.makeText(this, "Lỗi Mic: " + e.getMessage(), Toast.LENGTH_SHORT).show(); stopSelf(); }
     }

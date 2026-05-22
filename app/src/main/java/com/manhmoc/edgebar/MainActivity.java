@@ -207,7 +207,6 @@ public class MainActivity extends Activity {
         
         LinearLayout secSys = new LinearLayout(this); secSys.setOrientation(LinearLayout.VERTICAL); secSys.addView(createSectionTitle(T("SYSTEM BEHAVIOR", "HÀNH VI HỆ THỐNG"))); CheckBox cbKbd = new CheckBox(this); cbKbd.setText(T("Hide on Keyboard", "Tự ẩn khi hiện Bàn Phím")); cbKbd.setTextColor(Color.WHITE); cbKbd.setChecked(prefs.getBoolean("avoid_kbd", true)); cbKbd.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("avoid_kbd", c).apply()); secSys.addView(cbKbd); secSys.addView(createSectionTitle(T("BLACKLIST", "DANH SÁCH ĐEN"))); secSys.addView(createInput("Packages (com.ex.app)", "blacklist")); pageDesign.addView(wrapCard(secSys));
         
-        // V19.12.2.1: KHU VỰC CẤU HÌNH GHI ÂM (VOICE RECORDER)
         LinearLayout recSys = new LinearLayout(this); recSys.setOrientation(LinearLayout.VERTICAL); recSys.addView(createSectionTitle(T("🎤 STEALTH RECORDER", "🎤 CẤU HÌNH GHI ÂM ẨN")));
         recSys.addView(createComboDropdown(T("Bitrate (Quality)","Chất lượng (kbps)"), "rec_kbps", new String[]{"64 kbps", "128 kbps", "256 kbps", "320 kbps (High)"}, 1));
         TextView txtPath = new TextView(this); txtPath.setText(T("Lưu tại: Music/EdgeBar_Records", "Lưu tại: Music/EdgeBar_Records")); txtPath.setTextColor(Color.GRAY); recSys.addView(txtPath);
