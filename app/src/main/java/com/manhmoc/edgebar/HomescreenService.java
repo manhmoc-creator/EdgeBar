@@ -173,6 +173,7 @@ public class HomescreenService extends Service {
         }
     }
     
+    private void playTestBreath() { if(wm==null)return; final View redEdge = new View(this); int cIdx = prefs.getInt("breath_color",0); redEdge.setBackgroundColor(cIdx==0?Color.RED:(cIdx==1?Color.GREEN:Color.CYAN)); redEdge.setAlpha(0f); WindowManager.LayoutParams p = new WindowManager.LayoutParams(-1,6, Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); p.gravity=Gravity.TOP; wm.addView(redEdge, p); int d = prefs.getInt("breath_delay",2500); final Handler h = new Handler(Looper.getMainLooper()); final Runnable task = new Runnable(){int count=0; public void run(){ if(count>3){ try{wm.removeView(redEdge);}catch(Exception e){} return; } ObjectAnimator a = ObjectAnimator.ofFloat(redEdge,"alpha",0f,0.7f,0f); a.setDuration(1500); a.start(); count++; h.postDelayed(this, 1500+d); }}; h.post(task); }
     private void playAnim() {
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams(); fp.width = WindowManager.LayoutParams.MATCH_PARENT; fp.height = WindowManager.LayoutParams.MATCH_PARENT; wm.updateViewLayout(fV, fp);
         fV.setVisibility(View.VISIBLE);
