@@ -19,10 +19,10 @@ public class MainActivity extends Activity {
     private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold"}; 
     private String[] C_GESTURE_NAMES = {"1 Chạm", "2 Chạm", "Nhấn Giữ", "Vuốt Lên", "Vuốt Xuống", "Vuốt Trái", "Vuốt Phải", "Vuốt Lên + Giữ", "Vuốt Xuống + Giữ", "Vuốt Trái + Giữ", "Vuốt Phải + Giữ", "Vuốt Chéo", "Vuốt Chéo + Giữ"};
 
-    private LinearLayout pageEcosystem, pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain; 
-    private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim, fabRule, fabI, fabQ, fabM, btnEcoInt, btnEcoQS, btnEcoMac;
+    private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain, fabEcoContainer; 
+    private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim, fabRule, fabI, fabQ, fabM;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; private int currentEcoTab = 0;
-    private final String CURRENT_VERSION = "V19.12.2.13"; private RelativeLayout rootLayout;
+    private final String CURRENT_VERSION = "V19.12.2.12"; private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     private void refreshPreview() { boolean p = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); prefs.edit().putBoolean("preview_lock", p).apply(); }
@@ -42,9 +42,9 @@ public class MainActivity extends Activity {
         } else super.onBackPressed(); 
     }
     
-    private void closeDesignSpace() { pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(currentMainTab == 1 ? View.VISIBLE : View.GONE); pageEcosystem.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); if(currentMainTab == 2) switchEcoTab(currentEcoTab); fabRule.setVisibility(currentMainTab == 1 ? View.VISIBLE : View.GONE); fabI.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); fabQ.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); fabM.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); refreshPreview(); }
-    private void openDesignSpace() { refreshPreview(); navMain.setVisibility(View.GONE); pageConditions.setVisibility(View.GONE); pageEcosystem.setVisibility(View.GONE); pageDesign.setVisibility(View.VISIBLE); fabRule.setVisibility(View.GONE); fabI.setVisibility(View.GONE); fabQ.setVisibility(View.GONE); fabM.setVisibility(View.GONE); }
-    private Button createCircleBtn(String txt, String color, String txtColor) { Button b = new Button(this); b.setText(txt); b.setTextColor(Color.parseColor(txtColor)); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
+    private void closeDesignSpace() { pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(currentMainTab == 1 ? View.VISIBLE : View.GONE); if(currentMainTab == 2) switchEcoTab(currentEcoTab); fabRule.setVisibility(currentMainTab == 1 ? View.VISIBLE : View.GONE); fabEcoContainer.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); refreshPreview(); }
+    private void openDesignSpace() { refreshPreview(); navMain.setVisibility(View.GONE); pageConditions.setVisibility(View.GONE); pageIntents.setVisibility(View.GONE); pageTiles.setVisibility(View.GONE); pageMacros.setVisibility(View.GONE); pageDesign.setVisibility(View.VISIBLE); fabRule.setVisibility(View.GONE); fabEcoContainer.setVisibility(View.GONE); }
+    private Button createCircleBtn(String icon, String bg, String txtColor) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.parseColor(txtColor)); b.setTextSize(15); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(bg, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(120, 120); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); isVi = prefs.getBoolean("lang_vi", true); reloadActionLabels();
@@ -62,65 +62,74 @@ public class MainActivity extends Activity {
         if (!Settings.canDrawOverlays(this)) { Button btnReq = new Button(this); btnReq.setText(T("⚠️ GRANT OVERLAY PERMISSION", "⚠️ CẤP QUYỀN LỚP PHỦ")); btnReq.setBackground(getRounded("#D32F2F", 25f)); btnReq.setTextColor(Color.WHITE); btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))); main.addView(btnReq); }
 
         navMain = new LinearLayout(this); navMain.setOrientation(LinearLayout.HORIZONTAL); navMain.setPadding(0, 0, 0, 40);
-        btnNavCond = createNavBtn(T("ĐIỀU KIỆN", "ĐIỀU KIỆN")); btnNavAdv = createNavBtn(T("HỆ SINH THÁI", "HỆ SINH THÁI")); 
+        btnNavCond = createNavBtn(T("CONDITIONS", "ĐIỀU KIỆN")); btnNavAdv = createNavBtn(T("ECOSYSTEM", "HỆ SINH THÁI")); 
         navMain.addView(btnNavCond); navMain.addView(btnNavAdv); main.addView(navMain);
 
         pageDesign = new LinearLayout(this); pageDesign.setOrientation(LinearLayout.VERTICAL); pageDesign.setVisibility(View.GONE); buildDesignSpace();
         pageConditions = new LinearLayout(this); pageConditions.setOrientation(LinearLayout.VERTICAL); buildConditionsSpace();
         
-        pageEcosystem = new LinearLayout(this); pageEcosystem.setOrientation(LinearLayout.VERTICAL); pageEcosystem.setVisibility(View.GONE);
-        LinearLayout tabEcoContainer = new LinearLayout(this); tabEcoContainer.setOrientation(LinearLayout.HORIZONTAL); tabEcoContainer.setPadding(0, 0, 0, 20);
-        btnEcoInt = createTabBtn("INTENTS"); btnEcoQS = createTabBtn("QS TILES"); btnEcoMac = createTabBtn("MACROS");
-        LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(0, -2, 1f); tabLp.setMargins(0,0,15,0);
-        btnEcoInt.setLayoutParams(tabLp); btnEcoQS.setLayoutParams(tabLp); btnEcoMac.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        tabEcoContainer.addView(btnEcoInt); tabEcoContainer.addView(btnEcoQS); tabEcoContainer.addView(btnEcoMac);
-        pageEcosystem.addView(tabEcoContainer);
+        pageIntents = new LinearLayout(this); pageIntents.setOrientation(LinearLayout.VERTICAL); pageIntents.setVisibility(View.GONE);
+        pageTiles = new LinearLayout(this); pageTiles.setOrientation(LinearLayout.VERTICAL); pageTiles.setVisibility(View.GONE);
+        pageMacros = new LinearLayout(this); pageMacros.setOrientation(LinearLayout.VERTICAL); pageMacros.setVisibility(View.GONE);
 
-        pageIntents = new LinearLayout(this); pageIntents.setOrientation(LinearLayout.VERTICAL);
-        pageTiles = new LinearLayout(this); pageTiles.setOrientation(LinearLayout.VERTICAL);
-        pageMacros = new LinearLayout(this); pageMacros.setOrientation(LinearLayout.VERTICAL);
-
-        pageEcosystem.addView(pageIntents); pageEcosystem.addView(pageTiles); pageEcosystem.addView(pageMacros);
-        main.addView(pageDesign); main.addView(pageConditions); main.addView(pageEcosystem);
+        main.addView(pageDesign); main.addView(pageConditions); main.addView(pageIntents); main.addView(pageTiles); main.addView(pageMacros);
         scroll.addView(main); rootLayout.addView(scroll);
 
         LinearLayout bottomBar = new LinearLayout(this); bottomBar.setOrientation(LinearLayout.HORIZONTAL); bottomBar.setGravity(Gravity.CENTER_VERTICAL); bottomBar.setBackground(getRounded("#1E1E1E", 100f)); bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
+        
         Button btnUpdate = createCircleBtn("U", "#333333", "#BBBBBB"); btnUpdate.setTextSize(20); btnUpdate.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
         Button btnPremium = new Button(this); btnPremium.setText("PREMIUM"); btnPremium.setTextColor(Color.BLACK); btnPremium.setBackground(getRounded("#00E5FF", 100f)); btnPremium.setOnClickListener(v -> showPremiumDialog()); LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-2, -1); pLp.setMargins(10,0,10,0); btnPremium.setLayoutParams(pLp); btnPremium.setPadding(40,0,40,0);
         View spacer = new View(this); spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
 
         fabRule = new Button(this); fabRule.setText("+ NEW EB"); fabRule.setTextColor(Color.BLACK); fabRule.setBackground(getRounded("#00E5FF", 100f)); LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, -1); fLp.setMargins(10,0,10,0); fabRule.setLayoutParams(fLp); fabRule.setPadding(40,0,40,0); 
         
-        fabI = createCircleBtn("I+", "#44E53935", "#FFFFFF");
-        fabQ = createCircleBtn("QS+", "#4443A047", "#FFFFFF");
-        fabM = createCircleBtn("M+", "#441E88E5", "#FFFFFF");
+        // V19.12.2.12: Tách thành 3 ô tròn rời rạc
+        fabEcoContainer = new LinearLayout(this); fabEcoContainer.setOrientation(LinearLayout.HORIZONTAL); 
+        fabI = createCircleBtn("I", "#333333", "#E53935"); 
+        fabQ = createCircleBtn("QS", "#333333", "#43A047"); 
+        fabM = createCircleBtn("M", "#333333", "#1E88E5");
+        fabEcoContainer.addView(fabI); fabEcoContainer.addView(fabQ); fabEcoContainer.addView(fabM);
 
         Button btnDesign = createCircleBtn("⚙️", "#333333", "#FFFFFF"); btnDesign.setTag("btnDesign"); btnDesign.setOnClickListener(v -> { if(pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); btnDesign.setText("⚙️"); btnDesign.setTextColor(Color.WHITE); } else { openDesignSpace(); btnDesign.setText("<"); btnDesign.setTextColor(Color.parseColor("#BBBBBB")); } });
 
-        bottomBar.addView(btnUpdate); bottomBar.addView(btnPremium); bottomBar.addView(spacer); bottomBar.addView(fabRule); bottomBar.addView(fabI); bottomBar.addView(fabQ); bottomBar.addView(fabM); bottomBar.addView(btnDesign); rootLayout.addView(bottomBar);
+        bottomBar.addView(btnUpdate); bottomBar.addView(btnPremium); bottomBar.addView(spacer); bottomBar.addView(fabRule); bottomBar.addView(fabEcoContainer); bottomBar.addView(btnDesign); rootLayout.addView(bottomBar);
 
         btnNavCond.setOnClickListener(v->switchMainTab(1)); btnNavAdv.setOnClickListener(v->switchMainTab(2)); 
         fabRule.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1));
         
-        btnEcoInt.setOnClickListener(v -> switchEcoTab(0)); btnEcoQS.setOnClickListener(v -> switchEcoTab(1)); btnEcoMac.setOnClickListener(v -> switchEcoTab(2));
-        fabI.setOnClickListener(v -> { switchEcoTab(0); openEcoBuilder(0, -1); }); 
-        fabQ.setOnClickListener(v -> { switchEcoTab(1); openEcoBuilder(1, -1); }); 
-        fabM.setOnClickListener(v -> { switchEcoTab(2); openEcoBuilder(2, -1); });
+        // Gọi dialog cho CHỈ 1 SLOT TRỐNG ĐẦU TIÊN
+        fabI.setOnClickListener(v -> { switchEcoTab(0); handleEcoFabClick(0); }); 
+        fabQ.setOnClickListener(v -> { switchEcoTab(1); handleEcoFabClick(1); }); 
+        fabM.setOnClickListener(v -> { switchEcoTab(2); handleEcoFabClick(2); });
 
         switchMainTab(1); setContentView(rootLayout);
+    }
+
+    private void handleEcoFabClick(int type) {
+        int emptySlot = findEmptySlot(type);
+        if (emptySlot == -1) { Toast.makeText(this, "Đã đạt giới hạn tối đa!", Toast.LENGTH_SHORT).show(); return; }
+        openEcoItemDialog(type, emptySlot);
+    }
+
+    private int findEmptySlot(int type) {
+        int max = (type == 2) ? 5 : 15;
+        String prefix = (type == 0) ? "intent_" : (type == 1 ? "tile_" : "macro_");
+        for(int i=1; i<=max; i++) {
+            String val = (type == 1) ? prefs.getString(prefix+i+"_act", "NONE") : prefs.getString(prefix+i+"_name", "");
+            if (val.isEmpty() || val.equals("NONE")) return i;
+        }
+        return -1;
     }
 
     private void switchMainTab(int idx) { 
         currentMainTab = idx; refreshPreview(); navMain.setVisibility(View.VISIBLE);
         pageDesign.setVisibility(View.GONE); pageConditions.setVisibility(idx==1?View.VISIBLE:View.GONE);
-        pageEcosystem.setVisibility(idx==2?View.VISIBLE:View.GONE);
+        if (idx == 2) { switchEcoTab(currentEcoTab); } else { pageIntents.setVisibility(View.GONE); pageTiles.setVisibility(View.GONE); pageMacros.setVisibility(View.GONE); }
         btnNavCond.setBackground(getRounded(idx==1?"#222222":"#00000000", 20f)); btnNavCond.setTextColor(idx==1?Color.parseColor("#00E5FF"):Color.GRAY); 
         btnNavAdv.setBackground(getRounded(idx==2?"#222222":"#00000000", 20f)); btnNavAdv.setTextColor(idx==2?Color.parseColor("#00E5FF"):Color.GRAY); 
-        fabRule.setVisibility(idx == 1 ? View.VISIBLE : View.GONE); 
-        fabI.setVisibility(idx == 2 ? View.VISIBLE : View.GONE); fabQ.setVisibility(idx == 2 ? View.VISIBLE : View.GONE); fabM.setVisibility(idx == 2 ? View.VISIBLE : View.GONE);
+        fabRule.setVisibility(idx == 1 ? View.VISIBLE : View.GONE); fabEcoContainer.setVisibility(idx == 2 ? View.VISIBLE : View.GONE);
         if(idx==1) renderRulesList();
-        if(idx==2) switchEcoTab(currentEcoTab);
     }
 
     private void switchEcoTab(int tab) {
@@ -128,9 +137,9 @@ public class MainActivity extends Activity {
         pageIntents.setVisibility(tab == 0 ? View.VISIBLE : View.GONE);
         pageTiles.setVisibility(tab == 1 ? View.VISIBLE : View.GONE);
         pageMacros.setVisibility(tab == 2 ? View.VISIBLE : View.GONE);
-        btnEcoInt.setBackground(getRounded(tab == 0 ? "#E53935" : "#222222", 20f)); btnEcoInt.setTextColor(tab == 0 ? Color.WHITE : Color.GRAY);
-        btnEcoQS.setBackground(getRounded(tab == 1 ? "#43A047" : "#222222", 20f)); btnEcoQS.setTextColor(tab == 1 ? Color.WHITE : Color.GRAY);
-        btnEcoMac.setBackground(getRounded(tab == 2 ? "#1E88E5" : "#222222", 20f)); btnEcoMac.setTextColor(tab == 2 ? Color.WHITE : Color.GRAY);
+        fabI.setBackground(getRounded(tab == 0 ? "#44E53935" : "#333333", 100f));
+        fabQ.setBackground(getRounded(tab == 1 ? "#4443A047" : "#333333", 100f));
+        fabM.setBackground(getRounded(tab == 2 ? "#441E88E5" : "#333333", 100f));
         renderEcosystemList();
     }
 
@@ -160,114 +169,121 @@ public class MainActivity extends Activity {
         if(count == 0) { TextView empty = new TextView(this); empty.setText(T("No rules yet.\nPress + NEW EB to create.", "Chưa có quy tắc nào.\nBấm + NEW EB để tạo.")); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); listRules.addView(empty); }
     }
 
-    private View createEcoBlock(int type, int index, String title, String actionStr, boolean isOn) {
-        LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 25f)); card.setPadding(35,35,35,35); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,-2, 1f); lp.setMargins(15,15,15,15); card.setLayoutParams(lp);
-        LinearLayout rowTop = new LinearLayout(this); rowTop.setOrientation(LinearLayout.HORIZONTAL); rowTop.setGravity(Gravity.CENTER_VERTICAL);
-        Switch swOn = new Switch(this); swOn.setChecked(isOn);
-        swOn.setOnCheckedChangeListener((v, chk) -> {
-            if(type == 0) prefs.edit().putBoolean("intent_"+index+"_on", chk).apply();
-            else if(type == 1) { ComponentName comp = new ComponentName(this, "com.manhmoc.edgebar.Tile" + index); getPackageManager().setComponentEnabledSetting(comp, chk ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP); }
-            else prefs.edit().putBoolean("macro_"+index+"_on", chk).apply();
-        });
-        TextView tIcons = new TextView(this); tIcons.setText(type == 0 ? "🔴" : (type == 1 ? "🟢" : "🔵")); tIcons.setGravity(Gravity.RIGHT); tIcons.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-        rowTop.addView(swOn); rowTop.addView(tIcons); card.addView(rowTop);
-        TextView tTitle = new TextView(this); tTitle.setText(title); tTitle.setTextColor(Color.parseColor("#BBBBBB")); tTitle.setTextSize(13); tTitle.setPadding(0,15,0,15); card.addView(tTitle);
-        TextView tAct = new TextView(this); tAct.setText(actionStr); tAct.setTextColor(Color.parseColor("#00E5FF")); tAct.setTextSize(15); tAct.setMaxLines(2); card.addView(tAct);
-        card.setOnClickListener(v -> openEcoBuilder(type, index));
-        card.setOnLongClickListener(v -> { new AlertDialog.Builder(this).setTitle("Xóa Khối này?").setPositiveButton("XÓA", (d,w)->{ if(type==0) prefs.edit().putString("intent_"+index+"_name", "").apply(); if(type==1) { prefs.edit().putString("tile_"+index+"_act", "NONE").apply(); getPackageManager().setComponentEnabledSetting(new ComponentName(this, "com.manhmoc.edgebar.Tile"+index), PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP); } if(type==2) prefs.edit().putString("macro_"+index+"_name", "").apply(); renderEcosystemList(); }).setNegativeButton("HỦY", null).show(); return true; });
-        return card;
-    }
-
+    // V19.12.2.12: KHỐI RENDER HỆ SINH THÁI (2 CỘT)
     private void renderEcosystemList() {
         pageIntents.removeAllViews(); pageTiles.removeAllViews(); pageMacros.removeAllViews(); reloadActionLabels(); 
         int countI = 0, countQ = 0, countM = 0; LinearLayout rowI = null, rowQ = null, rowM = null;
         
-        for (int i = 1; i <= 15; i++) { String name = prefs.getString("intent_"+i+"_name", ""); if(!name.isEmpty()) { 
-            if(countI % 2 == 0) { rowI = new LinearLayout(this); rowI.setOrientation(LinearLayout.HORIZONTAL); rowI.setLayoutParams(new LinearLayout.LayoutParams(-1,-2)); pageIntents.addView(rowI); }
-            rowI.addView(createEcoBlock(0, i, "Intent " + i + "\n" + name, "Action: " + prefs.getString("intent_"+i+"_act", "Trống"), prefs.getBoolean("intent_"+i+"_on", true))); countI++; 
-        } }
-        for (int i = 1; i <= 15; i++) { String act = prefs.getString("tile_"+i+"_act", "NONE"); if(!act.equals("NONE")) { 
-            String actName = "Lỗi"; for(int j=0;j<ACT_KEYS.length;j++) if(ACT_KEYS[j].equals(act)) actName = ACT_LABS[j]; 
-            if(countQ % 2 == 0) { rowQ = new LinearLayout(this); rowQ.setOrientation(LinearLayout.HORIZONTAL); rowQ.setLayoutParams(new LinearLayout.LayoutParams(-1,-2)); pageTiles.addView(rowQ); }
-            boolean isEn = getPackageManager().getComponentEnabledSetting(new ComponentName(this, "com.manhmoc.edgebar.Tile"+i)) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
-            rowQ.addView(createEcoBlock(1, i, "QS Tile " + i, actName, isEn)); countQ++; 
-        } }
-        for (int i = 1; i <= 5; i++) { String name = prefs.getString("macro_"+i+"_name", ""); if(!name.isEmpty()) { 
-            if(countM % 2 == 0) { rowM = new LinearLayout(this); rowM.setOrientation(LinearLayout.HORIZONTAL); rowM.setLayoutParams(new LinearLayout.LayoutParams(-1,-2)); pageMacros.addView(rowM); }
-            rowM.addView(createEcoBlock(2, i, "Macro " + i + "\n" + name, "Svcs: " + prefs.getString("macro_"+i+"_svcs", "Trống"), prefs.getBoolean("macro_"+i+"_on", true))); countM++; 
-        } }
+        for (int i = 1; i <= 15; i++) { 
+            String name = prefs.getString("intent_"+i+"_name", ""); 
+            if(!name.isEmpty()) { 
+                String act = prefs.getString("intent_"+i+"_act", ""); String detail = "Act: " + (act.isEmpty()?"Trống":act);
+                if(countI % 2 == 0) { rowI = new LinearLayout(this); rowI.setOrientation(LinearLayout.HORIZONTAL); rowI.setLayoutParams(new LinearLayout.LayoutParams(-1,-2)); pageIntents.addView(rowI); }
+                rowI.addView(createEcoCard(0, i, "🔴 INTENT " + i, name, detail, prefs.getBoolean("intent_"+i+"_on", true), "#E53935")); countI++; 
+            } 
+        }
+        for (int i = 1; i <= 15; i++) { 
+            String act = prefs.getString("tile_"+i+"_act", "NONE"); 
+            if(!act.equals("NONE")) { 
+                String actName = "Lỗi"; for(int j=0;j<ACT_KEYS.length;j++) if(ACT_KEYS[j].equals(act)) actName = ACT_LABS[j]; 
+                if(countQ % 2 == 0) { rowQ = new LinearLayout(this); rowQ.setOrientation(LinearLayout.HORIZONTAL); rowQ.setLayoutParams(new LinearLayout.LayoutParams(-1,-2)); pageTiles.addView(rowQ); }
+                boolean isOn = getPackageManager().getComponentEnabledSetting(new ComponentName(this, "com.manhmoc.edgebar.Tile"+i)) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
+                rowQ.addView(createEcoCard(1, i, "🟢 QS TILE " + i, actName, isOn ? "Đã bật System" : "Đã ẩn System", isOn, "#43A047")); countQ++; 
+            } 
+        }
+        for (int i = 1; i <= 5; i++) { 
+            String name = prefs.getString("macro_"+i+"_name", ""); 
+            if(!name.isEmpty()) { 
+                if(countM % 2 == 0) { rowM = new LinearLayout(this); rowM.setOrientation(LinearLayout.HORIZONTAL); rowM.setLayoutParams(new LinearLayout.LayoutParams(-1,-2)); pageMacros.addView(rowM); }
+                rowM.addView(createEcoCard(2, i, "🔵 MACRO " + i, name, "Svc: " + prefs.getString("macro_"+i+"_svcs", "Trống"), prefs.getBoolean("macro_"+i+"_on", true), "#1E88E5")); countM++; 
+            } 
+        }
         
         if(countI % 2 != 0 && rowI != null) { View dummy = new View(this); dummy.setLayoutParams(new LinearLayout.LayoutParams(0,1,1f)); rowI.addView(dummy); }
         if(countQ % 2 != 0 && rowQ != null) { View dummy = new View(this); dummy.setLayoutParams(new LinearLayout.LayoutParams(0,1,1f)); rowQ.addView(dummy); }
         if(countM % 2 != 0 && rowM != null) { View dummy = new View(this); dummy.setLayoutParams(new LinearLayout.LayoutParams(0,1,1f)); rowM.addView(dummy); }
         
-        if(countI == 0) { TextView empty = new TextView(this); empty.setText("Chưa có Intent nào.\nBấm I+ bên dưới để tạo."); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); pageIntents.addView(empty); }
-        if(countQ == 0) { TextView empty = new TextView(this); empty.setText("Chưa có QS Tile nào.\nBấm QS+ bên dưới để tạo."); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); pageTiles.addView(empty); }
-        if(countM == 0) { TextView empty = new TextView(this); empty.setText("Chưa có Macro nào.\nBấm M+ bên dưới để tạo."); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); pageMacros.addView(empty); }
+        if(countI == 0) { TextView empty = new TextView(this); empty.setText("Chưa có Intent nào."); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); pageIntents.addView(empty); }
+        if(countQ == 0) { TextView empty = new TextView(this); empty.setText("Chưa có QS Tile nào."); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); pageTiles.addView(empty); }
+        if(countM == 0) { TextView empty = new TextView(this); empty.setText("Chưa có Macro nào."); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); pageMacros.addView(empty); }
     }
 
-    private int getNextEcoSlot(int type) {
-        int max = type == 2 ? 5 : 15;
-        for(int i=1; i<=max; i++) {
-            if(type == 0 && prefs.getString("intent_"+i+"_name", "").isEmpty()) return i;
-            if(type == 1 && prefs.getString("tile_"+i+"_act", "NONE").equals("NONE")) return i;
-            if(type == 2 && prefs.getString("macro_"+i+"_name", "").isEmpty()) return i;
-        }
-        return -1;
+    private View createEcoCard(int type, int slotIndex, String title, String desc, String detail, boolean isEnabled, String colorHex) {
+        LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 25f)); card.setPadding(35,35,35,35); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,-2, 1f); lp.setMargins(15,15,15,15); card.setLayoutParams(lp);
+        LinearLayout topRow = new LinearLayout(this); topRow.setOrientation(LinearLayout.HORIZONTAL); topRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView tTitle = new TextView(this); tTitle.setText(title); tTitle.setTextColor(Color.parseColor("#BBBBBB")); tTitle.setTextSize(11); tTitle.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+        Switch sw = new Switch(this); sw.setChecked(isEnabled); 
+        sw.setOnCheckedChangeListener((v, c) -> {
+            if(type == 0) prefs.edit().putBoolean("intent_"+slotIndex+"_on", c).apply();
+            else if(type == 2) prefs.edit().putBoolean("macro_"+slotIndex+"_on", c).apply();
+            else if(type == 1) {
+                ComponentName comp = new ComponentName(this, "com.manhmoc.edgebar.Tile" + slotIndex);
+                getPackageManager().setComponentEnabledSetting(comp, c ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
+                Toast.makeText(this, c ? "Đã MỞ KHÓA Tile!" : "Đã ẨN Tile", Toast.LENGTH_SHORT).show();
+            }
+        });
+        topRow.addView(tTitle); topRow.addView(sw); card.addView(topRow);
+        
+        TextView tDesc = new TextView(this); tDesc.setText(desc); tDesc.setTextColor(Color.parseColor(colorHex)); tDesc.setTextSize(15); tDesc.setPadding(0,10,0,0); card.addView(tDesc);
+        TextView tDet = new TextView(this); tDet.setText(detail); tDet.setTextColor(Color.GRAY); tDet.setTextSize(10); tDet.setPadding(0,5,0,0); tDet.setMaxLines(2); tDet.setEllipsize(TextUtils.TruncateAt.END); card.addView(tDet);
+        
+        card.setOnClickListener(v -> openEcoItemDialog(type, slotIndex));
+        card.setOnLongClickListener(v -> { 
+            new AlertDialog.Builder(this).setTitle("Xóa mục này?").setPositiveButton("XÓA", (d,w)->{
+                if(type == 0) prefs.edit().putString("intent_"+slotIndex+"_name", "").apply();
+                else if(type == 1) prefs.edit().putString("tile_"+slotIndex+"_act", "NONE").apply();
+                else if(type == 2) prefs.edit().putString("macro_"+slotIndex+"_name", "").apply();
+                renderEcosystemList();
+            }).setNegativeButton("HỦY", null).show(); 
+            return true; 
+        });
+        return card;
     }
 
-    private void openEcoBuilder(int type, int index) {
-        int finalIdx = index == -1 ? getNextEcoSlot(type) : index;
-        if(finalIdx == -1) { Toast.makeText(this, "Đã đạt giới hạn tối đa!", Toast.LENGTH_SHORT).show(); return; }
-
+    // V19.12.2.12: DIALOG ĐƠN NHIỆM CHỈ DÀNH CHO 1 SLOT DUY NHẤT
+    private void openEcoItemDialog(int type, int slotIndex) {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
-        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40, 60, 40, 40);
-        TextView header = new TextView(this); header.setText((index == -1 ? "TẠO MỚI " : "SỬA ") + (type == 0 ? "INTENT " : (type == 1 ? "QS TILE " : "MACRO ")) + finalIdx); header.setTextColor(Color.parseColor("#00E5FF")); header.setTextSize(20); header.setPadding(0,0,0,40); root.addView(header);
+        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30, 80, 30, 30);
+        
+        TextView header = new TextView(this); header.setTextSize(20); header.setPadding(0,0,0,30);
+        if(type == 0) { header.setText("🔴 CẤU HÌNH INTENT " + slotIndex); header.setTextColor(Color.parseColor("#E53935")); }
+        else if(type == 1) { header.setText("🟢 CẤU HÌNH QS TILE " + slotIndex); header.setTextColor(Color.parseColor("#43A047")); }
+        else { header.setText("🔵 CẤU HÌNH MACRO " + slotIndex); header.setTextColor(Color.parseColor("#1E88E5")); }
+        root.addView(header);
 
-        ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+        ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); scroll.addView(content); root.addView(scroll);
 
-        EditText eName=null, eAct=null, ePkg=null, eCls=null, eData=null, eCat=null, eFlag=null, eSvcs=null; CheckBox cbBr=null; Spinner spAct=null;
-
-        if(type == 0) { 
-            eName = createField("Tên gợi nhớ (VD: Mở FB)", prefs.getString("intent_"+finalIdx+"_name", ""));
-            eAct = createField("Action", prefs.getString("intent_"+finalIdx+"_act", ""));
-            ePkg = createField("Package", prefs.getString("intent_"+finalIdx+"_pkg", ""));
-            eCls = createField("Class Name", prefs.getString("intent_"+finalIdx+"_cls", ""));
-            eData = createField("Data URI (acc://...)", prefs.getString("intent_"+finalIdx+"_data", ""));
-            eCat = createField("Categories", prefs.getString("intent_"+finalIdx+"_cat", ""));
-            eFlag = createField("Flags", prefs.getString("intent_"+finalIdx+"_flags", ""));
-            cbBr = new CheckBox(this); cbBr.setText("Gửi dạng Broadcast"); cbBr.setTextColor(Color.WHITE); cbBr.setChecked(prefs.getBoolean("intent_"+finalIdx+"_br", true));
-            content.addView(eName); content.addView(eAct); content.addView(ePkg); content.addView(eCls); content.addView(eData); content.addView(eCat); content.addView(eFlag); content.addView(cbBr);
-        } else if (type == 1) { 
-            TextView tv = new TextView(this); tv.setText("Chọn Hành Động Cho Tile " + finalIdx); tv.setTextColor(Color.WHITE); tv.setPadding(0,0,0,20);
-            spAct = createSpinner(); spAct.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, ACT_LABS));
-            String v = prefs.getString("tile_"+finalIdx+"_act","NONE"); for(int j=0;j<ACT_KEYS.length;j++) if(ACT_KEYS[j].equals(v)) spAct.setSelection(j);
-            content.addView(tv); content.addView(spAct);
-        } else { 
-            eName = createField("Tên Macro", prefs.getString("macro_"+finalIdx+"_name", ""));
-            eSvcs = createField("Danh sách Services (com.a/.b, com.c/.d)", prefs.getString("macro_"+finalIdx+"_svcs", ""));
-            content.addView(eName); content.addView(eSvcs);
+        if(type == 0) {
+            content.addView(createInput("Tên gợi nhớ (VD: Mở FB)", "intent_"+slotIndex+"_name"));
+            content.addView(createInput("Action", "intent_"+slotIndex+"_act"));
+            content.addView(createInput("Package", "intent_"+slotIndex+"_pkg"));
+            content.addView(createInput("Class Name", "intent_"+slotIndex+"_cls"));
+            content.addView(createInput("Data URI (acc://...)", "intent_"+slotIndex+"_data"));
+            content.addView(createInput("Categories", "intent_"+slotIndex+"_cat"));
+            content.addView(createInput("Flags", "intent_"+slotIndex+"_flags"));
+            CheckBox cb = new CheckBox(this); cb.setText("Gửi dạng Broadcast"); cb.setTextColor(Color.WHITE); cb.setChecked(prefs.getBoolean("intent_"+slotIndex+"_br", true)); 
+            cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("intent_"+slotIndex+"_br", c).apply()); content.addView(cb);
+        } else if(type == 1) {
+            LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
+            TextView tv = new TextView(this); tv.setText("Hành động thực thi: "); tv.setTextColor(Color.parseColor("#E91E63")); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
+            Spinner s = createSpinner(); s.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, ACT_LABS)); 
+            String v = prefs.getString("tile_"+slotIndex+"_act","NONE"); for(int j=0;j<ACT_KEYS.length;j++) if(ACT_KEYS[j].equals(v)) s.setSelection(j); 
+            s.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putString("tile_"+slotIndex+"_act",ACT_KEYS[pos]).apply();}public void onNothingSelected(AdapterView<?> p){}}); 
+            s.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); 
+            row.addView(tv); row.addView(s); content.addView(row);
+        } else if(type == 2) {
+            content.addView(createInput("Tên gợi nhớ Macro", "macro_"+slotIndex+"_name")); 
+            content.addView(createInput("Danh sách Services (com.a/.b, com.c/.d)", "macro_"+slotIndex+"_svcs"));
         }
 
-        LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
-        Button bCancel = new Button(this); bCancel.setText("HỦY"); bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+        LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,30,0,0);
+        Button bCancel = new Button(this); bCancel.setText("HỦY BỎ"); bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
         Button bSave = new Button(this); bSave.setText("LƯU LẠI"); bSave.setBackground(getRounded("#4CAF50", 20f)); bSave.setTextColor(Color.WHITE); LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0); bSave.setLayoutParams(slp);
         footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
 
         bCancel.setOnClickListener(v -> d.dismiss());
-        Spinner finalSpAct = spAct; EditText fEName = eName, fEAct = eAct, fEPkg = ePkg, fECls = eCls, fEData = eData, fECat = eCat, fEFlag = eFlag, fESvcs = eSvcs; CheckBox fCbBr = cbBr;
-        bSave.setOnClickListener(v -> {
-            if(type == 0) {
-                prefs.edit().putString("intent_"+finalIdx+"_name", fEName.getText().toString()).putString("intent_"+finalIdx+"_act", fEAct.getText().toString()).putString("intent_"+finalIdx+"_pkg", fEPkg.getText().toString()).putString("intent_"+finalIdx+"_cls", fECls.getText().toString()).putString("intent_"+finalIdx+"_data", fEData.getText().toString()).putString("intent_"+finalIdx+"_cat", fECat.getText().toString()).putString("intent_"+finalIdx+"_flags", fEFlag.getText().toString()).putBoolean("intent_"+finalIdx+"_br", fCbBr.isChecked()).putBoolean("intent_"+finalIdx+"_on", prefs.getBoolean("intent_"+finalIdx+"_on", true)).apply();
-            } else if (type == 1) {
-                prefs.edit().putString("tile_"+finalIdx+"_act", ACT_KEYS[finalSpAct.getSelectedItemPosition()]).apply();
-                getPackageManager().setComponentEnabledSetting(new ComponentName(this, "com.manhmoc.edgebar.Tile"+finalIdx), PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP);
-            } else {
-                prefs.edit().putString("macro_"+finalIdx+"_name", fEName.getText().toString()).putString("macro_"+finalIdx+"_svcs", fESvcs.getText().toString()).putBoolean("macro_"+finalIdx+"_on", prefs.getBoolean("macro_"+finalIdx+"_on", true)).apply();
-            }
-            renderEcosystemList(); d.dismiss();
-        });
+        bSave.setOnClickListener(v -> { d.dismiss(); reloadActionLabels(); renderEcosystemList(); });
         d.setContentView(root); d.show();
     }
 
@@ -314,14 +330,18 @@ public class MainActivity extends Activity {
         private float w, h, thick, dotSize; private String timeStr = "00:00"; private int color;
         public BreathView(Context c) { super(c); pDraw = new Paint(); pDraw.setAntiAlias(true); pDraw.setStyle(Paint.Style.STROKE); pDraw.setStrokeCap(Paint.Cap.ROUND); pText = new Paint(); pText.setAntiAlias(true); pText.setColor(Color.WHITE); pText.setTextSize(35f); pText.setShadowLayer(5, 0, 0, Color.BLACK); shape = prefs.getInt("breath_shape", 0); w = prefs.getInt("breath_w", 0); h = prefs.getInt("breath_h", 0); thick = prefs.getInt("breath_thick", 12); dotSize = prefs.getInt("breath_dot_size", 40); pDraw.setStrokeWidth(thick); String cTheme = prefs.getString("anim_color", "WHITE"); color = Color.WHITE; for(int i=0; i<COLOR_KEYS.length; i++) if(COLOR_KEYS[i].equals(cTheme)) color = Color.parseColor(COLOR_VALS[i]); if(shape == 1) { pDraw.setStyle(Paint.Style.FILL); pDraw.setColor(color); } else { pDraw.setColor(color); } }
         public void setAnimAlpha(float a) { this.animAlpha = a; invalidate(); } public void setTime(String t) { this.timeStr = t; invalidate(); }
-        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); pDraw.setAlpha((int)(animAlpha * prefs.getInt("breath_alpha", 255))); float cx = getWidth() / 2f; float cy = getHeight() / 2f; if (shape == 1) { canvas.drawCircle(cx, cy, dotSize, pDraw); canvas.drawText(timeStr, cx + dotSize + 30, cy + 12, pText); } else { float drawW = (w > 0) ? w : getWidth(); float drawH = (h > 0) ? h : getHeight(); float off = thick / 2f; float left = (getWidth() - drawW) / 2f + off; float top = (getHeight() - drawH) / 2f + off; canvas.drawRoundRect(new RectF(left, top, left + drawW - 2*off, top + drawH - 2*off), 40, 40, pDraw); canvas.drawText(timeStr, cx - 40, top + drawH + 40, pText); } }
+        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); pDraw.setAlpha((int)(animAlpha * prefs.getInt("breath_alpha", 255))); float cx = getWidth() / 2f; float cy = getHeight() / 2f; 
+        // V19.12.2.12: Vá lỗi cắt chữ ở DOT. Đưa cx, cy về góc trái trên thay vì giữa màn.
+        if (shape == 1) { cx = dotSize + 10; cy = dotSize + 10; canvas.drawCircle(cx, cy, dotSize, pDraw); canvas.drawText(timeStr, cx + dotSize + 25, cy + 12, pText); 
+        } else { float drawW = (w > 0) ? w : getWidth(); float drawH = (h > 0) ? h : getHeight(); float off = thick / 2f; float left = (getWidth() - drawW) / 2f + off; float top = (getHeight() - drawH) / 2f + off; canvas.drawRoundRect(new RectF(left, top, left + drawW - 2*off, top + drawH - 2*off), 40, 40, pDraw); canvas.drawText(timeStr, cx - 40, top + drawH + 40, pText); } }
     }
     
     private void testBreathAnimation() {
         if (!Settings.canDrawOverlays(this)) { Toast.makeText(this, "Cấp quyền Lớp phủ trước!", Toast.LENGTH_SHORT).show(); return; }
         WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE); BreathView bv = new BreathView(this);
         int shape = prefs.getInt("breath_shape", 0); int w = prefs.getInt("breath_w", 0); int h = prefs.getInt("breath_h", 0); int dotSize = prefs.getInt("breath_dot_size", 40); int bX = prefs.getInt("breath_dot_x", 0); int bY = prefs.getInt("breath_dot_y", 0);
-        WindowManager.LayoutParams params = new WindowManager.LayoutParams(shape == 1 ? (dotSize*2 + 300) : (w > 0 ? w : -1), shape == 1 ? (dotSize*2 + 100) : (h > 0 ? h : 100), Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
+        // V19.12.2.12: Nới rộng LayoutParams cho Dot để text không bị cắt.
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(shape == 1 ? (int)(dotSize*2 + 300) : (w > 0 ? w : -1), shape == 1 ? (int)(dotSize*2 + 50) : (h > 0 ? h : 100), Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
         if (shape == 1) { params.gravity = Gravity.TOP | Gravity.LEFT; params.x = bX; params.y = bY; } else { params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL; }
         ObjectAnimator anim = ObjectAnimator.ofFloat(bv, "animAlpha", 0.1f, 1f, 0.1f); anim.setDuration(prefs.getInt("breath_delay", 1500)); anim.setRepeatCount(ValueAnimator.INFINITE); anim.start();
         wm.addView(bv, params); Toast.makeText(this, "Đang chạy thử hơi thở 4s...", Toast.LENGTH_SHORT).show();
@@ -335,16 +355,25 @@ public class MainActivity extends Activity {
         LinearLayout lS = new LinearLayout(this); lS.setOrientation(LinearLayout.HORIZONTAL); lS.setPadding(0,10,0,10); TextView tS = new TextView(this); tS.setText("Kiểu chạy:"); tS.setTextColor(Color.WHITE); tS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sS = createSpinner(); sS.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Nhấp Nháy", "1 Tia sáng nối đuôi", "2 Tia sáng đối xứng", "3 Tia sáng đều nhau"})); sS.setSelection(prefs.getInt("anim_style", 0)); sS.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt("anim_style", pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lS.addView(tS); lS.addView(sS); designSliderContainer.addView(lS); 
         designSliderContainer.addView(createSlider("Chiều ngang Hiệu ứng (0=Full)", "anim_w", 2000, 0)); designSliderContainer.addView(createSlider("Chiều dọc Hiệu ứng (0=Full)", "anim_h", 3500, 0)); designSliderContainer.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255)); designSliderContainer.addView(createSlider("Độ dày viền", "anim_thick", 50, 12)); designSliderContainer.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500)); designSliderContainer.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600)); designSliderContainer.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30)); 
         
-        designSliderContainer.addView(createSectionTitle("🎤 THIẾT KẾ HƠI THỞ GHI ÂM"));
-        Button btnTestBreath = new Button(this); btnTestBreath.setText("▶ THỬ ANIMATION HƠI THỞ"); btnTestBreath.setBackground(getRounded("#E91E63", 20f)); btnTestBreath.setTextColor(Color.WHITE); btnTestBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp2 = new LinearLayout.LayoutParams(-1,-2); testLp2.setMargins(0,0,0,20); btnTestBreath.setLayoutParams(testLp2); btnTestBreath.setOnClickListener(v -> testBreathAnimation()); designSliderContainer.addView(btnTestBreath);
-        designSliderContainer.addView(createComboDropdown("Chất lượng Ghi âm", "rec_kbps", new String[]{"64 kbps", "128 kbps", "256 kbps", "320 kbps (High)"}, 1));
-        designSliderContainer.addView(createComboDropdown("Hình dáng Hơi Thở", "breath_shape", new String[]{"Dải Viền (Edge)", "Chấm Tròn (Dot)"}, 0));
-        designSliderContainer.addView(createSlider("Khoảng nghỉ nhịp thở (ms)", "breath_delay", 5000, 1500)); designSliderContainer.addView(createSlider("Độ mờ tối đa (Alpha)", "breath_alpha", 255, 255));
-        TextView tEdge = new TextView(this); tEdge.setText("Cấu hình Dải Viền:"); tEdge.setTextColor(Color.GRAY); designSliderContainer.addView(tEdge);
-        designSliderContainer.addView(createSlider("Chiều ngang (0=Full)", "breath_w", 2000, 0)); designSliderContainer.addView(createSlider("Chiều dọc (0=Full)", "breath_h", 3500, 0)); designSliderContainer.addView(createSlider("Độ dày viền", "breath_thick", 50, 12));
-        TextView tDot = new TextView(this); tDot.setText("Cấu hình Chấm Tròn:"); tDot.setTextColor(Color.GRAY); designSliderContainer.addView(tDot);
-        designSliderContainer.addView(createSlider("Độ to chấm tròn", "breath_dot_size", 200, 40)); designSliderContainer.addView(createSlider("Toạ độ X", "breath_dot_x", 1500, 0)); designSliderContainer.addView(createSlider("Toạ độ Y", "breath_dot_y", 3000, 0));
-        LinearLayout recBtns = new LinearLayout(this); recBtns.setOrientation(LinearLayout.HORIZONTAL); Button btnTestRec = new Button(this); btnTestRec.setText("▶ BẮT ĐẦU GHI ÂM"); btnTestRec.setBackground(getRounded("#E91E63", 20f)); btnTestRec.setTextColor(Color.WHITE); btnTestRec.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Button btnStopRec = new Button(this); btnStopRec.setText("⏹ DỪNG LẠI"); btnStopRec.setBackground(getRounded("#333333", 20f)); btnStopRec.setTextColor(Color.WHITE); LinearLayout.LayoutParams tbLp2 = new LinearLayout.LayoutParams(0,-2,1f); tbLp2.setMargins(15,0,0,0); btnStopRec.setLayoutParams(tbLp2); btnTestRec.setOnClickListener(v -> { try { Intent i = new Intent(this, RecorderService.class); if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i); } catch(Exception e) {} }); btnStopRec.setOnClickListener(v -> { try { Intent i = new Intent(this, RecorderService.class); stopService(i); } catch(Exception e) {} }); recBtns.addView(btnTestRec); recBtns.addView(btnStopRec); designSliderContainer.addView(recBtns);
+        // V19.12.2.12: CHUYỂN KHẨU RECORDER VỀ KHÔNG GIAN ANIMA
+        LinearLayout recSys = new LinearLayout(this); recSys.setOrientation(LinearLayout.VERTICAL); recSys.addView(createSectionTitle("🎤 THIẾT KẾ HƠI THỞ GHI ÂM"));
+        Button btnTestBreath = new Button(this); btnTestBreath.setText("▶ THỬ ANIMATION HƠI THỞ"); btnTestBreath.setBackground(getRounded("#E91E63", 20f)); btnTestBreath.setTextColor(Color.WHITE); btnTestBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp2 = new LinearLayout.LayoutParams(-1,-2); testLp2.setMargins(0,0,0,20); btnTestBreath.setLayoutParams(testLp2); btnTestBreath.setOnClickListener(v -> testBreathAnimation()); recSys.addView(btnTestBreath);
+        recSys.addView(createComboDropdown("Chất lượng Ghi âm (kbps)", "rec_kbps", new String[]{"64 kbps", "128 kbps", "256 kbps", "320 kbps (High)"}, 1));
+        recSys.addView(createComboDropdown("Hình dáng Hơi Thở", "breath_shape", new String[]{"Dải Viền (Edge)", "Chấm Tròn (Dot)"}, 0));
+        recSys.addView(createSlider("Khoảng nghỉ nhịp thở (ms)", "breath_delay", 5000, 1500));
+        recSys.addView(createSlider("Độ mờ tối đa (Alpha)", "breath_alpha", 255, 255));
+        TextView tEdge = new TextView(this); tEdge.setText("Cấu hình Dải Viền:"); tEdge.setTextColor(Color.GRAY); recSys.addView(tEdge);
+        recSys.addView(createSlider("Chiều ngang (0=Full)", "breath_w", 2000, 0)); recSys.addView(createSlider("Chiều dọc (0=Full)", "breath_h", 3500, 0)); recSys.addView(createSlider("Độ dày viền", "breath_thick", 50, 12));
+        TextView tDot = new TextView(this); tDot.setText("Cấu hình Chấm Tròn:"); tDot.setTextColor(Color.GRAY); recSys.addView(tDot);
+        recSys.addView(createSlider("Độ to chấm tròn", "breath_dot_size", 200, 40)); recSys.addView(createSlider("Toạ độ X", "breath_dot_x", 1500, 0)); recSys.addView(createSlider("Toạ độ Y", "breath_dot_y", 3000, 0));
+        LinearLayout recBtns = new LinearLayout(this); recBtns.setOrientation(LinearLayout.HORIZONTAL);
+        Button btnTestRec = new Button(this); btnTestRec.setText("▶ BẮT ĐẦU GHI ÂM"); btnTestRec.setBackground(getRounded("#E91E63", 20f)); btnTestRec.setTextColor(Color.WHITE); btnTestRec.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+        Button btnStopRec = new Button(this); btnStopRec.setText("⏹ DỪNG LẠI"); btnStopRec.setBackground(getRounded("#333333", 20f)); btnStopRec.setTextColor(Color.WHITE); LinearLayout.LayoutParams tbLp2 = new LinearLayout.LayoutParams(0,-2,1f); tbLp2.setMargins(15,0,0,0); btnStopRec.setLayoutParams(tbLp2);
+        btnTestRec.setOnClickListener(v -> { try { Intent i = new Intent(this, RecorderService.class); if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i); } catch(Exception e) { Toast.makeText(this, "Lỗi gọi Service", Toast.LENGTH_SHORT).show(); } });
+        btnStopRec.setOnClickListener(v -> { try { Intent i = new Intent(this, RecorderService.class); stopService(i); } catch(Exception e) {} });
+        recBtns.addView(btnTestRec); recBtns.addView(btnStopRec); recSys.addView(recBtns);
+        designSliderContainer.addView(wrapCard(recSys));
+        
         } else { String prefix = designTabState == 1 ? "home_" : "lock_"; 
         designSliderContainer.addView(createSectionTitle("5 EDGE BARS"));
         for(int i=0; i< 5; i++) { LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); CheckBox cb = new CheckBox(this); cb.setText("BẬT: " + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_en", c).apply()); drawerContent.addView(cb); drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+BARS[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0)); drawerContent.addView(createSlider("Độ trong suốt", prefix+BARS[i]+"_alpha", 255, 50)); drawerContent.addView(createSlider("Chiều ngang", prefix+BARS[i]+"_w", 3000, 300)); drawerContent.addView(createSlider("Chiều dọc", prefix+BARS[i]+"_h", 3000, 60)); drawerContent.addView(createSlider("Toạ độ X", prefix+BARS[i]+"_x", 1000, 0)); drawerContent.addView(createSlider("Toạ độ Y", prefix+BARS[i]+"_y", 1000, 0)); designSliderContainer.addView(createDrawer(BAR_NAMES[i], drawerContent)); } 
@@ -361,7 +390,6 @@ public class MainActivity extends Activity {
     private TextView createSectionTitle(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.parseColor("#00E5FF")); tv.setPadding(0,10,0,20); return tv; }
     private Spinner createSpinner() { Spinner sp = new Spinner(this); sp.setBackground(getRounded("#2C2C2C", 20f)); sp.setPadding(20,20,20,20); return sp; }
     private EditText createInput(String h, String k) { EditText et = new EditText(this); et.setHint(h); et.setHintTextColor(Color.GRAY); et.setTextColor(Color.WHITE); et.setText(prefs.getString(k,"")); et.setBackground(getRounded("#2C2C2C", 20f)); et.setPadding(30,30,30,30); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,10,0,10); et.setLayoutParams(lp); et.addTextChangedListener(new android.text.TextWatcher(){public void afterTextChanged(android.text.Editable s){prefs.edit().putString(k,s.toString()).apply();}public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}}); return et; }
-    private EditText createField(String h, String v) { EditText et = new EditText(this); et.setHint(h); et.setHintTextColor(Color.GRAY); et.setTextColor(Color.WHITE); et.setText(v); et.setBackground(getRounded("#2C2C2C", 20f)); et.setPadding(30,30,30,30); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,10,0,10); et.setLayoutParams(lp); return et; }
     private LinearLayout wrapCard(View content) { LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 40f)); card.setPadding(40,40,40,40); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,40); card.setLayoutParams(lp); card.addView(content); return card; }
     private LinearLayout createSlider(String t, String k, int max, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv); LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ public void onProgressChanged(SeekBar s, int p, boolean b){ tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); } public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){} }); btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); }); btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) sb.setProgress(p+1); }); row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); return l; }
 }
