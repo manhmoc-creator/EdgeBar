@@ -14,25 +14,26 @@ public class RecorderService extends Service {
 
         public BreathView(Context c) { 
             super(c); pDraw = new Paint(); pDraw.setAntiAlias(true); pDraw.setStyle(Paint.Style.STROKE); pDraw.setStrokeCap(Paint.Cap.ROUND); 
-            pText = new Paint(); pText.setAntiAlias(true); pText.setColor(Color.WHITE); pText.setTextSize(35f); pText.setShadowLayer(5, 0, 0, Color.BLACK);
+            pText = new Paint(); pText.setAntiAlias(true); pText.setColor(Color.WHITE); pText.setTextSize(38f); pText.setShadowLayer(5, 0, 0, Color.BLACK);
             shape = prefs.getInt("breath_shape", 0); w = prefs.getInt("breath_w", 0); h = prefs.getInt("breath_h", 0);
             thick = prefs.getInt("breath_thick", 12); dotSize = prefs.getInt("breath_dot_size", 40); pDraw.setStrokeWidth(thick);
-            String cTheme = prefs.getString("anim_color", "WHITE"); color = Color.WHITE; for(int i=0; i<COLOR_KEYS.length; i++) if(COLOR_KEYS[i].equals(cTheme)) color = Color.parseColor(COLOR_VALS[i]);
+            
+            // V19.12.2.12: Kế thừa 15 màu của Animation Viền
+            String cTheme = prefs.getString("anim_color", "WHITE"); color = Color.WHITE; 
+            for(int i=0; i<COLOR_KEYS.length; i++) if(COLOR_KEYS[i].equals(cTheme)) color = Color.parseColor(COLOR_VALS[i]);
             if(shape == 1) { pDraw.setStyle(Paint.Style.FILL); pDraw.setColor(color); } else { pDraw.setColor(color); }
         }
         public void setAnimAlpha(float a) { this.animAlpha = a; invalidate(); }
         public void setTime(String t) { this.timeStr = t; invalidate(); }
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas); pDraw.setAlpha((int)(animAlpha * prefs.getInt("breath_alpha", 255)));
-            float cx = shape == 1 ? dotSize + 10 : getWidth() / 2f; 
-            float cy = shape == 1 ? dotSize + 10 : getHeight() / 2f;
             if (shape == 1) { 
-                canvas.drawCircle(cx, cy, dotSize, pDraw); 
-                // V19.12.2.12: Dịch chuyển text để không bị lẹm
-                canvas.drawText(timeStr, cx + dotSize + 25, cy + 12, pText); 
+                canvas.drawCircle(dotSize + 20, dotSize + 20, dotSize, pDraw); 
+                canvas.drawText(timeStr, dotSize*2 + 40, dotSize + 30, pText); 
             } else { 
                 float drawW = (w > 0) ? w : getWidth(); float drawH = (h > 0) ? h : getHeight(); float off = thick / 2f; float left = (getWidth() - drawW) / 2f + off; float top = (getHeight() - drawH) / 2f + off; 
-                canvas.drawRoundRect(new RectF(left, top, left + drawW - 2*off, top + drawH - 2*off), 40, 40, pDraw); canvas.drawText(timeStr, cx - 40, top + drawH + 40, pText); 
+                canvas.drawRoundRect(new RectF(left, top, left + drawW - 2*off, top + drawH - 2*off), 40, 40, pDraw); 
+                canvas.drawText(timeStr, (getWidth()/2f) - 40, top + drawH + 50, pText); 
             }
         }
     }
@@ -70,8 +71,8 @@ public class RecorderService extends Service {
         wm = (WindowManager) getSystemService(WINDOW_SERVICE); breathView = new BreathView(this);
         int shape = prefs.getInt("breath_shape", 0); int w = prefs.getInt("breath_w", 0); int h = prefs.getInt("breath_h", 0); int dotSize = prefs.getInt("breath_dot_size", 40); int bX = prefs.getInt("breath_dot_x", 0); int bY = prefs.getInt("breath_dot_y", 0);
 
-        // V19.12.2.12: Tăng chiều rộng để chứa đồng hồ MM:SS không bị cắt
-        WindowManager.LayoutParams params = new WindowManager.LayoutParams(shape == 1 ? (dotSize*2 + 250) : (w > 0 ? w : -1), shape == 1 ? (dotSize*2 + 20) : (h > 0 ? h : 100), Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
+        // V19.12.2.12: Nới rộng Bounding Box để chữ không bị lẹm
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(shape == 1 ? (dotSize*2 + 250) : (w > 0 ? w : -1), shape == 1 ? (dotSize*2 + 80) : (h > 0 ? h : 150), Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
         if (shape == 1) { params.gravity = Gravity.TOP | Gravity.LEFT; params.x = bX; params.y = bY; } else { params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL; }
         
         breathView.setOnTouchListener((v, event) -> { if (event.getAction() == MotionEvent.ACTION_DOWN) { stopRecording(); stopSelf(); return true; } return false; });
