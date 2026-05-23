@@ -1,17 +1,1 @@
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        // Đây là động cơ giúp Gradle hiểu được các task Android
-        classpath "com.android.tools.build:gradle:7.4.2"
-    }
-}
-
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
+plugins { id 'com.android.application' version '8.2.0' apply false }
