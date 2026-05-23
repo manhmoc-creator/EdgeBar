@@ -6,12 +6,8 @@ public class EdgeBarService extends AccessibilityService {
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"}; private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
     
-    // V19.12.3 FIX: UPDATE VIEW THỜI GIAN THỰC KHI KÉO SLIDER
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { 
-        if(k != null) { 
-            updateVisibility(); if(fV != null && fV.getVisibility() == View.VISIBLE) fV.updateStyle(); 
-            if(globalBv != null && k.startsWith("breath_")) updateBreathLayout();
-        } 
+        if(k != null) { updateVisibility(); if(fV != null && fV.getVisibility() == View.VISIBLE) fV.updateStyle(); if(globalBv != null && k.startsWith("breath_")) updateBreathLayout(); } 
     };
     
     private void updateBreathLayout() {
@@ -27,12 +23,15 @@ public class EdgeBarService extends AccessibilityService {
     private BroadcastReceiver stateReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) { playAnim(); } else if("com.manhmoc.edgebar.START_BREATH".equals(i.getAction())) { startGlobalBreath(); } else if("com.manhmoc.edgebar.STOP_BREATH".equals(i.getAction())) { stopGlobalBreath(); } else updateVisibility(); } };
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) { exec(i.getStringExtra("act")); } } };
 
+    // V19.12.4 FIX: BỔ SUNG setPhase(float) VÀ THUẬT TOÁN ĐỨT ĐOẠN CHO BREATHVIEW
     private class BreathView extends View {
         private Paint pDraw, pText; public float animAlpha = 0f; private int shape; 
         private float w, h, thick, dotSize; private String timeStr = "00:00"; private int color;
         private float phaseFraction = 0f; private int aStyle; 
         public BreathView(Context c) { super(c); pDraw = new Paint(); pDraw.setAntiAlias(true); pDraw.setStyle(Paint.Style.STROKE); pDraw.setStrokeCap(Paint.Cap.ROUND); pText = new Paint(); pText.setAntiAlias(true); pText.setColor(Color.WHITE); pText.setTextSize(40f); pText.setTextAlign(Paint.Align.CENTER); pText.setShadowLayer(5, 0, 0, Color.BLACK); shape = prefs.getInt("breath_shape", 0); w = prefs.getInt("breath_w", 0); h = prefs.getInt("breath_h", 0); thick = prefs.getInt("breath_thick", 12); dotSize = prefs.getInt("breath_dot_size", 40); pDraw.setStrokeWidth(thick); String cTheme = prefs.getString("anim_color", "WHITE"); color = Color.WHITE; String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; String[] COLOR_VALS = {"#FFFFFF", "#00FFFF", "#FFD700", "#FF4500", "#00BFFF", "#00FF00", "#FF8C00", "#EA4335", "#00E5FF", "#1DE9B6", "#4CAF50", "#FF9800", "#03A9F4", "#8BC34A", "#F06292"}; for(int i=0; i<COLOR_KEYS.length; i++) if(COLOR_KEYS[i].equals(cTheme)) color = Color.parseColor(COLOR_VALS[i]); if(shape == 1) { pDraw.setStyle(Paint.Style.FILL); pDraw.setColor(color); } else { pDraw.setColor(color); } aStyle = prefs.getInt("anim_style", 0); }
-        public void setAnimAlpha(float a) { this.animAlpha = a; invalidate(); } public void setPhase(float p) { this.phaseFraction = p; invalidate(); } public void setTime(String t) { this.timeStr = t; invalidate(); }
+        public void setAnimAlpha(float a) { this.animAlpha = a; invalidate(); } 
+        public void setPhase(float p) { this.phaseFraction = p; invalidate(); } 
+        public void setTime(String t) { this.timeStr = t; invalidate(); }
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); pDraw.setAlpha((int)(animAlpha * prefs.getInt("breath_alpha", 255))); float cx = getWidth() / 2f; float cy = getHeight() / 2f; if (shape == 1) { canvas.drawCircle(cx, cy, dotSize, pDraw); canvas.drawText(timeStr, cx, cy + dotSize + 60, pText); } else { float drawW = (w > 0) ? w : getWidth(); float drawH = (h > 0) ? h : getHeight(); float off = thick / 2f; float left = (getWidth() - drawW) / 2f + off; float top = (getHeight() - drawH) / 2f + off; pDraw.setStrokeCap(Paint.Cap.ROUND); if(aStyle > 0) { float perim = 2 * (drawW + drawH); float currentPhase = -perim * phaseFraction; if (aStyle == 1) pDraw.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, currentPhase)); else if (aStyle == 2) pDraw.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, currentPhase)); else if (aStyle == 3) pDraw.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, currentPhase)); } else { pDraw.setPathEffect(null); } canvas.drawRoundRect(new RectF(left, top, left + drawW - 2*off, top + drawH - 2*off), 40, 40, pDraw); canvas.drawText(timeStr, cx, top + drawH + 60, pText); } }
     }
     
@@ -43,18 +42,13 @@ public class EdgeBarService extends AccessibilityService {
         if(globalBv != null) return; breathSeconds = 0; globalBv = new BreathView(this); globalBv.setTime("00:00");
         int shape = prefs.getInt("breath_shape", 0); int w = prefs.getInt("breath_w", 0); int h = prefs.getInt("breath_h", 0); int dotSize = prefs.getInt("breath_dot_size", 40); 
         int bX = prefs.getInt("breath_dot_x", 1500) - 1500; int bY = prefs.getInt("breath_dot_y", 3000) - 3000;
-        
-        // V19.12.3: BẬT CLICK NẾU LÀ CHẤM TRÒN
         int bFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
         if(shape == 1) { bFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL; } else { bFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; }
-        
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(shape == 1 ? (dotSize*2 + 250) : (w > 0 ? w : -1), shape == 1 ? (dotSize*2 + 150) : (h > 0 ? h + 150 : -1), WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, bFlags, PixelFormat.TRANSLUCENT);
         if (shape == 1) { params.gravity = Gravity.TOP | Gravity.LEFT; params.x = bX; params.y = bY; globalBv.setOnClickListener(v -> sendBroadcast(new Intent("com.manhmoc.edgebar.STOP_REC_CMD"))); } else { params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL; }
-        
         int animStyle = prefs.getInt("anim_style", 0);
         if(animStyle == 0 || shape == 1) { globalBreathAnim = ObjectAnimator.ofFloat(globalBv, "animAlpha", 0.1f, 1f, 0.1f); } 
         else { globalBv.animAlpha = 1f; globalBreathAnim = ValueAnimator.ofFloat(0f, 1f); globalBreathAnim.addUpdateListener(a -> { globalBv.setPhase((float)a.getAnimatedValue()); }); }
-        
         globalBreathAnim.setDuration(prefs.getInt("breath_delay", 1500)); globalBreathAnim.setRepeatCount(ValueAnimator.INFINITE); globalBreathAnim.start();
         wm.addView(globalBv, params); breathHandler.postDelayed(breathRunnable, 1000);
     }
@@ -179,13 +173,8 @@ public class EdgeBarService extends AccessibilityService {
 
     private void exec(String a) { if (a == null || a.equals("NONE")) return; try { switch(a) { 
         case "BACK": performGlobalAction(GLOBAL_ACTION_BACK); break; case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break; case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break; case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break; case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break; case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break; case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; 
-        
-        // V19.12.3: TOGGLE RECORD TỪ INTENT
         case "VOICE_RECORD": try { Intent ir = new Intent(this, RecorderService.class); if (RecorderService.isRunning) { stopService(ir); } else { if (Build.VERSION.SDK_INT >= 26) startForegroundService(ir); else startService(ir); } } catch (Exception e){} break;
-        
-        // V19.12.3: BẮN ĐẠN QUA YTDLnis CỰC CHUẨN (Mở Chooser nếu lỗi)
         case "YTDL_DOWNLOAD": try { android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE); if (cb.hasPrimaryClip() && cb.getPrimaryClip().getItemCount() > 0) { CharSequence data = cb.getPrimaryClip().getItemAt(0).getText(); if (data != null && (data.toString().startsWith("http://") || data.toString().startsWith("https://"))) { Intent ytdl = new Intent(Intent.ACTION_SEND); ytdl.setType("text/plain"); ytdl.putExtra(Intent.EXTRA_TEXT, data.toString()); ytdl.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); try { ytdl.setPackage("com.deniscerri.ytdlnis"); startActivity(ytdl); } catch (Exception e1) { try { ytdl.setPackage("com.deniscerri.ytdl"); startActivity(ytdl); } catch (Exception e2) { ytdl.setPackage(null); startActivity(Intent.createChooser(ytdl, "Chọn App tải (YTDLnis)...").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } } } } } catch (Exception e) {} break;
-        
         default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
     private void fireIntent(String idx) { try { String act = prefs.getString("intent_"+idx+"_act", ""); String pkg = prefs.getString("intent_"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("intent_"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("intent_"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("intent_"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("intent_"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("intent_"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     

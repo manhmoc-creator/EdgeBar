@@ -4,16 +4,12 @@ public class RecorderService extends Service {
     public static boolean isRunning = false;
     private MediaRecorder rec; private String path;
     private BroadcastReceiver stopCmd = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { stopSelf(); } };
-
-    @Override public void onCreate() { super.onCreate(); 
-        if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(stopCmd, new IntentFilter("com.manhmoc.edgebar.STOP_REC_CMD"), Context.RECEIVER_NOT_EXPORTED); else registerReceiver(stopCmd, new IntentFilter("com.manhmoc.edgebar.STOP_REC_CMD"));
-    }
+    @Override public void onCreate() { super.onCreate(); if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(stopCmd, new IntentFilter("com.manhmoc.edgebar.STOP_REC_CMD"), Context.RECEIVER_NOT_EXPORTED); else registerReceiver(stopCmd, new IntentFilter("com.manhmoc.edgebar.STOP_REC_CMD")); }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if(isRunning) return START_STICKY;
         try {
             String cid = "rec_chan"; NotificationChannel c = new NotificationChannel(cid, "Ghi âm ẩn", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c);
             Notification n = new Notification.Builder(this, cid).setContentTitle("Đang ghi âm bí mật...").setSmallIcon(android.R.drawable.ic_menu_crop).build(); startForeground(3, n);
-
             File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "EdgeBar"); if(!dir.exists()) dir.mkdirs();
             path = new File(dir, "Record_" + new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()) + ".mp3").getAbsolutePath();
             rec = new MediaRecorder(); rec.setAudioSource(MediaRecorder.AudioSource.MIC); rec.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4); rec.setAudioEncoder(MediaRecorder.AudioEncoder.AAC); rec.setOutputFile(path); rec.prepare(); rec.start(); isRunning = true;
