@@ -1,5 +1,5 @@
 package com.manhmoc.edgebar;
-import android.animation.AnimatorSet; import android.animation.ObjectAnimator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.PixelFormat; import android.graphics.RectF; import android.media.MediaRecorder; import android.os.Build; import android.os.CountDownTimer; import android.os.Environment; import android.os.Handler; import android.os.IBinder; import android.os.Looper; import android.provider.Settings; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager; import android.widget.Toast; import java.io.File;
+import android.animation.AnimatorSet; import android.animation.ObjectAnimator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.PixelFormat; import android.graphics.RectF; import android.media.MediaRecorder; import android.os.Build; import android.os.CountDownTimer; import android.os.Environment; import android.os.Handler; import android.os.IBinder; import android.os.Looper; import android.provider.Settings; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager; import android.widget.Toast; import java.io.File; import java.text.SimpleDateFormat; import java.util.Date;
 
 public class RecorderService extends Service {
     private MediaRecorder recorder; private boolean isRecording = false;
@@ -89,7 +89,7 @@ public class RecorderService extends Service {
         ObjectAnimator down = ObjectAnimator.ofFloat(breathView, "animAlpha", 1f, 0.1f); down.setDuration(speed/2);
         breathAnim.playSequentially(up, down);
         breathAnim.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(android.animation.Animator a) { if(isRecording || breathView != null) breathHandler.postDelayed(() -> { if(breathAnim != null) breathAnim.start(); }, delay); }
+            @Override public void onAnimationEnd(android.animation.Animator a) { if(isRecording && breathView != null) breathHandler.postDelayed(() -> { if(breathAnim != null) breathAnim.start(); }, delay); }
         }); breathAnim.start();
     }
 
