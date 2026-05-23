@@ -9,7 +9,6 @@ public class EdgeBarService extends AccessibilityService {
     private BroadcastReceiver stateReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) { playAnim(); } else if("com.manhmoc.edgebar.START_BREATH".equals(i.getAction())) { startGlobalBreath(); } else if("com.manhmoc.edgebar.STOP_BREATH".equals(i.getAction())) { stopGlobalBreath(); } else updateVisibility(); } };
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) { exec(i.getStringExtra("act")); } } };
 
-    // V19.12.2.14: VIEW HƠI THỞ CHẠY NGẦM TỪ BẤT CỨ ĐÂU
     private class BreathView extends View {
         private Paint pDraw, pText; public float animAlpha = 0f; private int shape; 
         private float w, h, thick, dotSize; private String timeStr = "00:00"; private int color;
@@ -124,7 +123,6 @@ public class EdgeBarService extends AccessibilityService {
             if(shapeMode == 1) { sStartY = (type==0||type==1) ? h-pad : pad; sEndY = sStartY; sStartX = pad; sEndX = w-pad; strokePath.moveTo(sStartX, sStartY); strokePath.lineTo(sEndX, sEndY); }
             else if(shapeMode == 2) { sStartX = (type==0||type==2) ? w-pad : pad; sEndX = sStartX; sStartY = pad; sEndY = h-pad; strokePath.moveTo(sStartX, sStartY); strokePath.lineTo(sEndX, sEndY); }
             else { strokePath.moveTo(sStartX, sStartY); strokePath.quadTo(sCtrlX, sCtrlY, sEndX, sEndY); }
-            canvas.drawPath(strokePath, pStroke); 
 
             Path moonPath = new Path();
             float mStartX=0, mStartY=0, mEndX=0, mEndY=0, mCtrlX=0, mCtrlY=0, rootX=0, rootY=0;
@@ -135,7 +133,8 @@ public class EdgeBarService extends AccessibilityService {
 
             float offX = (type==0||type==2) ? w - mw : 0; float offY = (type==0||type==1) ? h - mh : 0;
             moonPath.moveTo(mStartX + offX, mStartY + offY); moonPath.quadTo(mCtrlX + offX, mCtrlY + offY, mEndX + offX, mEndY + offY); moonPath.lineTo(rootX, rootY); moonPath.close();
-            canvas.drawPath(moonPath, pFill); 
+
+            canvas.drawPath(moonPath, pFill); canvas.drawPath(strokePath, pStroke); 
         } 
     }
 
@@ -193,7 +192,8 @@ public class EdgeBarService extends AccessibilityService {
         for(int i=0; i<4; i++) { 
             if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isLocked) { 
                 int moonAlpha = prefs.getInt("lock_corner_moon_alpha", 100); int strokeAlpha = prefs.getInt("lock_corner_stroke_alpha", 200); int hideDelay = prefs.getInt("lock_corner_hide_dur", 2500); 
-                int visMode = prefs.getInt("lock_corner_"+CORNERS[i]+"_vis_mode", 0); boolean isAuto = (visMode == 1); boolean isInv = (visMode == 2);
+                int visMode = prefs.getInt("lock_corner_"+CORNERS[i]+"_vis_mode", 0);
+                boolean isAuto = (visMode == 1); boolean isInv = (visMode == 2);
                 ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv); 
                 
                 int priMode = prefs.getInt("lock_corner_"+CORNERS[i]+"_pri_mode", 0);
