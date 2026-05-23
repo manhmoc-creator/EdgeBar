@@ -41,7 +41,7 @@ public class RecorderService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (isRecording) { stopRecording(); stopSelf(); } 
         else {
-            startForeground(1912, (Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, "EB_REC") : new Notification.Builder(this)).setContentTitle("Edge Bar").setContentText("Chuẩn bị ghi âm...").setSmallIcon(android.R.drawable.ic_btn_speak_now).build());
+            startForeground(1912, (Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, "EB_REC") : new Notification.Builder(this)).setContentTitle("Edge Bar").setContentText("Chuẩn bị ghi âm...").setSmallIcon(android.R.drawable.ic_dialog_info).build());
             new CountDownTimer(3000, 1000) {
                 public void onTick(long millis) { Toast.makeText(RecorderService.this, "🎙 " + (millis / 1000 + 1) + "...", Toast.LENGTH_SHORT).show(); }
                 public void onFinish() { startRecording(); }
