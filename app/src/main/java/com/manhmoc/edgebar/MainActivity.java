@@ -98,7 +98,6 @@ public class MainActivity extends Activity {
         btnNavCond.setOnClickListener(v->switchMainTab(1)); btnNavAdv.setOnClickListener(v->switchMainTab(2)); 
         fabRule.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1));
         
-        // Mở Dialog Gốc như bạn yêu cầu
         fabI.setOnClickListener(v -> { switchEcoTab(0); openNewbieDialog(0); }); 
         fabQ.setOnClickListener(v -> { switchEcoTab(1); openNewbieDialog(1); }); 
         fabM.setOnClickListener(v -> { switchEcoTab(2); openNewbieDialog(2); });
@@ -189,7 +188,6 @@ public class MainActivity extends Activity {
         return card;
     }
 
-    // V19.12.2.11: PHỤC HỒI TOÀN BỘ CÁNH CỬA KHÔNG GIAN HỆ SINH THÁI GỐC
     private void openNewbieDialog(int tabIndex) {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(20, 40, 20, 20);
