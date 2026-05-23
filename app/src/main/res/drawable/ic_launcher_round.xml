@@ -2,12 +2,16 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- Background Đen Nhám -->
-    <path android:fillColor="#1A1A1A" android:pathData="M54,0 C83.823,0 108,24.176 108,54 C108,83.823 83.823,108 54,108 C24.176,108 0,83.823 0,54 C0,24.176 24.176,0 54,0 Z" />
-    <!-- Khung Điện Thoại -->
-    <path android:strokeColor="#555555" android:strokeWidth="4" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M34,24 h40 a10,10 0 0 1 10,10 v40 a10,10 0 0 1 -10,10 h-40 a10,10 0 0 1 -10,-10 v-40 a10,10 0 0 1 10,-10 z" />
-    <!-- Hiệu Ứng Viền Phải (Neon Cyan) -->
-    <path android:strokeColor="#00E5FF" android:strokeWidth="6" android:strokeLineCap="round" android:pathData="M84,34 v40" />
-    <!-- Hiệu Ứng Viền Trái Dưới (Neon Pink) -->
-    <path android:strokeColor="#E91E63" android:strokeWidth="6" android:strokeLineCap="round" android:pathData="M24,54 v20" />
+    
+    <!-- Background Tròn Màu Trắng Tuyệt Đối -->
+    <path android:fillColor="#FFFFFF" android:pathData="M54,0 C83.823,0 108,24.176 108,54 C108,83.823 83.823,108 54,108 C24.176,108 0,83.823 0,54 C0,24.176 24.176,0 54,0 Z" />
+    
+    <!-- Khung Điện Thoại Màu Xanh Dương (Icon Cũ) -->
+    <path android:strokeColor="#03A9F4" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M34,20 h40 a8,8 0 0 1 8,8 v52 a8,8 0 0 1 -8,8 h-40 a8,8 0 0 1 -8,-8 v-52 a8,8 0 0 1 8,-8 z" />
+    
+    <!-- Màn Hình Bên Trong (Hộp Xanh) -->
+    <path android:fillColor="#03A9F4" android:pathData="M38,32 h32 v40 h-32 z" />
+    
+    <!-- Nút Home mờ phía dưới -->
+    <path android:fillColor="#FFFFFF" android:pathData="M50,78 h8 v4 h-8 z" />
 </vector>
