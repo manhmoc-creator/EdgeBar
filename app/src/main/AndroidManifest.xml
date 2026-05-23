@@ -14,7 +14,7 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
-    <application android:requestLegacyExternalStorage="true" android:allowBackup="true" android:icon="@drawable/ic_launcher" android:label="Edge Bar" android:supportsRtl="true" android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+    <application android:requestLegacyExternalStorage="true" android:requestLegacyExternalStorage="true" android:allowBackup="true" android:icon="@drawable/ic_launcher" android:label="Edge Bar" android:supportsRtl="true" android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true"> <intent-filter> <action android:name="android.intent.action.MAIN" /> <category android:name="android.intent.category.LAUNCHER" /> </intent-filter> </activity>
         <activity android:name=".ScannerHelper" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:exported="true" />
         <receiver android:name=".ToggleReceiver" android:exported="true"> <intent-filter> <action android:name="com.manhmoc.edgebar.TOGGLE_LOCK" /> <action android:name="com.manhmoc.edgebar.TOGGLE_HOME" /> </intent-filter> </receiver>

@@ -1,31 +1,43 @@
 package com.manhmoc.edgebar;
-import android.accessibilityservice.AccessibilityService; import android.animation.ValueAnimator; import android.animation.AnimatorListenerAdapter; import android.animation.Animator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.graphics.RectF; import android.graphics.LinearGradient; import android.graphics.Shader; import android.graphics.DashPathEffect; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.Build; import android.os.Handler; import android.os.VibrationEffect; import android.os.Vibrator; import android.provider.MediaStore; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager; import android.view.accessibility.AccessibilityEvent; import android.animation.ObjectAnimator;
+import android.accessibilityservice.AccessibilityService; import android.animation.ValueAnimator; import android.animation.AnimatorListenerAdapter; import android.animation.Animator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.graphics.RectF; import android.graphics.LinearGradient; import android.graphics.Shader; import android.graphics.DashPathEffect; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.Build; import android.os.Handler; import android.os.VibrationEffect; import android.os.Vibrator; import android.os.IBinder; import android.provider.MediaStore; import android.provider.Settings; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager; import android.animation.ObjectAnimator; import android.graphics.Rect; import java.util.Collections;
 
-public class EdgeBarService extends AccessibilityService {
-    private WindowManager wm; private View[] bars = new View[5]; private View[] corners = new View[4]; private FlashView fV; private CameraManager cm; private String cId; private boolean fOn = false, isKbd = false, isBl = false; private KeyguardManager km; private SharedPreferences prefs; private Vibrator vibrator;
+public class EdgeBarService extends android.accessibilityservice.AccessibilityService {
+    public static boolean isRunning = false; 
+    private WindowManager wm; private View[] bars = new View[5]; private View[] corners = new View[4]; private FlashView fV; private CameraManager cm; private String cId; private boolean fOn = false, isKbd = false, isBl = false; private SharedPreferences prefs; private KeyguardManager km; private Vibrator vibrator;
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"}; private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { if(k != null) { updateVisibility(); if(fV != null) fV.updateStyle(); } };
-    private BroadcastReceiver stateReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) { playAnim(); } else if("com.manhmoc.edgebar.START_BREATH".equals(i.getAction())) { startGlobalBreath(); } else if("com.manhmoc.edgebar.STOP_BREATH".equals(i.getAction())) { stopGlobalBreath(); } else updateVisibility(); } };
-    private BroadcastReceiver ipcReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) { exec(i.getStringExtra("act")); } } };
+    private BroadcastReceiver syncReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if(i.getAction().equals("com.manhmoc.edgebar.SYNC_STATE")) { isKbd = i.getBooleanExtra("isKbd", false); isBl = i.getBooleanExtra("isBl", false); updateVisibility(); } else if (i.getAction().equals("com.manhmoc.edgebar.TEST_ANIM")) { updateVisibility(); if(fV != null) fV.updateStyle(); if(globalBv != null) globalBv.updateStyle(); } else if("com.manhmoc.edgebar.START_BREATH".equals(i.getAction())) { startGlobalBreath(); } else if("com.manhmoc.edgebar.STOP_BREATH".equals(i.getAction())) { stopGlobalBreath(); } else if("com.manhmoc.edgebar.TOGGLE_BREATH".equals(i.getAction())) { MicHelper.toggle(c); } } };
 
     private class BreathView extends View {
         private Paint pDraw, pText; public float animAlpha = 0f; private int shape; 
-        private float w, h, thick, dotSize; private String timeStr = "00:00"; private int color;
-        public BreathView(Context c) { super(c); pDraw = new Paint(); pDraw.setAntiAlias(true); pDraw.setStyle(Paint.Style.STROKE); pDraw.setStrokeCap(Paint.Cap.ROUND); pText = new Paint(); pText.setAntiAlias(true); pText.setColor(Color.WHITE); pText.setTextSize(40f); pText.setTextAlign(Paint.Align.CENTER); pText.setShadowLayer(5, 0, 0, Color.BLACK); shape = prefs.getInt("breath_shape", 0); w = prefs.getInt("breath_w", 0); h = prefs.getInt("breath_h", 0); thick = prefs.getInt("breath_thick", 12); dotSize = prefs.getInt("breath_dot_size", 40); pDraw.setStrokeWidth(thick); String cTheme = prefs.getString("anim_color", "WHITE"); color = Color.WHITE; String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; String[] COLOR_VALS = {"#FFFFFF", "#00FFFF", "#FFD700", "#FF4500", "#00BFFF", "#00FF00", "#FF8C00", "#EA4335", "#00E5FF", "#1DE9B6", "#4CAF50", "#FF9800", "#03A9F4", "#8BC34A", "#F06292"}; for(int i=0; i<COLOR_KEYS.length; i++) if(COLOR_KEYS[i].equals(cTheme)) color = Color.parseColor(COLOR_VALS[i]); if(shape == 1) { pDraw.setStyle(Paint.Style.FILL); pDraw.setColor(color); } else { pDraw.setColor(color); } }
-        public void setAnimAlpha(float a) { this.animAlpha = a; invalidate(); } public void setTime(String t) { this.timeStr = t; invalidate(); }
-        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); pDraw.setAlpha((int)(animAlpha * prefs.getInt("breath_alpha", 255))); float cx = getWidth() / 2f; float cy = getHeight() / 2f; if (shape == 1) { canvas.drawCircle(cx, cy, dotSize, pDraw); canvas.drawText(timeStr, cx, cy + dotSize + 60, pText); } else { float drawW = (w > 0) ? w : getWidth(); float drawH = (h > 0) ? h : getHeight(); float off = thick / 2f; float left = (getWidth() - drawW) / 2f + off; float top = (getHeight() - drawH) / 2f + off; canvas.drawRoundRect(new RectF(left, top, left + drawW - 2*off, top + drawH - 2*off), 40, 40, pDraw); canvas.drawText(timeStr, cx, top + drawH + 60, pText); } }
+        private float w, h, thick, dotSize, xOff, yOff; private String timeStr = "00:00"; private int color;
+        private float phaseFraction = 0f; private int aStyle; 
+        public BreathView(Context c) { super(c); pDraw = new Paint(); pDraw.setAntiAlias(true); pDraw.setStyle(Paint.Style.STROKE); pDraw.setStrokeCap(Paint.Cap.ROUND); pText = new Paint(); pText.setAntiAlias(true); pText.setColor(Color.WHITE); pText.setTextSize(40f); pText.setTextAlign(Paint.Align.CENTER); pText.setShadowLayer(5, 0, 0, Color.BLACK); updateStyle(); }
+        public void updateStyle() {
+            shape = prefs.getInt("breath_shape", 0); w = prefs.getInt("breath_w", 0); h = prefs.getInt("breath_h", 0); thick = prefs.getInt("breath_thick", 12); dotSize = prefs.getInt("breath_dot_size", 40); xOff = prefs.getInt("breath_x_off", 0); yOff = prefs.getInt("breath_y_off", 0); pDraw.setStrokeWidth(thick); 
+            String cTheme = prefs.getString("anim_color", "WHITE"); color = Color.WHITE; String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; String[] COLOR_VALS = {"#FFFFFF", "#00FFFF", "#FFD700", "#FF4500", "#00BFFF", "#00FF00", "#FF8C00", "#EA4335", "#00E5FF", "#1DE9B6", "#4CAF50", "#FF9800", "#03A9F4", "#8BC34A", "#F06292"}; for(int i=0; i<COLOR_KEYS.length; i++) if(COLOR_KEYS[i].equals(cTheme)) color = Color.parseColor(COLOR_VALS[i]); if(shape == 1) { pDraw.setStyle(Paint.Style.FILL); pDraw.setColor(color); setOnClickListener(v -> MicHelper.toggle(getContext())); } else { pDraw.setColor(color); setOnClickListener(null); } aStyle = prefs.getInt("anim_style", 0); invalidate();
+        }
+        public void setAnimAlpha(float a) { this.animAlpha = a; invalidate(); } public void setPhase(float p) { this.phaseFraction = p; invalidate(); } public void setTime(String t) { this.timeStr = t; invalidate(); }
+        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); pDraw.setAlpha((int)(animAlpha * prefs.getInt("breath_alpha", 255))); float cx = getWidth() / 2f; float cy = getHeight() / 2f; if (shape == 1) { canvas.drawCircle(cx, cy, dotSize, pDraw); canvas.drawText(timeStr, cx, cy + dotSize + 60, pText); } else { float drawW = (w > 0) ? w : getWidth(); float drawH = (h > 0) ? h : getHeight(); float off = thick / 2f; float left = (getWidth() - drawW) / 2f + off + xOff; float top = (getHeight() - drawH) / 2f + off + yOff; pDraw.setStrokeCap(Paint.Cap.ROUND); if(aStyle > 0) { float perim = 2 * (drawW + drawH); float currentPhase = -perim * phaseFraction; if (aStyle == 1) pDraw.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, currentPhase)); else if (aStyle == 2) pDraw.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, currentPhase)); else if (aStyle == 3) pDraw.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, currentPhase)); } else { pDraw.setPathEffect(null); } canvas.drawRoundRect(new RectF(left, top, left + drawW - 2*off, top + drawH - 2*off), 40, 40, pDraw); canvas.drawText(timeStr, cx, top + drawH + 60, pText); } }
     }
     
-    private BreathView globalBv; private ObjectAnimator globalBreathAnim; private Handler breathHandler = new Handler(); private int breathSeconds = 0;
+    private BreathView globalBv; private ValueAnimator globalBreathAnim; private Handler breathHandler = new Handler(); private int breathSeconds = 0;
     private Runnable breathRunnable = new Runnable() { @Override public void run() { breathSeconds++; if(globalBv != null) globalBv.setTime(String.format("%02d:%02d", breathSeconds / 60, breathSeconds % 60)); breathHandler.postDelayed(this, 1000); } };
     
     private void startGlobalBreath() {
         if(globalBv != null) return; breathSeconds = 0; globalBv = new BreathView(this); globalBv.setTime("00:00");
         int shape = prefs.getInt("breath_shape", 0); int w = prefs.getInt("breath_w", 0); int h = prefs.getInt("breath_h", 0); int dotSize = prefs.getInt("breath_dot_size", 40); int bX = prefs.getInt("breath_dot_x", 0); int bY = prefs.getInt("breath_dot_y", 0);
-        WindowManager.LayoutParams params = new WindowManager.LayoutParams(shape == 1 ? (dotSize*2 + 250) : (w > 0 ? w : -1), shape == 1 ? (dotSize*2 + 150) : (h > 0 ? h + 150 : 250), WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
+        int layoutFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+        if (shape == 0) layoutFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(shape == 1 ? (dotSize*2 + 250) : (w > 0 ? w : -1), shape == 1 ? (dotSize*2 + 150) : (h > 0 ? h + 150 : -1), Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE, layoutFlags, PixelFormat.TRANSLUCENT);
         if (shape == 1) { params.gravity = Gravity.TOP | Gravity.LEFT; params.x = bX; params.y = bY; } else { params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL; }
-        globalBreathAnim = ObjectAnimator.ofFloat(globalBv, "animAlpha", 0.1f, 1f, 0.1f); globalBreathAnim.setDuration(prefs.getInt("breath_delay", 1500)); globalBreathAnim.setRepeatCount(ValueAnimator.INFINITE); globalBreathAnim.start();
+        
+        int animStyle = prefs.getInt("anim_style", 0);
+        if(animStyle == 0 || shape == 1) { globalBreathAnim = ObjectAnimator.ofFloat(globalBv, "animAlpha", 0.1f, 1f, 0.1f); } 
+        else { globalBv.animAlpha = 1f; globalBreathAnim = ValueAnimator.ofFloat(0f, 1f); globalBreathAnim.addUpdateListener(a -> { globalBv.setPhase((float)a.getAnimatedValue()); }); }
+        
+        globalBreathAnim.setDuration(prefs.getInt("breath_delay", 1500)); globalBreathAnim.setRepeatCount(ValueAnimator.INFINITE); globalBreathAnim.start();
         wm.addView(globalBv, params); breathHandler.postDelayed(breathRunnable, 1000);
     }
     private void stopGlobalBreath() { if(globalBreathAnim != null) globalBreathAnim.cancel(); breathHandler.removeCallbacks(breathRunnable); if(globalBv != null) { try { wm.removeView(globalBv); } catch(Exception e){} globalBv = null; } }
@@ -115,10 +127,10 @@ public class EdgeBarService extends AccessibilityService {
             
             Path strokePath = new Path();
             float sStartX=0, sStartY=0, sEndX=0, sEndY=0, sCtrlX=0, sCtrlY=0;
-            if(type==0) { sStartX = w-pad; sStartY = pad; sEndX = pad; sEndY = h-pad; sCtrlX = w-pad - (1f - sRad)*(w*0.7f); sCtrlY = h-pad - (1f - sRad)*(h*0.7f); } // BR
-            else if(type==1) { sStartX = pad; sStartY = pad; sEndX = w-pad; sEndY = h-pad; sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = h-pad - (1f - sRad)*(h*0.7f); } // BL
-            else if(type==2) { sStartX = w-pad; sStartY = h-pad; sEndX = pad; sEndY = pad; sCtrlX = w-pad - (1f - sRad)*(w*0.7f); sCtrlY = pad + (1f - sRad)*(h*0.7f); } // TR
-            else if(type==3) { sStartX = pad; sStartY = h-pad; sEndX = w-pad; sEndY = pad; sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = pad + (1f - sRad)*(h*0.7f); } // TL
+            if(type==0) { sStartX = w-pad; sStartY = pad; sEndX = pad; sEndY = h-pad; sCtrlX = w-pad - (1f - sRad)*(w*0.7f); sCtrlY = h-pad - (1f - sRad)*(h*0.7f); } 
+            else if(type==1) { sStartX = pad; sStartY = pad; sEndX = w-pad; sEndY = h-pad; sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = h-pad - (1f - sRad)*(h*0.7f); } 
+            else if(type==2) { sStartX = w-pad; sStartY = h-pad; sEndX = pad; sEndY = pad; sCtrlX = w-pad - (1f - sRad)*(w*0.7f); sCtrlY = pad + (1f - sRad)*(h*0.7f); } 
+            else if(type==3) { sStartX = pad; sStartY = h-pad; sEndX = w-pad; sEndY = pad; sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = pad + (1f - sRad)*(h*0.7f); } 
             
             if(shapeMode == 1) { sStartY = (type==0||type==1) ? h-pad : pad; sEndY = sStartY; sStartX = pad; sEndX = w-pad; strokePath.moveTo(sStartX, sStartY); strokePath.lineTo(sEndX, sEndY); }
             else if(shapeMode == 2) { sStartX = (type==0||type==2) ? w-pad : pad; sEndX = sStartX; sStartY = pad; sEndY = h-pad; strokePath.moveTo(sStartX, sStartY); strokePath.lineTo(sEndX, sEndY); }
@@ -138,21 +150,52 @@ public class EdgeBarService extends AccessibilityService {
         } 
     }
 
-    @Override protected void onServiceConnected() {
-        super.onServiceConnected(); wm = (WindowManager) getSystemService(WINDOW_SERVICE); km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE); vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE); try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
-        prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.TEST_ANIM"); filter.addAction("com.manhmoc.edgebar.START_BREATH"); filter.addAction("com.manhmoc.edgebar.STOP_BREATH"); registerReceiver(stateReceiver, filter);
-        if(Build.VERSION.SDK_INT >= 33) registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"), Context.RECEIVER_NOT_EXPORTED); else registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"));
-        String cid = "eb_19_acc"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar đang chạy nền", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build(); startForeground(1, n); createFloatingBars();
+    @Override public IBinder onBind(Intent intent) { return null; }
+    @Override public int onStartCommand(Intent intent, int flags, int startId) { isRunning = true; return START_STICKY; }
+
+    @Override public void onCreate() {
+        super.onCreate(); isRunning = true; wm = (WindowManager) getSystemService(WINDOW_SERVICE); km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE); vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE); try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
+        if (!Settings.canDrawOverlays(this)) { stopSelf(); return; }
+        prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.SYNC_STATE"); filter.addAction("com.manhmoc.edgebar.TEST_ANIM"); filter.addAction("com.manhmoc.edgebar.START_BREATH"); filter.addAction("com.manhmoc.edgebar.STOP_BREATH"); filter.addAction("com.manhmoc.edgebar.TOGGLE_BREATH"); registerReceiver(syncReceiver, filter);
+        if(Build.VERSION.SDK_INT >= 33) registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED); else registerReceiver(syncReceiver, filter);
+
+        String cid = "eb_19_home"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar Lớp phủ ADB").setSmallIcon(android.R.drawable.ic_menu_crop).build(); startForeground(2, n);
+        
+        fV = new FlashView(this); fV.setAlpha(0f); fV.setVisibility(View.GONE); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(0, 0, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
+        for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], p); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener("lock_" + BARS[i], null)); }
+        for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], p); } catch(Exception e){} corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_" + CORNERS[i], corners[i])); } updateVisibility();
     }
 
-    @Override public void onAccessibilityEvent(AccessibilityEvent event) { if(event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) { String pName = event.getPackageName() != null ? event.getPackageName().toString() : ""; String cName = event.getClassName() != null ? event.getClassName().toString() : ""; isKbd = pName.contains("inputmethod") || cName.contains("InputWindow") || cName.contains("keyboard") || cName.contains("Keyboard"); String bl = prefs.getString("blacklist", ""); isBl = !pName.isEmpty() && bl.contains(pName); updateVisibility(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); i.putExtra("isKbd", isKbd); i.putExtra("isBl", isBl); sendBroadcast(i); } }
-
-    private void exec(String a) { if (a == null || a.equals("NONE")) return; try { switch(a) { 
-        case "BACK": performGlobalAction(GLOBAL_ACTION_BACK); break; case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break; case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break; case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break; case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break; case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break; case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; 
-        case "VOICE_RECORD": try { Intent ir = new Intent(this, RecorderService.class); if (Build.VERSION.SDK_INT >= 26) startForegroundService(ir); else startService(ir); } catch (Exception e){} break;
-        case "YTDL_DOWNLOAD": try { android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE); if (cb.hasPrimaryClip() && cb.getPrimaryClip().getItemCount() > 0) { CharSequence data = cb.getPrimaryClip().getItemAt(0).getText(); if (data != null && (data.toString().startsWith("http://") || data.toString().startsWith("https://"))) { Intent ytdl = new Intent(Intent.ACTION_SEND); ytdl.setType("text/plain"); ytdl.putExtra(Intent.EXTRA_TEXT, data.toString()); ytdl.setPackage("com.deniscerri.ytdlnis"); ytdl.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(ytdl); } } } catch (Exception e) {} break;
-        default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
-    private void fireIntent(String idx) { try { String act = prefs.getString("intent_"+idx+"_act", ""); String pkg = prefs.getString("intent_"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("intent_"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("intent_"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("intent_"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("intent_"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("intent_"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
+    private void updateVisibility() { 
+        boolean isUnlocked = !km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
+        if(hide && fV != null) fV.setVisibility(View.GONE);
+        for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(en && isUnlocked) { 
+            int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("lock_"+BARS[i]+"_w", 300); int h = prefs.getInt("lock_"+BARS[i]+"_h", 60); int x = prefs.getInt("lock_"+BARS[i]+"_x", 0); int y = prefs.getInt("lock_"+BARS[i]+"_y", 0); 
+            GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); 
+            int priMode = prefs.getInt("lock_"+BARS[i]+"_pri_mode", 0);
+            int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; 
+            if(priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); 
+            WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); 
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && bars[i].getVisibility() == View.VISIBLE && priMode == 0) { Rect rect = new Rect(0, 0, w, h); bars[i].setSystemGestureExclusionRects(Collections.singletonList(rect)); } } } 
+        
+        for(int i=0; i<4; i++) { 
+            if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { 
+                int moonAlpha = prefs.getInt("lock_corner_moon_alpha", 100); int strokeAlpha = prefs.getInt("lock_corner_stroke_alpha", 200); int hideDelay = prefs.getInt("lock_corner_hide_dur", 2500); 
+                int visMode = prefs.getInt("lock_corner_"+CORNERS[i]+"_vis_mode", 0); boolean isAuto = (visMode == 1); boolean isInv = (visMode == 2);
+                ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv); 
+                
+                int priMode = prefs.getInt("lock_corner_"+CORNERS[i]+"_pri_mode", 0);
+                int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; 
+                if(priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); 
+                WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.flags = baseFlags; p.gravity = C_GRAV[i]; 
+                
+                int widthPref = prefs.getInt("lock_corner_"+CORNERS[i]+"_w", 100); int heightPref = prefs.getInt("lock_corner_"+CORNERS[i]+"_h", 100);
+                p.width = Math.max(10, widthPref); p.height = Math.max(10, heightPref);
+                p.x = prefs.getInt("lock_corner_"+CORNERS[i]+"_x", 0); p.y = prefs.getInt("lock_corner_"+CORNERS[i]+"_y", 0); 
+                wm.updateViewLayout(corners[i], p); 
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && corners[i].getVisibility() == View.VISIBLE && priMode == 0) { Rect rect = new Rect(0, 0, p.width, p.height); corners[i].setSystemGestureExclusionRects(Collections.singletonList(rect)); } } 
+        }
+    }
     
     private void playAnim() {
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams(); fp.width = WindowManager.LayoutParams.MATCH_PARENT; fp.height = WindowManager.LayoutParams.MATCH_PARENT; wm.updateViewLayout(fV, fp);
@@ -168,46 +211,13 @@ public class EdgeBarService extends AccessibilityService {
         });
     }
 
-    private void handleAction(String key) { String action = prefs.getString(key, "NONE"); if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_vib", true)) { doVibrate(prefs.getInt("vib_dur", 30)); } if (prefs.getBoolean(key + "_anim", true)) { playAnim(); } exec(action); } }
+    private void handleAction(String key) { String action = prefs.getString(key, "NONE"); if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30)); if (prefs.getBoolean(key + "_anim", true)) playAnim(); try { switch(action) { case "BACK": case "HOME": case "RECENTS": case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", action); sendBroadcast(ipc); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; 
+        case "VOICE_RECORD": sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_BREATH")); break;
+        case "YTDL_DOWNLOAD": try { android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE); if (cb.hasPrimaryClip() && cb.getPrimaryClip().getItemCount() > 0) { CharSequence data = cb.getPrimaryClip().getItemAt(0).getText(); if (data != null && (data.toString().startsWith("http://") || data.toString().startsWith("https://"))) { Intent ytdl = new Intent(Intent.ACTION_SEND); ytdl.setType("text/plain"); ytdl.putExtra(Intent.EXTRA_TEXT, data.toString()); ytdl.setPackage("com.deniscerri.ytdlnis"); ytdl.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(ytdl); } } } catch (Exception e) {} break;
+        default: if(action.startsWith("INTENT_")) fireIntent(action.split("_")[1]); break; } } catch (Exception e) {} } }
     private void doVibrate(int dur) { if(dur<=0) return; try { if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
-
-    private void createFloatingBars() {
-        fV = new FlashView(this); fV.setAlpha(0f); fV.setVisibility(View.GONE); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(0, 0, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
-        for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], p); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener("lock_" + BARS[i], null)); } 
-        for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], p); } catch(Exception e){} corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_" + CORNERS[i], corners[i])); } updateVisibility();
-    }
-
-    private void updateVisibility() { 
-        boolean isLocked = km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
-        if(hide && fV != null) fV.setVisibility(View.GONE);
-        for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE); if(en && isLocked) { 
-            int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("lock_"+BARS[i]+"_w", 300); int h = prefs.getInt("lock_"+BARS[i]+"_h", 60); int x = prefs.getInt("lock_"+BARS[i]+"_x", 0); int y = prefs.getInt("lock_"+BARS[i]+"_y", 0); 
-            GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); 
-            int priMode = prefs.getInt("lock_"+BARS[i]+"_pri_mode", 0);
-            int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; 
-            if(priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); 
-            WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); } 
-        } 
-        
-        for(int i=0; i<4; i++) { 
-            if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isLocked) { 
-                int moonAlpha = prefs.getInt("lock_corner_moon_alpha", 100); int strokeAlpha = prefs.getInt("lock_corner_stroke_alpha", 200); int hideDelay = prefs.getInt("lock_corner_hide_dur", 2500); 
-                int visMode = prefs.getInt("lock_corner_"+CORNERS[i]+"_vis_mode", 0);
-                boolean isAuto = (visMode == 1); boolean isInv = (visMode == 2);
-                ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv); 
-                
-                int priMode = prefs.getInt("lock_corner_"+CORNERS[i]+"_pri_mode", 0);
-                int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; 
-                if(priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); 
-                WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.flags = baseFlags; p.gravity = C_GRAV[i]; 
-                
-                int widthPref = prefs.getInt("lock_corner_"+CORNERS[i]+"_w", 100); int heightPref = prefs.getInt("lock_corner_"+CORNERS[i]+"_h", 100);
-                p.width = Math.max(10, widthPref); p.height = Math.max(10, heightPref);
-                p.x = prefs.getInt("lock_corner_"+CORNERS[i]+"_x", 0); p.y = prefs.getInt("lock_corner_"+CORNERS[i]+"_y", 0); 
-                wm.updateViewLayout(corners[i], p); } 
-        }
-    }
-
+    private void fireIntent(String idx) { try { String act = prefs.getString("intent_"+idx+"_act", ""); String pkg = prefs.getString("intent_"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("intent_"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("intent_"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("intent_"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("intent_"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("intent_"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
+    
     private class SidebarTouchListener implements View.OnTouchListener { 
         private String prefKeyBase; private View myView; private GestureDetector gd; private float sx, sy; private long st;
         public SidebarTouchListener(String keyBase, View v) { this.prefKeyBase = keyBase; this.myView = v; this.gd = new GestureDetector(EdgeBarService.this, new GestureDetector.SimpleOnGestureListener() { @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction(prefKeyBase + "_tap"); return true; } @Override public boolean onDoubleTap(MotionEvent e) { handleAction(prefKeyBase + "_dtap"); return true; } @Override public void onLongPress(MotionEvent e) { handleAction(prefKeyBase + "_long"); } @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { return false; } }); } 
@@ -223,5 +233,6 @@ public class EdgeBarService extends AccessibilityService {
                 } 
             } return true; } 
     }
-    @Override public void onInterrupt() {} @Override public void onDestroy() { super.onDestroy(); try{unregisterReceiver(stateReceiver); unregisterReceiver(ipcReceiver);}catch(Exception e){} prefs.unregisterOnSharedPreferenceChangeListener(prefListener); for(int i=0; i<5; i++) if(bars[i] != null) wm.removeView(bars[i]); for(int i=0; i<4; i++) if(corners[i] != null) wm.removeView(corners[i]); if (fV != null) wm.removeView(fV); }
+    @Override public void onDestroy() { super.onDestroy(); isRunning = false; try{unregisterReceiver(syncReceiver);}catch(Exception e){} prefs.unregisterOnSharedPreferenceChangeListener(prefListener); for(int i=0; i<5; i++) if(bars[i] != null) wm.removeView(bars[i]); for(int i=0; i<4; i++) if(corners[i] != null) wm.removeView(corners[i]); if (fV != null) wm.removeView(fV); }
+    @Override public void onAccessibilityEvent(android.view.accessibility.AccessibilityEvent e) {} @Override public void onInterrupt() {}
 }
