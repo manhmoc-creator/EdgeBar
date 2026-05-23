@@ -22,7 +22,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain, fabEcoContainer; 
     private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim, fabRule, fabI, fabQ, fabM;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; private int currentEcoTab = 0;
-    private final String CURRENT_VERSION = "V19.12.2.11"; private RelativeLayout rootLayout;
+    private final String CURRENT_VERSION = "V19.12.2.12"; private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     private void refreshPreview() { boolean p = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); prefs.edit().putBoolean("preview_lock", p).apply(); }
@@ -291,8 +291,8 @@ public class MainActivity extends Activity {
         Button btnTestRec = new Button(this); btnTestRec.setText("▶ BẮT ĐẦU GHI ÂM"); btnTestRec.setBackground(getRounded("#E91E63", 20f)); btnTestRec.setTextColor(Color.WHITE); btnTestRec.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
         Button btnStopRec = new Button(this); btnStopRec.setText("⏹ DỪNG LẠI"); btnStopRec.setBackground(getRounded("#333333", 20f)); btnStopRec.setTextColor(Color.WHITE); LinearLayout.LayoutParams tbLp2 = new LinearLayout.LayoutParams(0,-2,1f); tbLp2.setMargins(15,0,0,0); btnStopRec.setLayoutParams(tbLp2);
         
-        btnTestRec.setOnClickListener(v -> { try { Intent i = new Intent(this, RecorderService.class); if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i); } catch(Exception e) { Toast.makeText(this, "Lỗi gọi Service", Toast.LENGTH_SHORT).show(); } });
-        btnStopRec.setOnClickListener(v -> { try { Intent i = new Intent(this, RecorderService.class); stopService(i); } catch(Exception e) {} });
+        btnTestRec.setOnClickListener(v -> { try { Intent i = new Intent(this, Class.forName("com.manhmoc.edgebar.RecorderService")); if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i); } catch(Exception e) { Toast.makeText(this, "Lỗi gọi Service", Toast.LENGTH_SHORT).show(); } });
+        btnStopRec.setOnClickListener(v -> { try { Intent i = new Intent(this, Class.forName("com.manhmoc.edgebar.RecorderService")); stopService(i); } catch(Exception e) {} });
         recBtns.addView(btnTestRec); recBtns.addView(btnStopRec); recSys.addView(recBtns);
         pageDesign.addView(wrapCard(recSys));
 
