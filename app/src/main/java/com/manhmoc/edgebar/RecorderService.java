@@ -5,7 +5,6 @@ public class RecorderService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if(isRecording) return START_STICKY;
         try {
-            // V19.12.2.16 FIX: Tạo Foreground Notification để HĐH không kill sau 10s
             String cid = "rec_chan"; NotificationChannel c = new NotificationChannel(cid, "Ghi âm ẩn", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c);
             Notification n = new Notification.Builder(this, cid).setContentTitle("Đang ghi âm bí mật...").setSmallIcon(android.R.drawable.ic_menu_crop).build(); startForeground(3, n);
 

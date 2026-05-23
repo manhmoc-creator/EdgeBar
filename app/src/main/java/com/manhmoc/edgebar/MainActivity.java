@@ -21,7 +21,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim, fabRule, fabI, fabQ, fabM, btnUpdate;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; private int currentEcoTab = 0;
-    private final String CURRENT_VERSION = "V19.12.2.16"; private RelativeLayout rootLayout;
+    private final String CURRENT_VERSION = "V19.12.2.17"; private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     private void refreshPreview() { boolean p = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); prefs.edit().putBoolean("preview_lock", p).apply(); }
@@ -90,7 +90,6 @@ public class MainActivity extends Activity {
         btnNavCond.setOnClickListener(v->switchMainTab(1)); btnNavAdv.setOnClickListener(v->switchMainTab(2)); 
         fabRule.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1));
         
-        // V19.12.2.16 FIX: TÌM Ô TRỐNG TRƯỚC KHI THÊM
         fabI.setOnClickListener(v -> { int slot = getEmptySlot("intent_", 15); if(slot>0) showIntentEditor(slot); else Toast.makeText(this,"Đã đầy 15 Intents!",Toast.LENGTH_SHORT).show(); }); 
         fabQ.setOnClickListener(v -> { int slot = getEmptySlot("tile_", 15); if(slot>0) showQsEditor(slot); else Toast.makeText(this,"Đã đầy 15 Tiles!",Toast.LENGTH_SHORT).show(); }); 
         fabM.setOnClickListener(v -> { int slot = getEmptySlot("macro_", 5); if(slot>0) showMacroEditor(slot); else Toast.makeText(this,"Đã đầy 5 Macros!",Toast.LENGTH_SHORT).show(); });
@@ -249,15 +248,6 @@ public class MainActivity extends Activity {
 
         LinearLayout secSys = new LinearLayout(this); secSys.setOrientation(LinearLayout.VERTICAL); secSys.addView(createSectionTitle(T("SYSTEM BEHAVIOR", "HÀNH VI HỆ THỐNG"))); CheckBox cbKbd = new CheckBox(this); cbKbd.setText(T("Hide on Keyboard", "Tự ẩn khi hiện Bàn Phím")); cbKbd.setTextColor(Color.WHITE); cbKbd.setChecked(prefs.getBoolean("avoid_kbd", true)); cbKbd.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("avoid_kbd", c).apply()); secSys.addView(cbKbd); secSys.addView(createSectionTitle(T("BLACKLIST", "DANH SÁCH ĐEN"))); secSys.addView(createInput("Packages (com.ex.app)", "blacklist")); pageDesign.addView(wrapCard(secSys));
         
-        LinearLayout ytdlSys = new LinearLayout(this); ytdlSys.setOrientation(LinearLayout.VERTICAL); ytdlSys.addView(createSectionTitle(T("YTDLnis INTEGRATION", "KIỂM TRA LIÊN KẾT YTDLnis")));
-        EditText ytdlInput = createInput("Nhập tên bài hát / Link YouTube...", "ytdl_test_input");
-        Button btnYtdl = new Button(this); btnYtdl.setText("🚀 CHUYỂN HƯỚNG TỚI YTDLnis"); btnYtdl.setBackground(getRounded("#FF9800", 20f)); btnYtdl.setTextColor(Color.BLACK); LinearLayout.LayoutParams yLp = new LinearLayout.LayoutParams(-1,-2); yLp.setMargins(0,10,0,0); btnYtdl.setLayoutParams(yLp);
-        btnYtdl.setOnClickListener(v -> {
-            String q = ytdlInput.getText().toString(); if(q.isEmpty()) { Toast.makeText(this, "Chưa nhập thông tin!", Toast.LENGTH_SHORT).show(); return; }
-            try { Intent intent = new Intent(Intent.ACTION_SEND); intent.setType("text/plain"); intent.putExtra(Intent.EXTRA_TEXT, q); intent.setPackage("com.deniscerri.ytdlnis"); intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION); startActivity(intent); } catch(Exception e) { Toast.makeText(this, "Lỗi: YTDLnis chưa cài đặt", Toast.LENGTH_SHORT).show(); }
-        }); 
-        ytdlSys.addView(ytdlInput); ytdlSys.addView(btnYtdl); pageDesign.addView(wrapCard(ytdlSys));
-
         pageDesign.addView(createSectionTitle(T("CORE DESIGN", "THIẾT KẾ CỐT LÕI")));
         LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL); btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0); btnEditLock.setOnClickListener(v -> { designTabState=0; refreshPreview(); btnEditLock.setBackground(getRounded("#00E5FF", 20f)); btnEditLock.setTextColor(Color.BLACK); btnEditHome.setBackground(getRounded("#222222", 20f)); btnEditHome.setTextColor(Color.WHITE); btnEditAnim.setBackground(getRounded("#222222", 20f)); btnEditAnim.setTextColor(Color.WHITE); renderSliders(); }); btnEditHome.setOnClickListener(v -> { designTabState=1; refreshPreview(); btnEditLock.setBackground(getRounded("#222222", 20f)); btnEditLock.setTextColor(Color.WHITE); btnEditHome.setBackground(getRounded("#00E5FF", 20f)); btnEditHome.setTextColor(Color.BLACK); btnEditAnim.setBackground(getRounded("#222222", 20f)); btnEditAnim.setTextColor(Color.WHITE); renderSliders(); }); btnEditAnim.setOnClickListener(v -> { designTabState=2; refreshPreview(); btnEditLock.setBackground(getRounded("#222222", 20f)); btnEditLock.setTextColor(Color.WHITE); btnEditHome.setBackground(getRounded("#222222", 20f)); btnEditHome.setTextColor(Color.WHITE); btnEditAnim.setBackground(getRounded("#00E5FF", 20f)); btnEditAnim.setTextColor(Color.BLACK); renderSliders(); }); toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addView(btnEditAnim); pageDesign.addView(toggleRow); pageDesign.addView(designSliderContainer); btnEditLock.performClick();
     }
