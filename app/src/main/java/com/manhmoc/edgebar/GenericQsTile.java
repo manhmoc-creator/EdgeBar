@@ -1,38 +1,7 @@
-package com.manhmoc.edgebar;
-import android.service.quicksettings.Tile; import android.service.quicksettings.TileService; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.drawable.Icon;
+package com.manhmoc.edgebar; import android.service.quicksettings.Tile; import android.service.quicksettings.TileService; import android.content.Intent; import android.content.SharedPreferences; import android.graphics.drawable.Icon;
 public class GenericQsTile extends TileService {
     private int tileId; public GenericQsTile(int id) { this.tileId = id; }
-    private int getIconForAction(String act) {
-        switch(act) {
-            case "BACK": return android.R.drawable.ic_menu_revert;
-            case "HOME": return android.R.drawable.ic_menu_compass;
-            case "RECENTS": return android.R.drawable.ic_menu_recent_history;
-            case "SCREEN_OFF": return android.R.drawable.ic_lock_power_off;
-            case "VOLUME": return android.R.drawable.ic_media_ff;
-            case "SCREENSHOT": case "CAMERA": return android.R.drawable.ic_menu_camera;
-            case "TOGGLE_ACC": return android.R.drawable.ic_menu_preferences;
-            case "YTDL_DOWNLOAD": return android.R.drawable.stat_sys_download;
-            case "VOICE_RECORD": return android.R.drawable.ic_btn_speak_now;
-            default:
-                if(act.startsWith("INTENT_")) return android.R.drawable.ic_menu_send;
-                if(act.startsWith("MACRO_")) return android.R.drawable.ic_menu_agenda;
-                return android.R.drawable.ic_menu_crop;
-        }
-    }
-    @Override public void onStartListening() { 
-        Tile t = getQsTile(); if(t!=null){ 
-            SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); 
-            String act = prefs.getString("tile_" + tileId + "_act", "NONE"); 
-            t.setState(!act.equals("NONE") ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE); 
-            t.setIcon(Icon.createWithResource(this, getIconForAction(act))); 
-            if(android.os.Build.VERSION.SDK_INT >= 29) { t.setSubtitle(act); }
-            t.updateTile();
-        } 
-    }
-    @Override public void onClick() {
-        SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        String act = prefs.getString("tile_" + tileId + "_act", "NONE");
-        if (!act.equals("NONE")) { Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", act); sendBroadcast(ipc); }
-        sendBroadcast(new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
-    }
+    private int getIconForAction(String act) { switch(act) { case "BACK": return android.R.drawable.ic_menu_revert; case "HOME": return android.R.drawable.ic_menu_compass; case "RECENTS": return android.R.drawable.ic_menu_recent_history; case "SCREEN_OFF": return android.R.drawable.ic_lock_power_off; case "VOLUME": return android.R.drawable.ic_media_ff; case "SCREENSHOT": case "CAMERA": return android.R.drawable.ic_menu_camera; case "TOGGLE_ACC": return android.R.drawable.ic_menu_preferences; case "YTDL_DOWNLOAD": return android.R.drawable.stat_sys_download; case "VOICE_RECORD": return android.R.drawable.ic_btn_speak_now; default: if(act.startsWith("INTENT_")) return android.R.drawable.ic_menu_send; if(act.startsWith("MACRO_")) return android.R.drawable.ic_menu_agenda; return android.R.drawable.ic_menu_crop; } }
+    @Override public void onStartListening() { Tile t = getQsTile(); if(t!=null){ SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); String act = prefs.getString("tile_" + tileId + "_act", "NONE"); t.setState(!act.equals("NONE") ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE); t.setIcon(Icon.createWithResource(this, getIconForAction(act))); if(android.os.Build.VERSION.SDK_INT >= 29) { t.setSubtitle(act); } t.updateTile(); } }
+    @Override public void onClick() { SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); String act = prefs.getString("tile_" + tileId + "_act", "NONE"); if (!act.equals("NONE")) { Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", act); sendBroadcast(ipc); } sendBroadcast(new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)); }
 }
