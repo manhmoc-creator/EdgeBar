@@ -1,5 +1,5 @@
 package com.manhmoc.edgebar;
-import android.animation.ValueAnimator; import android.animation.AnimatorListenerAdapter; import android.animation.Animator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.graphics.LinearGradient; import android.graphics.Shader; import android.graphics.DashPathEffect; import android.graphics.Rect; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.Build; import android.os.Handler; import android.os.VibrationEffect; import android.os.Vibrator; import android.os.IBinder; import android.provider.MediaStore; import android.provider.Settings; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager;
+import android.animation.ValueAnimator; import android.animation.AnimatorListenerAdapter; import android.animation.Animator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.graphics.LinearGradient; import android.graphics.Shader; import android.graphics.DashPathEffect; import android.graphics.Rect; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.Build; import android.os.Handler; import android.os.VibrationEffect; import android.os.Vibrator; import android.os.IBinder; import android.provider.MediaStore; import android.provider.Settings; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager; import android.graphics.RectF;
 import java.util.Collections;
 
 public class HomescreenService extends Service {
@@ -92,7 +92,7 @@ public class HomescreenService extends Service {
             float mw = prefs.getInt("home_corner_"+CORNERS[type]+"_moon_w", 100); 
             float mh = prefs.getInt("home_corner_"+CORNERS[type]+"_moon_h", 100);
             
-            Path moonPath = new Path(); Path strokePath = new Path();
+            Path strokePath = new Path();
             float sStartX=0, sStartY=0, sEndX=0, sEndY=0, sCtrlX=0, sCtrlY=0;
             if(type==0) { sStartX = w-pad; sStartY = pad; sEndX = pad; sEndY = h-pad; sCtrlX = w-pad - (1f - sRad)*(w*0.7f); sCtrlY = h-pad - (1f - sRad)*(h*0.7f); } 
             else if(type==1) { sStartX = pad; sStartY = pad; sEndX = w-pad; sEndY = h-pad; sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = h-pad - (1f - sRad)*(h*0.7f); } 
@@ -103,10 +103,15 @@ public class HomescreenService extends Service {
             else if(shapeMode == 2) { sStartX = (type==0||type==2) ? w-pad : pad; sEndX = sStartX; sStartY = pad; sEndY = h-pad; strokePath.moveTo(sStartX, sStartY); strokePath.lineTo(sEndX, sEndY); }
             else { strokePath.moveTo(sStartX, sStartY); strokePath.quadTo(sCtrlX, sCtrlY, sEndX, sEndY); }
 
-            if(type==0) { moonPath.moveTo(w-pad, pad); moonPath.lineTo(w-mw, pad); moonPath.lineTo(w-pad, mh); moonPath.close(); }
-            else if(type==1) { moonPath.moveTo(pad, pad); moonPath.lineTo(mw, pad); moonPath.lineTo(pad, mh); moonPath.close(); }
-            else if(type==2) { moonPath.moveTo(w-pad, h-pad); moonPath.lineTo(w-mw, h-pad); moonPath.lineTo(w-pad, h-mh); moonPath.close(); }
-            else if(type==3) { moonPath.moveTo(pad, h-pad); moonPath.lineTo(mw, h-pad); moonPath.lineTo(pad, h-mh); moonPath.close(); }
+            Path moonPath = new Path();
+            float mStartX=0, mStartY=0, mEndX=0, mEndY=0, mCtrlX=0, mCtrlY=0, rootX=0, rootY=0;
+            if(type==0) { mStartX = mw; mStartY = 0; mEndX = 0; mEndY = mh; mCtrlX = mw - (1f - mRad)*(mw*0.7f); mCtrlY = mh - (1f - mRad)*(mh*0.7f); rootX = w; rootY = h; } 
+            else if(type==1) { mStartX = 0; mStartY = 0; mEndX = mw; mEndY = mh; mCtrlX = (1f - mRad)*(mw*0.7f); mCtrlY = mh - (1f - mRad)*(mh*0.7f); rootX = 0; rootY = h; } 
+            else if(type==2) { mStartX = mw; mStartY = mh; mEndX = 0; mEndY = 0; mCtrlX = mw - (1f - mRad)*(mw*0.7f); mCtrlY = (1f - mRad)*(mh*0.7f); rootX = w; rootY = 0; } 
+            else if(type==3) { mStartX = 0; mStartY = mh; mEndX = mw; mEndY = 0; mCtrlX = (1f - mRad)*(mw*0.7f); mCtrlY = (1f - mRad)*(mh*0.7f); rootX = 0; rootY = 0; } 
+
+            float offX = (type==0||type==2) ? w - mw : 0; float offY = (type==0||type==1) ? h - mh : 0;
+            moonPath.moveTo(mStartX + offX, mStartY + offY); moonPath.quadTo(mCtrlX + offX, mCtrlY + offY, mEndX + offX, mEndY + offY); moonPath.lineTo(rootX, rootY); moonPath.close();
 
             canvas.drawPath(moonPath, pFill); canvas.drawPath(strokePath, pStroke); 
         } 
@@ -143,8 +148,7 @@ public class HomescreenService extends Service {
         for(int i=0; i<4; i++) { 
             if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("home_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { 
                 int moonAlpha = prefs.getInt("home_corner_moon_alpha", 100); int strokeAlpha = prefs.getInt("home_corner_stroke_alpha", 200); int hideDelay = prefs.getInt("home_corner_hide_dur", 2500); 
-                int visMode = prefs.getInt("home_corner_"+CORNERS[i]+"_vis_mode", 0);
-                boolean isAuto = (visMode == 1); boolean isInv = (visMode == 2);
+                int visMode = prefs.getInt("home_corner_"+CORNERS[i]+"_vis_mode", 0); boolean isAuto = (visMode == 1); boolean isInv = (visMode == 2);
                 ((CornerView)corners[i]).updateProps(prefs.getInt("home_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv); 
                 
                 int priMode = prefs.getInt("home_corner_"+CORNERS[i]+"_pri_mode", 0);
@@ -175,7 +179,8 @@ public class HomescreenService extends Service {
     }
 
     private void handleAction(String key) { String action = prefs.getString(key, "NONE"); if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30)); if (prefs.getBoolean(key + "_anim", true)) playAnim(); try { switch(action) { case "BACK": case "HOME": case "RECENTS": case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", action); sendBroadcast(ipc); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; 
-        case "YTDL_DOWNLOAD": try { android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE); if (cb.hasPrimaryClip() && cb.getPrimaryClip().getItemCount() > 0) { CharSequence data = cb.getPrimaryClip().getItemAt(0).getText(); if (data != null && (data.toString().startsWith("http://") || data.toString().startsWith("https://"))) { Intent ytdl = new Intent(Intent.ACTION_SEND); ytdl.setType("text/plain"); ytdl.putExtra(Intent.EXTRA_TEXT, data.toString()); ytdl.setPackage("com.deniscerri.ytdl"); ytdl.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(ytdl); } } } catch (Exception e) {} break;
+        case "VOICE_RECORD": try { Intent ir = new Intent(this, RecorderService.class); if (Build.VERSION.SDK_INT >= 26) startForegroundService(ir); else startService(ir); } catch (Exception e){} break;
+        case "YTDL_DOWNLOAD": try { android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE); if (cb.hasPrimaryClip() && cb.getPrimaryClip().getItemCount() > 0) { CharSequence data = cb.getPrimaryClip().getItemAt(0).getText(); if (data != null && (data.toString().startsWith("http://") || data.toString().startsWith("https://"))) { Intent ytdl = new Intent(Intent.ACTION_SEND); ytdl.setType("text/plain"); ytdl.putExtra(Intent.EXTRA_TEXT, data.toString()); ytdl.setPackage("com.deniscerri.ytdlnis"); ytdl.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(ytdl); } } } catch (Exception e) {} break;
         default: if(action.startsWith("INTENT_")) fireIntent(action.split("_")[1]); break; } } catch (Exception e) {} } }
     private void doVibrate(int dur) { if(dur<=0) return; try { if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
     private void fireIntent(String idx) { try { String act = prefs.getString("intent_"+idx+"_act", ""); String pkg = prefs.getString("intent_"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("intent_"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("intent_"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("intent_"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("intent_"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("intent_"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }

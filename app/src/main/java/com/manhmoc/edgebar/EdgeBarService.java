@@ -1,13 +1,35 @@
 package com.manhmoc.edgebar;
-import android.accessibilityservice.AccessibilityService; import android.animation.ValueAnimator; import android.animation.AnimatorListenerAdapter; import android.animation.Animator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.graphics.LinearGradient; import android.graphics.Shader; import android.graphics.DashPathEffect; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.Build; import android.os.Handler; import android.os.VibrationEffect; import android.os.Vibrator; import android.provider.MediaStore; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager; import android.view.accessibility.AccessibilityEvent;
+import android.accessibilityservice.AccessibilityService; import android.animation.ValueAnimator; import android.animation.AnimatorListenerAdapter; import android.animation.Animator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.graphics.RectF; import android.graphics.LinearGradient; import android.graphics.Shader; import android.graphics.DashPathEffect; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.Build; import android.os.Handler; import android.os.VibrationEffect; import android.os.Vibrator; import android.provider.MediaStore; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager; import android.view.accessibility.AccessibilityEvent; import android.animation.ObjectAnimator;
 
 public class EdgeBarService extends AccessibilityService {
     private WindowManager wm; private View[] bars = new View[5]; private View[] corners = new View[4]; private FlashView fV; private CameraManager cm; private String cId; private boolean fOn = false, isKbd = false, isBl = false; private KeyguardManager km; private SharedPreferences prefs; private Vibrator vibrator;
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"}; private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { if(k != null) { updateVisibility(); if(fV != null) fV.updateStyle(); } };
-    private BroadcastReceiver stateReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) { playAnim(); } else updateVisibility(); } };
+    private BroadcastReceiver stateReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) { playAnim(); } else if("com.manhmoc.edgebar.START_BREATH".equals(i.getAction())) { startGlobalBreath(); } else if("com.manhmoc.edgebar.STOP_BREATH".equals(i.getAction())) { stopGlobalBreath(); } else updateVisibility(); } };
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) { exec(i.getStringExtra("act")); } } };
+
+    // V19.12.2.14: VIEW HƠI THỞ CHẠY NGẦM TỪ BẤT CỨ ĐÂU
+    private class BreathView extends View {
+        private Paint pDraw, pText; public float animAlpha = 0f; private int shape; 
+        private float w, h, thick, dotSize; private String timeStr = "00:00"; private int color;
+        public BreathView(Context c) { super(c); pDraw = new Paint(); pDraw.setAntiAlias(true); pDraw.setStyle(Paint.Style.STROKE); pDraw.setStrokeCap(Paint.Cap.ROUND); pText = new Paint(); pText.setAntiAlias(true); pText.setColor(Color.WHITE); pText.setTextSize(40f); pText.setTextAlign(Paint.Align.CENTER); pText.setShadowLayer(5, 0, 0, Color.BLACK); shape = prefs.getInt("breath_shape", 0); w = prefs.getInt("breath_w", 0); h = prefs.getInt("breath_h", 0); thick = prefs.getInt("breath_thick", 12); dotSize = prefs.getInt("breath_dot_size", 40); pDraw.setStrokeWidth(thick); String cTheme = prefs.getString("anim_color", "WHITE"); color = Color.WHITE; String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; String[] COLOR_VALS = {"#FFFFFF", "#00FFFF", "#FFD700", "#FF4500", "#00BFFF", "#00FF00", "#FF8C00", "#EA4335", "#00E5FF", "#1DE9B6", "#4CAF50", "#FF9800", "#03A9F4", "#8BC34A", "#F06292"}; for(int i=0; i<COLOR_KEYS.length; i++) if(COLOR_KEYS[i].equals(cTheme)) color = Color.parseColor(COLOR_VALS[i]); if(shape == 1) { pDraw.setStyle(Paint.Style.FILL); pDraw.setColor(color); } else { pDraw.setColor(color); } }
+        public void setAnimAlpha(float a) { this.animAlpha = a; invalidate(); } public void setTime(String t) { this.timeStr = t; invalidate(); }
+        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); pDraw.setAlpha((int)(animAlpha * prefs.getInt("breath_alpha", 255))); float cx = getWidth() / 2f; float cy = getHeight() / 2f; if (shape == 1) { canvas.drawCircle(cx, cy, dotSize, pDraw); canvas.drawText(timeStr, cx, cy + dotSize + 60, pText); } else { float drawW = (w > 0) ? w : getWidth(); float drawH = (h > 0) ? h : getHeight(); float off = thick / 2f; float left = (getWidth() - drawW) / 2f + off; float top = (getHeight() - drawH) / 2f + off; canvas.drawRoundRect(new RectF(left, top, left + drawW - 2*off, top + drawH - 2*off), 40, 40, pDraw); canvas.drawText(timeStr, cx, top + drawH + 60, pText); } }
+    }
+    
+    private BreathView globalBv; private ObjectAnimator globalBreathAnim; private Handler breathHandler = new Handler(); private int breathSeconds = 0;
+    private Runnable breathRunnable = new Runnable() { @Override public void run() { breathSeconds++; if(globalBv != null) globalBv.setTime(String.format("%02d:%02d", breathSeconds / 60, breathSeconds % 60)); breathHandler.postDelayed(this, 1000); } };
+    
+    private void startGlobalBreath() {
+        if(globalBv != null) return; breathSeconds = 0; globalBv = new BreathView(this); globalBv.setTime("00:00");
+        int shape = prefs.getInt("breath_shape", 0); int w = prefs.getInt("breath_w", 0); int h = prefs.getInt("breath_h", 0); int dotSize = prefs.getInt("breath_dot_size", 40); int bX = prefs.getInt("breath_dot_x", 0); int bY = prefs.getInt("breath_dot_y", 0);
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(shape == 1 ? (dotSize*2 + 250) : (w > 0 ? w : -1), shape == 1 ? (dotSize*2 + 150) : (h > 0 ? h + 150 : 250), WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
+        if (shape == 1) { params.gravity = Gravity.TOP | Gravity.LEFT; params.x = bX; params.y = bY; } else { params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL; }
+        globalBreathAnim = ObjectAnimator.ofFloat(globalBv, "animAlpha", 0.1f, 1f, 0.1f); globalBreathAnim.setDuration(prefs.getInt("breath_delay", 1500)); globalBreathAnim.setRepeatCount(ValueAnimator.INFINITE); globalBreathAnim.start();
+        wm.addView(globalBv, params); breathHandler.postDelayed(breathRunnable, 1000);
+    }
+    private void stopGlobalBreath() { if(globalBreathAnim != null) globalBreathAnim.cancel(); breathHandler.removeCallbacks(breathRunnable); if(globalBv != null) { try { wm.removeView(globalBv); } catch(Exception e){} globalBv = null; } }
 
     private class FlashView extends View { 
         private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phaseFraction = 0f;
@@ -88,32 +110,38 @@ public class EdgeBarService extends AccessibilityService {
             float w = getWidth(), h = getHeight(), thick = pStroke.getStrokeWidth(); float pad = thick/2;
             int shapeMode = prefs.getInt("lock_corner_"+CORNERS[type]+"_shape", 0); 
             float sRad = prefs.getInt("lock_corner_"+CORNERS[type]+"_rad", 80) / 1000f; 
+            float mRad = prefs.getInt("lock_corner_"+CORNERS[type]+"_moon_rad", 80) / 1000f; 
             float mw = prefs.getInt("lock_corner_"+CORNERS[type]+"_moon_w", 100); 
             float mh = prefs.getInt("lock_corner_"+CORNERS[type]+"_moon_h", 100);
             
-            Path moonPath = new Path(); Path strokePath = new Path();
+            Path strokePath = new Path();
             float sStartX=0, sStartY=0, sEndX=0, sEndY=0, sCtrlX=0, sCtrlY=0;
-            if(type==0) { sStartX = w-pad; sStartY = pad; sEndX = pad; sEndY = h-pad; sCtrlX = w-pad - (1f - sRad)*(w*0.7f); sCtrlY = h-pad - (1f - sRad)*(h*0.7f); } 
-            else if(type==1) { sStartX = pad; sStartY = pad; sEndX = w-pad; sEndY = h-pad; sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = h-pad - (1f - sRad)*(h*0.7f); } 
-            else if(type==2) { sStartX = w-pad; sStartY = h-pad; sEndX = pad; sEndY = pad; sCtrlX = w-pad - (1f - sRad)*(w*0.7f); sCtrlY = pad + (1f - sRad)*(h*0.7f); } 
-            else if(type==3) { sStartX = pad; sStartY = h-pad; sEndX = w-pad; sEndY = pad; sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = pad + (1f - sRad)*(h*0.7f); } 
+            if(type==0) { sStartX = w-pad; sStartY = pad; sEndX = pad; sEndY = h-pad; sCtrlX = w-pad - (1f - sRad)*(w*0.7f); sCtrlY = h-pad - (1f - sRad)*(h*0.7f); } // BR
+            else if(type==1) { sStartX = pad; sStartY = pad; sEndX = w-pad; sEndY = h-pad; sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = h-pad - (1f - sRad)*(h*0.7f); } // BL
+            else if(type==2) { sStartX = w-pad; sStartY = h-pad; sEndX = pad; sEndY = pad; sCtrlX = w-pad - (1f - sRad)*(w*0.7f); sCtrlY = pad + (1f - sRad)*(h*0.7f); } // TR
+            else if(type==3) { sStartX = pad; sStartY = h-pad; sEndX = w-pad; sEndY = pad; sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = pad + (1f - sRad)*(h*0.7f); } // TL
             
             if(shapeMode == 1) { sStartY = (type==0||type==1) ? h-pad : pad; sEndY = sStartY; sStartX = pad; sEndX = w-pad; strokePath.moveTo(sStartX, sStartY); strokePath.lineTo(sEndX, sEndY); }
             else if(shapeMode == 2) { sStartX = (type==0||type==2) ? w-pad : pad; sEndX = sStartX; sStartY = pad; sEndY = h-pad; strokePath.moveTo(sStartX, sStartY); strokePath.lineTo(sEndX, sEndY); }
             else { strokePath.moveTo(sStartX, sStartY); strokePath.quadTo(sCtrlX, sCtrlY, sEndX, sEndY); }
+            canvas.drawPath(strokePath, pStroke); 
 
-            if(type==0) { moonPath.moveTo(w-pad, pad); moonPath.lineTo(w-mw, pad); moonPath.lineTo(w-pad, mh); moonPath.close(); }
-            else if(type==1) { moonPath.moveTo(pad, pad); moonPath.lineTo(mw, pad); moonPath.lineTo(pad, mh); moonPath.close(); }
-            else if(type==2) { moonPath.moveTo(w-pad, h-pad); moonPath.lineTo(w-mw, h-pad); moonPath.lineTo(w-pad, h-mh); moonPath.close(); }
-            else if(type==3) { moonPath.moveTo(pad, h-pad); moonPath.lineTo(mw, h-pad); moonPath.lineTo(pad, h-mh); moonPath.close(); }
+            Path moonPath = new Path();
+            float mStartX=0, mStartY=0, mEndX=0, mEndY=0, mCtrlX=0, mCtrlY=0, rootX=0, rootY=0;
+            if(type==0) { mStartX = mw; mStartY = 0; mEndX = 0; mEndY = mh; mCtrlX = mw - (1f - mRad)*(mw*0.7f); mCtrlY = mh - (1f - mRad)*(mh*0.7f); rootX = w; rootY = h; } 
+            else if(type==1) { mStartX = 0; mStartY = 0; mEndX = mw; mEndY = mh; mCtrlX = (1f - mRad)*(mw*0.7f); mCtrlY = mh - (1f - mRad)*(mh*0.7f); rootX = 0; rootY = h; } 
+            else if(type==2) { mStartX = mw; mStartY = mh; mEndX = 0; mEndY = 0; mCtrlX = mw - (1f - mRad)*(mw*0.7f); mCtrlY = (1f - mRad)*(mh*0.7f); rootX = w; rootY = 0; } 
+            else if(type==3) { mStartX = 0; mStartY = mh; mEndX = mw; mEndY = 0; mCtrlX = (1f - mRad)*(mw*0.7f); mCtrlY = (1f - mRad)*(mh*0.7f); rootX = 0; rootY = 0; } 
 
-            canvas.drawPath(moonPath, pFill); canvas.drawPath(strokePath, pStroke); 
+            float offX = (type==0||type==2) ? w - mw : 0; float offY = (type==0||type==1) ? h - mh : 0;
+            moonPath.moveTo(mStartX + offX, mStartY + offY); moonPath.quadTo(mCtrlX + offX, mCtrlY + offY, mEndX + offX, mEndY + offY); moonPath.lineTo(rootX, rootY); moonPath.close();
+            canvas.drawPath(moonPath, pFill); 
         } 
     }
 
     @Override protected void onServiceConnected() {
         super.onServiceConnected(); wm = (WindowManager) getSystemService(WINDOW_SERVICE); km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE); vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE); try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
-        prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.TEST_ANIM"); registerReceiver(stateReceiver, filter);
+        prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.TEST_ANIM"); filter.addAction("com.manhmoc.edgebar.START_BREATH"); filter.addAction("com.manhmoc.edgebar.STOP_BREATH"); registerReceiver(stateReceiver, filter);
         if(Build.VERSION.SDK_INT >= 33) registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"), Context.RECEIVER_NOT_EXPORTED); else registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"));
         String cid = "eb_19_acc"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar đang chạy nền", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build(); startForeground(1, n); createFloatingBars();
     }
@@ -122,7 +150,8 @@ public class EdgeBarService extends AccessibilityService {
 
     private void exec(String a) { if (a == null || a.equals("NONE")) return; try { switch(a) { 
         case "BACK": performGlobalAction(GLOBAL_ACTION_BACK); break; case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break; case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break; case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break; case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break; case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break; case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; 
-        case "YTDL_DOWNLOAD": try { android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE); if (cb.hasPrimaryClip() && cb.getPrimaryClip().getItemCount() > 0) { CharSequence data = cb.getPrimaryClip().getItemAt(0).getText(); if (data != null && (data.toString().startsWith("http://") || data.toString().startsWith("https://"))) { Intent ytdl = new Intent(Intent.ACTION_SEND); ytdl.setType("text/plain"); ytdl.putExtra(Intent.EXTRA_TEXT, data.toString()); ytdl.setPackage("com.deniscerri.ytdl"); ytdl.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(ytdl); } } } catch (Exception e) {} break;
+        case "VOICE_RECORD": try { Intent ir = new Intent(this, RecorderService.class); if (Build.VERSION.SDK_INT >= 26) startForegroundService(ir); else startService(ir); } catch (Exception e){} break;
+        case "YTDL_DOWNLOAD": try { android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE); if (cb.hasPrimaryClip() && cb.getPrimaryClip().getItemCount() > 0) { CharSequence data = cb.getPrimaryClip().getItemAt(0).getText(); if (data != null && (data.toString().startsWith("http://") || data.toString().startsWith("https://"))) { Intent ytdl = new Intent(Intent.ACTION_SEND); ytdl.setType("text/plain"); ytdl.putExtra(Intent.EXTRA_TEXT, data.toString()); ytdl.setPackage("com.deniscerri.ytdlnis"); ytdl.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(ytdl); } } } catch (Exception e) {} break;
         default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
     private void fireIntent(String idx) { try { String act = prefs.getString("intent_"+idx+"_act", ""); String pkg = prefs.getString("intent_"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("intent_"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("intent_"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("intent_"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("intent_"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("intent_"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     
@@ -164,8 +193,7 @@ public class EdgeBarService extends AccessibilityService {
         for(int i=0; i<4; i++) { 
             if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isLocked) { 
                 int moonAlpha = prefs.getInt("lock_corner_moon_alpha", 100); int strokeAlpha = prefs.getInt("lock_corner_stroke_alpha", 200); int hideDelay = prefs.getInt("lock_corner_hide_dur", 2500); 
-                int visMode = prefs.getInt("lock_corner_"+CORNERS[i]+"_vis_mode", 0);
-                boolean isAuto = (visMode == 1); boolean isInv = (visMode == 2);
+                int visMode = prefs.getInt("lock_corner_"+CORNERS[i]+"_vis_mode", 0); boolean isAuto = (visMode == 1); boolean isInv = (visMode == 2);
                 ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv); 
                 
                 int priMode = prefs.getInt("lock_corner_"+CORNERS[i]+"_pri_mode", 0);
