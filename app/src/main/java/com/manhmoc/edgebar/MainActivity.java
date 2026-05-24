@@ -21,8 +21,11 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, listEcosystem, designSliderContainer, navMain, morseTriggerContainer, listMorseTriggers; 
     private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim, btnEditMorse, fabRule, fabI, fabQ, fabM, btnUpdate, fabMorse;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; private boolean isMorseTriggerSpaceOpen = false;
-    private final String CURRENT_VERSION = "V19.12.3.3.2"; private RelativeLayout rootLayout;
+    private final String CURRENT_VERSION = "V19.12.3.3.3"; private RelativeLayout rootLayout;
+    
     private View morseOverlayView;
+    private View[] morsePreviewBars = new View[5];
+    private View[] morsePreviewCorners = new View[4];
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     
@@ -31,7 +34,6 @@ public class MainActivity extends Activity {
         boolean pMorse = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==3);
         prefs.edit().putBoolean("preview_lock", pLock).putBoolean("preview_morse", pMorse).apply(); 
         
-        // Quản lý hiển thị nút FAB
         if (fabRule != null) fabRule.setVisibility(currentMainTab == 1 && (pageDesign == null || pageDesign.getVisibility() == View.GONE) ? View.VISIBLE : View.GONE);
         if (fabMorse != null) fabMorse.setVisibility((designTabState == 3 && isMorseTriggerSpaceOpen) ? View.VISIBLE : View.GONE);
     }
@@ -126,9 +128,7 @@ public class MainActivity extends Activity {
         Button btnPremium = new Button(this); btnPremium.setText("PRO"); btnPremium.setTextColor(Color.BLACK); btnPremium.setBackground(getRounded("#FFD700", 100f)); btnPremium.setOnClickListener(v -> showPremiumDialog()); LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-2, -1); pLp.setMargins(10,0,10,0); btnPremium.setLayoutParams(pLp); btnPremium.setPadding(30,0,30,0);
         View spacer = new View(this); spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
 
-        // FAB Gốc
         fabRule = new Button(this); fabRule.setText("+ NEW EB"); fabRule.setTextColor(Color.BLACK); fabRule.setBackground(getRounded("#00E5FF", 100f)); LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, -1); fLp.setMargins(10,0,10,0); fabRule.setLayoutParams(fLp); fabRule.setPadding(40,0,40,0); 
-        // FAB Morse Mới (ẩn mặc định, kích thước giống hệt fabRule)
         fabMorse = new Button(this); fabMorse.setText("+ NEW MORSE"); fabMorse.setTextColor(Color.BLACK); fabMorse.setBackground(getRounded("#E91E63", 100f)); fabMorse.setLayoutParams(fLp); fabMorse.setPadding(40,0,40,0); fabMorse.setVisibility(View.GONE);
         
         fabI = createCircleBtn("I", "#E53935", "#FFFFFF"); fabI.setVisibility(View.GONE);
@@ -136,7 +136,7 @@ public class MainActivity extends Activity {
         fabM = createCircleBtn("M", "#1E88E5", "#FFFFFF"); fabM.setVisibility(View.GONE);
         Button btnDesign = createCircleBtn("⚙️", "#333333", "#FFFFFF"); btnDesign.setTag("btnDesign"); btnDesign.setOnClickListener(v -> { if(pageDesign.getVisibility() == View.VISIBLE) { if(isMorseTriggerSpaceOpen) closeMorseTriggerSpace(); else { closeDesignSpace(); btnDesign.setText("⚙️"); btnDesign.setTextColor(Color.WHITE); } } else { openDesignSpace(); btnDesign.setText("<"); btnDesign.setTextColor(Color.parseColor("#BBBBBB")); } });
         bottomBar.addView(btnUpdate); bottomBar.addView(btnPremium); bottomBar.addView(spacer); 
-        bottomBar.addView(fabRule); bottomBar.addView(fabMorse); // Cùng vị trí, sẽ toggle visibility
+        bottomBar.addView(fabRule); bottomBar.addView(fabMorse);
         bottomBar.addView(fabI); bottomBar.addView(fabQ); bottomBar.addView(fabM); bottomBar.addView(btnDesign); rootLayout.addView(bottomBar);
 
         btnNavCond.setOnClickListener(v->switchMainTab(1)); btnNavAdv.setOnClickListener(v->switchMainTab(2)); 
@@ -281,7 +281,6 @@ public class MainActivity extends Activity {
         footer.addView(btnC); footer.addView(btnS); root.addView(footer); d.setContentView(root); d.show();
     }
 
-    // --- CẤU HÌNH GÓI TRIGGER MORSE ---
     private void showMorseTriggerEditor(int defaultSlot) {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar); LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,40,40,40); root.addView(createSectionTitle("📦 CẤU HÌNH MORSE TRIGGER PACK " + defaultSlot));
         EditText eName = createInput("Tên gói (VD: Khóa Zalo)", ""); EditText eTriggers = createInput("Chuỗi hành động (VD: r_tap, l_up)", "");
@@ -339,7 +338,6 @@ public class MainActivity extends Activity {
         btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
         btnEditMorse = new Button(this); btnEditMorse.setText("MORSE"); LinearLayout.LayoutParams mP2 = new LinearLayout.LayoutParams(0, -2, 1f); mP2.setMargins(10,0,0,0); btnEditMorse.setLayoutParams(mP2); 
         
-        // VÙNG HIỂN THỊ MORSE TRIGGER PACK (MẶC ĐỊNH ẨN)
         morseTriggerContainer = new LinearLayout(this); morseTriggerContainer.setOrientation(LinearLayout.VERTICAL); morseTriggerContainer.setVisibility(View.GONE);
         morseTriggerContainer.addView(createSectionTitle("🚀 DANH SÁCH MORSE TRIGGER PACK"));
         listMorseTriggers = new LinearLayout(this); listMorseTriggers.setOrientation(LinearLayout.VERTICAL); morseTriggerContainer.addView(listMorseTriggers);
@@ -374,8 +372,8 @@ public class MainActivity extends Activity {
             
             // --- DRAWERS BREATH RECORDER ---
             LinearLayout recSys = new LinearLayout(this); recSys.setOrientation(LinearLayout.VERTICAL); recSys.setPadding(10,10,10,10);
-            Button btnTestBreath = new Button(this); btnTestBreath.setText("▶ THỬ ANIMATION HƠI THỞ"); btnTestBreath.setBackground(getRounded("#E91E63", 20f)); btnTestBreath.setTextColor(Color.WHITE); btnTestBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp2 = new LinearLayout.LayoutParams(-1,-2); testLp2.setMargins(0,0,0,20); btnTestBreath.setLayoutParams(testLp2); btnTestBreath.setOnClickListener(v -> sendBroadcast(new Intent("com.manhmoc.edgebar.START_BREATH"))); recSys.addView(btnTestBreath);
-            Button btnStopBreath = new Button(this); btnStopBreath.setText("⏹ DỪNG THỬ"); btnStopBreath.setBackground(getRounded("#333333", 20f)); btnStopBreath.setTextColor(Color.WHITE); btnStopBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams stopLp = new LinearLayout.LayoutParams(-1,-2); stopLp.setMargins(0,0,0,20); btnStopBreath.setLayoutParams(stopLp); btnStopBreath.setOnClickListener(v -> sendBroadcast(new Intent("com.manhmoc.edgebar.STOP_BREATH"))); recSys.addView(btnStopBreath);
+            Button btnTestBreath = new Button(this); btnTestBreath.setText("▶ THỬ ANIMATION HƠI THỞ"); btnTestBreath.setBackground(getRounded("#E91E63", 20f)); btnTestBreath.setTextColor(Color.WHITE); btnTestBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp2 = new LinearLayout.LayoutParams(-1,-2); testLp2.setMargins(0,0,0,20); btnTestBreath.setLayoutParams(testLp2); btnTestBreath.setOnClickListener(v -> sendBroadcast(new Intent("com.manhmoc.edgebar.START_BREATH").setPackage(getPackageName()))); recSys.addView(btnTestBreath);
+            Button btnStopBreath = new Button(this); btnStopBreath.setText("⏹ DỪNG THỬ"); btnStopBreath.setBackground(getRounded("#333333", 20f)); btnStopBreath.setTextColor(Color.WHITE); btnStopBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams stopLp = new LinearLayout.LayoutParams(-1,-2); stopLp.setMargins(0,0,0,20); btnStopBreath.setLayoutParams(stopLp); btnStopBreath.setOnClickListener(v -> sendBroadcast(new Intent("com.manhmoc.edgebar.STOP_BREATH").setPackage(getPackageName()))); recSys.addView(btnStopBreath);
             
             recSys.addView(createComboDropdown("Cơ chế Ghi âm", "record_engine", new String[]{"Tự động (Lock: Trợ năng / Home: Lớp phủ)", "Luôn dùng Lớp Phủ (Cần ADB)", "Luôn dùng Trợ Năng"}, 0));
             CheckBox cbCover = new CheckBox(this); cbCover.setText("Phủ lên cả Thanh trạng thái (Status bar)"); cbCover.setTextColor(Color.WHITE); cbCover.setPadding(0,10,0,20); cbCover.setChecked(prefs.getBoolean("breath_cover_status", true)); cbCover.setOnCheckedChangeListener((v,c)->prefs.edit().putBoolean("breath_cover_status", c).apply()); recSys.addView(cbCover);
@@ -394,7 +392,6 @@ public class MainActivity extends Activity {
         } else if (designTabState == 0 || designTabState == 1 || designTabState == 3) { 
             String prefix = designTabState == 1 ? "home_" : (designTabState == 3 ? "morse_" : "lock_"); 
             
-            // UI MORSE: Thêm nút truy cập Trigger Pack
             if (designTabState == 3) {
                 LinearLayout overlayBox = new LinearLayout(this); overlayBox.setOrientation(LinearLayout.VERTICAL); overlayBox.setPadding(30,10,30,30);
                 overlayBox.addView(createSlider("Độ mờ vùng Lớp Phủ Khoá (Alpha)", "morse_overlay_alpha", 255, 180));
@@ -419,7 +416,6 @@ public class MainActivity extends Activity {
                 btnTestOverlay.setOnClickListener(v -> toggleMorseOverlayPreview());
                 overlayBox.addView(btnTestOverlay);
                 
-                // NÚT MỞ KHÔNG GIAN TRIGGER PACK
                 Button btnTriggerPack = new Button(this); btnTriggerPack.setText("📦 QUẢN LÝ TRIGGER PACK"); btnTriggerPack.setBackground(getRounded("#E91E63", 20f)); btnTriggerPack.setTextColor(Color.WHITE);
                 btnTriggerPack.setLayoutParams(bp1); btnTriggerPack.setOnClickListener(v -> openMorseTriggerSpace());
                 overlayBox.addView(btnTriggerPack);
@@ -428,14 +424,13 @@ public class MainActivity extends Activity {
             }
 
             designSliderContainer.addView(createSectionTitle("5 EDGE BARS"));
-            for(int i=0; i< 5; i++) { LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); CheckBox cb = new CheckBox(this); cb.setText("BẬT: " + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_en", c).apply()); drawerContent.addView(cb); drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+BARS[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0)); drawerContent.addView(createSlider("Độ trong suốt", prefix+BARS[i]+"_alpha", 255, 50)); drawerContent.addView(createSlider("Chiều ngang", prefix+BARS[i]+"_w", 3000, 300)); drawerContent.addView(createSlider("Chiều dọc", prefix+BARS[i]+"_h", 3000, 60)); drawerContent.addView(createSignedSlider("Toạ độ X", prefix+BARS[i]+"_x", -1500, 1500, 0)); drawerContent.addView(createSignedSlider("Toạ độ Y", prefix+BARS[i]+"_y", -1500, 1500, 0)); designSliderContainer.addView(createDrawer(BAR_NAMES[i], drawerContent)); } 
+            for(int i=0; i< 5; i++) { LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); CheckBox cb = new CheckBox(this); cb.setText("BẬT: " + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(prefix+BARS[idx]+"_en", c).apply(); if(designTabState == 3) updateMorsePreviewUI(); }); drawerContent.addView(cb); drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+BARS[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0)); drawerContent.addView(createSlider("Độ trong suốt", prefix+BARS[i]+"_alpha", 255, 50)); drawerContent.addView(createSlider("Chiều ngang", prefix+BARS[i]+"_w", 3000, 300)); drawerContent.addView(createSlider("Chiều dọc", prefix+BARS[i]+"_h", 3000, 60)); drawerContent.addView(createSignedSlider("Toạ độ X", prefix+BARS[i]+"_x", -1500, 1500, 0)); drawerContent.addView(createSignedSlider("Toạ độ Y", prefix+BARS[i]+"_y", -1500, 1500, 0)); designSliderContainer.addView(createDrawer(BAR_NAMES[i], drawerContent)); } 
             designSliderContainer.addView(createSectionTitle("4 FRAME CORNERS"));
             for(int i=0; i<4; i++) { LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); drawerContent.addView(createComboDropdown("Hiển thị", prefix+"corner_"+CORNERS[i]+"_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình (Nháy sáng)", "Ẩn hoàn toàn (Vô hình)"}, 0)); drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+"corner_"+CORNERS[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0)); drawerContent.addView(createComboDropdown("Hình dáng Góc", prefix+"corner_"+CORNERS[i]+"_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0)); drawerContent.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix+"corner_"+CORNERS[i]+"_w", 2500, 100)); drawerContent.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix+"corner_"+CORNERS[i]+"_h", 2500, 100)); drawerContent.addView(createSignedSlider("Di chuyển Ngang (X)", prefix+"corner_"+CORNERS[i]+"_x", -1500, 1500, 0)); drawerContent.addView(createSignedSlider("Di chuyển Dọc (Y)", prefix+"corner_"+CORNERS[i]+"_y", -1500, 1500, 0)); drawerContent.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix+"corner_"+CORNERS[i]+"_moon_w", 2500, 100)); drawerContent.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix+"corner_"+CORNERS[i]+"_moon_h", 2500, 100)); drawerContent.addView(createSlider("Di chuyển Trăng Non Ngang (X) (1250=Giữa)", prefix+"corner_"+CORNERS[i]+"_moon_x", 2500, 1250)); drawerContent.addView(createSlider("Di chuyển Trăng Non Dọc (Y) (1250=Giữa)", prefix+"corner_"+CORNERS[i]+"_moon_y", 2500, 1250)); drawerContent.addView(createSlider("Độ cong BO VIỀN (Vỏ) (1000=Thẳng)", prefix+"corner_"+CORNERS[i]+"_rad", 1000, 80)); drawerContent.addView(createSlider("Độ cong TRĂNG NON (Lõi) (1000=Thẳng)", prefix+"corner_"+CORNERS[i]+"_moon_rad", 1000, 80)); designSliderContainer.addView(createDrawer(CORNER_NAMES[i], drawerContent)); }
             LinearLayout globalDrawer = new LinearLayout(this); globalDrawer.setOrientation(LinearLayout.VERTICAL); globalDrawer.setPadding(30,10,30,30); globalDrawer.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500)); globalDrawer.addView(createSlider("Độ mờ vùng TRĂNG NON (Đậm/Nhạt)", prefix+"corner_moon_alpha", 255, 100)); globalDrawer.addView(createSlider("Độ mờ VIỀN GÓC (Đậm/Nhạt)", prefix+"corner_stroke_alpha", 255, 200)); globalDrawer.addView(createSlider("Độ đậm viền (Dày/Mỏng)", prefix+"corner_thick", 50, 8)); designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", globalDrawer));
         } 
     }
 
-    // --- CẬP NHẬT: THUẬT TOÁN QUÉT APP XUYÊN THẤU VÀO ISLAND/WORK PROFILE BẰNG LAUNCHER APPS ---
     private void showAppSelectorDialog(TextView tvCountToUpdate) {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,40,40,40);
@@ -452,7 +447,6 @@ public class MainActivity extends Activity {
         ArrayList<CheckBox> checkBoxes = new ArrayList<>();
         ArrayList<String> packages = new ArrayList<>();
         
-        // Quét xuyên tất cả profile
         class AppItem implements Comparable<AppItem> { String pkg; String name; AppItem(String p, String n){ pkg=p; name=n; } public int compareTo(AppItem o) { return name.compareToIgnoreCase(o.name); } }
         ArrayList<AppItem> appList = new ArrayList<>();
         
@@ -490,6 +484,7 @@ public class MainActivity extends Activity {
         footer.addView(btnC); footer.addView(btnS); root.addView(footer); d.setContentView(root); d.show();
     }
 
+    // TÍCH HỢP MORSE MOCKUP ENGINE (BẢN NHÁP TRỰC QUAN TRÊN MÀN HÌNH)
     private void toggleMorseOverlayPreview() {
         android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
         if (morseOverlayView != null) { 
@@ -498,10 +493,11 @@ public class MainActivity extends Activity {
         }
         if (!Settings.canDrawOverlays(this)) { Toast.makeText(this,"Cần cấp quyền Lớp phủ trước!", Toast.LENGTH_SHORT).show(); return; }
         
-        morseOverlayView = new View(this);
-        int alpha = prefs.getInt("morse_overlay_alpha", 180);
-        morseOverlayView.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
+        RelativeLayout root = new RelativeLayout(this);
+        for(int i=0; i<5; i++) { morsePreviewBars[i] = new View(this); morsePreviewBars[i].setBackgroundColor(Color.parseColor("#4CAF50")); root.addView(morsePreviewBars[i]); }
+        for(int i=0; i<4; i++) { morsePreviewCorners[i] = new View(this); morsePreviewCorners[i].setBackgroundColor(Color.parseColor("#E91E63")); root.addView(morsePreviewCorners[i]); }
         
+        morseOverlayView = root;
         int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
         android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
             android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT,
@@ -509,7 +505,45 @@ public class MainActivity extends Activity {
             flags, android.graphics.PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.CENTER;
-        try { wm.addView(morseOverlayView, params); Toast.makeText(this, "Đã BẬT. Bấm lại nút Thử Lớp Phủ để tắt.", Toast.LENGTH_LONG).show(); } catch (Exception e) {}
+        try { wm.addView(morseOverlayView, params); updateMorsePreviewUI(); Toast.makeText(this, "Đã BẬT Mockup! Kéo thanh Slider để xem thay đổi.", Toast.LENGTH_LONG).show(); } catch (Exception e) {}
+    }
+
+    // HÀM XỬ LÝ MOCKUP MORSE CHẠY REALTIME
+    private void updateMorsePreviewUI() {
+        if(morseOverlayView == null) return;
+        morseOverlayView.setBackgroundColor(Color.argb(prefs.getInt("morse_overlay_alpha", 180), 0,0,0));
+        for(int i=0; i<5; i++) {
+            if(morsePreviewBars[i] == null) continue;
+            if(!prefs.getBoolean("morse_"+BARS[i]+"_en", i<2)) { morsePreviewBars[i].setVisibility(View.GONE); continue; }
+            morsePreviewBars[i].setVisibility(View.VISIBLE);
+            int w = prefs.getInt("morse_"+BARS[i]+"_w", 300); int h = prefs.getInt("morse_"+BARS[i]+"_h", 60);
+            RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(w, h);
+            if(BARS[i].equals("r")) { lp.addRule(RelativeLayout.ALIGN_PARENT_RIGHT); lp.addRule(RelativeLayout.CENTER_VERTICAL); }
+            else if(BARS[i].equals("l")) { lp.addRule(RelativeLayout.ALIGN_PARENT_LEFT); lp.addRule(RelativeLayout.CENTER_VERTICAL); }
+            else if(BARS[i].equals("t_r")) { lp.addRule(RelativeLayout.ALIGN_PARENT_RIGHT); lp.addRule(RelativeLayout.ALIGN_PARENT_TOP); }
+            else if(BARS[i].equals("t_l")) { lp.addRule(RelativeLayout.ALIGN_PARENT_LEFT); lp.addRule(RelativeLayout.ALIGN_PARENT_TOP); }
+            else if(BARS[i].equals("t_c")) { lp.addRule(RelativeLayout.CENTER_HORIZONTAL); lp.addRule(RelativeLayout.ALIGN_PARENT_TOP); }
+            morsePreviewBars[i].setLayoutParams(lp);
+            morsePreviewBars[i].setTranslationX(prefs.getInt("morse_"+BARS[i]+"_x", 0));
+            morsePreviewBars[i].setTranslationY(prefs.getInt("morse_"+BARS[i]+"_y", 0));
+            morsePreviewBars[i].setAlpha(prefs.getInt("morse_"+BARS[i]+"_alpha", 50) / 255f);
+        }
+        for(int i=0; i<4; i++) {
+            if(morsePreviewCorners[i] == null) continue;
+            int vis = prefs.getInt("morse_corner_"+CORNERS[i]+"_vis_mode", 0);
+            if(vis == 2) { morsePreviewCorners[i].setVisibility(View.GONE); continue; }
+            morsePreviewCorners[i].setVisibility(View.VISIBLE);
+            int w = prefs.getInt("morse_corner_"+CORNERS[i]+"_w", 100); int h = prefs.getInt("morse_corner_"+CORNERS[i]+"_h", 100);
+            RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(w, h);
+            if(CORNERS[i].equals("br")) { lp.addRule(RelativeLayout.ALIGN_PARENT_RIGHT); lp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); }
+            else if(CORNERS[i].equals("bl")) { lp.addRule(RelativeLayout.ALIGN_PARENT_LEFT); lp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); }
+            else if(CORNERS[i].equals("tr")) { lp.addRule(RelativeLayout.ALIGN_PARENT_RIGHT); lp.addRule(RelativeLayout.ALIGN_PARENT_TOP); }
+            else if(CORNERS[i].equals("tl")) { lp.addRule(RelativeLayout.ALIGN_PARENT_LEFT); lp.addRule(RelativeLayout.ALIGN_PARENT_TOP); }
+            morsePreviewCorners[i].setLayoutParams(lp);
+            morsePreviewCorners[i].setTranslationX(prefs.getInt("morse_corner_"+CORNERS[i]+"_x", 0));
+            morsePreviewCorners[i].setTranslationY(prefs.getInt("morse_corner_"+CORNERS[i]+"_y", 0));
+            morsePreviewCorners[i].setAlpha(prefs.getInt("morse_corner_stroke_alpha", 200) / 255f);
+        }
     }
 
     private void showPremiumDialog() { 
@@ -541,7 +575,7 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout createDrawer(String title, View content) { LinearLayout container = new LinearLayout(this); container.setOrientation(LinearLayout.VERTICAL); container.setBackground(getRounded("#222222", 20f)); LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1,-2); clp.setMargins(0,0,0,20); container.setLayoutParams(clp); TextView header = new TextView(this); header.setText(title); header.setTextColor(Color.parseColor("#00E5FF")); header.setPadding(30,30,30,30); header.setTextSize(16); content.setVisibility(View.GONE); header.setOnClickListener(v -> { boolean isClosed = content.getVisibility() == View.GONE; content.setVisibility(isClosed ? View.VISIBLE : View.GONE); header.setBackground(getRounded(isClosed ? "#333333" : "#222222", 20f)); }); container.addView(header); container.addView(content); return container; }
-    private LinearLayout createComboDropdown(String title, String key, String[] items, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL); l.setGravity(Gravity.CENTER_VERTICAL); l.setPadding(0,10,0,20); TextView tv = new TextView(this); tv.setText(title); tv.setTextColor(Color.parseColor("#E91E63")); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sp = createSpinner(); sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items)); sp.setSelection(prefs.getInt(key, def)); sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt(key,pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sp.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.2f)); l.addView(tv); l.addView(sp); return l; }
+    private LinearLayout createComboDropdown(String title, String key, String[] items, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL); l.setGravity(Gravity.CENTER_VERTICAL); l.setPadding(0,10,0,20); TextView tv = new TextView(this); tv.setText(title); tv.setTextColor(Color.parseColor("#E91E63")); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sp = createSpinner(); sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items)); sp.setSelection(prefs.getInt(key, def)); sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt(key,pos).apply(); if(designTabState == 3) updateMorsePreviewUI(); }public void onNothingSelected(AdapterView<?> p){}}); sp.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.2f)); l.addView(tv); l.addView(sp); return l; }
     private Button createNavBtn(String t) { Button b = new Button(this); b.setText(t); b.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); return b; }
     private Button createTabBtn(String t) { Button b = new Button(this); b.setText(t); return b; }
     private TextView createSectionTitle(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.parseColor("#00E5FF")); tv.setPadding(0,10,0,20); return tv; }
@@ -549,9 +583,9 @@ public class MainActivity extends Activity {
     private EditText createInput(String h, String k) { EditText et = new EditText(this); et.setHint(h); et.setHintTextColor(Color.GRAY); et.setTextColor(Color.WHITE); et.setText(prefs.getString(k,"")); et.setBackground(getRounded("#2C2C2C", 20f)); et.setPadding(30,30,30,30); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,10,0,10); et.setLayoutParams(lp); et.addTextChangedListener(new android.text.TextWatcher(){public void afterTextChanged(android.text.Editable s){prefs.edit().putString(k,s.toString()).apply();}public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}}); return et; }
     private LinearLayout wrapCard(View content) { LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 40f)); card.setPadding(40,40,40,40); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,40); card.setLayoutParams(lp); card.addView(content); return card; }
     
-    // CẬP NHẬT: TÁCH LUỒNG LỆNH BROADCAST CHO BREATH VÀ ANIMA
-    private LinearLayout createSlider(String t, String k, int max, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv); LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ public void onProgressChanged(SeekBar s, int p, boolean b){ tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); } public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){ if (designTabState == 2) { if(k.startsWith("breath")) sendBroadcast(new Intent("com.manhmoc.edgebar.START_BREATH").setPackage(getPackageName())); else sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName())); } } }); btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); }); btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) sb.setProgress(p+1); }); row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); return l; }
+    // CẬP NHẬT: GỬI LỆNH UPDATE_BREATH VÀ UPDATE MORSE MOCKUP LIÊN TỤC TRONG KHI KÉO
+    private LinearLayout createSlider(String t, String k, int max, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv); LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ public void onProgressChanged(SeekBar s, int p, boolean b){ tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); if(designTabState == 3) updateMorsePreviewUI(); if(designTabState == 2 && k.startsWith("breath")) sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_BREATH").setPackage(getPackageName())); } public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){ if (designTabState == 2 && !k.startsWith("breath")) sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName())); } }); btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); }); btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) sb.setProgress(p+1); }); row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); return l; }
     
-    // CẬP NHẬT: TÁCH LUỒNG LỆNH BROADCAST CHO BREATH VÀ ANIMA
-    private LinearLayout createSignedSlider(String t, String k, int min, int max, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); int curVal = prefs.getInt(k, def); tv.setText(t + ": " + curVal); l.addView(tv); LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); SeekBar sb = new SeekBar(this); sb.setMax(max - min); sb.setProgress(curVal - min); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ public void onProgressChanged(SeekBar s, int p, boolean b){ int v = p + min; tv.setText(t + ": " + v); prefs.edit().putInt(k, v).apply(); } public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){ if (designTabState == 2) { if(k.startsWith("breath")) sendBroadcast(new Intent("com.manhmoc.edgebar.START_BREATH").setPackage(getPackageName())); else sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName())); } } }); btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); }); btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<(max-min)) sb.setProgress(p+1); }); row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); return l; }
+    // CẬP NHẬT: GỬI LỆNH UPDATE_BREATH VÀ UPDATE MORSE MOCKUP LIÊN TỤC TRONG KHI KÉO (ÂM TÍNH)
+    private LinearLayout createSignedSlider(String t, String k, int min, int max, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); int curVal = prefs.getInt(k, def); tv.setText(t + ": " + curVal); l.addView(tv); LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); SeekBar sb = new SeekBar(this); sb.setMax(max - min); sb.setProgress(curVal - min); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ public void onProgressChanged(SeekBar s, int p, boolean b){ int v = p + min; tv.setText(t + ": " + v); prefs.edit().putInt(k, v).apply(); if(designTabState == 3) updateMorsePreviewUI(); if(designTabState == 2 && k.startsWith("breath")) sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_BREATH").setPackage(getPackageName())); } public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){ if (designTabState == 2 && !k.startsWith("breath")) sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName())); } }); btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); }); btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<(max-min)) sb.setProgress(p+1); }); row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); return l; }
 }
