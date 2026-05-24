@@ -7,9 +7,8 @@ public class HomescreenService extends Service {
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"}; private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
     
-    private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { 
-        if(k != null) { updateVisibility(); if(fV != null && fV.getVisibility() == View.VISIBLE) fV.updateStyle(); if(globalBv != null && k.startsWith("breath_")) updateBreathLayout(); } 
-    };
+    // FIX: Khai báo Listener nhưng không khởi tạo ngay lập tức
+    private SharedPreferences.OnSharedPreferenceChangeListener prefListener;
     
     private void updateBreathLayout() {
         if(globalBv == null) return;
@@ -166,8 +165,14 @@ public class HomescreenService extends Service {
 
     @Override public void onCreate() {
         super.onCreate(); isRunning = true; wm = (WindowManager) getSystemService(WINDOW_SERVICE); km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE); vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE); try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
-        if (!Settings.canDrawOverlays(this)) { stopSelf(); return; }
-        prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.SYNC_STATE"); filter.addAction("com.manhmoc.edgebar.TEST_ANIM"); filter.addAction("com.manhmoc.edgebar.START_BREATH"); filter.addAction("com.manhmoc.edgebar.STOP_BREATH"); registerReceiver(syncReceiver, filter);
+        
+        // FIX: Khởi tạo prefListener bên trong hàm
+        prefListener = (p, k) -> { 
+            if(k != null) { updateVisibility(); if(fV != null && fV.getVisibility() == View.VISIBLE) fV.updateStyle(); if(globalBv != null && k.startsWith("breath_")) updateBreathLayout(); } 
+        };
+        prefs.registerOnSharedPreferenceChangeListener(prefListener); 
+        
+        IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.SYNC_STATE"); filter.addAction("com.manhmoc.edgebar.TEST_ANIM"); filter.addAction("com.manhmoc.edgebar.START_BREATH"); filter.addAction("com.manhmoc.edgebar.STOP_BREATH"); registerReceiver(syncReceiver, filter);
         if(Build.VERSION.SDK_INT >= 33) registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED); else registerReceiver(syncReceiver, filter);
 
         String cid = "eb_19_home"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar Lớp phủ ADB").setSmallIcon(android.R.drawable.ic_menu_crop).build(); startForeground(2, n);

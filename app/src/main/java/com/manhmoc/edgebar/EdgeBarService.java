@@ -6,9 +6,8 @@ public class EdgeBarService extends AccessibilityService {
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"}; private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
     
-    private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { 
-        if(k != null) { updateVisibility(); if(fV != null && fV.getVisibility() == View.VISIBLE) fV.updateStyle(); if(globalBv != null && k.startsWith("breath_")) updateBreathLayout(); } 
-    };
+    // FIX: Khai báo Listener nhưng không khởi tạo ngay lập tức để tránh lỗi Forward Reference
+    private SharedPreferences.OnSharedPreferenceChangeListener prefListener;
     
     private void updateBreathLayout() {
         if(globalBv == null) return;
@@ -163,7 +162,14 @@ public class EdgeBarService extends AccessibilityService {
 
     @Override protected void onServiceConnected() {
         super.onServiceConnected(); wm = (WindowManager) getSystemService(WINDOW_SERVICE); km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE); vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE); try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
-        prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.TEST_ANIM"); filter.addAction("com.manhmoc.edgebar.START_BREATH"); filter.addAction("com.manhmoc.edgebar.STOP_BREATH"); registerReceiver(stateReceiver, filter);
+        
+        // FIX LỖI ILLEGAL FORWARD REFERENCE BẰNG CÁCH KHỞI TẠO Ở ĐÂY
+        prefListener = (p, k) -> { 
+            if(k != null) { updateVisibility(); if(fV != null && fV.getVisibility() == View.VISIBLE) fV.updateStyle(); if(globalBv != null && k.startsWith("breath_")) updateBreathLayout(); } 
+        };
+        prefs.registerOnSharedPreferenceChangeListener(prefListener); 
+        
+        IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.TEST_ANIM"); filter.addAction("com.manhmoc.edgebar.START_BREATH"); filter.addAction("com.manhmoc.edgebar.STOP_BREATH"); registerReceiver(stateReceiver, filter);
         if(Build.VERSION.SDK_INT >= 33) registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"), Context.RECEIVER_NOT_EXPORTED); else registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"));
         String cid = "eb_19_acc"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar đang chạy nền", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build(); startForeground(1, n); createFloatingBars();
     }
@@ -172,11 +178,8 @@ public class EdgeBarService extends AccessibilityService {
 
     private void exec(String a) { if (a == null || a.equals("NONE")) return; try { switch(a) { 
         case "BACK": performGlobalAction(GLOBAL_ACTION_BACK); break; case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break; case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break; case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break; case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break; case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break; case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; 
-        
         case "VOICE_RECORD": try { Intent ir = new Intent(this, RecorderService.class); if (RecorderService.isRunning) { stopService(ir); } else { if (Build.VERSION.SDK_INT >= 26) startForegroundService(ir); else startService(ir); } } catch (Exception e){} break;
-        
         case "YTDL_DOWNLOAD": try { android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE); if (cb.hasPrimaryClip() && cb.getPrimaryClip().getItemCount() > 0) { CharSequence data = cb.getPrimaryClip().getItemAt(0).getText(); if (data != null && (data.toString().startsWith("http://") || data.toString().startsWith("https://"))) { Intent ytdl = new Intent(Intent.ACTION_SEND); ytdl.setType("text/plain"); ytdl.putExtra(Intent.EXTRA_TEXT, data.toString()); ytdl.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); try { ytdl.setPackage("com.deniscerri.ytdlnis"); startActivity(ytdl); } catch (Exception e1) { try { ytdl.setPackage("com.deniscerri.ytdl"); startActivity(ytdl); } catch (Exception e2) { ytdl.setPackage(null); startActivity(Intent.createChooser(ytdl, "Chọn App tải (YTDLnis)...").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } } } } } catch (Exception e) {} break;
-        
         default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
     private void fireIntent(String idx) { try { String act = prefs.getString("intent_"+idx+"_act", ""); String pkg = prefs.getString("intent_"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("intent_"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("intent_"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("intent_"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("intent_"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("intent_"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     
