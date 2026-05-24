@@ -19,14 +19,17 @@ public class MainActivity extends Activity {
     private String[] C_GESTURE_NAMES = {"1 Chạm", "2 Chạm", "Nhấn Giữ", "Vuốt Lên", "Vuốt Xuống", "Vuốt Trái", "Vuốt Phải", "Vuốt Lên + Giữ", "Vuốt Xuống + Giữ", "Vuốt Trái + Giữ", "Vuốt Phải + Giữ", "Vuốt Chéo", "Vuốt Chéo + Giữ"};
 
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, listEcosystem, designSliderContainer, navMain; 
-    private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim, fabRule, fabI, fabQ, fabM, btnUpdate;
+    private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim, btnEditMorse, fabRule, fabI, fabQ, fabM, btnUpdate;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0;
-    private final String CURRENT_VERSION = "V19.12.3.2"; private RelativeLayout rootLayout;
+    private final String CURRENT_VERSION = "V19.12.3.3"; private RelativeLayout rootLayout;
+    private View morseOverlayView; // View chứa Lớp phủ preview
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     private void refreshPreview() { boolean p = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); prefs.edit().putBoolean("preview_lock", p).apply(); }
+    
     @Override protected void onResume() { super.onResume(); refreshPreview(); }
-    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).apply(); }
+    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).apply(); if (morseOverlayView != null) toggleMorseOverlayPreview(); }
+    @Override protected void onDestroy() { super.onDestroy(); if (morseOverlayView != null) toggleMorseOverlayPreview(); }
 
     private void reloadActionLabels() {
         String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "VOICE_RECORD", "STOP_RECORD"}; 
@@ -228,7 +231,6 @@ public class MainActivity extends Activity {
         return card;
     }
 
-    // FIX BẢN 19.12.3.2: KHÔI PHỤC LẠI NGUYÊN VẸN BỘ EDITOR CHỨ KHÔNG CẮT BỎ NỮA
     private void showIntentEditor(int defaultSlot) {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar); LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,40,40,40); root.addView(createSectionTitle("🔴 CẤU HÌNH INTENT " + defaultSlot));
         EditText eName = createInput("Tên gợi nhớ (VD: Mở Facebook)", ""); EditText eAct = createInput("Action", ""); EditText ePkg = createInput("Package", ""); EditText eCls = createInput("Class Name", ""); EditText eData = createInput("Data URI (acc://...)", ""); EditText eCat = createInput("Categories", ""); EditText eFlags = createInput("Flags", ""); CheckBox cbBr = new CheckBox(this); cbBr.setText("Gửi dạng Broadcast"); cbBr.setTextColor(Color.WHITE);
@@ -285,51 +287,156 @@ public class MainActivity extends Activity {
         LinearLayout secSys = new LinearLayout(this); secSys.setOrientation(LinearLayout.VERTICAL); secSys.addView(createSectionTitle(T("SYSTEM BEHAVIOR", "HÀNH VI HỆ THỐNG"))); CheckBox cbKbd = new CheckBox(this); cbKbd.setText(T("Hide on Keyboard", "Tự ẩn khi hiện Bàn Phím")); cbKbd.setTextColor(Color.WHITE); cbKbd.setChecked(prefs.getBoolean("avoid_kbd", true)); cbKbd.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("avoid_kbd", c).apply()); secSys.addView(cbKbd); secSys.addView(createSectionTitle(T("BLACKLIST", "DANH SÁCH ĐEN"))); secSys.addView(createInput("Packages (com.ex.app)", "blacklist")); pageDesign.addView(wrapCard(secSys));
         
         pageDesign.addView(createSectionTitle(T("CORE DESIGN", "THIẾT KẾ CỐT LÕI")));
-        LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL); btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0); btnEditLock.setOnClickListener(v -> { designTabState=0; refreshPreview(); btnEditLock.setBackground(getRounded("#00E5FF", 20f)); btnEditLock.setTextColor(Color.BLACK); btnEditHome.setBackground(getRounded("#222222", 20f)); btnEditHome.setTextColor(Color.WHITE); btnEditAnim.setBackground(getRounded("#222222", 20f)); btnEditAnim.setTextColor(Color.WHITE); renderSliders(); }); btnEditHome.setOnClickListener(v -> { designTabState=1; refreshPreview(); btnEditLock.setBackground(getRounded("#222222", 20f)); btnEditLock.setTextColor(Color.WHITE); btnEditHome.setBackground(getRounded("#00E5FF", 20f)); btnEditHome.setTextColor(Color.BLACK); btnEditAnim.setBackground(getRounded("#222222", 20f)); btnEditAnim.setTextColor(Color.WHITE); renderSliders(); }); btnEditAnim.setOnClickListener(v -> { designTabState=2; refreshPreview(); btnEditLock.setBackground(getRounded("#222222", 20f)); btnEditLock.setTextColor(Color.WHITE); btnEditHome.setBackground(getRounded("#222222", 20f)); btnEditHome.setTextColor(Color.WHITE); btnEditAnim.setBackground(getRounded("#00E5FF", 20f)); btnEditAnim.setTextColor(Color.BLACK); renderSliders(); }); toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addView(btnEditAnim); pageDesign.addView(toggleRow); pageDesign.addView(designSliderContainer); btnEditLock.performClick();
+        LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL); 
+        btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
+        btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); 
+        btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
+        btnEditMorse = new Button(this); btnEditMorse.setText("MORSE"); LinearLayout.LayoutParams mP2 = new LinearLayout.LayoutParams(0, -2, 1f); mP2.setMargins(10,0,0,0); btnEditMorse.setLayoutParams(mP2); 
+        
+        designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0); 
+        
+        btnEditLock.setOnClickListener(v -> { designTabState=0; refreshPreview(); btnEditLock.setBackground(getRounded("#00E5FF", 20f)); btnEditLock.setTextColor(Color.BLACK); btnEditHome.setBackground(getRounded("#222222", 20f)); btnEditHome.setTextColor(Color.WHITE); btnEditAnim.setBackground(getRounded("#222222", 20f)); btnEditAnim.setTextColor(Color.WHITE); btnEditMorse.setBackground(getRounded("#222222", 20f)); btnEditMorse.setTextColor(Color.WHITE); renderSliders(); }); 
+        btnEditHome.setOnClickListener(v -> { designTabState=1; refreshPreview(); btnEditLock.setBackground(getRounded("#222222", 20f)); btnEditLock.setTextColor(Color.WHITE); btnEditHome.setBackground(getRounded("#00E5FF", 20f)); btnEditHome.setTextColor(Color.BLACK); btnEditAnim.setBackground(getRounded("#222222", 20f)); btnEditAnim.setTextColor(Color.WHITE); btnEditMorse.setBackground(getRounded("#222222", 20f)); btnEditMorse.setTextColor(Color.WHITE); renderSliders(); }); 
+        btnEditAnim.setOnClickListener(v -> { designTabState=2; refreshPreview(); btnEditLock.setBackground(getRounded("#222222", 20f)); btnEditLock.setTextColor(Color.WHITE); btnEditHome.setBackground(getRounded("#222222", 20f)); btnEditHome.setTextColor(Color.WHITE); btnEditAnim.setBackground(getRounded("#00E5FF", 20f)); btnEditAnim.setTextColor(Color.BLACK); btnEditMorse.setBackground(getRounded("#222222", 20f)); btnEditMorse.setTextColor(Color.WHITE); renderSliders(); }); 
+        btnEditMorse.setOnClickListener(v -> { designTabState=3; refreshPreview(); btnEditLock.setBackground(getRounded("#222222", 20f)); btnEditLock.setTextColor(Color.WHITE); btnEditHome.setBackground(getRounded("#222222", 20f)); btnEditHome.setTextColor(Color.WHITE); btnEditAnim.setBackground(getRounded("#222222", 20f)); btnEditAnim.setTextColor(Color.WHITE); btnEditMorse.setBackground(getRounded("#00E5FF", 20f)); btnEditMorse.setTextColor(Color.BLACK); renderSliders(); });
+
+        toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addView(btnEditAnim); toggleRow.addView(btnEditMorse); 
+        pageDesign.addView(toggleRow); pageDesign.addView(designSliderContainer); btnEditLock.performClick();
     }
 
-    private void renderSliders() { designSliderContainer.removeAllViews(); if(designTabState == 2) { 
+    private void renderSliders() { designSliderContainer.removeAllViews(); 
+        if(designTabState == 2) { 
+            // --- DRAWERS ANIMATION VIỀN CƠ BẢN ---
+            LinearLayout edgeAnimContent = new LinearLayout(this); edgeAnimContent.setOrientation(LinearLayout.VERTICAL); edgeAnimContent.setPadding(10,10,10,10);
+            Button btnTest = new Button(this); btnTest.setText("▶ THỬ NGAY HIỆU ỨNG VIỀN"); btnTest.setBackground(getRounded("#FFC107", 20f)); btnTest.setTextColor(Color.BLACK); btnTest.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(-1,-2); testLp.setMargins(0,0,0,20); btnTest.setLayoutParams(testLp); btnTest.setOnClickListener(v -> { Intent i = new Intent("com.manhmoc.edgebar.TEST_ANIM"); i.setPackage(getPackageName()); sendBroadcast(i); }); edgeAnimContent.addView(btnTest);
+            LinearLayout lC = new LinearLayout(this); lC.setOrientation(LinearLayout.HORIZONTAL); lC.setPadding(0,10,0,10); TextView tC = new TextView(this); tC.setText("Chủ đề:"); tC.setTextColor(Color.WHITE); tC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sC = createSpinner(); sC.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, COLOR_NAMES)); String curC = prefs.getString("anim_color", "WHITE"); for(int i=0;i<COLOR_KEYS.length;i++) if(COLOR_KEYS[i].equals(curC)) sC.setSelection(i); 
+            
+            final boolean[] firstRunC = {true};
+            sC.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){ if(firstRunC[0]) { firstRunC[0] = false; return; } prefs.edit().putString("anim_color",COLOR_KEYS[pos]).apply(); sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName()));}public void onNothingSelected(AdapterView<?> p){}}); 
+            
+            sC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lC.addView(tC); lC.addView(sC); edgeAnimContent.addView(lC); 
+            LinearLayout lS = new LinearLayout(this); lS.setOrientation(LinearLayout.HORIZONTAL); lS.setPadding(0,10,0,10); TextView tS = new TextView(this); tS.setText("Kiểu chạy:"); tS.setTextColor(Color.WHITE); tS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sS = createSpinner(); sS.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Nhấp Nháy", "1 Tia sáng nối đuôi", "2 Tia sáng đối xứng", "3 Tia sáng đều nhau"})); sS.setSelection(prefs.getInt("anim_style", 0)); sS.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt("anim_style", pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lS.addView(tS); lS.addView(sS); edgeAnimContent.addView(lS); 
+            edgeAnimContent.addView(createSignedSlider("Chiều ngang Hiệu ứng", "anim_w", -2000, 2000, 0)); edgeAnimContent.addView(createSignedSlider("Chiều dọc Hiệu ứng", "anim_h", -3500, 3500, 0)); edgeAnimContent.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255)); edgeAnimContent.addView(createSlider("Độ dày viền", "anim_thick", 50, 12)); edgeAnimContent.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500)); edgeAnimContent.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600)); edgeAnimContent.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30)); 
+            designSliderContainer.addView(createDrawer("✨ HIỆU ỨNG ÁNH SÁNG (VIỀN)", edgeAnimContent));
+            
+            // --- DRAWERS BREATH RECORDER ---
+            LinearLayout recSys = new LinearLayout(this); recSys.setOrientation(LinearLayout.VERTICAL); recSys.setPadding(10,10,10,10);
+            Button btnTestBreath = new Button(this); btnTestBreath.setText("▶ THỬ ANIMATION HƠI THỞ"); btnTestBreath.setBackground(getRounded("#E91E63", 20f)); btnTestBreath.setTextColor(Color.WHITE); btnTestBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp2 = new LinearLayout.LayoutParams(-1,-2); testLp2.setMargins(0,0,0,20); btnTestBreath.setLayoutParams(testLp2); btnTestBreath.setOnClickListener(v -> sendBroadcast(new Intent("com.manhmoc.edgebar.START_BREATH"))); recSys.addView(btnTestBreath);
+            Button btnStopBreath = new Button(this); btnStopBreath.setText("⏹ DỪNG THỬ"); btnStopBreath.setBackground(getRounded("#333333", 20f)); btnStopBreath.setTextColor(Color.WHITE); btnStopBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams stopLp = new LinearLayout.LayoutParams(-1,-2); stopLp.setMargins(0,0,0,20); btnStopBreath.setLayoutParams(stopLp); btnStopBreath.setOnClickListener(v -> sendBroadcast(new Intent("com.manhmoc.edgebar.STOP_BREATH"))); recSys.addView(btnStopBreath);
+            
+            recSys.addView(createComboDropdown("Cơ chế Ghi âm", "record_engine", new String[]{"Tự động (Lock: Trợ năng / Home: Lớp phủ)", "Luôn dùng Lớp Phủ (Cần ADB)", "Luôn dùng Trợ Năng"}, 0));
+            CheckBox cbCover = new CheckBox(this); cbCover.setText("Phủ lên cả Thanh trạng thái (Status bar)"); cbCover.setTextColor(Color.WHITE); cbCover.setPadding(0,10,0,20); cbCover.setChecked(prefs.getBoolean("breath_cover_status", true)); cbCover.setOnCheckedChangeListener((v,c)->prefs.edit().putBoolean("breath_cover_status", c).apply()); recSys.addView(cbCover);
+            
+            recSys.addView(createComboDropdown("Hình dáng Hơi Thở", "breath_shape", new String[]{"Dải Viền (Edge)", "Chấm Tròn (Dot)"}, 0));
+            recSys.addView(createSlider("Khoảng nghỉ nhịp thở (ms)", "breath_delay", 5000, 1500));
+            recSys.addView(createSlider("Độ mờ tối đa (Alpha)", "breath_alpha", 255, 255));
+            
+            TextView tEdge = new TextView(this); tEdge.setText("Cấu hình Dải Viền:"); tEdge.setTextColor(Color.GRAY); recSys.addView(tEdge);
+            recSys.addView(createSignedSlider("Chiều ngang", "breath_w", -2000, 2000, 0)); recSys.addView(createSignedSlider("Chiều dọc", "breath_h", -3500, 3500, 0)); recSys.addView(createSlider("Độ dày viền", "breath_thick", 50, 12));
+            
+            TextView tDot = new TextView(this); tDot.setText("Cấu hình Chấm Tròn:"); tDot.setTextColor(Color.GRAY); recSys.addView(tDot);
+            recSys.addView(createSlider("Độ to chấm tròn", "breath_dot_size", 400, 40)); recSys.addView(createSignedSlider("Toạ độ X", "breath_dot_x", -1500, 1500, 0)); recSys.addView(createSignedSlider("Toạ độ Y", "breath_dot_y", -3000, 3000, 0));
+            designSliderContainer.addView(createDrawer("🎤 BREATH RECORDER & GHI ÂM TÀNG HÌNH", recSys));
+            
+        } else if (designTabState == 0 || designTabState == 1 || designTabState == 3) { 
+            String prefix = designTabState == 1 ? "home_" : (designTabState == 3 ? "morse_" : "lock_"); 
+            
+            // UI Riêng cho MORSE (Lớp Phủ + Chọn App)
+            if (designTabState == 3) {
+                LinearLayout overlayBox = new LinearLayout(this); overlayBox.setOrientation(LinearLayout.VERTICAL); overlayBox.setPadding(30,10,30,30);
+                overlayBox.addView(createSlider("Độ mờ vùng Lớp Phủ Khoá (Alpha)", "morse_overlay_alpha", 255, 180));
+                
+                Button btnApps = new Button(this); btnApps.setText("📱 CHỌN APP BỊ KHÓA");
+                btnApps.setBackground(getRounded("#E91E63", 20f)); btnApps.setTextColor(Color.WHITE);
+                LinearLayout.LayoutParams bp1 = new LinearLayout.LayoutParams(-1,-2); bp1.setMargins(0,10,0,10); btnApps.setLayoutParams(bp1);
+                btnApps.setOnClickListener(v -> showAppSelectorDialog());
+                overlayBox.addView(btnApps);
+                
+                Button btnTestOverlay = new Button(this); btnTestOverlay.setText("👁️ BẬT/TẮT THỬ LỚP PHỦ");
+                btnTestOverlay.setBackground(getRounded("#FFC107", 20f)); btnTestOverlay.setTextColor(Color.BLACK);
+                btnTestOverlay.setLayoutParams(bp1);
+                btnTestOverlay.setOnClickListener(v -> toggleMorseOverlayPreview());
+                overlayBox.addView(btnTestOverlay);
+                
+                designSliderContainer.addView(createDrawer("🛡️ CẤU HÌNH LỚP PHỦ KHÓA", overlayBox));
+            }
+
+            designSliderContainer.addView(createSectionTitle("5 EDGE BARS"));
+            for(int i=0; i< 5; i++) { LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); CheckBox cb = new CheckBox(this); cb.setText("BẬT: " + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_en", c).apply()); drawerContent.addView(cb); drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+BARS[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0)); drawerContent.addView(createSlider("Độ trong suốt", prefix+BARS[i]+"_alpha", 255, 50)); drawerContent.addView(createSlider("Chiều ngang", prefix+BARS[i]+"_w", 3000, 300)); drawerContent.addView(createSlider("Chiều dọc", prefix+BARS[i]+"_h", 3000, 60)); drawerContent.addView(createSignedSlider("Toạ độ X", prefix+BARS[i]+"_x", -1500, 1500, 0)); drawerContent.addView(createSignedSlider("Toạ độ Y", prefix+BARS[i]+"_y", -1500, 1500, 0)); designSliderContainer.addView(createDrawer(BAR_NAMES[i], drawerContent)); } 
+            designSliderContainer.addView(createSectionTitle("4 FRAME CORNERS"));
+            for(int i=0; i<4; i++) { LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); drawerContent.addView(createComboDropdown("Hiển thị", prefix+"corner_"+CORNERS[i]+"_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình (Nháy sáng)", "Ẩn hoàn toàn (Vô hình)"}, 0)); drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+"corner_"+CORNERS[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0)); drawerContent.addView(createComboDropdown("Hình dáng Góc", prefix+"corner_"+CORNERS[i]+"_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0)); drawerContent.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix+"corner_"+CORNERS[i]+"_w", 2500, 100)); drawerContent.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix+"corner_"+CORNERS[i]+"_h", 2500, 100)); drawerContent.addView(createSignedSlider("Di chuyển Ngang (X)", prefix+"corner_"+CORNERS[i]+"_x", -1500, 1500, 0)); drawerContent.addView(createSignedSlider("Di chuyển Dọc (Y)", prefix+"corner_"+CORNERS[i]+"_y", -1500, 1500, 0)); drawerContent.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix+"corner_"+CORNERS[i]+"_moon_w", 2500, 100)); drawerContent.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix+"corner_"+CORNERS[i]+"_moon_h", 2500, 100)); drawerContent.addView(createSlider("Di chuyển Trăng Non Ngang (X) (1250=Giữa)", prefix+"corner_"+CORNERS[i]+"_moon_x", 2500, 1250)); drawerContent.addView(createSlider("Di chuyển Trăng Non Dọc (Y) (1250=Giữa)", prefix+"corner_"+CORNERS[i]+"_moon_y", 2500, 1250)); drawerContent.addView(createSlider("Độ cong BO VIỀN (Vỏ) (1000=Thẳng)", prefix+"corner_"+CORNERS[i]+"_rad", 1000, 80)); drawerContent.addView(createSlider("Độ cong TRĂNG NON (Lõi) (1000=Thẳng)", prefix+"corner_"+CORNERS[i]+"_moon_rad", 1000, 80)); designSliderContainer.addView(createDrawer(CORNER_NAMES[i], drawerContent)); }
+            LinearLayout globalDrawer = new LinearLayout(this); globalDrawer.setOrientation(LinearLayout.VERTICAL); globalDrawer.setPadding(30,10,30,30); globalDrawer.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500)); globalDrawer.addView(createSlider("Độ mờ vùng TRĂNG NON (Đậm/Nhạt)", prefix+"corner_moon_alpha", 255, 100)); globalDrawer.addView(createSlider("Độ mờ VIỀN GÓC (Đậm/Nhạt)", prefix+"corner_stroke_alpha", 255, 200)); globalDrawer.addView(createSlider("Độ đậm viền (Dày/Mỏng)", prefix+"corner_thick", 50, 8)); designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", globalDrawer));
+        } 
+    }
+
+    // Logic Quét và Cửa sổ Chọn App
+    private void showAppSelectorDialog() {
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,40,40,40);
+        root.addView(createSectionTitle("CHỌN APP SẼ BỊ KHÓA BỞI MORSE"));
         
-        // --- DRAWERS ANIMATION VIỀN CƠ BẢN ---
-        LinearLayout edgeAnimContent = new LinearLayout(this); edgeAnimContent.setOrientation(LinearLayout.VERTICAL); edgeAnimContent.setPadding(10,10,10,10);
-        Button btnTest = new Button(this); btnTest.setText("▶ THỬ NGAY HIỆU ỨNG VIỀN"); btnTest.setBackground(getRounded("#FFC107", 20f)); btnTest.setTextColor(Color.BLACK); btnTest.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(-1,-2); testLp.setMargins(0,0,0,20); btnTest.setLayoutParams(testLp); btnTest.setOnClickListener(v -> { Intent i = new Intent("com.manhmoc.edgebar.TEST_ANIM"); i.setPackage(getPackageName()); sendBroadcast(i); }); edgeAnimContent.addView(btnTest);
-        LinearLayout lC = new LinearLayout(this); lC.setOrientation(LinearLayout.HORIZONTAL); lC.setPadding(0,10,0,10); TextView tC = new TextView(this); tC.setText("Chủ đề:"); tC.setTextColor(Color.WHITE); tC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sC = createSpinner(); sC.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, COLOR_NAMES)); String curC = prefs.getString("anim_color", "WHITE"); for(int i=0;i<COLOR_KEYS.length;i++) if(COLOR_KEYS[i].equals(curC)) sC.setSelection(i); 
+        ScrollView scroll = new ScrollView(this); LinearLayout list = new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); scroll.addView(list);
+        LinearLayout.LayoutParams sclp = new LinearLayout.LayoutParams(-1,0,1f); scroll.setLayoutParams(sclp);
+
+        PackageManager pm = getPackageManager();
+        Intent intent = new Intent(Intent.ACTION_MAIN, null); intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        java.util.List<android.content.pm.ResolveInfo> apps = pm.queryIntentActivities(intent, 0);
+        String savedApps = prefs.getString("morse_locked_apps", "");
+        java.util.ArrayList<CheckBox> checkBoxes = new java.util.ArrayList<>();
+        java.util.ArrayList<String> packages = new java.util.ArrayList<>();
+
+        // Sắp xếp theo tên Alphabet cho dễ tìm
+        java.util.Collections.sort(apps, new java.util.Comparator<android.content.pm.ResolveInfo>() {
+            public int compare(android.content.pm.ResolveInfo a, android.content.pm.ResolveInfo b) {
+                return a.loadLabel(pm).toString().compareToIgnoreCase(b.loadLabel(pm).toString());
+            }
+        });
+
+        for(android.content.pm.ResolveInfo info : apps) {
+            String pkg = info.activityInfo.packageName; String name = info.loadLabel(pm).toString();
+            CheckBox cb = new CheckBox(this); cb.setText(name + "\n(" + pkg + ")"); cb.setTextColor(Color.WHITE); cb.setPadding(0,25,0,25);
+            if(savedApps.contains(pkg)) cb.setChecked(true);
+            list.addView(cb); checkBoxes.add(cb); packages.add(pkg);
+        }
+        root.addView(scroll);
+
+        LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,20,0,0);
+        Button btnC = new Button(this); btnC.setText("HỦY"); btnC.setBackground(getRounded("#333333", 20f)); btnC.setTextColor(Color.WHITE); btnC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+        Button btnS = new Button(this); btnS.setText("LƯU LẠI"); btnS.setBackground(getRounded("#4CAF50", 20f)); btnS.setTextColor(Color.WHITE); LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0,-2,1f); btnLp.setMargins(20,0,0,0); btnS.setLayoutParams(btnLp);
+        btnC.setOnClickListener(v -> d.dismiss());
+        btnS.setOnClickListener(v -> {
+            StringBuilder sb = new StringBuilder();
+            for(int i=0; i<checkBoxes.size(); i++) { if(checkBoxes.get(i).isChecked()) { sb.append(packages.get(i)).append(","); } }
+            prefs.edit().putString("morse_locked_apps", sb.toString()).apply();
+            d.dismiss(); Toast.makeText(this, "Đã lưu danh sách app bị khóa!", Toast.LENGTH_SHORT).show();
+        });
+        footer.addView(btnC); footer.addView(btnS); root.addView(footer); d.setContentView(root); d.show();
+    }
+
+    // Logic Tắt / Bật nhanh để test hình ảnh Lớp Phủ Đen
+    private void toggleMorseOverlayPreview() {
+        android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+        if (morseOverlayView != null) { 
+            wm.removeView(morseOverlayView); morseOverlayView = null; 
+            Toast.makeText(this, "Đã tắt Lớp phủ Morse", Toast.LENGTH_SHORT).show(); return; 
+        }
+        if (!Settings.canDrawOverlays(this)) { Toast.makeText(this,"Cần cấp quyền Lớp phủ trước!", Toast.LENGTH_SHORT).show(); return; }
         
-        // FIX BẢN 19.12.3.2: CHẶN CÚ CHỚP MÀN HÌNH VÔ DUYÊN KHI VỪA MỞ NGĂN KÉO
-        final boolean[] firstRunC = {true};
-        sC.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){ if(firstRunC[0]) { firstRunC[0] = false; return; } prefs.edit().putString("anim_color",COLOR_KEYS[pos]).apply(); sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName()));}public void onNothingSelected(AdapterView<?> p){}}); 
+        morseOverlayView = new View(this);
+        int alpha = prefs.getInt("morse_overlay_alpha", 180);
+        morseOverlayView.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
         
-        sC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lC.addView(tC); lC.addView(sC); edgeAnimContent.addView(lC); 
-        LinearLayout lS = new LinearLayout(this); lS.setOrientation(LinearLayout.HORIZONTAL); lS.setPadding(0,10,0,10); TextView tS = new TextView(this); tS.setText("Kiểu chạy:"); tS.setTextColor(Color.WHITE); tS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sS = createSpinner(); sS.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Nhấp Nháy", "1 Tia sáng nối đuôi", "2 Tia sáng đối xứng", "3 Tia sáng đều nhau"})); sS.setSelection(prefs.getInt("anim_style", 0)); sS.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt("anim_style", pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lS.addView(tS); lS.addView(sS); edgeAnimContent.addView(lS); 
-        edgeAnimContent.addView(createSignedSlider("Chiều ngang Hiệu ứng", "anim_w", -2000, 2000, 0)); edgeAnimContent.addView(createSignedSlider("Chiều dọc Hiệu ứng", "anim_h", -3500, 3500, 0)); edgeAnimContent.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255)); edgeAnimContent.addView(createSlider("Độ dày viền", "anim_thick", 50, 12)); edgeAnimContent.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500)); edgeAnimContent.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600)); edgeAnimContent.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30)); 
-        designSliderContainer.addView(createDrawer("✨ HIỆU ỨNG ÁNH SÁNG (VIỀN)", edgeAnimContent));
+        // Cờ Không nhận Focus, Không chặn chạm xuyên thấu để bạn bấm dc nút tắt
+        int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
         
-        // --- DRAWERS BREATH RECORDER ---
-        LinearLayout recSys = new LinearLayout(this); recSys.setOrientation(LinearLayout.VERTICAL); recSys.setPadding(10,10,10,10);
-        Button btnTestBreath = new Button(this); btnTestBreath.setText("▶ THỬ ANIMATION HƠI THỞ"); btnTestBreath.setBackground(getRounded("#E91E63", 20f)); btnTestBreath.setTextColor(Color.WHITE); btnTestBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp2 = new LinearLayout.LayoutParams(-1,-2); testLp2.setMargins(0,0,0,20); btnTestBreath.setLayoutParams(testLp2); btnTestBreath.setOnClickListener(v -> sendBroadcast(new Intent("com.manhmoc.edgebar.START_BREATH"))); recSys.addView(btnTestBreath);
-        Button btnStopBreath = new Button(this); btnStopBreath.setText("⏹ DỪNG THỬ"); btnStopBreath.setBackground(getRounded("#333333", 20f)); btnStopBreath.setTextColor(Color.WHITE); btnStopBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams stopLp = new LinearLayout.LayoutParams(-1,-2); stopLp.setMargins(0,0,0,20); btnStopBreath.setLayoutParams(stopLp); btnStopBreath.setOnClickListener(v -> sendBroadcast(new Intent("com.manhmoc.edgebar.STOP_BREATH"))); recSys.addView(btnStopBreath);
-        
-        recSys.addView(createComboDropdown("Cơ chế Ghi âm", "record_engine", new String[]{"Tự động (Lock: Trợ năng / Home: Lớp phủ)", "Luôn dùng Lớp Phủ (Cần ADB)", "Luôn dùng Trợ Năng"}, 0));
-        CheckBox cbCover = new CheckBox(this); cbCover.setText("Phủ lên cả Thanh trạng thái (Status bar)"); cbCover.setTextColor(Color.WHITE); cbCover.setPadding(0,10,0,20); cbCover.setChecked(prefs.getBoolean("breath_cover_status", true)); cbCover.setOnCheckedChangeListener((v,c)->prefs.edit().putBoolean("breath_cover_status", c).apply()); recSys.addView(cbCover);
-        
-        recSys.addView(createComboDropdown("Hình dáng Hơi Thở", "breath_shape", new String[]{"Dải Viền (Edge)", "Chấm Tròn (Dot)"}, 0));
-        recSys.addView(createSlider("Khoảng nghỉ nhịp thở (ms)", "breath_delay", 5000, 1500));
-        recSys.addView(createSlider("Độ mờ tối đa (Alpha)", "breath_alpha", 255, 255));
-        
-        TextView tEdge = new TextView(this); tEdge.setText("Cấu hình Dải Viền:"); tEdge.setTextColor(Color.GRAY); recSys.addView(tEdge);
-        recSys.addView(createSignedSlider("Chiều ngang", "breath_w", -2000, 2000, 0)); recSys.addView(createSignedSlider("Chiều dọc", "breath_h", -3500, 3500, 0)); recSys.addView(createSlider("Độ dày viền", "breath_thick", 50, 12));
-        
-        TextView tDot = new TextView(this); tDot.setText("Cấu hình Chấm Tròn:"); tDot.setTextColor(Color.GRAY); recSys.addView(tDot);
-        recSys.addView(createSlider("Độ to chấm tròn", "breath_dot_size", 400, 40)); recSys.addView(createSignedSlider("Toạ độ X", "breath_dot_x", -1500, 1500, 0)); recSys.addView(createSignedSlider("Toạ độ Y", "breath_dot_y", -3000, 3000, 0));
-        designSliderContainer.addView(createDrawer("🎤 BREATH RECORDER & GHI ÂM TÀNG HÌNH", recSys));
-        
-        } else { String prefix = designTabState == 1 ? "home_" : "lock_"; 
-        designSliderContainer.addView(createSectionTitle("5 EDGE BARS"));
-        for(int i=0; i< 5; i++) { LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); CheckBox cb = new CheckBox(this); cb.setText("BẬT: " + BAR_NAMES[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+BARS[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+BARS[idx]+"_en", c).apply()); drawerContent.addView(cb); drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+BARS[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0)); drawerContent.addView(createSlider("Độ trong suốt", prefix+BARS[i]+"_alpha", 255, 50)); drawerContent.addView(createSlider("Chiều ngang", prefix+BARS[i]+"_w", 3000, 300)); drawerContent.addView(createSlider("Chiều dọc", prefix+BARS[i]+"_h", 3000, 60)); drawerContent.addView(createSignedSlider("Toạ độ X", prefix+BARS[i]+"_x", -1500, 1500, 0)); drawerContent.addView(createSignedSlider("Toạ độ Y", prefix+BARS[i]+"_y", -1500, 1500, 0)); designSliderContainer.addView(createDrawer(BAR_NAMES[i], drawerContent)); } 
-        designSliderContainer.addView(createSectionTitle("4 FRAME CORNERS"));
-        for(int i=0; i<4; i++) { LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); drawerContent.addView(createComboDropdown("Hiển thị", prefix+"corner_"+CORNERS[i]+"_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình (Nháy sáng)", "Ẩn hoàn toàn (Vô hình)"}, 0)); drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+"corner_"+CORNERS[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0)); drawerContent.addView(createComboDropdown("Hình dáng Góc", prefix+"corner_"+CORNERS[i]+"_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0)); drawerContent.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix+"corner_"+CORNERS[i]+"_w", 2500, 100)); drawerContent.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix+"corner_"+CORNERS[i]+"_h", 2500, 100)); drawerContent.addView(createSignedSlider("Di chuyển Ngang (X)", prefix+"corner_"+CORNERS[i]+"_x", -1500, 1500, 0)); drawerContent.addView(createSignedSlider("Di chuyển Dọc (Y)", prefix+"corner_"+CORNERS[i]+"_y", -1500, 1500, 0)); drawerContent.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix+"corner_"+CORNERS[i]+"_moon_w", 2500, 100)); drawerContent.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix+"corner_"+CORNERS[i]+"_moon_h", 2500, 100)); drawerContent.addView(createSlider("Di chuyển Trăng Non Ngang (X) (1250=Giữa)", prefix+"corner_"+CORNERS[i]+"_moon_x", 2500, 1250)); drawerContent.addView(createSlider("Di chuyển Trăng Non Dọc (Y) (1250=Giữa)", prefix+"corner_"+CORNERS[i]+"_moon_y", 2500, 1250)); drawerContent.addView(createSlider("Độ cong BO VIỀN (Vỏ) (1000=Thẳng)", prefix+"corner_"+CORNERS[i]+"_rad", 1000, 80)); drawerContent.addView(createSlider("Độ cong TRĂNG NON (Lõi) (1000=Thẳng)", prefix+"corner_"+CORNERS[i]+"_moon_rad", 1000, 80)); designSliderContainer.addView(createDrawer(CORNER_NAMES[i], drawerContent)); }
-        LinearLayout globalDrawer = new LinearLayout(this); globalDrawer.setOrientation(LinearLayout.VERTICAL); globalDrawer.setPadding(30,10,30,30); globalDrawer.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500)); globalDrawer.addView(createSlider("Độ mờ vùng TRĂNG NON (Đậm/Nhạt)", prefix+"corner_moon_alpha", 255, 100)); globalDrawer.addView(createSlider("Độ mờ VIỀN GÓC (Đậm/Nhạt)", prefix+"corner_stroke_alpha", 255, 200)); globalDrawer.addView(createSlider("Độ đậm viền (Dày/Mỏng)", prefix+"corner_thick", 50, 8)); designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", globalDrawer));
-        } }
+        android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
+            android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT,
+            android.os.Build.VERSION.SDK_INT >= 26 ? android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : android.view.WindowManager.LayoutParams.TYPE_PHONE,
+            flags, android.graphics.PixelFormat.TRANSLUCENT
+        );
+        params.gravity = Gravity.CENTER;
+        try { wm.addView(morseOverlayView, params); Toast.makeText(this, "Đã BẬT. Bấm lại nút Thử Lớp Phủ để tắt.", Toast.LENGTH_LONG).show(); } catch (Exception e) {}
+    }
 
     // Dialog Premium tích hợp ADB Copy thẳng vào Clipboard
     private void showPremiumDialog() { 
