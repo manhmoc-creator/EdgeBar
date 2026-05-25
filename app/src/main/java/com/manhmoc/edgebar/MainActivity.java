@@ -24,13 +24,13 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, listEcosystem, designSliderContainer, navMain, morseTriggerContainer, listMorseTriggers; 
     private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim, btnEditMorse, fabRule, fabI, fabQ, fabM, btnUpdate, fabMorse;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; private boolean isMorseTriggerSpaceOpen = false;
-    private final String CURRENT_VERSION = "V19.12.3.3.6"; private RelativeLayout rootLayout;
+    private final String CURRENT_VERSION = "V19.12.3.3.7"; private RelativeLayout rootLayout;
     
     private View mockupOverlayView;
     private View[] mockupPreviewBars = new View[7]; 
     private View[] mockupPreviewCorners = new View[4];
 
-    // MOCKUP CLASS - Kế thừa tinh hoa Bezier & Đa giác
+    // MOCKUP CLASS - Phiên bản Lõi Trăng Non neo chuẩn góc
     class CornerMockupView extends View {
         String cornerType; String prefix; Paint pStroke, pFill;
         public CornerMockupView(Context context) {
@@ -48,36 +48,58 @@ public class MainActivity extends Activity {
             int moonAlpha = prefs.getInt(prefix+"corner_moon_alpha", 100);
             pStroke.setColor(Color.argb(strokeAlpha, 255, 255, 255)); pStroke.setStrokeWidth(thick);
             pFill.setColor(Color.argb(moonAlpha, 96, 125, 139));
+            
             float sRad = prefs.getInt(prefix+"corner_"+cornerType+"_rad", 80) / 1000f;
+            float mRad = prefs.getInt(prefix+"corner_"+cornerType+"_moon_rad", 80) / 1000f;
             int mw = prefs.getInt(prefix+"corner_"+cornerType+"_moon_w", 100);
             int mh = prefs.getInt(prefix+"corner_"+cornerType+"_moon_h", 100);
 
             Path strokePath = new Path(); Path moonPath = new Path();
             float sStartX = 0, sStartY = 0, sEndX = 0, sEndY = 0, sCtrlX = 0, sCtrlY = 0;
 
-            if(cornerType.equals("br")) {
+            if(cornerType.equals("br")) { // Góc đáy phải
                 sStartX = w - pad; sStartY = pad; sEndX = pad; sEndY = h - pad;
                 sCtrlX = w - pad - (1f - sRad)*(w*0.7f); sCtrlY = h - pad - (1f - sRad)*(h*0.7f);
                 strokePath.moveTo(sStartX, sStartY); strokePath.quadTo(sCtrlX, sCtrlY, sEndX, sEndY);
-                moonPath.moveTo(w - pad, pad); moonPath.lineTo(w - mw, pad); moonPath.lineTo(w - pad, mh);
-            } else if(cornerType.equals("bl")) {
+                
+                moonPath.moveTo(w - pad - mw, h - pad);
+                moonPath.quadTo(w - pad - (1f - mRad)*mw, h - pad - (1f - mRad)*mh, w - pad, h - pad - mh);
+                moonPath.lineTo(w - pad, h - pad);
+            } else if(cornerType.equals("bl")) { // Góc đáy trái
                 sStartX = pad; sStartY = pad; sEndX = w - pad; sEndY = h - pad;
                 sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = h - pad - (1f - sRad)*(h*0.7f);
                 strokePath.moveTo(sStartX, sStartY); strokePath.quadTo(sCtrlX, sCtrlY, sEndX, sEndY);
-                moonPath.moveTo(pad, pad); moonPath.lineTo(mw, pad); moonPath.lineTo(pad, mh);
-            } else if(cornerType.equals("tr")) {
+                
+                moonPath.moveTo(pad + mw, h - pad);
+                moonPath.quadTo(pad + (1f - mRad)*mw, h - pad - (1f - mRad)*mh, pad, h - pad - mh);
+                moonPath.lineTo(pad, h - pad);
+            } else if(cornerType.equals("tr")) { // Góc đỉnh phải
                 sStartX = w - pad; sStartY = h - pad; sEndX = pad; sEndY = pad;
                 sCtrlX = w - pad - (1f - sRad)*(w*0.7f); sCtrlY = pad + (1f - sRad)*(h*0.7f);
                 strokePath.moveTo(sStartX, sStartY); strokePath.quadTo(sCtrlX, sCtrlY, sEndX, sEndY);
-                moonPath.moveTo(w - pad, h - pad); moonPath.lineTo(w - mw, h - pad); moonPath.lineTo(w - pad, h - mh);
-            } else if(cornerType.equals("tl")) {
+                
+                moonPath.moveTo(w - pad - mw, pad);
+                moonPath.quadTo(w - pad - (1f - mRad)*mw, pad + (1f - mRad)*mh, w - pad, pad + mh);
+                moonPath.lineTo(w - pad, pad);
+            } else if(cornerType.equals("tl")) { // Góc đỉnh trái
                 sStartX = pad; sStartY = h - pad; sEndX = w - pad; sEndY = pad;
                 sCtrlX = pad + (1f - sRad)*(w*0.7f); sCtrlY = pad + (1f - sRad)*(h*0.7f);
                 strokePath.moveTo(sStartX, sStartY); strokePath.quadTo(sCtrlX, sCtrlY, sEndX, sEndY);
-                moonPath.moveTo(pad, h - pad); moonPath.lineTo(mw, h - pad); moonPath.lineTo(pad, h - mh);
+                
+                moonPath.moveTo(pad + mw, pad);
+                moonPath.quadTo(pad + (1f - mRad)*mw, pad + (1f - mRad)*mh, pad, pad + mh);
+                moonPath.lineTo(pad, pad);
             }
             moonPath.close();
-            canvas.drawPath(moonPath, pFill); canvas.drawPath(strokePath, pStroke);
+            
+            canvas.save();
+            int moonOffsetX = prefs.getInt(prefix+"corner_"+cornerType+"_moon_x", 1250) - 1250;
+            int moonOffsetY = prefs.getInt(prefix+"corner_"+cornerType+"_moon_y", 1250) - 1250;
+            canvas.translate(moonOffsetX, moonOffsetY);
+            canvas.drawPath(moonPath, pFill);
+            canvas.restore();
+            
+            canvas.drawPath(strokePath, pStroke);
         }
     }
 
@@ -92,9 +114,9 @@ public class MainActivity extends Activity {
         if (fabMorse != null) fabMorse.setVisibility((designTabState == 3 && isMorseTriggerSpaceOpen) ? View.VISIBLE : View.GONE);
     }
     
-    @Override protected void onResume() { super.onResume(); refreshPreview(); }
-    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).apply(); if (mockupOverlayView != null) toggleMockupOverlay(); }
-    @Override protected void onDestroy() { super.onDestroy(); if (mockupOverlayView != null) toggleMockupOverlay(); }
+    @Override protected void onResume() { super.onResume(); refreshPreview(); hideMockupOverlay(); }
+    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).apply(); hideMockupOverlay(); }
+    @Override protected void onDestroy() { super.onDestroy(); hideMockupOverlay(); }
 
     private void reloadActionLabels() {
         String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "VOICE_RECORD", "STOP_RECORD"}; 
@@ -142,7 +164,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void closeDesignSpace() { pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(currentMainTab == 1 ? View.VISIBLE : View.GONE); pageEcosystem.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); fabI.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); fabQ.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); fabM.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); refreshPreview(); }
+    private void closeDesignSpace() { hideMockupOverlay(); pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(currentMainTab == 1 ? View.VISIBLE : View.GONE); pageEcosystem.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); fabI.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); fabQ.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); fabM.setVisibility(currentMainTab == 2 ? View.VISIBLE : View.GONE); refreshPreview(); }
     private void openDesignSpace() { refreshPreview(); navMain.setVisibility(View.GONE); pageConditions.setVisibility(View.GONE); pageEcosystem.setVisibility(View.GONE); pageDesign.setVisibility(View.VISIBLE); fabI.setVisibility(View.GONE); fabQ.setVisibility(View.GONE); fabM.setVisibility(View.GONE); }
     private void openMorseTriggerSpace() { isMorseTriggerSpaceOpen = true; designSliderContainer.setVisibility(View.GONE); morseTriggerContainer.setVisibility(View.VISIBLE); refreshPreview(); renderMorseTriggersList(); }
     private void closeMorseTriggerSpace() { isMorseTriggerSpaceOpen = false; designSliderContainer.setVisibility(View.VISIBLE); morseTriggerContainer.setVisibility(View.GONE); refreshPreview(); }
@@ -449,11 +471,11 @@ public class MainActivity extends Activity {
         
         designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0); 
         
-        btnEditLock.setOnClickListener(v -> { isMorseTriggerSpaceOpen = false; designTabState=0; refreshPreview(); btnEditLock.setBackground(getRounded("#00E5FF", 20f)); btnEditLock.setTextColor(Color.BLACK); btnEditHome.setBackground(getRounded("#222222", 20f)); btnEditHome.setTextColor(Color.WHITE); btnEditAnim.setBackground(getRounded("#222222", 20f)); btnEditAnim.setTextColor(Color.WHITE); btnEditMorse.setBackground(getRounded("#222222", 20f)); btnEditMorse.setTextColor(Color.WHITE); morseTriggerContainer.setVisibility(View.GONE); designSliderContainer.setVisibility(View.VISIBLE); renderSliders(); if(mockupOverlayView!=null)updateMockupUI(); }); 
-        btnEditHome.setOnClickListener(v -> { isMorseTriggerSpaceOpen = false; designTabState=1; refreshPreview(); btnEditLock.setBackground(getRounded("#222222", 20f)); btnEditLock.setTextColor(Color.WHITE); btnEditHome.setBackground(getRounded("#00E5FF", 20f)); btnEditHome.setTextColor(Color.BLACK); btnEditAnim.setBackground(getRounded("#222222", 20f)); btnEditAnim.setTextColor(Color.WHITE); btnEditMorse.setBackground(getRounded("#222222", 20f)); btnEditMorse.setTextColor(Color.WHITE); morseTriggerContainer.setVisibility(View.GONE); designSliderContainer.setVisibility(View.VISIBLE); renderSliders(); if(mockupOverlayView!=null)updateMockupUI(); }); 
-        btnEditAnim.setOnClickListener(v -> { isMorseTriggerSpaceOpen = false; designTabState=2; refreshPreview(); btnEditLock.setBackground(getRounded("#222222", 20f)); btnEditLock.setTextColor(Color.WHITE); btnEditHome.setBackground(getRounded("#222222", 20f)); btnEditHome.setTextColor(Color.WHITE); btnEditAnim.setBackground(getRounded("#00E5FF", 20f)); btnEditAnim.setTextColor(Color.BLACK); btnEditMorse.setBackground(getRounded("#222222", 20f)); btnEditMorse.setTextColor(Color.WHITE); morseTriggerContainer.setVisibility(View.GONE); designSliderContainer.setVisibility(View.VISIBLE); renderSliders(); if(mockupOverlayView!=null) updateMockupUI(); }); 
+        btnEditLock.setOnClickListener(v -> { isMorseTriggerSpaceOpen = false; designTabState=0; refreshPreview(); btnEditLock.setBackground(getRounded("#00E5FF", 20f)); btnEditLock.setTextColor(Color.BLACK); btnEditHome.setBackground(getRounded("#222222", 20f)); btnEditHome.setTextColor(Color.WHITE); btnEditAnim.setBackground(getRounded("#222222", 20f)); btnEditAnim.setTextColor(Color.WHITE); btnEditMorse.setBackground(getRounded("#222222", 20f)); btnEditMorse.setTextColor(Color.WHITE); morseTriggerContainer.setVisibility(View.GONE); designSliderContainer.setVisibility(View.VISIBLE); ensureMockupVisible(); updateMockupUI(); renderSliders(); }); 
+        btnEditHome.setOnClickListener(v -> { isMorseTriggerSpaceOpen = false; designTabState=1; refreshPreview(); btnEditLock.setBackground(getRounded("#222222", 20f)); btnEditLock.setTextColor(Color.WHITE); btnEditHome.setBackground(getRounded("#00E5FF", 20f)); btnEditHome.setTextColor(Color.BLACK); btnEditAnim.setBackground(getRounded("#222222", 20f)); btnEditAnim.setTextColor(Color.WHITE); btnEditMorse.setBackground(getRounded("#222222", 20f)); btnEditMorse.setTextColor(Color.WHITE); morseTriggerContainer.setVisibility(View.GONE); designSliderContainer.setVisibility(View.VISIBLE); ensureMockupVisible(); updateMockupUI(); renderSliders(); }); 
+        btnEditAnim.setOnClickListener(v -> { isMorseTriggerSpaceOpen = false; designTabState=2; refreshPreview(); btnEditLock.setBackground(getRounded("#222222", 20f)); btnEditLock.setTextColor(Color.WHITE); btnEditHome.setBackground(getRounded("#222222", 20f)); btnEditHome.setTextColor(Color.WHITE); btnEditAnim.setBackground(getRounded("#00E5FF", 20f)); btnEditAnim.setTextColor(Color.BLACK); btnEditMorse.setBackground(getRounded("#222222", 20f)); btnEditMorse.setTextColor(Color.WHITE); morseTriggerContainer.setVisibility(View.GONE); designSliderContainer.setVisibility(View.VISIBLE); hideMockupOverlay(); renderSliders(); }); 
         btnEditMorse.setOnClickListener(v -> { designTabState=3; refreshPreview(); btnEditLock.setBackground(getRounded("#222222", 20f)); btnEditLock.setTextColor(Color.WHITE); btnEditHome.setBackground(getRounded("#222222", 20f)); btnEditHome.setTextColor(Color.WHITE); btnEditAnim.setBackground(getRounded("#222222", 20f)); btnEditAnim.setTextColor(Color.WHITE); btnEditMorse.setBackground(getRounded("#00E5FF", 20f)); btnEditMorse.setTextColor(Color.BLACK); 
-            if(isMorseTriggerSpaceOpen) { designSliderContainer.setVisibility(View.GONE); morseTriggerContainer.setVisibility(View.VISIBLE); } else { morseTriggerContainer.setVisibility(View.GONE); designSliderContainer.setVisibility(View.VISIBLE); renderSliders(); if(mockupOverlayView!=null)updateMockupUI(); }
+            if(isMorseTriggerSpaceOpen) { designSliderContainer.setVisibility(View.GONE); morseTriggerContainer.setVisibility(View.VISIBLE); } else { morseTriggerContainer.setVisibility(View.GONE); designSliderContainer.setVisibility(View.VISIBLE); hideMockupOverlay(); renderSliders(); }
         });
 
         toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addView(btnEditAnim); toggleRow.addView(btnEditMorse); 
@@ -552,11 +574,6 @@ public class MainActivity extends Activity {
                 overlayBox.addView(btnTriggerPack);
                 
                 designSliderContainer.addView(createDrawer("🛡️ CẤU HÌNH LỚP PHỦ KHÓA & PACKS", overlayBox));
-            } else {
-                Button btnTestOverlay = new Button(this); btnTestOverlay.setText("👁️ BẬT/TẮT MOCKUP HIỂN THỊ"); btnTestOverlay.setBackground(getRounded("#FFC107", 20f)); btnTestOverlay.setTextColor(Color.BLACK);
-                LinearLayout.LayoutParams bp1 = new LinearLayout.LayoutParams(-1,-2); bp1.setMargins(0,15,0,25); btnTestOverlay.setLayoutParams(bp1);
-                btnTestOverlay.setOnClickListener(v -> toggleMockupOverlay());
-                designSliderContainer.addView(btnTestOverlay);
             }
 
             designSliderContainer.addView(createSectionTitle(barCount + " EDGE BARS"));
@@ -638,17 +655,20 @@ public class MainActivity extends Activity {
         footer.addView(btnC); footer.addView(btnS); root.addView(footer); d.setContentView(root); d.show();
     }
 
-    private void toggleMockupOverlay() {
-        android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+    private void hideMockupOverlay() {
         if (mockupOverlayView != null) { 
-            wm.removeView(mockupOverlayView); mockupOverlayView = null; 
-            Toast.makeText(this, "Đã tắt Mockup", Toast.LENGTH_SHORT).show(); return; 
+            try { ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).removeView(mockupOverlayView); } catch(Exception e){}
+            mockupOverlayView = null; 
         }
+    }
+
+    private void ensureMockupVisible() {
+        if (mockupOverlayView != null) return;
         if (!Settings.canDrawOverlays(this)) { Toast.makeText(this,"Cần cấp quyền Lớp phủ trước!", Toast.LENGTH_SHORT).show(); return; }
         
+        android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
         RelativeLayout root = new RelativeLayout(this);
         for(int i=0; i<7; i++) { mockupPreviewBars[i] = new View(this); root.addView(mockupPreviewBars[i]); }
-        // Sử dụng CornerMockupView thay thế cho View mặc định
         for(int i=0; i<4; i++) { mockupPreviewCorners[i] = new CornerMockupView(this); root.addView(mockupPreviewCorners[i]); }
         
         mockupOverlayView = root;
@@ -659,7 +679,12 @@ public class MainActivity extends Activity {
             flags, android.graphics.PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.CENTER;
-        try { wm.addView(mockupOverlayView, params); updateMockupUI(); Toast.makeText(this, "Đã BẬT Mockup! Kéo thanh Slider bên dưới thoải mái.", Toast.LENGTH_LONG).show(); } catch (Exception e) {}
+        try { wm.addView(mockupOverlayView, params); } catch (Exception e) {}
+    }
+
+    private void toggleMockupOverlay() { // Giữ nút này độc quyền cho không gian Morse
+        if (mockupOverlayView != null) { hideMockupOverlay(); Toast.makeText(this, "Đã TẮT Mockup Morse!", Toast.LENGTH_SHORT).show(); }
+        else { ensureMockupVisible(); updateMockupUI(); Toast.makeText(this, "Đã BẬT Mockup Morse!", Toast.LENGTH_SHORT).show(); }
     }
 
     private void updateMockupUI() {
@@ -693,7 +718,6 @@ public class MainActivity extends Activity {
             mockupPreviewBars[i].setTranslationX(prefs.getInt(prefix+currentBars[i]+"_x", 0));
             mockupPreviewBars[i].setTranslationY(prefs.getInt(prefix+currentBars[i]+"_y", 0));
             
-            // Trả lại cấu hình Thanh Bar 24px bo cong chuẩn mực
             int alpha = prefs.getInt(prefix+currentBars[i]+"_alpha", 50);
             GradientDrawable barGd = new GradientDrawable();
             barGd.setColor(Color.argb(alpha, 96, 125, 139));
@@ -716,7 +740,6 @@ public class MainActivity extends Activity {
             mockupPreviewCorners[i].setTranslationX(prefs.getInt(prefix+"corner_"+CORNERS[i]+"_x", 0));
             mockupPreviewCorners[i].setTranslationY(prefs.getInt(prefix+"corner_"+CORNERS[i]+"_y", 0));
             
-            // Kích hoạt ma thuật vẽ Canvas thay cho GradientDrawable
             if(mockupPreviewCorners[i] instanceof CornerMockupView) {
                 ((CornerMockupView)mockupPreviewCorners[i]).setConfig(CORNERS[i], prefix);
             }
