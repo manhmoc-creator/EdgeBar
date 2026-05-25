@@ -22,7 +22,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, listEcosystem, designSliderContainer, navMain, morseTriggerContainer, listMorseTriggers; 
     private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim, btnEditMorse, fabRule, fabI, fabQ, fabM, btnUpdate, fabMorse;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; private boolean isMorseTriggerSpaceOpen = false;
-    private final String CURRENT_VERSION = "V19.12.4.0"; private RelativeLayout rootLayout;
+    private final String CURRENT_VERSION = "V19.12.3.4.5"; private RelativeLayout rootLayout;
     
     // Nền đen dành riêng cho Morse
     private View mockupOverlayView;
