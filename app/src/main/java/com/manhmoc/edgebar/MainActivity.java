@@ -9,9 +9,9 @@ public class MainActivity extends Activity {
     private String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; 
     private String[] BAR_NAMES = {"Đáy phải", "Đáy trái", "Cạnh Phải", "Cạnh Trái", "Đỉnh giữa"}; 
     
-    // BỔ SUNG 2 THANH BAR CHO MORSE
+    // BỔ SUNG 2 THANH BAR ĐẶC QUYỀN CHO MORSE
     private String[] MORSE_BARS = {"r", "l", "t_r", "t_l", "t_c", "c", "b_c"}; 
-    private String[] MORSE_BAR_NAMES = {"Đáy phải", "Đáy trái", "Cạnh Phải", "Cạnh Trái", "Đỉnh giữa", "Giữa Màn hình", "Đáy giữa"}; 
+    private String[] MORSE_BAR_NAMES = {"Đáy phải", "Đáy trái", "Cạnh Phải", "Cạnh Trái", "Đỉnh giữa", "Giữa Màn hình", "Đáy Giữa"}; 
     
     private String[] CORNERS = {"br", "bl", "tr", "tl"}; 
     private String[] CORNER_NAMES = {"Góc đáy phải", "Góc đáy trái", "Góc đỉnh phải", "Góc đỉnh trái"};
@@ -28,7 +28,7 @@ public class MainActivity extends Activity {
     private final String CURRENT_VERSION = "V19.12.3.3.5"; private RelativeLayout rootLayout;
     
     private View mockupOverlayView;
-    private View[] mockupPreviewBars = new View[7]; // Up to 7 for Morse
+    private View[] mockupPreviewBars = new View[7]; 
     private View[] mockupPreviewCorners = new View[4];
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
@@ -37,6 +37,7 @@ public class MainActivity extends Activity {
         boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); 
         boolean pMorse = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==3);
         prefs.edit().putBoolean("preview_lock", pLock).putBoolean("preview_morse", pMorse).apply(); 
+        
         if (fabRule != null) fabRule.setVisibility(currentMainTab == 1 && (pageDesign == null || pageDesign.getVisibility() == View.GONE) ? View.VISIBLE : View.GONE);
         if (fabMorse != null) fabMorse.setVisibility((designTabState == 3 && isMorseTriggerSpaceOpen) ? View.VISIBLE : View.GONE);
     }
@@ -256,7 +257,6 @@ public class MainActivity extends Activity {
     // ==========================================
     // PHỤC SINH FULL EDITOR (KHÔNG CẮT XÉN)
     // ==========================================
-    
     private void showIntentEditor(int defaultSlot) {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar); LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,40,40,40); root.addView(createSectionTitle("🔴 CẤU HÌNH INTENT " + defaultSlot));
         EditText eName = createInput("Tên gợi nhớ (VD: Mở Facebook)", ""); EditText eAct = createInput("Action", ""); EditText ePkg = createInput("Package", ""); EditText eCls = createInput("Class Name", ""); EditText eData = createInput("Data URI (acc://...)", ""); EditText eCat = createInput("Categories", ""); EditText eFlags = createInput("Flags", ""); CheckBox cbBr = new CheckBox(this); cbBr.setText("Gửi dạng Broadcast"); cbBr.setTextColor(Color.WHITE);
@@ -434,7 +434,13 @@ public class MainActivity extends Activity {
             
             // --- DRAWERS BREATH RECORDER ---
             LinearLayout recSys = new LinearLayout(this); recSys.setOrientation(LinearLayout.VERTICAL); recSys.setPadding(10,10,10,10);
-            Button btnTestBreath = new Button(this); btnTestBreath.setText("▶ THỬ ANIMATION HƠI THỞ"); btnTestBreath.setBackground(getRounded("#E91E63", 20f)); btnTestBreath.setTextColor(Color.WHITE); btnTestBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp2 = new LinearLayout.LayoutParams(-1,-2); testLp2.setMargins(0,0,0,20); btnTestBreath.setLayoutParams(testLp2); btnTestBreath.setOnClickListener(v -> sendBroadcast(new Intent("com.manhmoc.edgebar.START_BREATH").setPackage(getPackageName()))); recSys.addView(btnTestBreath);
+            
+            // BỔ SUNG: NÚT THỬ GHI ÂM TEST RECORD (TẶNG KÈM)
+            LinearLayout testRow = new LinearLayout(this); testRow.setOrientation(LinearLayout.HORIZONTAL);
+            Button btnTestBreath = new Button(this); btnTestBreath.setText("▶ THỬ ANIMATION"); btnTestBreath.setBackground(getRounded("#E91E63", 20f)); btnTestBreath.setTextColor(Color.WHITE); btnTestBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp2 = new LinearLayout.LayoutParams(0,-2, 1f); testLp2.setMargins(0,0,10,20); btnTestBreath.setLayoutParams(testLp2); btnTestBreath.setOnClickListener(v -> sendBroadcast(new Intent("com.manhmoc.edgebar.START_BREATH").setPackage(getPackageName()))); testRow.addView(btnTestBreath);
+            Button btnTestRecord = new Button(this); btnTestRecord.setText("🎙️ THỬ GHI ÂM"); btnTestRecord.setBackground(getRounded("#4CAF50", 20f)); btnTestRecord.setTextColor(Color.WHITE); btnTestRecord.setPadding(0,30,0,30); LinearLayout.LayoutParams recLp = new LinearLayout.LayoutParams(0,-2, 1f); recLp.setMargins(10,0,0,20); btnTestRecord.setLayoutParams(recLp); btnTestRecord.setOnClickListener(v -> { Toast.makeText(this, "Đã gửi lệnh thử Ghi âm!", Toast.LENGTH_SHORT).show(); sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_RECORD").setPackage(getPackageName())); }); testRow.addView(btnTestRecord);
+            recSys.addView(testRow);
+
             Button btnStopBreath = new Button(this); btnStopBreath.setText("⏹ DỪNG THỬ"); btnStopBreath.setBackground(getRounded("#333333", 20f)); btnStopBreath.setTextColor(Color.WHITE); btnStopBreath.setPadding(0,30,0,30); LinearLayout.LayoutParams stopLp = new LinearLayout.LayoutParams(-1,-2); stopLp.setMargins(0,0,0,20); btnStopBreath.setLayoutParams(stopLp); btnStopBreath.setOnClickListener(v -> sendBroadcast(new Intent("com.manhmoc.edgebar.STOP_BREATH").setPackage(getPackageName()))); recSys.addView(btnStopBreath);
             
             recSys.addView(createComboDropdown("Cơ chế Ghi âm", "record_engine", new String[]{"Tự động (Lock: Trợ năng / Home: Lớp phủ)", "Luôn dùng Lớp Phủ (Cần ADB)", "Luôn dùng Trợ Năng"}, 0));
@@ -454,7 +460,6 @@ public class MainActivity extends Activity {
         } else if (designTabState == 0 || designTabState == 1 || designTabState == 3) { 
             String prefix = designTabState == 1 ? "home_" : (designTabState == 3 ? "morse_" : "lock_"); 
             
-            // XÁC ĐỊNH SỐ LƯỢNG BAR TÙY TAB
             int barCount = (designTabState == 3) ? 7 : 5;
             String[] currentBars = (designTabState == 3) ? MORSE_BARS : BARS;
             String[] currentBarNames = (designTabState == 3) ? MORSE_BAR_NAMES : BAR_NAMES;
@@ -478,7 +483,6 @@ public class MainActivity extends Activity {
                 appSelectRow.setOnClickListener(v -> showAppSelectorDialog(tvAppCount));
                 overlayBox.addView(appSelectRow);
                 
-                // NÚT MOCKUP CHUNG
                 Button btnTestOverlay = new Button(this); btnTestOverlay.setText("👁️ BẬT/TẮT MOCKUP HIỂN THỊ"); btnTestOverlay.setBackground(getRounded("#FFC107", 20f)); btnTestOverlay.setTextColor(Color.BLACK);
                 LinearLayout.LayoutParams bp1 = new LinearLayout.LayoutParams(-1,-2); bp1.setMargins(0,15,0,15); btnTestOverlay.setLayoutParams(bp1);
                 btnTestOverlay.setOnClickListener(v -> toggleMockupOverlay());
@@ -490,7 +494,6 @@ public class MainActivity extends Activity {
                 
                 designSliderContainer.addView(createDrawer("🛡️ CẤU HÌNH LỚP PHỦ KHÓA & PACKS", overlayBox));
             } else {
-                // NẾU LÀ LOCK HOẶC HOME CŨNG CÓ NÚT MOCKUP
                 Button btnTestOverlay = new Button(this); btnTestOverlay.setText("👁️ BẬT/TẮT MOCKUP HIỂN THỊ"); btnTestOverlay.setBackground(getRounded("#FFC107", 20f)); btnTestOverlay.setTextColor(Color.BLACK);
                 LinearLayout.LayoutParams bp1 = new LinearLayout.LayoutParams(-1,-2); bp1.setMargins(0,15,0,25); btnTestOverlay.setLayoutParams(bp1);
                 btnTestOverlay.setOnClickListener(v -> toggleMockupOverlay());
@@ -507,7 +510,6 @@ public class MainActivity extends Activity {
                 drawerContent.addView(createSlider("Độ trong suốt", prefix+currentBars[i]+"_alpha", 255, 50)); 
                 drawerContent.addView(createSlider("Chiều ngang", prefix+currentBars[i]+"_w", 3000, 300)); 
                 drawerContent.addView(createSlider("Chiều dọc", prefix+currentBars[i]+"_h", 3000, 60)); 
-                // MORSE X,Y SLIDER RANGE LÊN ĐẾN 3000 (-500 ĐẾN 2500)
                 if(designTabState == 3) {
                     drawerContent.addView(createSignedSlider("Toạ độ X", prefix+currentBars[i]+"_x", -500, 2500, 0)); 
                     drawerContent.addView(createSignedSlider("Toạ độ Y", prefix+currentBars[i]+"_y", -500, 2500, 0)); 
@@ -577,9 +579,6 @@ public class MainActivity extends Activity {
         footer.addView(btnC); footer.addView(btnS); root.addView(footer); d.setContentView(root); d.show();
     }
 
-    // ==========================================
-    // MOCKUP ENGINE TỐI THƯỢNG (HỖ TRỢ ĐA KHÔNG GIAN, MÀU BLUE-GREY VÀ BO GÓC THỰC TẾ)
-    // ==========================================
     private void toggleMockupOverlay() {
         android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
         if (mockupOverlayView != null) { 
@@ -593,7 +592,6 @@ public class MainActivity extends Activity {
         for(int i=0; i<4; i++) { mockupPreviewCorners[i] = new View(this); root.addView(mockupPreviewCorners[i]); }
         
         mockupOverlayView = root;
-        // FLAG_NOT_TOUCHABLE GIÚP BẠN CHẠM XUYÊN QUA ĐỂ KÉO SLIDER Ở DƯỚI
         int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
         android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
             android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT,
@@ -601,24 +599,20 @@ public class MainActivity extends Activity {
             flags, android.graphics.PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.CENTER;
-        try { wm.addView(mockupOverlayView, params); updateMockupUI(); Toast.makeText(this, "Đã BẬT Mockup! Sờ xuyên thấu thoải mái.", Toast.LENGTH_LONG).show(); } catch (Exception e) {}
+        try { wm.addView(mockupOverlayView, params); updateMockupUI(); Toast.makeText(this, "Đã BẬT Mockup! Kéo thanh Slider bên dưới thoải mái.", Toast.LENGTH_LONG).show(); } catch (Exception e) {}
     }
 
     private void updateMockupUI() {
         if(mockupOverlayView == null) return;
         
-        String prefix = "";
-        int barCount = 5;
-        String[] currentBars = BARS;
-        
+        String prefix = ""; int barCount = 5; String[] currentBars = BARS;
         if(designTabState == 0) { prefix = "lock_"; }
         else if(designTabState == 1) { prefix = "home_"; }
         else if(designTabState == 3) { prefix = "morse_"; barCount = 7; currentBars = MORSE_BARS; }
         else return;
         
-        if(designTabState == 3) {
-            mockupOverlayView.setBackgroundColor(Color.argb(prefs.getInt("morse_overlay_alpha", 180), 0,0,0));
-        } else { mockupOverlayView.setBackgroundColor(Color.TRANSPARENT); }
+        if(designTabState == 3) { mockupOverlayView.setBackgroundColor(Color.argb(prefs.getInt("morse_overlay_alpha", 180), 0,0,0)); } 
+        else { mockupOverlayView.setBackgroundColor(Color.TRANSPARENT); }
         
         for(int i=0; i<7; i++) {
             if(mockupPreviewBars[i] == null) continue;
@@ -627,7 +621,6 @@ public class MainActivity extends Activity {
             int w = prefs.getInt(prefix+currentBars[i]+"_w", 300); int h = prefs.getInt(prefix+currentBars[i]+"_h", 60);
             RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(w, h);
             
-            // Xếp vị trí
             if(currentBars[i].equals("r")) { lp.addRule(RelativeLayout.ALIGN_PARENT_RIGHT); lp.addRule(RelativeLayout.CENTER_VERTICAL); }
             else if(currentBars[i].equals("l")) { lp.addRule(RelativeLayout.ALIGN_PARENT_LEFT); lp.addRule(RelativeLayout.CENTER_VERTICAL); }
             else if(currentBars[i].equals("t_r")) { lp.addRule(RelativeLayout.ALIGN_PARENT_RIGHT); lp.addRule(RelativeLayout.ALIGN_PARENT_TOP); }
@@ -640,7 +633,6 @@ public class MainActivity extends Activity {
             mockupPreviewBars[i].setTranslationX(prefs.getInt(prefix+currentBars[i]+"_x", 0));
             mockupPreviewBars[i].setTranslationY(prefs.getInt(prefix+currentBars[i]+"_y", 0));
             
-            // TÔ MÀU XANH XÁM LỤC BẢO
             int alpha = prefs.getInt(prefix+currentBars[i]+"_alpha", 50);
             mockupPreviewBars[i].setBackgroundColor(Color.argb(alpha, 96, 125, 139));
         }
@@ -660,7 +652,6 @@ public class MainActivity extends Activity {
             mockupPreviewCorners[i].setTranslationX(prefs.getInt(prefix+"corner_"+CORNERS[i]+"_x", 0));
             mockupPreviewCorners[i].setTranslationY(prefs.getInt(prefix+"corner_"+CORNERS[i]+"_y", 0));
             
-            // TÔ MÀU VÀ BO GÓC CHO CORNERS THEO CÔNG THỨC
             int strokeAlpha = prefs.getInt(prefix+"corner_stroke_alpha", 200);
             int moonAlpha = prefs.getInt(prefix+"corner_moon_alpha", 100);
             float rad = prefs.getInt(prefix+"corner_"+CORNERS[i]+"_rad", 80);
@@ -668,10 +659,10 @@ public class MainActivity extends Activity {
             if(actualRadius < 0) actualRadius = 0;
             
             GradientDrawable gd = new GradientDrawable();
-            gd.setColor(Color.argb(moonAlpha, 96, 125, 139)); // Lõi Trăng Non
+            gd.setColor(Color.argb(moonAlpha, 96, 125, 139));
             int thick = prefs.getInt(prefix+"corner_thick", 8);
-            gd.setStroke(thick, Color.argb(strokeAlpha, 255, 255, 255)); // Vỏ Trắng
-            gd.setCornerRadius(actualRadius); // Bo cong thực tế
+            gd.setStroke(thick, Color.argb(strokeAlpha, 255, 255, 255));
+            gd.setCornerRadius(actualRadius);
             
             mockupPreviewCorners[i].setBackground(gd);
         }
