@@ -1,5 +1,5 @@
 package com.manhmoc.edgebar;
-import android.Manifest; import android.app.Activity; import android.app.AlertDialog; import android.app.Dialog; import android.content.ComponentName; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.content.pm.LauncherActivityInfo; import android.content.pm.LauncherApps; import android.content.pm.PackageManager; import android.graphics.Color; import android.graphics.drawable.GradientDrawable; import android.os.Build; import android.os.Bundle; import android.os.UserHandle; import android.os.UserManager; import android.provider.Settings; import android.net.Uri; import android.text.TextUtils; import android.view.Gravity; import android.view.View; import android.widget.*; import org.json.JSONObject; import java.util.ArrayList; import java.util.Iterator; import java.util.List;
+import android.Manifest; import android.app.Activity; import android.app.AlertDialog; import android.app.Dialog; import android.content.ClipData; import android.content.ClipboardManager; import android.content.ComponentName; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.content.pm.LauncherActivityInfo; import android.content.pm.LauncherApps; import android.content.pm.PackageManager; import android.graphics.Color; import android.graphics.drawable.Drawable; import android.graphics.drawable.GradientDrawable; import android.os.Build; import android.os.Bundle; import android.os.UserHandle; import android.os.UserManager; import android.provider.Settings; import android.net.Uri; import android.text.TextUtils; import android.view.Gravity; import android.view.View; import android.widget.*; import org.json.JSONObject; import java.util.ArrayList; import java.util.Iterator; import java.util.List;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs; private boolean isVi;
@@ -8,56 +8,43 @@ public class MainActivity extends Activity {
     private String[] ACT_KEYS = new String[36]; private String[] ACT_LABS = new String[36];
     private String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; 
     private String[] BAR_NAMES = {"Đáy phải", "Đáy trái", "Cạnh Phải", "Cạnh Trái", "Đỉnh giữa"}; 
-    
     private String[] MORSE_BARS = {"r", "l", "t_r", "t_l", "t_c", "c", "b_c"}; 
     private String[] MORSE_BAR_NAMES = {"Đáy phải", "Đáy trái", "Cạnh Phải", "Cạnh Trái", "Đỉnh giữa", "Giữa Màn hình", "Đáy Giữa"}; 
-    
     private String[] CORNERS = {"br", "bl", "tr", "tl"}; 
     private String[] CORNER_NAMES = {"Góc đáy phải", "Góc đáy trái", "Góc đỉnh phải", "Góc đỉnh trái"};
     private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; 
     private String[] COLOR_NAMES = {"Trắng Tinh Khiết", "Neon (Pink-Cyan)", "Cyberpunk (Purple-Gold)", "Lava (Red-Orange)", "Ocean (Blue-Cyan)", "Matrix (Green)", "Sunset (Purple-Orange)", "Google (4 Colors)", "Aurora (Cyan-Purple)", "Abyss", "Forest", "Flame", "Midnight", "Tropical", "Candy"};
-    private String[] ALL_COMP_KEYS = {"r", "l", "t_r", "t_l", "t_c", "corner_br", "corner_bl", "corner_tr", "corner_tl"}; 
-    private String[] ALL_COMP_NAMES = {"Thanh Đáy Phải", "Thanh Đáy Trái", "Thanh Cạnh Phải", "Thanh Cạnh Trái", "Thanh Đỉnh Giữa", "Góc Viền Đáy Phải", "Góc Viền Đáy Trái", "Góc Viền Đỉnh Phải", "Góc Viền Đỉnh Trái"};
+    private String[] ALL_COMP_KEYS = {"r", "l", "t_r", "t_l", "t_c", "corner_br", "corner_bl", "corner_tr", "corner_tl", "spy_bar"}; 
+    private String[] ALL_COMP_NAMES = {"Thanh Đáy Phải", "Thanh Đáy Trái", "Thanh Cạnh Phải", "Thanh Cạnh Trái", "Thanh Đỉnh Giữa", "Góc Viền Đáy Phải", "Góc Viền Đáy Trái", "Góc Viền Đỉnh Phải", "Góc Viền Đỉnh Trái", "Spy Bar (Ghi Âm)"};
     private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold"}; 
     private String[] C_GESTURE_NAMES = {"1 Chạm", "2 Chạm", "Nhấn Giữ", "Vuốt Lên", "Vuốt Xuống", "Vuốt Trái", "Vuốt Phải", "Vuốt Lên+Giữ", "Vuốt Xuống+Giữ", "Vuốt Trái+Giữ", "Vuốt Phải+Giữ", "Vuốt Chéo", "Vuốt Chéo+Giữ"};
 
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, listEcosystem, designSliderContainer, navMain, morseTriggerContainer, listMorseTriggers; 
     private Button btnLock, btnHome, btnNavCond, btnNavAdv, btnEditLock, btnEditHome, btnEditAnim, btnEditMorse, fabRule, fabI, fabQ, fabM, btnUpdate, fabMorse;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; private boolean isMorseTriggerSpaceOpen = false;
-    private final String CURRENT_VERSION = "V19.12.3.3.8"; private RelativeLayout rootLayout;
+    private final String CURRENT_VERSION = "V19.12.4.0"; private RelativeLayout rootLayout;
     
-    // BIẾN THỜI GIAN ĐỂ CHỐNG LAG KHI KÉO SLIDER LIÊN TỤC
-    private long lastUiUpdateTime = 0;
+    // Nền đen dành riêng cho Morse
+    private View mockupOverlayView;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     
-    // Gửi lệnh Update nhẹ nhàng (Debounce ~40ms tương đương 25fps)
-    private void broadcastUiUpdate() {
-        if(System.currentTimeMillis() - lastUiUpdateTime > 40) {
-            lastUiUpdateTime = System.currentTimeMillis();
-            sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName()));
-        }
-    }
-    
-    private void broadcastBreathUpdate() {
-        if(System.currentTimeMillis() - lastUiUpdateTime > 40) {
-            lastUiUpdateTime = System.currentTimeMillis();
-            sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_BREATH").setPackage(getPackageName()));
-        }
-    }
-
     private void refreshPreview() { 
+        // Logic Preview được tối ưu lại hoàn toàn
         boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); 
         boolean pHome = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==1) || (currentMainTab==1 && currentGesTab==1);
         boolean pMorse = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==3);
+        boolean pSpy = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==2); // Tab ANIMA kích hoạt SpyBar
         
+        if (!pMorse) hideMorseOverlay();
+
         prefs.edit()
             .putBoolean("preview_lock", pLock)
             .putBoolean("preview_home", pHome)
             .putBoolean("preview_morse", pMorse)
+            .putBoolean("preview_spy", pSpy)
             .apply(); 
-        
-        // Gọi Service thật vẽ lại lập tức
+            
         sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName()));
         
         if (fabRule != null) fabRule.setVisibility(currentMainTab == 1 && (pageDesign == null || pageDesign.getVisibility() == View.GONE) ? View.VISIBLE : View.GONE);
@@ -65,20 +52,12 @@ public class MainActivity extends Activity {
     }
     
     @Override protected void onResume() { super.onResume(); refreshPreview(); }
-    @Override protected void onPause() { 
-        super.onPause(); 
-        prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_home", false).putBoolean("preview_morse", false).putBoolean("preview_morse_dim", false).apply(); 
-        sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName()));
-    }
-    @Override protected void onDestroy() { 
-        super.onDestroy(); 
-        prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_home", false).putBoolean("preview_morse", false).putBoolean("preview_morse_dim", false).apply(); 
-        sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName()));
-    }
+    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_home", false).putBoolean("preview_morse", false).putBoolean("preview_spy", false).apply(); sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName())); hideMorseOverlay(); }
+    @Override protected void onDestroy() { super.onDestroy(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_home", false).putBoolean("preview_morse", false).putBoolean("preview_spy", false).apply(); sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName())); hideMorseOverlay(); }
 
     private void reloadActionLabels() {
         String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "VOICE_RECORD", "STOP_RECORD"}; 
-        String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn hình chính"), T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume", "Menu Âm Lượng"), T("Screenshot", "Chụp ảnh màn"), T("Camera", "Camera"), T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("YTDL Download", "Tải bằng YTDL"), T("Stealth Record", "Bật Ghi Âm"), T("Stop Record", "Tắt Ghi Âm")};
+        String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn hình chính"), T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume", "Menu Âm Lượng"), T("Screenshot", "Chụp ảnh màn"), T("Camera", "Camera"), T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("YTDL Download", "Tải bằng YTDL"), T("Voice Record", "Bật/Tắt Ghi Âm ngầm"), T("Stop Record", "Dừng Ghi Âm")};
         for(int i=0; i<16; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; } 
         for(int i=1; i<=15; i++) { ACT_KEYS[15+i]="INTENT_"+i; ACT_LABS[15+i] = prefs.getString("intent_"+i+"_name", "Intent " + i); }
         for(int i=1; i<=5; i++) { ACT_KEYS[30+i]="MACRO_"+i; ACT_LABS[30+i] = prefs.getString("macro_"+i+"_name", "Macro " + i); }
@@ -277,7 +256,15 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
         TextView tTitle = new TextView(this); tTitle.setText(title); tTitle.setTextColor(Color.parseColor("#BBBBBB")); tTitle.setTextSize(12); tTitle.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
         Switch sw = new Switch(this); sw.setChecked(prefs.getBoolean(prefKey, defState)); 
-        sw.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(prefKey, c).apply(); if(prefKey.startsWith("tile_")) { int tileIdx = Integer.parseInt(prefKey.replace("tile_","").replace("_on","")); ComponentName comp = new ComponentName(this, "com.manhmoc.edgebar.Tile" + tileIdx); getPackageManager().setComponentEnabledSetting(comp, c ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP); renderEcosystemList(); } else if(prefKey.startsWith("morse_pack_")) { renderMorseTriggersList(); } });
+        sw.setOnCheckedChangeListener((v,c) -> {
+            prefs.edit().putBoolean(prefKey, c).apply();
+            if(prefKey.startsWith("tile_")) {
+                int tileIdx = Integer.parseInt(prefKey.replace("tile_","").replace("_on",""));
+                ComponentName comp = new ComponentName(this, "com.manhmoc.edgebar.Tile" + tileIdx);
+                getPackageManager().setComponentEnabledSetting(comp, c ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
+                renderEcosystemList();
+            } else if(prefKey.startsWith("morse_pack_")) { renderMorseTriggersList(); }
+        });
         row.addView(tTitle); row.addView(sw); card.addView(row);
         TextView tDesc = new TextView(this); tDesc.setText(desc); tDesc.setTextColor(Color.parseColor("#00E5FF")); tDesc.setTextSize(15); tDesc.setPadding(0,10,0,5); card.addView(tDesc);
         TextView tDet = new TextView(this); tDet.setText(detail); tDet.setTextColor(Color.GRAY); tDet.setTextSize(10); tDet.setMaxLines(2); tDet.setEllipsize(TextUtils.TruncateAt.END); card.addView(tDet);
@@ -288,7 +275,12 @@ public class MainActivity extends Activity {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar); LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,40,40,40); root.addView(createSectionTitle("🔴 CẤU HÌNH INTENT " + defaultSlot));
         EditText eName = createInput("Tên gợi nhớ (VD: Mở Facebook)", ""); EditText eAct = createInput("Action", ""); EditText ePkg = createInput("Package", ""); EditText eCls = createInput("Class Name", ""); EditText eData = createInput("Data URI (acc://...)", ""); EditText eCat = createInput("Categories", ""); EditText eFlags = createInput("Flags", ""); CheckBox cbBr = new CheckBox(this); cbBr.setText("Gửi dạng Broadcast"); cbBr.setTextColor(Color.WHITE);
         int i = defaultSlot; eName.setText(prefs.getString("intent_"+i+"_name", "")); eAct.setText(prefs.getString("intent_"+i+"_act", "")); ePkg.setText(prefs.getString("intent_"+i+"_pkg", "")); eCls.setText(prefs.getString("intent_"+i+"_cls", "")); eData.setText(prefs.getString("intent_"+i+"_data", "")); eCat.setText(prefs.getString("intent_"+i+"_cat", "")); eFlags.setText(prefs.getString("intent_"+i+"_flags", "")); cbBr.setChecked(prefs.getBoolean("intent_"+i+"_br", true));
-        ScrollView scroll = new ScrollView(this); LinearLayout form = new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); form.addView(eName); form.addView(eAct); form.addView(ePkg); form.addView(eCls); form.addView(eData); form.addView(eCat); form.addView(eFlags); form.addView(cbBr); scroll.addView(form); LinearLayout.LayoutParams sclp = new LinearLayout.LayoutParams(-1,0,1f); scroll.setLayoutParams(sclp); root.addView(scroll);
+        
+        Button btnPickApp = new Button(this); btnPickApp.setText("CẬP NHẬT GÓI/TÊN LỚP TỪ APP CÀI ĐẶT"); btnPickApp.setBackground(getRounded("#2196F3", 20f)); btnPickApp.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams btnAppLp = new LinearLayout.LayoutParams(-1,-2); btnAppLp.setMargins(0,0,0,20); btnPickApp.setLayoutParams(btnAppLp);
+        btnPickApp.setOnClickListener(v -> showAppSelectorDialogForIntent(ePkg, eCls));
+        
+        ScrollView scroll = new ScrollView(this); LinearLayout form = new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); form.addView(btnPickApp); form.addView(eName); form.addView(eAct); form.addView(ePkg); form.addView(eCls); form.addView(eData); form.addView(eCat); form.addView(eFlags); form.addView(cbBr); scroll.addView(form); LinearLayout.LayoutParams sclp = new LinearLayout.LayoutParams(-1,0,1f); scroll.setLayoutParams(sclp); root.addView(scroll);
         LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,20,0,0); Button btnC = new Button(this); btnC.setText("HỦY"); btnC.setBackground(getRounded("#333333", 20f)); btnC.setTextColor(Color.WHITE); btnC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Button btnS = new Button(this); btnS.setText("LƯU LẠI"); btnS.setBackground(getRounded("#4CAF50", 20f)); btnS.setTextColor(Color.WHITE); LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0,-2,1f); btnLp.setMargins(20,0,0,0); btnS.setLayoutParams(btnLp);
         btnC.setOnClickListener(v -> d.dismiss()); btnS.setOnClickListener(v -> { prefs.edit().putString("intent_"+i+"_name", eName.getText().toString()).putString("intent_"+i+"_act", eAct.getText().toString()).putString("intent_"+i+"_pkg", ePkg.getText().toString()).putString("intent_"+i+"_cls", eCls.getText().toString()).putString("intent_"+i+"_data", eData.getText().toString()).putString("intent_"+i+"_cat", eCat.getText().toString()).putString("intent_"+i+"_flags", eFlags.getText().toString()).putBoolean("intent_"+i+"_br", cbBr.isChecked()).apply(); d.dismiss(); renderEcosystemList(); reloadActionLabels(); });
         footer.addView(btnC); footer.addView(btnS); root.addView(footer); d.setContentView(root); d.show();
@@ -335,57 +327,28 @@ public class MainActivity extends Activity {
         root.addView(createSectionTitle("📦 CẤU HÌNH MORSE TRIGGER PACK " + defaultSlot));
         EditText eName = createInput("Tên gói (VD: Khóa Zalo)", ""); eName.setText(prefs.getString("morse_pack_"+defaultSlot+"_name", ""));
         root.addView(eName);
-
         TextView tvGuide = new TextView(this); tvGuide.setText("Chọn Cử chỉ cho các vùng bạn muốn dùng. Điền Thứ tự (1, 2, 3...) để hệ thống biết chuỗi mật mã của bạn."); tvGuide.setTextColor(Color.GRAY); tvGuide.setPadding(0,10,0,20); root.addView(tvGuide);
-        
         ScrollView scroll = new ScrollView(this); LinearLayout form = new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); scroll.addView(form); LinearLayout.LayoutParams sclp = new LinearLayout.LayoutParams(-1,0,1f); scroll.setLayoutParams(sclp); root.addView(scroll);
-        
-        String savedTriggers = prefs.getString("morse_pack_"+defaultSlot+"_triggers", "");
-        String[] steps = savedTriggers.split(",");
-        
+        String savedTriggers = prefs.getString("morse_pack_"+defaultSlot+"_triggers", ""); String[] steps = savedTriggers.split(",");
         CheckBox[] cbComps = new CheckBox[9]; Spinner[] spGestures = new Spinner[9]; EditText[] etOrders = new EditText[9];
-        
         for(int c=0; c<9; c++) {
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(0,15,0,15);
             cbComps[c] = new CheckBox(this); cbComps[c].setText(ALL_COMP_NAMES[c]); cbComps[c].setTextColor(Color.WHITE); cbComps[c].setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.2f));
-            
             spGestures[c] = createSpinner(); spGestures[c].setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, C_GESTURE_NAMES)); spGestures[c].setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.2f)); spGestures[c].setEnabled(false);
-            
             etOrders[c] = new EditText(this); etOrders[c].setHint("#"); etOrders[c].setTextColor(Color.WHITE); etOrders[c].setBackground(getRounded("#333333", 15f)); etOrders[c].setPadding(20,20,20,20); etOrders[c].setInputType(android.text.InputType.TYPE_CLASS_NUMBER); etOrders[c].setGravity(Gravity.CENTER); etOrders[c].setLayoutParams(new LinearLayout.LayoutParams(0, -2, 0.6f)); etOrders[c].setEnabled(false);
-            
             final int fc = c; cbComps[c].setOnCheckedChangeListener((v, chk) -> { spGestures[fc].setEnabled(chk); etOrders[fc].setEnabled(chk); if(!chk) etOrders[fc].setText(""); });
-            
             int order = -1; String gest = "";
-            for(int s=0; s<steps.length; s++) {
-                if(!steps[s].trim().isEmpty() && steps[s].trim().startsWith(ALL_COMP_KEYS[c]+"_")) {
-                    order = s + 1; gest = steps[s].trim().replace(ALL_COMP_KEYS[c]+"_", ""); break;
-                }
-            }
-            if(order != -1) {
-                cbComps[c].setChecked(true); etOrders[c].setText(String.valueOf(order));
-                for(int g=0; g<C_GESTURES.length; g++) { if(C_GESTURES[g].equals(gest)) spGestures[c].setSelection(g); }
-            }
-            
+            for(int s=0; s<steps.length; s++) { if(!steps[s].trim().isEmpty() && steps[s].trim().startsWith(ALL_COMP_KEYS[c]+"_")) { order = s + 1; gest = steps[s].trim().replace(ALL_COMP_KEYS[c]+"_", ""); break; } }
+            if(order != -1) { cbComps[c].setChecked(true); etOrders[c].setText(String.valueOf(order)); for(int g=0; g<C_GESTURES.length; g++) { if(C_GESTURES[g].equals(gest)) spGestures[c].setSelection(g); } }
             row.addView(cbComps[c]); row.addView(spGestures[c]); row.addView(etOrders[c]); form.addView(row);
         }
-
         LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,20,0,0); Button btnC = new Button(this); btnC.setText("HỦY"); btnC.setBackground(getRounded("#333333", 20f)); btnC.setTextColor(Color.WHITE); btnC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Button btnS = new Button(this); btnS.setText("LƯU LẠI"); btnS.setBackground(getRounded("#4CAF50", 20f)); btnS.setTextColor(Color.WHITE); LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0,-2,1f); btnLp.setMargins(20,0,0,0); btnS.setLayoutParams(btnLp);
         btnC.setOnClickListener(v_ -> d.dismiss()); 
         btnS.setOnClickListener(v_ -> { 
             class Step implements Comparable<Step> { int order; String trigger; Step(int o, String t){order=o; trigger=t;} public int compareTo(Step s){return Integer.compare(this.order, s.order);} }
             ArrayList<Step> parsedSteps = new ArrayList<>();
-            for(int c=0; c<9; c++) {
-                if(cbComps[c].isChecked()) {
-                    String ordStr = etOrders[c].getText().toString();
-                    if(ordStr.isEmpty()) { Toast.makeText(this, "Thiếu số thứ tự cho " + ALL_COMP_NAMES[c], Toast.LENGTH_SHORT).show(); return; }
-                    int o = Integer.parseInt(ordStr);
-                    String t = ALL_COMP_KEYS[c] + "_" + C_GESTURES[spGestures[c].getSelectedItemPosition()];
-                    parsedSteps.add(new Step(o, t));
-                }
-            }
-            java.util.Collections.sort(parsedSteps);
-            StringBuilder sb = new StringBuilder();
-            for(int j=0; j<parsedSteps.size(); j++) { sb.append(parsedSteps.get(j).trigger); if(j<parsedSteps.size()-1) sb.append(","); }
+            for(int c=0; c<9; c++) { if(cbComps[c].isChecked()) { String ordStr = etOrders[c].getText().toString(); if(ordStr.isEmpty()) { Toast.makeText(this, "Thiếu số thứ tự cho " + ALL_COMP_NAMES[c], Toast.LENGTH_SHORT).show(); return; } int o = Integer.parseInt(ordStr); String t = ALL_COMP_KEYS[c] + "_" + C_GESTURES[spGestures[c].getSelectedItemPosition()]; parsedSteps.add(new Step(o, t)); } }
+            java.util.Collections.sort(parsedSteps); StringBuilder sb = new StringBuilder(); for(int j=0; j<parsedSteps.size(); j++) { sb.append(parsedSteps.get(j).trigger); if(j<parsedSteps.size()-1) sb.append(","); }
             prefs.edit().putString("morse_pack_"+defaultSlot+"_name", eName.getText().toString()).putString("morse_pack_"+defaultSlot+"_triggers", sb.toString()).apply(); 
             d.dismiss(); renderMorseTriggersList(); 
         });
@@ -420,7 +383,7 @@ public class MainActivity extends Activity {
         LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL); 
         btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
         btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); 
-        btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
+        btnEditAnim = new Button(this); btnEditAnim.setText("SPY BAR"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
         btnEditMorse = new Button(this); btnEditMorse.setText("MORSE"); LinearLayout.LayoutParams mP2 = new LinearLayout.LayoutParams(0, -2, 1f); mP2.setMargins(10,0,0,0); btnEditMorse.setLayoutParams(mP2); 
         
         morseTriggerContainer = new LinearLayout(this); morseTriggerContainer.setOrientation(LinearLayout.VERTICAL); morseTriggerContainer.setVisibility(View.GONE);
@@ -443,7 +406,7 @@ public class MainActivity extends Activity {
     private void renderSliders() { designSliderContainer.removeAllViews(); 
         if(designTabState == 2) { 
             LinearLayout edgeAnimContent = new LinearLayout(this); edgeAnimContent.setOrientation(LinearLayout.VERTICAL); edgeAnimContent.setPadding(10,10,10,10);
-            Button btnTest = new Button(this); btnTest.setText("▶ THỬ NGAY HIỆU ỨNG VIỀN"); btnTest.setBackground(getRounded("#FFC107", 20f)); btnTest.setTextColor(Color.BLACK); btnTest.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(-1,-2); testLp.setMargins(0,0,0,20); btnTest.setLayoutParams(testLp); btnTest.setOnClickListener(v -> { Intent i = new Intent("com.manhmoc.edgebar.TEST_ANIM"); i.setPackage(getPackageName()); sendBroadcast(i); }); edgeAnimContent.addView(btnTest);
+            Button btnTest = new Button(this); btnTest.setText("▶ THỬ NGAY HIỆU ỨNG VIỀN"); btnTest.setBackground(getRounded("#FFC107", 20f)); btnTest.setTextColor(Color.BLACK); btnTest.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(-1,-2); testLp.setMargins(0,0,0,20); btnTest.setLayoutParams(testLp); btnTest.setOnClickListener(v -> { Intent i = new Intent("com.manhmoc.edgebar.TEST_ANIM"); i.setPackage(getPackageName()); sendBroadcast(i); Toast.makeText(this, "Playing Animation...", Toast.LENGTH_SHORT).show(); }); edgeAnimContent.addView(btnTest);
             LinearLayout lC = new LinearLayout(this); lC.setOrientation(LinearLayout.HORIZONTAL); lC.setPadding(0,10,0,10); TextView tC = new TextView(this); tC.setText("Chủ đề:"); tC.setTextColor(Color.WHITE); tC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sC = createSpinner(); sC.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, COLOR_NAMES)); String curC = prefs.getString("anim_color", "WHITE"); for(int i=0;i<COLOR_KEYS.length;i++) if(COLOR_KEYS[i].equals(curC)) sC.setSelection(i); 
             
             final boolean[] firstRunC = {true};
@@ -451,53 +414,42 @@ public class MainActivity extends Activity {
             
             sC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lC.addView(tC); lC.addView(sC); edgeAnimContent.addView(lC); 
             LinearLayout lS = new LinearLayout(this); lS.setOrientation(LinearLayout.HORIZONTAL); lS.setPadding(0,10,0,10); TextView tS = new TextView(this); tS.setText("Kiểu chạy:"); tS.setTextColor(Color.WHITE); tS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sS = createSpinner(); sS.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Nhấp Nháy", "1 Tia sáng nối đuôi", "2 Tia sáng đối xứng", "3 Tia sáng đều nhau"})); sS.setSelection(prefs.getInt("anim_style", 0)); sS.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt("anim_style", pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lS.addView(tS); lS.addView(sS); edgeAnimContent.addView(lS); 
-            edgeAnimContent.addView(createSignedSlider("Chiều ngang Hiệu ứng", "anim_w", -2000, 2000, 0)); edgeAnimContent.addView(createSignedSlider("Chiều dọc Hiệu ứng", "anim_h", -3500, 3500, 0)); edgeAnimContent.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255)); edgeAnimContent.addView(createSlider("Độ dày viền", "anim_thick", 50, 12)); edgeAnimContent.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500)); edgeAnimContent.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600)); edgeAnimContent.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30)); 
+            edgeAnimContent.addView(createSignedSlider("Chiều ngang Hiệu ứng (0=Full)", "anim_w", -2000, 2000, 0)); edgeAnimContent.addView(createSignedSlider("Chiều dọc Hiệu ứng (0=Full)", "anim_h", -3500, 3500, 0)); edgeAnimContent.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255)); edgeAnimContent.addView(createSlider("Độ dày viền", "anim_thick", 50, 12)); edgeAnimContent.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500)); edgeAnimContent.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600)); edgeAnimContent.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30)); 
             designSliderContainer.addView(createDrawer("✨ HIỆU ỨNG ÁNH SÁNG (VIỀN)", edgeAnimContent));
             
-            // --- DRAWERS BREATH RECORDER ---
             LinearLayout recSys = new LinearLayout(this); recSys.setOrientation(LinearLayout.VERTICAL); recSys.setPadding(10,10,10,10);
             
             LinearLayout testRow = new LinearLayout(this); testRow.setOrientation(LinearLayout.HORIZONTAL);
-            Button btnTestStart = new Button(this); btnTestStart.setText("▶ BẬT GHI ÂM + HƠI THỞ");
+            Button btnTestStart = new Button(this); btnTestStart.setText("▶ BẬT GHI ÂM (TEST)");
             btnTestStart.setBackground(getRounded("#4CAF50", 20f)); btnTestStart.setTextColor(Color.WHITE); btnTestStart.setPadding(0,30,0,30);
             LinearLayout.LayoutParams testLp2 = new LinearLayout.LayoutParams(0,-2, 1f); testLp2.setMargins(0,0,10,20);
             btnTestStart.setLayoutParams(testLp2);
             btnTestStart.setOnClickListener(v -> {
-                Toast.makeText(this, "Đã gửi lệnh Bật Ghi Âm & Hơi Thở! (Lưu vào Storage/Recordings)", Toast.LENGTH_SHORT).show();
-                Intent intent = new Intent("com.manhmoc.edgebar.TEST_RECORD_START");
-                intent.setPackage(getPackageName());
-                intent.putExtra("save_to_public", true); // Flag yêu cầu Service lưu vào folder public
-                intent.putExtra("folder", "Recordings");
-                sendBroadcast(intent);
-                sendBroadcast(new Intent("com.manhmoc.edgebar.START_BREATH").setPackage(getPackageName()));
+                Intent intentRec = new Intent("com.manhmoc.edgebar.TEST_RECORD_START");
+                sendBroadcast(intentRec.setPackage(getPackageName()));
             });
             testRow.addView(btnTestStart);
 
-            Button btnTestStop = new Button(this); btnTestStop.setText("⏹ DỪNG TẤT CẢ");
+            Button btnTestStop = new Button(this); btnTestStop.setText("⏹ DỪNG & LƯU FILE");
             btnTestStop.setBackground(getRounded("#E91E63", 20f)); btnTestStop.setTextColor(Color.WHITE); btnTestStop.setPadding(0,30,0,30);
             LinearLayout.LayoutParams recLp = new LinearLayout.LayoutParams(0,-2, 1f); recLp.setMargins(10,0,0,20);
             btnTestStop.setLayoutParams(recLp);
             btnTestStop.setOnClickListener(v -> {
-                Toast.makeText(this, "Đã gửi lệnh Dừng Ghi Âm!", Toast.LENGTH_SHORT).show();
                 sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_RECORD_STOP").setPackage(getPackageName()));
-                sendBroadcast(new Intent("com.manhmoc.edgebar.STOP_BREATH").setPackage(getPackageName()));
             });
             testRow.addView(btnTestStop);
             recSys.addView(testRow);
             
-            recSys.addView(createComboDropdown("Cơ chế Ghi âm", "record_engine", new String[]{"Tự động (Lock: Trợ năng / Home: Lớp phủ)", "Luôn dùng Lớp Phủ (Cần ADB)", "Luôn dùng Trợ Năng"}, 0));
-            CheckBox cbCover = new CheckBox(this); cbCover.setText("Phủ lên cả Thanh trạng thái (Status bar)"); cbCover.setTextColor(Color.WHITE); cbCover.setPadding(0,10,0,20); cbCover.setChecked(prefs.getBoolean("breath_cover_status", true)); cbCover.setOnCheckedChangeListener((v,c)->{prefs.edit().putBoolean("breath_cover_status", c).apply(); broadcastUiUpdate();}); recSys.addView(cbCover);
+            recSys.addView(createComboDropdown("Hình dáng Spy Bar", "spy_bar_shape", new String[]{"Viền cạnh (Bo góc dài)", "Chấm Tròn (Viên bi)"}, 0));
+            TextView tEdge = new TextView(this); tEdge.setText("Để thiết lập vị trí Spy Bar, hãy kéo độ mờ (Alpha) lên để nhìn thấy nó. Khi thiết lập xong, kéo độ mờ về 0 để Tàng hình hoàn toàn."); tEdge.setTextColor(Color.GRAY); tEdge.setPadding(0,20,0,20); recSys.addView(tEdge);
+            recSys.addView(createSlider("Độ mờ Spy Bar (Alpha)", "spy_bar_alpha", 255, 150));
+            recSys.addView(createSlider("Độ bo góc (Radius)", "spy_bar_rad", 500, 100));
+            recSys.addView(createSignedSlider("Chiều ngang", "spy_bar_w", 10, 2000, 150)); 
+            recSys.addView(createSignedSlider("Chiều dọc", "spy_bar_h", 10, 3500, 150)); 
+            recSys.addView(createSignedSlider("Toạ độ X", "spy_bar_x", -1500, 1500, 0)); 
+            recSys.addView(createSignedSlider("Toạ độ Y", "spy_bar_y", -1500, 1500, 0));
             
-            recSys.addView(createComboDropdown("Hình dáng Hơi Thở", "breath_shape", new String[]{"Dải Viền (Edge)", "Chấm Tròn (Dot)"}, 0));
-            recSys.addView(createSlider("Khoảng nghỉ nhịp thở (ms)", "breath_delay", 5000, 1500));
-            recSys.addView(createSlider("Độ mờ tối đa (Alpha)", "breath_alpha", 255, 255));
-            
-            TextView tEdge = new TextView(this); tEdge.setText("Cấu hình Dải Viền:"); tEdge.setTextColor(Color.GRAY); recSys.addView(tEdge);
-            recSys.addView(createSignedSlider("Chiều ngang", "breath_w", -2000, 2000, 0)); recSys.addView(createSignedSlider("Chiều dọc", "breath_h", -3500, 3500, 0)); recSys.addView(createSlider("Độ dày viền", "breath_thick", 50, 12));
-            
-            TextView tDot = new TextView(this); tDot.setText("Cấu hình Chấm Tròn:"); tDot.setTextColor(Color.GRAY); recSys.addView(tDot);
-            recSys.addView(createSlider("Độ to chấm tròn", "breath_dot_size", 400, 40)); recSys.addView(createSignedSlider("Toạ độ X", "breath_dot_x", -1500, 1500, 0)); recSys.addView(createSignedSlider("Toạ độ Y", "breath_dot_y", -3000, 3000, 0));
-            designSliderContainer.addView(createDrawer("🎤 BREATH RECORDER & GHI ÂM TÀNG HÌNH", recSys));
+            designSliderContainer.addView(createDrawer("🕵️ CẤU HÌNH SPY BAR & GHI ÂM", recSys));
             
         } else if (designTabState == 0 || designTabState == 1 || designTabState == 3) { 
             String prefix = designTabState == 1 ? "home_" : (designTabState == 3 ? "morse_" : "lock_"); 
@@ -525,15 +477,9 @@ public class MainActivity extends Activity {
                 appSelectRow.setOnClickListener(v -> showAppSelectorDialog(tvAppCount));
                 overlayBox.addView(appSelectRow);
                 
-                // Nút Bật/Tắt Lớp nền mờ đặc quyền của Morse Space (Service sẽ đọc cờ này)
-                Button btnTestOverlay = new Button(this); btnTestOverlay.setText("👁️ BẬT/TẮT NỀN ĐEN MỜ MORSE"); btnTestOverlay.setBackground(getRounded("#FFC107", 20f)); btnTestOverlay.setTextColor(Color.BLACK);
+                Button btnTestOverlay = new Button(this); btnTestOverlay.setText("👁️ BẬT/TẮT NỀN ĐEN MORSE"); btnTestOverlay.setBackground(getRounded("#FFC107", 20f)); btnTestOverlay.setTextColor(Color.BLACK);
                 LinearLayout.LayoutParams bp1 = new LinearLayout.LayoutParams(-1,-2); bp1.setMargins(0,15,0,15); btnTestOverlay.setLayoutParams(bp1);
-                btnTestOverlay.setOnClickListener(v -> {
-                    boolean curr = prefs.getBoolean("preview_morse_dim", false);
-                    prefs.edit().putBoolean("preview_morse_dim", !curr).apply();
-                    sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName()));
-                    Toast.makeText(this, !curr ? "Đã BẬT nền mờ Morse!" : "Đã TẮT nền mờ Morse!", Toast.LENGTH_SHORT).show();
-                });
+                btnTestOverlay.setOnClickListener(v -> toggleMorseMockup());
                 overlayBox.addView(btnTestOverlay);
                 
                 Button btnTriggerPack = new Button(this); btnTriggerPack.setText("📦 QUẢN LÝ TRIGGER PACK"); btnTriggerPack.setBackground(getRounded("#E91E63", 20f)); btnTriggerPack.setTextColor(Color.WHITE);
@@ -547,7 +493,7 @@ public class MainActivity extends Activity {
             for(int i=0; i< barCount; i++) { 
                 LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); 
                 CheckBox cb = new CheckBox(this); cb.setText("BẬT: " + currentBarNames[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+currentBars[i]+"_en", i < 2)); 
-                final int idx = i; cb.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(prefix+currentBars[idx]+"_en", c).apply(); broadcastUiUpdate(); }); 
+                final int idx = i; cb.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(prefix+currentBars[idx]+"_en", c).apply(); sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName())); }); 
                 drawerContent.addView(cb); 
                 drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+currentBars[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0)); 
                 drawerContent.addView(createSlider("Độ trong suốt", prefix+currentBars[i]+"_alpha", 255, 50)); 
@@ -622,6 +568,91 @@ public class MainActivity extends Activity {
         footer.addView(btnC); footer.addView(btnS); root.addView(footer); d.setContentView(root); d.show();
     }
 
+    private void showAppSelectorDialogForIntent(EditText pkgInput, EditText clsInput) {
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,40,40,40);
+        root.addView(createSectionTitle("LẤY PACKAGE TỪ APP CÀI ĐẶT"));
+        
+        ScrollView scroll = new ScrollView(this); LinearLayout list = new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); scroll.addView(list);
+        LinearLayout.LayoutParams sclp = new LinearLayout.LayoutParams(-1,0,1f); scroll.setLayoutParams(sclp);
+
+        LauncherApps launcherApps = (LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
+        UserManager userManager = (UserManager) getSystemService(Context.USER_SERVICE);
+        List<UserHandle> profiles = userManager.getUserProfiles();
+
+        class AppItem implements Comparable<AppItem> { String pkg; String cls; String name; Drawable icon; AppItem(String p, String c, String n, Drawable i){ pkg=p; cls=c; name=n; icon=i; } public int compareTo(AppItem o) { return name.compareToIgnoreCase(o.name); } }
+        ArrayList<AppItem> appList = new ArrayList<>();
+        
+        for (UserHandle profile : profiles) {
+            List<LauncherActivityInfo> apps = launcherApps.getActivityList(null, profile);
+            for (LauncherActivityInfo info : apps) {
+                String pkg = info.getComponentName().getPackageName();
+                String cls = info.getComponentName().getClassName();
+                String name = info.getLabel().toString() + (profile.equals(android.os.Process.myUserHandle()) ? "" : " 💼");
+                Drawable icon = info.getIcon(getResources().getDisplayMetrics().densityDpi);
+                boolean alreadyAdded = false;
+                for(AppItem item : appList) { if(item.pkg.equals(pkg)) { alreadyAdded = true; break; } }
+                if(!alreadyAdded) appList.add(new AppItem(pkg, cls, name, icon));
+            }
+        }
+        
+        java.util.Collections.sort(appList);
+
+        for(AppItem item : appList) {
+            LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(0,25,0,25);
+            ImageView iv = new ImageView(this); iv.setImageDrawable(item.icon); iv.setLayoutParams(new LinearLayout.LayoutParams(80,80));
+            TextView tv = new TextView(this); tv.setText(item.name + "\n" + item.pkg); tv.setTextColor(Color.WHITE); tv.setPadding(30,0,0,0); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+            row.addView(iv); row.addView(tv);
+            row.setOnClickListener(v -> {
+                pkgInput.setText(item.pkg); clsInput.setText(item.cls);
+                Toast.makeText(this, "Đã chép: " + item.name, Toast.LENGTH_SHORT).show(); d.dismiss();
+            });
+            list.addView(row); 
+        }
+        root.addView(scroll);
+        Button btnC = new Button(this); btnC.setText("HỦY"); btnC.setBackground(getRounded("#333333", 20f)); btnC.setTextColor(Color.WHITE); 
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-1,-2); btnLp.setMargins(0,20,0,0); btnC.setLayoutParams(btnLp);
+        btnC.setOnClickListener(v -> d.dismiss()); root.addView(btnC);
+        d.setContentView(root); d.show();
+    }
+
+    private void hideMorseOverlay() {
+        if (mockupOverlayView != null) { 
+            try { ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).removeView(mockupOverlayView); } catch(Exception e){}
+            mockupOverlayView = null; 
+        }
+    }
+
+    private void toggleMorseMockup() {
+        boolean isMorsePreview = prefs.getBoolean("preview_morse_dim", false);
+        isMorsePreview = !isMorsePreview;
+        prefs.edit().putBoolean("preview_morse_dim", isMorsePreview).apply();
+
+        if (isMorsePreview) {
+            if (mockupOverlayView == null) {
+                if (!Settings.canDrawOverlays(this)) { Toast.makeText(this,"Cần cấp quyền Lớp phủ trước!", Toast.LENGTH_SHORT).show(); return; }
+                android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+                mockupOverlayView = new View(this);
+                int alpha = prefs.getInt("morse_overlay_alpha", 180);
+                mockupOverlayView.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
+                
+                int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+                android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
+                    -1, -1,
+                    android.os.Build.VERSION.SDK_INT >= 26 ? android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : android.view.WindowManager.LayoutParams.TYPE_PHONE,
+                    flags, android.graphics.PixelFormat.TRANSLUCENT
+                );
+                params.gravity = Gravity.CENTER;
+                try { wm.addView(mockupOverlayView, params); } catch (Exception e) {}
+                Toast.makeText(this, "Đã BẬT nền đen Morse!", Toast.LENGTH_SHORT).show();
+            }
+        } else {
+            hideMorseOverlay();
+            Toast.makeText(this, "Đã TẮT nền đen Morse!", Toast.LENGTH_SHORT).show();
+        }
+        sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName()));
+    }
+
     private void showPremiumDialog() { 
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,40,40,40);
@@ -651,7 +682,7 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout createDrawer(String title, View content) { LinearLayout container = new LinearLayout(this); container.setOrientation(LinearLayout.VERTICAL); container.setBackground(getRounded("#222222", 20f)); LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1,-2); clp.setMargins(0,0,0,20); container.setLayoutParams(clp); TextView header = new TextView(this); header.setText(title); header.setTextColor(Color.parseColor("#00E5FF")); header.setPadding(30,30,30,30); header.setTextSize(16); content.setVisibility(View.GONE); header.setOnClickListener(v -> { boolean isClosed = content.getVisibility() == View.GONE; content.setVisibility(isClosed ? View.VISIBLE : View.GONE); header.setBackground(getRounded(isClosed ? "#333333" : "#222222", 20f)); }); container.addView(header); container.addView(content); return container; }
-    private LinearLayout createComboDropdown(String title, String key, String[] items, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL); l.setGravity(Gravity.CENTER_VERTICAL); l.setPadding(0,10,0,20); TextView tv = new TextView(this); tv.setText(title); tv.setTextColor(Color.parseColor("#E91E63")); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sp = createSpinner(); sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items)); sp.setSelection(prefs.getInt(key, def)); sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt(key,pos).apply(); broadcastUiUpdate(); }public void onNothingSelected(AdapterView<?> p){}}); sp.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.2f)); l.addView(tv); l.addView(sp); return l; }
+    private LinearLayout createComboDropdown(String title, String key, String[] items, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL); l.setGravity(Gravity.CENTER_VERTICAL); l.setPadding(0,10,0,20); TextView tv = new TextView(this); tv.setText(title); tv.setTextColor(Color.parseColor("#E91E63")); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sp = createSpinner(); sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items)); sp.setSelection(prefs.getInt(key, def)); sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt(key,pos).apply(); sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName())); }public void onNothingSelected(AdapterView<?> p){}}); sp.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.2f)); l.addView(tv); l.addView(sp); return l; }
     private Button createNavBtn(String t) { Button b = new Button(this); b.setText(t); b.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); return b; }
     private Button createTabBtn(String t) { Button b = new Button(this); b.setText(t); return b; }
     private TextView createSectionTitle(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.parseColor("#00E5FF")); tv.setPadding(0,10,0,20); return tv; }
@@ -659,32 +690,52 @@ public class MainActivity extends Activity {
     private EditText createInput(String h, String k) { EditText et = new EditText(this); et.setHint(h); et.setHintTextColor(Color.GRAY); et.setTextColor(Color.WHITE); et.setText(prefs.getString(k,"")); et.setBackground(getRounded("#2C2C2C", 20f)); et.setPadding(30,30,30,30); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,10,0,10); et.setLayoutParams(lp); et.addTextChangedListener(new android.text.TextWatcher(){public void afterTextChanged(android.text.Editable s){prefs.edit().putString(k,s.toString()).apply();}public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}}); return et; }
     private LinearLayout wrapCard(View content) { LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 40f)); card.setPadding(40,40,40,40); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,40); card.setLayoutParams(lp); card.addView(content); return card; }
     
-    // Tích hợp thuật toán Debounce chống giật cho Slider
-    private LinearLayout createSlider(String t, String k, int max, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv); LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ 
-        public void onProgressChanged(SeekBar s, int p, boolean b){ 
-            tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); 
-            if (designTabState == 2 && k.startsWith("breath")) broadcastBreathUpdate();
-            else broadcastUiUpdate();
-        } 
-        public void onStartTrackingTouch(SeekBar s){} 
-        public void onStopTrackingTouch(SeekBar s){ 
-            if (designTabState == 2 && !k.startsWith("breath")) sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName())); 
-            else if (designTabState == 2 && k.startsWith("breath")) sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_BREATH").setPackage(getPackageName())); 
-            else sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName()));
-        } 
-    }); btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); }); btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) sb.setProgress(p+1); }); row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); return l; }
+    private LinearLayout createSlider(String t, String k, int max, int def) { 
+        LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); 
+        TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv); 
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); 
+        Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); 
+        Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); 
+        SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); 
+        Runnable updateAction = () -> { 
+            if (designTabState == 2 && !k.startsWith("spy_")) sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName())); 
+            else sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName())); 
+        };
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ 
+            public void onProgressChanged(SeekBar s, int p, boolean b){ 
+                tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); 
+                if(k.equals("morse_overlay_alpha") && mockupOverlayView != null) { mockupOverlayView.setBackgroundColor(Color.argb(p, 0, 0, 0)); }
+                if (!k.startsWith("anim_") && !k.equals("morse_overlay_alpha")) { sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName())); }
+            } 
+            public void onStartTrackingTouch(SeekBar s){} 
+            public void onStopTrackingTouch(SeekBar s){ updateAction.run(); } 
+        }); 
+        btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) { sb.setProgress(p-1); updateAction.run(); } }); 
+        btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) { sb.setProgress(p+1); updateAction.run(); } }); 
+        row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); return l; 
+    }
     
-    private LinearLayout createSignedSlider(String t, String k, int min, int max, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); int curVal = prefs.getInt(k, def); tv.setText(t + ": " + curVal); l.addView(tv); LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); SeekBar sb = new SeekBar(this); sb.setMax(max - min); sb.setProgress(curVal - min); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ 
-        public void onProgressChanged(SeekBar s, int p, boolean b){ 
-            int v = p + min; tv.setText(t + ": " + v); prefs.edit().putInt(k, v).apply(); 
-            if (designTabState == 2 && k.startsWith("breath")) broadcastBreathUpdate();
-            else broadcastUiUpdate();
-        } 
-        public void onStartTrackingTouch(SeekBar s){} 
-        public void onStopTrackingTouch(SeekBar s){ 
-            if (designTabState == 2 && !k.startsWith("breath")) sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName())); 
-            else if (designTabState == 2 && k.startsWith("breath")) sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_BREATH").setPackage(getPackageName())); 
+    private LinearLayout createSignedSlider(String t, String k, int min, int max, int def) { 
+        LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); 
+        TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); int curVal = prefs.getInt(k, def); tv.setText(t + ": " + curVal); l.addView(tv); 
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); 
+        Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); 
+        Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); 
+        SeekBar sb = new SeekBar(this); sb.setMax(max - min); sb.setProgress(curVal - min); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); 
+        Runnable updateAction = () -> { 
+            if (designTabState == 2 && !k.startsWith("spy_")) sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName())); 
             else sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName()));
-        } 
-    }); btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); }); btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<(max-min)) sb.setProgress(p+1); }); row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); return l; }
+        };
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ 
+            public void onProgressChanged(SeekBar s, int p, boolean b){ 
+                int v = p + min; tv.setText(t + ": " + v); prefs.edit().putInt(k, v).apply(); 
+                if (!k.startsWith("anim_")) { sendBroadcast(new Intent("com.manhmoc.edgebar.UPDATE_UI").setPackage(getPackageName())); }
+            } 
+            public void onStartTrackingTouch(SeekBar s){} 
+            public void onStopTrackingTouch(SeekBar s){ updateAction.run(); } 
+        }); 
+        btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) { sb.setProgress(p-1); updateAction.run(); } }); 
+        btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<(max-min)) { sb.setProgress(p+1); updateAction.run(); } }); 
+        row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); return l; 
+    }
 }
