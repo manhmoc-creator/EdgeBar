@@ -103,26 +103,35 @@ public class HomescreenService extends Service {
     }
 
     @Override public IBinder onBind(Intent intent) { return null; }
-    @Override public int onStartCommand(Intent intent, int flags, int startId) { isRunning = true; return START_STICKY; }
+    @Override public int onStartCommand(Intent intent, int flags, int startId) { isRunning = true; sendSyncState(); return START_STICKY; }
+
+    private void sendSyncState() { Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
 
     @Override public void onCreate() {
         super.onCreate(); isRunning = true; wm = (WindowManager) getSystemService(WINDOW_SERVICE); km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE); vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE); try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return; }
-        prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.SYNC_STATE"); filter.addAction("com.manhmoc.edgebar.TEST_ANIM");
+        prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.SYNC_STATE"); filter.addAction("com.manhmoc.edgebar.TEST_ANIM"); filter.addAction("com.manhmoc.edgebar.IPC_ACTION");
         if(Build.VERSION.SDK_INT >= 33) registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED); else registerReceiver(syncReceiver, filter);
 
-        String cid = "eb_19_home"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar Lớp phủ ADB").setSmallIcon(android.R.drawable.ic_menu_crop).build(); startForeground(2, n);
+        String cid = "eb_19_home"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); 
+        Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar Màn Chính").setSmallIcon(R.drawable.ic_launcher_fg).setOngoing(true).build(); startForeground(2, n);
         
-        fV = new FlashView(this); fV.setAlpha(0f); fV.setVisibility(View.GONE); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(0, 0, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
+        fV = new FlashView(this); fV.setAlpha(0f); fV.setVisibility(View.GONE); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
         for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], p); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], null)); }
         for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], p); } catch(Exception e){} corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i])); } updateVisibility();
+        sendSyncState();
     }
 
     private void updateVisibility() { 
         boolean isUnlocked = !km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
+        // V19.12.1.3: CÔNG TẮC TÀNG HÌNH (INVISIBLE BUT TOUCHABLE) KHI PREVIEW MÀN KHOÁ
+        boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
+
         if(hide && fV != null) fV.setVisibility(View.GONE);
         for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("home_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(en && isUnlocked) { 
-            int alpha = prefs.getInt("home_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("home_"+BARS[i]+"_w", 300); int h = prefs.getInt("home_"+BARS[i]+"_h", 60); int x = prefs.getInt("home_"+BARS[i]+"_x", 0); int y = prefs.getInt("home_"+BARS[i]+"_y", 0); 
+            // Nếu đang preview màn khoá -> Đánh tụt alpha về 0 (Tàng hình)
+            int alpha = isPreviewLock ? 0 : prefs.getInt("home_"+BARS[i]+"_alpha", 50); 
+            int w = prefs.getInt("home_"+BARS[i]+"_w", 300); int h = prefs.getInt("home_"+BARS[i]+"_h", 60); int x = prefs.getInt("home_"+BARS[i]+"_x", 0); int y = prefs.getInt("home_"+BARS[i]+"_y", 0); 
             GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); 
             int priMode = prefs.getInt("home_"+BARS[i]+"_pri_mode", 0);
             int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; 
@@ -133,7 +142,10 @@ public class HomescreenService extends Service {
         for(int i=0; i<4; i++) { 
             if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("home_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { 
                 String ck = "home_corner_" + CORNERS[i] + "_";
-                int moonAlpha = prefs.getInt("home_corner_moon_alpha", 100); int strokeAlpha = prefs.getInt("home_corner_stroke_alpha", 200); int hideDelay = prefs.getInt("home_corner_hide_dur", 2500); 
+                // Nếu đang preview màn khoá -> Đánh tụt alpha Lõi và Vỏ về 0 (Tàng hình)
+                int moonAlpha = isPreviewLock ? 0 : prefs.getInt("home_corner_moon_alpha", 100); 
+                int strokeAlpha = isPreviewLock ? 0 : prefs.getInt("home_corner_stroke_alpha", 200); 
+                int hideDelay = prefs.getInt("home_corner_hide_dur", 2500); 
                 int visMode = prefs.getInt(ck+"vis_mode", 0);
                 boolean isAuto = (visMode == 1); boolean isInv = (visMode == 2);
                 ((CornerView)corners[i]).updateProps(prefs.getInt("home_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv); 
