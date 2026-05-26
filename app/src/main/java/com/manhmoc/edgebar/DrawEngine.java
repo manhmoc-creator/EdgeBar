@@ -14,26 +14,40 @@ public class DrawEngine {
         canvas.drawRoundRect(barRect, radius, radius, paint);
     }
 
-    public static void drawFrameCorner(Canvas canvas, Paint paint, int width, int height, float cornerRadius, String position) {
-        Path cornerPath = new Path();
-        switch (position) {
-            case "br": cornerPath.moveTo(0, height); cornerPath.lineTo(width - cornerRadius, height); cornerPath.quadTo(width, height, width, height - cornerRadius); cornerPath.lineTo(width, 0); break;
-            case "tl": cornerPath.moveTo(width, 0); cornerPath.lineTo(cornerRadius, 0); cornerPath.quadTo(0, 0, 0, cornerRadius); cornerPath.lineTo(0, height); break;
-            case "tr": cornerPath.moveTo(0, 0); cornerPath.lineTo(width - cornerRadius, 0); cornerPath.quadTo(width, 0, width, cornerRadius); cornerPath.lineTo(width, height); break;
-            case "bl": cornerPath.moveTo(width, height); cornerPath.lineTo(cornerRadius, height); cornerPath.quadTo(0, height, 0, height - cornerRadius); cornerPath.lineTo(0, 0); break;
-        }
+    public static void drawFrameCorner(Canvas canvas, Paint paint, int width, int height, float radius, String position) {
         paint.setStyle(Paint.Style.STROKE);
-        // ✅ FIX BUG 2: Làm mềm 2 đầu mút của viền góc như bản 19.12.1.11
-        paint.setStrokeCap(Paint.Cap.ROUND); 
+        paint.setStrokeCap(Paint.Cap.ROUND); // Tròn vành 2 đầu nét vẽ
         paint.setStrokeJoin(Paint.Join.ROUND);
-        canvas.drawPath(cornerPath, paint);
+        
+        Path path = new Path();
+        float r = Math.min(radius, Math.min(width, height)); // Chống tràn viền
+        
+        // Thuật toán ArcTo tạo đường cong toán học chuẩn xác 100%
+        switch (position) {
+            case "br": 
+                path.moveTo(0, height); path.lineTo(width - r, height);
+                path.arcTo(new RectF(width - 2*r, height - 2*r, width, height), 90, -90);
+                path.lineTo(width, 0); break;
+            case "bl": 
+                path.moveTo(width, height); path.lineTo(r, height);
+                path.arcTo(new RectF(0, height - 2*r, 2*r, height), 90, 90);
+                path.lineTo(0, 0); break;
+            case "tr": 
+                path.moveTo(0, 0); path.lineTo(width - r, 0);
+                path.arcTo(new RectF(width - 2*r, 0, width, 2*r), 270, 90);
+                path.lineTo(width, height); break;
+            case "tl": 
+                path.moveTo(width, 0); path.lineTo(r, 0);
+                path.arcTo(new RectF(0, 0, 2*r, 2*r), 270, -90);
+                path.lineTo(0, height); break;
+        }
+        canvas.drawPath(path, paint);
     }
 
     public static void drawCrescentMoon(Canvas canvas, Paint paint, float moonW, float moonH, float thicknessOffset) {
         Path outerOval = new Path(); outerOval.addOval(new RectF(0, 0, moonW, moonH), Path.Direction.CW);
         Path innerOval = new Path(); innerOval.addOval(new RectF(thicknessOffset, thicknessOffset, moonW + thicknessOffset, moonH + thicknessOffset), Path.Direction.CW);
         Path crescentMoon = new Path(); crescentMoon.op(outerOval, innerOval, Path.Op.DIFFERENCE);
-        paint.setStyle(Paint.Style.FILL);
-        canvas.drawPath(crescentMoon, paint);
+        paint.setStyle(Paint.Style.FILL); canvas.drawPath(crescentMoon, paint);
     }
 }
