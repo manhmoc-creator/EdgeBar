@@ -1,5 +1,5 @@
 package com.manhmoc.edgebar;
-import android.animation.ValueAnimator; import android.animation.AnimatorListenerAdapter; import android.animation.Animator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.graphics.LinearGradient; import android.graphics.Shader; import android.graphics.DashPathEffect; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.Build; import android.os.VibrationEffect; import android.os.Vibrator; import android.os.IBinder; import android.provider.MediaStore; import android.provider.Settings; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager;
+import android.animation.ValueAnimator; import android.animation.AnimatorListenerAdapter; import android.animation.Animator; import android.app.Notification; import android.app.NotificationChannel; import android.app.NotificationManager; import android.app.Service; import android.app.KeyguardManager; import android.content.BroadcastReceiver; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.graphics.Canvas; import android.graphics.Color; import android.graphics.Paint; import android.graphics.Path; import android.graphics.PixelFormat; import android.graphics.LinearGradient; import android.graphics.Shader; import android.graphics.DashPathEffect; import android.graphics.drawable.GradientDrawable; import android.hardware.camera2.CameraManager; import android.media.AudioManager; import android.os.Build; import android.os.Handler; import android.os.VibrationEffect; import android.os.Vibrator; import android.os.IBinder; import android.provider.MediaStore; import android.provider.Settings; import android.view.GestureDetector; import android.view.Gravity; import android.view.MotionEvent; import android.view.View; import android.view.WindowManager;
 
 public class HomescreenService extends Service {
     public static boolean isRunning = false; 
@@ -25,40 +25,59 @@ public class HomescreenService extends Service {
             float off = p.getStrokeWidth()/2; 
             float left = (getWidth() - drawW) / 2f + off; float top = (getHeight() - drawH) / 2f + off;
             float right = left + drawW - 2*off; float bottom = top + drawH - 2*off;
-            
-            if(aStyle > 0) { 
-                float perim = 2 * (drawW + drawH); 
-                if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, phase)); 
-                else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, phase)); 
-                else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, phase)); 
-            } else { p.setPathEffect(null); }
+            if(aStyle > 0) { float perim = 2 * (drawW + drawH); if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, phase)); else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, phase)); else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, phase)); } else { p.setPathEffect(null); }
             canvas.drawRoundRect(left, top, right, bottom, radius, radius, p); 
         } 
     }
     
     private class CornerView extends View { 
         private Paint pFill, pStroke; private int type; 
+        private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha;
+        
         public CornerView(Context c, int type) { super(c); this.type = type; 
             pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); 
             pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); 
         } 
-        public void updateProps(int thick, int moonAlpha) { 
-            pStroke.setStrokeWidth(thick); pStroke.setAlpha(moonAlpha); 
-            pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); invalidate(); 
+        
+        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide) { 
+            pStroke.setStrokeWidth(thick); 
+            this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha; this.isAutoHiding = autoHide;
+            if(!autoHide) { pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); pStroke.setAlpha(strokeAlpha); }
+            else { triggerFlash(); } 
+            invalidate(); 
         }
+        
+        public void triggerFlash() {
+            if(!isAutoHiding) return;
+            autoHideHandler.removeCallbacksAndMessages(null);
+            pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha + 50), 96, 125, 139)); pStroke.setAlpha(Math.min(255, baseStrokeAlpha + 50)); invalidate();
+            autoHideHandler.postDelayed(() -> {
+                ValueAnimator a = ValueAnimator.ofFloat(1f, 0f); a.setDuration(1500);
+                a.addUpdateListener(anim -> { float val = (float)anim.getAnimatedValue(); pFill.setColor(Color.argb((int)(baseMoonAlpha * val), 96, 125, 139)); pStroke.setAlpha((int)(baseStrokeAlpha * val)); invalidate(); });
+                a.start();
+            }, 2500); 
+        }
+
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); 
-            float w = getWidth(), h = getHeight(), pad = pStroke.getStrokeWidth()/2; float rad = prefs.getInt("home_corner_rad", 40);
-            Path moonPath = new Path();
-            if(type==0) { moonPath.moveTo(w, 0); moonPath.quadTo(0, 0, 0, h); moonPath.lineTo(0, 0); } 
-            else if(type==1) { moonPath.moveTo(0, 0); moonPath.quadTo(w, 0, w, h); moonPath.lineTo(w, 0); } 
-            else if(type==2) { moonPath.moveTo(w, h); moonPath.quadTo(0, h, 0, 0); moonPath.lineTo(0, h); } 
-            else if(type==3) { moonPath.moveTo(0, h); moonPath.quadTo(w, h, w, 0); moonPath.lineTo(w, h); }
-            moonPath.close(); canvas.drawPath(moonPath, pFill);
-            Path strokePath = new Path();
-            if(type==0) { strokePath.moveTo(pad, h); strokePath.lineTo(pad, rad); strokePath.quadTo(pad, pad, rad, pad); strokePath.lineTo(w, pad); } 
-            else if(type==1) { strokePath.moveTo(0, pad); strokePath.lineTo(w-rad, pad); strokePath.quadTo(w-pad, pad, w-pad, rad); strokePath.lineTo(w-pad, h); } 
-            else if(type==2) { strokePath.moveTo(pad, 0); strokePath.lineTo(pad, h-rad); strokePath.quadTo(pad, h-pad, rad, h-pad); strokePath.lineTo(w, h-pad); } 
-            else if(type==3) { strokePath.moveTo(0, h-pad); strokePath.lineTo(w-rad, h-pad); strokePath.quadTo(w-pad, h-pad, w-pad, h-rad); strokePath.lineTo(w-pad, 0); } 
+            float w = getWidth(), h = getHeight(), pad = pStroke.getStrokeWidth()/2; 
+            float rad = prefs.getInt("home_corner_rad", 80); 
+            float cw = (w > rad) ? rad : w; float ch = (h > rad) ? rad : h;
+            
+            Path moonPath = new Path(); Path strokePath = new Path();
+            if(type==0) { 
+                moonPath.moveTo(pad, h); moonPath.lineTo(pad, h-ch); moonPath.quadTo(pad, pad, cw, pad); moonPath.lineTo(w, pad); moonPath.lineTo(w, h); 
+                strokePath.moveTo(pad, h); strokePath.lineTo(pad, h-ch); strokePath.quadTo(pad, pad, cw, pad); strokePath.lineTo(w, pad); 
+            } else if(type==1) { 
+                moonPath.moveTo(0, pad); moonPath.lineTo(w-cw, pad); moonPath.quadTo(w-pad, pad, w-pad, ch); moonPath.lineTo(w-pad, h); moonPath.lineTo(0, h);
+                strokePath.moveTo(0, pad); strokePath.lineTo(w-cw, pad); strokePath.quadTo(w-pad, pad, w-pad, ch); strokePath.lineTo(w-pad, h); 
+            } else if(type==2) { 
+                moonPath.moveTo(pad, 0); moonPath.lineTo(pad, h-ch); moonPath.quadTo(pad, h-pad, cw, h-pad); moonPath.lineTo(w, h-pad); moonPath.lineTo(w, 0);
+                strokePath.moveTo(pad, 0); strokePath.lineTo(pad, h-ch); strokePath.quadTo(pad, h-pad, cw, h-pad); strokePath.lineTo(w, h-pad); 
+            } else if(type==3) { 
+                moonPath.moveTo(0, h-pad); moonPath.lineTo(w-cw, h-pad); moonPath.quadTo(w-pad, h-pad, w-pad, h-ch); moonPath.lineTo(w-pad, 0); moonPath.lineTo(0, 0);
+                strokePath.moveTo(0, h-pad); strokePath.lineTo(w-cw, h-pad); strokePath.quadTo(w-pad, h-pad, w-pad, h-ch); strokePath.lineTo(w-pad, 0); 
+            }
+            if(rad > 0) canvas.drawPath(moonPath, pFill); 
             canvas.drawPath(strokePath, pStroke); 
         } 
     }
@@ -75,14 +94,22 @@ public class HomescreenService extends Service {
         String cid = "eb_19_home"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar Lớp phủ ADB").setSmallIcon(android.R.drawable.ic_menu_crop).build(); startForeground(2, n);
         
         fV = new FlashView(this); fV.setAlpha(0f); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
-        for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams initP = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], initP); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener(i)); }
-        for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i); WindowManager.LayoutParams cp = new WindowManager.LayoutParams(70, 70, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], cp); } catch(Exception e){} corners[i].setOnTouchListener(new CornerTouchListener(i)); } updateVisibility();
+        for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams initP = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], initP); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i])); }
+        for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i); WindowManager.LayoutParams cp = new WindowManager.LayoutParams(70, 70, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], cp); } catch(Exception e){} corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i])); } updateVisibility();
     }
 
     private void updateVisibility() { 
         boolean isUnlocked = !km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
         for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("home_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(en && isUnlocked) { int alpha = prefs.getInt("home_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("home_"+BARS[i]+"_w", 300); int h = prefs.getInt("home_"+BARS[i]+"_h", 60); int x = prefs.getInt("home_"+BARS[i]+"_x", 0); int y = prefs.getInt("home_"+BARS[i]+"_y", 0); GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); } } 
-        for(int i=0; i<4; i++) { if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("home_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { int generalCornAlpha = prefs.getInt("home_corner_alpha", 180); boolean cornPerInvis = prefs.getBoolean("home_corner_"+CORNERS[i]+"_invis", false); ((CornerView)corners[i]).updateProps(prefs.getInt("home_corner_thick", 8), cornPerInvis ? 0 : generalCornAlpha); WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.gravity = C_GRAV[i]; p.x = prefs.getInt("home_corner_w", 0); p.y = prefs.getInt("home_corner_h", 0); wm.updateViewLayout(corners[i], p); } }
+        for(int i=0; i<4; i++) { if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("home_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { 
+            int moonAlpha = prefs.getInt("home_corner_moon_alpha", 100); int strokeAlpha = prefs.getInt("home_corner_stroke_alpha", 200);
+            boolean isAuto = prefs.getBoolean("home_corner_"+CORNERS[i]+"_auto", false);
+            ((CornerView)corners[i]).updateProps(prefs.getInt("home_corner_thick", 8), moonAlpha, strokeAlpha, isAuto); 
+            WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.gravity = C_GRAV[i]; 
+            int widthPref = prefs.getInt("home_corner_w", 0); int heightPref = prefs.getInt("home_corner_h", 0);
+            p.width = (widthPref > 0) ? widthPref : 70; p.height = (heightPref > 0) ? heightPref : 70;
+            p.x = prefs.getInt("home_corner_off_x", 0); p.y = prefs.getInt("home_corner_off_y", 0); wm.updateViewLayout(corners[i], p); } 
+        }
     }
     
     private void playAnim() {
@@ -92,20 +119,16 @@ public class HomescreenService extends Service {
     }
 
     private void handleAction(String key) { String action = prefs.getString(key, "NONE"); if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30)); if (prefs.getBoolean(key + "_anim", true)) playAnim(); try { switch(action) { case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", action); sendBroadcast(ipc); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; case "QR": Intent lens = getPackageManager().getLaunchIntentForPackage("com.google.ar.lens"); lens.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(lens); break; default: if(action.startsWith("INTENT_")) fireIntent(action.split("_")[1]); break; } } catch (Exception e) {} } }
-    
     private void doVibrate(int dur) { if(dur<=0) return; try { if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
     private void fireIntent(String idx) { try { String act = prefs.getString("i"+idx+"_act", ""); String pkg = prefs.getString("i"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("i"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("i"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("i"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("i"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("i"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     
-    private class CornerTouchListener implements View.OnTouchListener {
-        private int idx; private float sx, sy; private long st;
-        public CornerTouchListener(int i) { this.idx = i; }
-        @Override public boolean onTouch(View v, MotionEvent e) { if (e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis(); } else if (e.getAction() == MotionEvent.ACTION_UP) { float dx = e.getRawX() - sx, dy = e.getRawY() - sy; if (Math.abs(dx) > 40 && Math.abs(dy) > 40) { boolean isHold = (System.currentTimeMillis() - st) > prefs.getInt("hold_dur", 600); handleAction("home_corner_" + CORNERS[idx] + "_" + (isHold ? "hold" : "swipe")); return true; } } return true; }
-    }
-
     private class SidebarTouchListener implements View.OnTouchListener { 
-        private int idx; private GestureDetector gd; private float sx, sy; private long st;
-        public SidebarTouchListener(int i) { this.idx = i; this.gd = new GestureDetector(HomescreenService.this, new GestureDetector.SimpleOnGestureListener() { @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction("home_" + BARS[idx] + "_tap"); return true; } @Override public boolean onDoubleTap(MotionEvent e) { handleAction("home_" + BARS[idx] + "_dtap"); return true; } @Override public void onLongPress(MotionEvent e) { handleAction("home_" + BARS[idx] + "_long"); } @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { return false; } }); } 
-        @Override public boolean onTouch(View v, MotionEvent e) { gd.onTouchEvent(e); if (e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis(); } else if (e.getAction() == MotionEvent.ACTION_UP) { float dx = e.getRawX() - sx, dy = e.getRawY() - sy; if (Math.abs(dx) > 50 || Math.abs(dy) > 50) { long duration = System.currentTimeMillis() - st; boolean isHold = duration > prefs.getInt("hold_dur", 600); String dir = ""; if (Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? "right" : "left"; else dir = dy > 0 ? "down" : "up"; String actionName = dir + (isHold ? "_hold" : ""); handleAction("home_" + BARS[idx] + "_" + actionName); return true; } } return true; } 
+        private String prefKeyBase; private View myView; private GestureDetector gd; private float sx, sy; private long st;
+        public SidebarTouchListener(String keyBase) { this(keyBase, null); }
+        public SidebarTouchListener(String keyBase, View v) { this.prefKeyBase = keyBase; this.myView = v; this.gd = new GestureDetector(HomescreenService.this, new GestureDetector.SimpleOnGestureListener() { @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction(prefKeyBase + "_tap"); return true; } @Override public boolean onDoubleTap(MotionEvent e) { handleAction(prefKeyBase + "_dtap"); return true; } @Override public void onLongPress(MotionEvent e) { handleAction(prefKeyBase + "_long"); } @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { return false; } }); } 
+        @Override public boolean onTouch(View v, MotionEvent e) { 
+            if(myView != null && myView instanceof CornerView) ((CornerView)myView).triggerFlash();
+            gd.onTouchEvent(e); if (e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis(); } else if (e.getAction() == MotionEvent.ACTION_UP) { float dx = e.getRawX() - sx, dy = e.getRawY() - sy; if (Math.abs(dx) > 50 || Math.abs(dy) > 50) { long duration = System.currentTimeMillis() - st; boolean isHold = duration > prefs.getInt("hold_dur", 600); String dir = ""; if (Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? "right" : "left"; else dir = dy > 0 ? "down" : "up"; handleAction(prefKeyBase + "_" + dir + (isHold ? "_hold" : "")); return true; } } return true; } 
     }
     @Override public void onDestroy() { super.onDestroy(); isRunning = false; try{unregisterReceiver(syncReceiver);}catch(Exception e){} prefs.unregisterOnSharedPreferenceChangeListener(prefListener); for(int i=0; i<5; i++) if(bars[i] != null) wm.removeView(bars[i]); for(int i=0; i<4; i++) if(corners[i] != null) wm.removeView(corners[i]); if (fV != null) wm.removeView(fV); }
 }
