@@ -20,7 +20,7 @@ public class HomescreenService extends Service {
     }};
 
     private class FlashView extends View { 
-        private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phase = 0f;
+        private Paint p = new Paint(android.graphics.Paint.ANTI_ALIAS_FLAG | android.graphics.Paint.DITHER_FLAG); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phase = 0f;
         public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); p.setShadowLayer(15f, 0, 0, Color.WHITE); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); } 
         public void updateStyle() { 
             p.setStrokeWidth(prefs.getInt("anim_thick", 12)); radius = prefs.getInt("anim_rad", 40); cTheme = prefs.getString("anim_color", "WHITE"); aStyle = prefs.getInt("anim_style", 0); 
@@ -28,7 +28,15 @@ public class HomescreenService extends Service {
         }
         @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w, h, oldw, oldh); applyGradient(w, h); }
         private void applyGradient(int w, int h) { 
-            int[] cArr; switch(cTheme) { case "NEON": cArr=new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF")}; break; case "CYBERPUNK": cArr=new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700")}; break; case "LAVA": cArr=new int[]{Color.parseColor("#FF4500"), Color.parseColor("#FF8C00")}; break; case "OCEAN": cArr=new int[]{Color.parseColor("#00BFFF"), Color.parseColor("#1E90FF")}; break; case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000")}; break; case "SUNSET": cArr=new int[]{Color.parseColor("#FF1493"), Color.parseColor("#FF8C00")}; break; case "GOOGLE": cArr=new int[]{Color.parseColor("#4285F4"), Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853")}; break; default: cArr=new int[]{Color.WHITE, Color.WHITE}; break; } 
+            int[] cArr; switch(cTheme) { case "NEON": cArr=new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF")}; break; case "CYBERPUNK": cArr=new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700")}; break; case "LAVA": cArr=new int[]{Color.parseColor("#FF4500"), Color.parseColor("#FF8C00")}; break; case "OCEAN": cArr=new int[]{Color.parseColor("#00BFFF"), Color.parseColor("#1E90FF")}; break; case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000")}; break; case "SUNSET": cArr=new int[]{Color.parseColor("#FF1493"), Color.parseColor("#FF8C00")}; break; case "GOOGLE": cArr=new int[]{Color.parseColor("#4285F4"), Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853")}; break; 
+        case "AURORA": return new int[]{android.graphics.Color.parseColor("#00E5FF"), android.graphics.Color.parseColor("#E040FB")};
+        case "ABYSS": return new int[]{android.graphics.Color.parseColor("#1A237E"), android.graphics.Color.parseColor("#000000")};
+        case "FOREST": return new int[]{android.graphics.Color.parseColor("#1B5E20"), android.graphics.Color.parseColor("#00E676")};
+        case "FLAME": return new int[]{android.graphics.Color.parseColor("#D50000"), android.graphics.Color.parseColor("#FFD600")};
+        case "MIDNIGHT": return new int[]{android.graphics.Color.parseColor("#000000"), android.graphics.Color.parseColor("#311B92")};
+        case "TROPICAL": return new int[]{android.graphics.Color.parseColor("#FF4081"), android.graphics.Color.parseColor("#FFEB3B")};
+        case "CANDY": return new int[]{android.graphics.Color.parseColor("#F50057"), android.graphics.Color.parseColor("#00E5FF")};
+        default: cArr=new int[]{Color.WHITE, Color.WHITE}; break; } 
             p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.CLAMP)); p.setShadowLayer(15f, 0, 0, cArr[0]); 
         }
         public void setPhase(float ph) { this.phase = ph; invalidate(); }
@@ -41,7 +49,7 @@ public class HomescreenService extends Service {
     
     // PHỤC DỰNG LÕI TRĂNG NON (CRESCENT MOON)
     private class CornerView extends View { 
-        private Paint pShell = new Paint(), pMoon = new Paint(); private int type; private String pfx; 
+        private Paint pShell = new Paint(android.graphics.Paint.ANTI_ALIAS_FLAG | android.graphics.Paint.DITHER_FLAG), pMoon = new Paint(android.graphics.Paint.ANTI_ALIAS_FLAG | android.graphics.Paint.DITHER_FLAG); private int type; private String pfx; 
         public CornerView(Context c, int type, String prefix) { super(c); this.type = type; this.pfx = prefix; 
             pShell.setStyle(Paint.Style.STROKE); pShell.setAntiAlias(true); pShell.setStrokeCap(Paint.Cap.ROUND); 
             pMoon.setStyle(Paint.Style.STROKE); pMoon.setAntiAlias(true); pMoon.setStrokeCap(Paint.Cap.ROUND); 
@@ -98,9 +106,9 @@ public class HomescreenService extends Service {
         String cid = "eb_19_home"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); 
         Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar đang chạy nền (Home)").setSmallIcon(android.R.drawable.ic_menu_crop).build(); startForeground(2, n);
         
-        fV = new FlashView(this); fV.setAlpha(0f); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
-        for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams initP = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], initP); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener(i)); }
-        for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i, "home_"); WindowManager.LayoutParams cp = new WindowManager.LayoutParams(70, 70, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], cp); } catch(Exception e){} corners[i].setOnTouchListener(new CornerTouchListener(i)); } 
+        fV = new FlashView(this); fV.setAlpha(0f); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
+        for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams initP = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], initP); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener(i)); }
+        for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i, "home_"); WindowManager.LayoutParams cp = new WindowManager.LayoutParams(70, 70, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], cp); } catch(Exception e){} corners[i].setOnTouchListener(new CornerTouchListener(i)); } 
         updateVisibility();
     }
 
@@ -143,7 +151,15 @@ public class HomescreenService extends Service {
         if (!action.equals("NONE")) {
             if (prefs.getBoolean(prefixKey + "_vib", true)) { doVibrate(prefs.getInt("vib_dur", 30)); }
             if (prefs.getBoolean(prefixKey + "_anim", true)) { sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName())); }
-            try { switch(action) { case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", action); sendBroadcast(ipc); break; case "FLASH": cm.setTorchMode(cId, !fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; case "QR": Intent lens = getPackageManager().getLaunchIntentForPackage("com.google.ar.lens"); if (lens != null) { lens.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(lens); } else { Intent fb = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://lens.google.com/")); fb.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(fb); } break; default: if(action.startsWith("INTENT_")) fireIntent(action.split("_")[1]); break; } } catch (Exception e) {}
+            try { switch(action) { case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", action); sendBroadcast(ipc); break; case "FLASH": cm.setTorchMode(cId, !fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; case "QR": Intent lens = getPackageManager().getLaunchIntentForPackage("com.google.ar.lens"); if (lens != null) { lens.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(lens); } else { Intent fb = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://lens.google.com/")); fb.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(fb); } break; 
+        case "AURORA": return new int[]{android.graphics.Color.parseColor("#00E5FF"), android.graphics.Color.parseColor("#E040FB")};
+        case "ABYSS": return new int[]{android.graphics.Color.parseColor("#1A237E"), android.graphics.Color.parseColor("#000000")};
+        case "FOREST": return new int[]{android.graphics.Color.parseColor("#1B5E20"), android.graphics.Color.parseColor("#00E676")};
+        case "FLAME": return new int[]{android.graphics.Color.parseColor("#D50000"), android.graphics.Color.parseColor("#FFD600")};
+        case "MIDNIGHT": return new int[]{android.graphics.Color.parseColor("#000000"), android.graphics.Color.parseColor("#311B92")};
+        case "TROPICAL": return new int[]{android.graphics.Color.parseColor("#FF4081"), android.graphics.Color.parseColor("#FFEB3B")};
+        case "CANDY": return new int[]{android.graphics.Color.parseColor("#F50057"), android.graphics.Color.parseColor("#00E5FF")};
+        default: if(action.startsWith("INTENT_")) fireIntent(action.split("_")[1]); break; } } catch (Exception e) {}
         }
     }
     
