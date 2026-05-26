@@ -6,3 +6,4 @@ android {
     defaultConfig { applicationId "com.manhmoc.edgebar"; minSdk 26; targetSdk 34; versionCode 96; versionName "19.12.3.4.6" }
     buildTypes { debug { signingConfig signingConfigs.release }; release { signingConfig signingConfigs.release; minifyEnabled false } }
 }
+# V19.12.2.2.2
