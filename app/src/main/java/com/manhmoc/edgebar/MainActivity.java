@@ -11,16 +11,16 @@ public class MainActivity extends Activity {
     private String[] GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold"}; 
     private String[] GESTURE_NAMES; 
     
-    // V19.11.2: GÓC VIỀN CÓ FULL 13 CỬ CHỈ (Thêm Vuốt chéo)
+    // V19.11.3: GÓC VIỀN CÓ FULL 13 CỬ CHỈ ĐƯỢC VIỆT HOÁ ĐỒNG BỘ
     private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold"}; 
     private String[] C_GESTURE_NAMES;
     
-    private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "GRADIENT_ICON"};
+    private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA"};
     private String[] COLOR_NAMES;
 
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabLock, tabHome; private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
-    private int designTabState = 0; private final String CURRENT_VERSION = "V19.11.2"; 
+    private int designTabState = 0; private final String CURRENT_VERSION = "V19.11.3"; 
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
 
@@ -30,10 +30,12 @@ public class MainActivity extends Activity {
         CORNER_NAMES = new String[]{T("Top Left Corner", "Góc Đỉnh Trái"), T("Top Right Corner", "Góc Đỉnh Phải"), T("Bottom Left Corner", "Góc Đáy Trái"), T("Bottom Right Corner", "Góc Đáy Phải")};
         GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ")};
         C_GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ"), T("Swipe Diagonal", "Vuốt Chéo"), T("Diag + Hold", "Vuốt Chéo + Giữ")};
-        COLOR_NAMES = new String[]{T("Pure White", "Trắng Tinh Khiết"), "Neon (Pink-Cyan)", "Cyberpunk (Purple-Gold)", "Lava (Red-Orange)", "Ocean (Blue-Cyan)", "Matrix (Green)", "Sunset (Purple-Orange)", "Google (4 Colors)", "Gradient (Màu Icon App)"};
+        
+        // V19.11.3: THAY GRADIENT ICON BẰNG MÀU AURORA MỚI HOÀN TOÀN
+        COLOR_NAMES = new String[]{T("Pure White", "Trắng Tinh Khiết"), "Neon (Pink-Cyan)", "Cyberpunk (Purple-Gold)", "Lava (Red-Orange)", "Ocean (Blue-Cyan)", "Matrix (Green)", "Sunset (Purple-Orange)", "Google (4 Colors)", "Aurora (Cyan-Purple-Pink)"};
 
         String[] bK = {"NONE", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "QR", "NOTIFICATIONS"}; 
-        String[] bL = {T("None", "Không có"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume Panel", "Menu Âm Lượng"), T("Screenshot", "Chụp ảnh màn hình"), "Camera", "Google Lens", T("Notifications", "Mở Thông Báo")};
+        String[] bL = {T("None", "Không có"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume Panel", "Menu Âm Lượng"), T("Screenshot", "Chụp ảnh màn hình"), "Camera", "Google Lens (QR)", T("Notifications", "Mở Thông Báo")};
         for(int i=0; i<9; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; } for(int i=1; i<=15; i++) { ACT_KEYS[8+i]="INTENT_"+i; ACT_LABS[8+i]=T("Fire Intent ", "Gửi Intent ")+i; }
 
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212")); LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(20,40,20,100); 
@@ -115,12 +117,16 @@ public class MainActivity extends Activity {
             CheckBox cbAuto = new CheckBox(this); cbAuto.setText(T("Auto-Hide (Google Assistant Flash)","Hiệu ứng Tàng hình thông minh (Nháy sáng khi chạm)")); cbAuto.setTextColor(Color.parseColor("#00E5FF")); cbAuto.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_auto", false)); cbAuto.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_auto", c).apply()); designSliderContainer.addView(cbAuto); 
         }
 
-        // V19.11.2: THÊM THANH KÉO THỜI GIAN TẮT HIỆU ỨNG TÀNG HÌNH
+        // V19.11.3: SỬA TÊN RUỘT -> LÕI. CHIA TÁCH THANH KÉO DÀI/RỘNG CHO ĐỈNH VÀ ĐÁY.
         designSliderContainer.addView(createSlider(T("Auto-Hide Delay (ms)","Thời gian chờ tắt tàng hình (ms)"), prefix+"corner_hide_dur", 5000, 2500)); 
-        designSliderContainer.addView(createSlider(T("Moon Fill Opacity","Độ mờ vùng TRĂNG NON (Ruột)"), prefix+"corner_moon_alpha", 255, 100)); 
+        designSliderContainer.addView(createSlider(T("Moon Fill Opacity","Độ mờ vùng TRĂNG NON (Lõi)"), prefix+"corner_moon_alpha", 255, 100)); 
         designSliderContainer.addView(createSlider(T("Corner Stroke Opacity","Độ mờ VIỀN GÓC (Vỏ)"), prefix+"corner_stroke_alpha", 255, 200)); 
-        designSliderContainer.addView(createSlider(T("Length X (Extend Edge)","Kéo giãn Ngang (X)"), prefix+"corner_w", 1000, 0)); 
-        designSliderContainer.addView(createSlider(T("Length Y (Extend Edge)","Kéo giãn Dọc (Y)"), prefix+"corner_h", 1000, 0)); 
+        
+        designSliderContainer.addView(createSlider(T("Top Length X (Extend)","Kéo giãn Ngang ĐỈNH (X)"), prefix+"corner_top_w", 1000, 0)); 
+        designSliderContainer.addView(createSlider(T("Top Length Y (Extend)","Kéo giãn Dọc ĐỈNH (Y)"), prefix+"corner_top_h", 1000, 0)); 
+        designSliderContainer.addView(createSlider(T("Bottom Length X (Extend)","Kéo giãn Ngang ĐÁY (X)"), prefix+"corner_bot_w", 1000, 0)); 
+        designSliderContainer.addView(createSlider(T("Bottom Length Y (Extend)","Kéo giãn Dọc ĐÁY (Y)"), prefix+"corner_bot_h", 1000, 0)); 
+        
         designSliderContainer.addView(createSlider(T("Position Offset X","Dịch chuyển vị trí Ngang (X)"), prefix+"corner_off_x", 1000, 0)); 
         designSliderContainer.addView(createSlider(T("Position Offset Y","Dịch chuyển vị trí Dọc (Y)"), prefix+"corner_off_y", 1000, 0)); 
         designSliderContainer.addView(createSlider(T("Stroke Thickness","Độ đậm viền"), prefix+"corner_thick", 50, 8)); 
@@ -136,8 +142,7 @@ public class MainActivity extends Activity {
     private LinearLayout createSlider(String t, String k, int max, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv); LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ public void onProgressChanged(SeekBar s, int p, boolean b){ tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); } public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){} }); btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); }); btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) sb.setProgress(p+1); }); row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); return l; }
 
     private LinearLayout createConfigPage(String prefix) { LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); for(int i=0; i<5; i++) { LinearLayout sec = new LinearLayout(this); sec.setOrientation(LinearLayout.VERTICAL); sec.addView(createGestureHeader(BAR_NAMES[i])); for(int j=0; j<GESTURES.length; j++) sec.addView(createRow(GESTURE_NAMES[j], prefix + "_" + BARS[i] + "_" + GESTURES[j])); page.addView(wrapCard(sec)); } LinearLayout secC = new LinearLayout(this); secC.setOrientation(LinearLayout.VERTICAL); secC.addView(createSectionTitle(T("4 FRAME CORNERS","4 GÓC VIỀN"))); for(int i=0; i<4; i++) { secC.addView(createGestureHeader(CORNER_NAMES[i])); 
-        // V19.11.2: ÁP DỤNG 13 GESTURE (Có cả vuốt chéo) CHO 4 GÓC VIỀN
-        for(int j=0; j<C_GESTURES.length; j++) secC.addView(createRow(C_GESTURES[j], prefix + "_corner_" + CORNERS[i] + "_" + C_GESTURES[j])); } page.addView(wrapCard(secC)); return page; }
+        for(int j=0; j<C_GESTURES.length; j++) secC.addView(createRow(C_GESTURE_NAMES[j], prefix + "_corner_" + CORNERS[i] + "_" + C_GESTURES[j])); } page.addView(wrapCard(secC)); return page; }
     private TextView createSectionTitle(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.parseColor("#00E5FF")); tv.setPadding(0,10,0,20); return tv; }
     private LinearLayout createGestureHeader(String titleText) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL); l.setGravity(Gravity.CENTER_VERTICAL); l.setPadding(0,10,0,20); TextView tv = new TextView(this); tv.setText(titleText); tv.setTextColor(Color.parseColor("#00E5FF")); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); TextView tAnim = new TextView(this); tAnim.setText("✨"); tAnim.setPadding(10,0,20,0); TextView tVib = new TextView(this); tVib.setText("📳"); tVib.setPadding(10,0,10,0); l.addView(tv); l.addView(tAnim); l.addView(tVib); return l; }
     private Spinner createSpinner() { Spinner sp = new Spinner(this); sp.setBackground(getRounded("#2C2C2C", 20f)); sp.setPadding(20,20,20,20); return sp; }
