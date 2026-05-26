@@ -1,29 +1,6 @@
 package com.manhmoc.edgebar;
 
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.Dialog;
-import android.content.ComponentName;
-import android.content.Context;
-import android.content.Intent;
-import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
-import android.os.Bundle;
-import android.provider.Settings;
-import android.net.Uri;
-import android.text.TextUtils;
-import android.view.Gravity;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.*;
-import java.util.ArrayList;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.util.Map;
+import android.app.Activity; import android.app.AlertDialog; import android.app.Dialog; import android.content.ComponentName; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.content.pm.PackageManager; import android.graphics.Color; import android.graphics.drawable.GradientDrawable; import android.os.Bundle; import android.provider.Settings; import android.net.Uri; import android.text.TextUtils; import android.view.Gravity; import android.view.View; import android.view.ViewGroup; import android.widget.*; import java.util.ArrayList; import java.io.InputStream; import java.io.OutputStream; import java.io.BufferedReader; import java.io.InputStreamReader; import java.util.Map;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs; private boolean isVi;
@@ -34,13 +11,14 @@ public class MainActivity extends Activity {
     private String[] CORNERS = {"br", "bl", "tr", "tl"}; private String[] CORNER_NAMES;
     private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; private String[] COLOR_NAMES;
 
-    private String[] ALL_COMP_KEYS = {"r", "l", "t_r", "t_l", "t_c", "corner_br", "corner_bl", "corner_tr", "corner_tl"}; 
-    private String[] ALL_COMP_NAMES = {"Thanh Đáy Phải", "Thanh Đáy Trái", "Thanh Cạnh Phải", "Thanh Cạnh Trái", "Thanh Đỉnh Giữa", "Góc Viền Đáy Phải", "Góc Viền Đáy Trái", "Góc Viền Đỉnh Phải", "Góc Viền Đỉnh Trái"};
+    // Mở rộng mảng Components để hỗ trợ 3 thanh Bar trung tâm của không gian Morse
+    private String[] ALL_COMP_KEYS = {"r", "l", "t_r", "t_l", "t_c", "b_c", "c_t", "c_b", "corner_br", "corner_bl", "corner_tr", "corner_tl"}; 
+    private String[] ALL_COMP_NAMES = {"Thanh Đáy Phải", "Thanh Đáy Trái", "Thanh Cạnh Phải", "Thanh Cạnh Trái", "Thanh Đỉnh Giữa", "Thanh Đáy Giữa", "Thanh TT Nửa Trên", "Thanh TT Nửa Dưới", "Góc Viền Đáy Phải", "Góc Viền Đáy Trái", "Góc Viền Đỉnh Phải", "Góc Viền Đỉnh Trái"};
     private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold"}; 
     private String[] C_GESTURE_NAMES = {"1 Chạm", "2 Chạm", "Nhấn Giữ", "Vuốt Lên", "Vuốt Xuống", "Vuốt Trái", "Vuốt Phải", "Vuốt Lên + Giữ", "Vuốt Xuống + Giữ", "Vuốt Trái + Giữ", "Vuốt Phải + Giữ", "Vuốt Chéo", "Vuốt Chéo + Giữ"};
 
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain; 
-    private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
+    private Button btnLock, btnHome, btnMorseCond, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
     private final String CURRENT_VERSION = "V19.12.2.0"; 
     private RelativeLayout rootLayout;
@@ -64,9 +42,9 @@ public class MainActivity extends Activity {
             Button btnD = rootLayout.findViewWithTag("btnDesign"); if(btnD!=null){btnD.setText("⚙️"); btnD.setBackground(getRounded("#333333", 100f));}
         } else super.onBackPressed(); 
     }
+    
     private void closeDesignSpace() { pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(View.VISIBLE); View fab = rootLayout.findViewWithTag("fab"); if(fab != null) fab.setVisibility(View.VISIBLE); refreshPreview(); }
     private void openDesignSpace() { currentMainTab = 0; refreshPreview(); navMain.setVisibility(View.GONE); pageConditions.setVisibility(View.GONE); pageIntents.setVisibility(View.GONE); pageTiles.setVisibility(View.GONE); pageMacros.setVisibility(View.GONE); pageDesign.setVisibility(View.VISIBLE); View fab = rootLayout.findViewWithTag("fab"); if(fab != null) fab.setVisibility(View.GONE); }
-
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -81,7 +59,6 @@ public class MainActivity extends Activity {
         LinearLayout headerRow = new LinearLayout(this); headerRow.setOrientation(LinearLayout.HORIZONTAL); headerRow.setGravity(Gravity.CENTER_VERTICAL); headerRow.setPadding(0, 0, 0, 50);
         TextView title = new TextView(this); title.setText("Edge Bar\n" + CURRENT_VERSION); title.setTextColor(Color.WHITE); title.setTextSize(24); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         
-        // CẬP NHẬT: Fix nút chuyển đổi ngôn ngữ
         Button btnLang = new Button(this); btnLang.setText(isVi ? "🇻🇳 TIẾNG VIỆT" : "🇺🇸 ENGLISH"); btnLang.setTextColor(Color.WHITE); btnLang.setBackground(getRounded(isVi ? "#2E7D32" : "#1976D2", 20f)); btnLang.setPadding(30, 20, 30, 20); 
         btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
         headerRow.addView(title); headerRow.addView(btnLang); main.addView(headerRow);
@@ -126,7 +103,7 @@ public class MainActivity extends Activity {
         setContentView(rootLayout);
     }
 
-    // CẬP NHẬT: Fix Backup/Restore toàn diện (\n xuống dòng và ép kiểu Float)
+    // --- FIX BACKUP / RESTORE CORE ---
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -153,18 +130,14 @@ public class MainActivity extends Activity {
                         if (eqIdx > 0) {
                             String k = line.substring(0, eqIdx); 
                             String v = line.substring(eqIdx + 1).replace("\\n", "\n");
-                            if (v.equals("true") || v.equals("false")) {
-                                editor.putBoolean(k, Boolean.parseBoolean(v));
-                            } else {
-                                try {
-                                    editor.putInt(k, Integer.parseInt(v));
-                                } catch (NumberFormatException e1) {
-                                    try {
-                                        editor.putFloat(k, Float.parseFloat(v));
-                                    } catch (NumberFormatException e2) {
-                                        editor.putString(k, v);
-                                    }
-                                }
+                            if (v.equals("true") || v.equals("false")) editor.putBoolean(k, Boolean.parseBoolean(v));
+                            else { 
+                                try { 
+                                    editor.putInt(k, Integer.parseInt(v)); 
+                                } catch (NumberFormatException e1) { 
+                                    try { editor.putFloat(k, Float.parseFloat(v)); } 
+                                    catch (NumberFormatException e2) { editor.putString(k, v); } 
+                                } 
                             }
                         }
                     }
@@ -188,20 +161,29 @@ public class MainActivity extends Activity {
 
     private void buildConditionsSpace() {
         LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 0, 0, 20); 
-        btnLock = createTabBtn("LOCKSCREEN"); btnHome = createTabBtn("HOMESCREEN"); 
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f); p.setMargins(0,0,15,0); btnLock.setLayoutParams(p);
-        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f); btnHome.setLayoutParams(rp);
-        tabContainer.addView(btnLock); tabContainer.addView(btnHome); pageConditions.addView(tabContainer);
+        btnLock = createTabBtn("LOCKSCREEN"); btnHome = createTabBtn("HOMESCREEN"); btnMorseCond = createTabBtn("MORSE");
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f); p.setMargins(0,0,15,0); 
+        btnLock.setLayoutParams(p); btnHome.setLayoutParams(p);
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f); btnMorseCond.setLayoutParams(rp);
+        tabContainer.addView(btnLock); tabContainer.addView(btnHome); tabContainer.addView(btnMorseCond); pageConditions.addView(tabContainer);
         listRules = new LinearLayout(this); listRules.setOrientation(LinearLayout.VERTICAL); pageConditions.addView(listRules);
-        btnLock.setOnClickListener(v -> { currentGesTab=0; refreshPreview(); btnLock.setBackground(getRounded("#00E5FF", 20f)); btnLock.setTextColor(Color.BLACK); btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE); renderRulesList(); }); 
-        btnHome.setOnClickListener(v -> { currentGesTab=1; refreshPreview(); btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE); btnHome.setBackground(getRounded("#00E5FF", 20f)); btnHome.setTextColor(Color.BLACK); renderRulesList(); }); 
+        
+        View.OnClickListener condTabLogic = v -> {
+            currentGesTab = (v==btnLock) ? 0 : (v==btnHome) ? 1 : 2; refreshPreview();
+            btnLock.setBackground(getRounded(currentGesTab==0?"#00E5FF":"#222222", 20f)); btnLock.setTextColor(currentGesTab==0?Color.BLACK:Color.WHITE);
+            btnHome.setBackground(getRounded(currentGesTab==1?"#00E5FF":"#222222", 20f)); btnHome.setTextColor(currentGesTab==1?Color.BLACK:Color.WHITE);
+            btnMorseCond.setBackground(getRounded(currentGesTab==2?"#00E5FF":"#222222", 20f)); btnMorseCond.setTextColor(currentGesTab==2?Color.BLACK:Color.WHITE);
+            renderRulesList();
+        };
+        btnLock.setOnClickListener(condTabLogic); btnHome.setOnClickListener(condTabLogic); btnMorseCond.setOnClickListener(condTabLogic);
         btnLock.performClick();
     }
 
     private void renderRulesList() {
-        listRules.removeAllViews(); String prefix = currentGesTab == 0 ? "lock_" : "home_";
+        listRules.removeAllViews(); String prefix = currentGesTab == 0 ? "lock_" : (currentGesTab == 1 ? "home_" : "morse_");
         LinearLayout currentRow = null; int count = 0;
         for (int c = 0; c < ALL_COMP_KEYS.length; c++) {
+            if (currentGesTab != 2 && c >= 5 && c <= 7) continue; // Bỏ qua 3 thanh Bar giữa của không gian Morse nếu đang ở Home/Lock
             for (int g = 0; g < C_GESTURES.length; g++) {
                 String key = prefix + ALL_COMP_KEYS[c] + "_" + C_GESTURES[g];
                 String action = prefs.getString(key, "NONE");
@@ -249,40 +231,49 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(0,40,0,0); scroll.addView(content); root.addView(scroll);
 
-        final int[] selectedComp = {preComp != -1 ? preComp : 0}; 
         ArrayList<CheckBox> gestureBoxes = new ArrayList<>(); ArrayList<CheckBox> actionBoxes = new ArrayList<>();
         CheckBox cbVib = new CheckBox(this); CheckBox cbAnim = new CheckBox(this);
 
         LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
         TextView tvC = new TextView(this); tvC.setText(T("1. SELECT COMPONENT", "1. CHỌN VÙNG (COMPONENT)")); tvC.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvC);
-        Spinner spComp = createSpinner(); spComp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, ALL_COMP_NAMES)); spComp.setSelection(selectedComp[0]); spComp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){selectedComp[0] = pos;}public void onNothingSelected(AdapterView<?> p){}}); vTrig.addView(spComp);
-        TextView tvG = new TextView(this); tvG.setText(T("\n2. SELECT GESTURES (OR logic)", "\n2. CHỌN CỬ CHỈ (Được chọn nhiều - Lệnh OR)")); tvG.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvG);
+        
+        // Lọc danh sách Component tuỳ theo Không gian
+        final ArrayList<Integer> validComps = new ArrayList<>();
+        for (int i=0; i<ALL_COMP_KEYS.length; i++) {
+            if (currentGesTab != 2 && i >= 5 && i <= 7) continue; // Loại bỏ 3 thanh mới nếu không phải Morse
+            validComps.add(i);
+        }
+        String[] dispNames = new String[validComps.size()];
+        int selectedSpinnerPos = 0;
+        for (int i=0; i<validComps.size(); i++) {
+            dispNames[i] = ALL_COMP_NAMES[validComps.get(i)];
+            if(preComp != -1 && validComps.get(i) == preComp) selectedSpinnerPos = i;
+        }
 
-        // CẬP NHẬT: Fix Bug 2 - Phục hồi toàn bộ gestures đang active thay vì chỉ 1
+        final int[] finalCompIdx = {validComps.get(selectedSpinnerPos)};
+        Spinner spComp = createSpinner(); spComp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, dispNames)); spComp.setSelection(selectedSpinnerPos); 
+        spComp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){finalCompIdx[0] = validComps.get(pos);}public void onNothingSelected(AdapterView<?> p){}}); vTrig.addView(spComp);
+        
+        TextView tvG = new TextView(this); tvG.setText(T("\n2. SELECT GESTURES (OR logic)", "\n2. CHỌN CỬ CHỈ (Được chọn nhiều - Lệnh OR)")); tvG.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvG);
+        
         String editBasePrefix = null;
         if (editKey != null) {
             for (String ck : ALL_COMP_KEYS) {
-                String base = (currentGesTab == 0 ? "lock_" : "home_") + ck + "_";
-                if (editKey.startsWith(base)) {
-                    editBasePrefix = base;
-                    break;
-                }
+                String base = (currentGesTab == 0 ? "lock_" : (currentGesTab == 1 ? "home_" : "morse_")) + ck + "_";
+                if (editKey.startsWith(base)) { editBasePrefix = base; break; }
             }
         }
         final String finalEditBasePrefix = editBasePrefix;
 
         for (int i = 0; i < C_GESTURES.length; i++) {
             CheckBox cb = new CheckBox(this);
-            cb.setText(C_GESTURE_NAMES[i]);
-            cb.setTextColor(Color.WHITE);
-            cb.setPadding(0, 20, 0, 20);
+            cb.setText(C_GESTURE_NAMES[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0, 20, 0, 20);
             if (finalEditBasePrefix != null) {
                 String chkKey = finalEditBasePrefix + C_GESTURES[i];
                 String chkAct = prefs.getString(chkKey, "NONE");
                 if (!chkAct.equals("NONE")) cb.setChecked(true);
             }
-            gestureBoxes.add(cb);
-            vTrig.addView(cb);
+            gestureBoxes.add(cb); vTrig.addView(cb);
         }
         
         LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
@@ -308,18 +299,11 @@ public class MainActivity extends Activity {
         bSave.setOnClickListener(v -> {
             ArrayList<String> acts = new ArrayList<>(); for(int i=0; i<actionBoxes.size(); i++) { if(actionBoxes.get(i).isChecked()) acts.add(ACT_KEYS[i+1]); }
             if(acts.isEmpty()) { Toast.makeText(this, T("Select at least 1 Action!","Hãy chọn ít nhất 1 Hành động bên tab ACTION!"), Toast.LENGTH_SHORT).show(); return; }
+            String joinedActions = TextUtils.join(",", acts); String prefix = currentGesTab == 0 ? "lock_" : (currentGesTab == 1 ? "home_" : "morse_"); String compKey = ALL_COMP_KEYS[finalCompIdx[0]]; boolean hasChecked = false;
             
-            String joinedActions = TextUtils.join(",", acts); 
-            String prefix = currentGesTab == 0 ? "lock_" : "home_"; 
-            String compKey = ALL_COMP_KEYS[selectedComp[0]]; 
-            boolean hasChecked = false;
-
-            // CẬP NHẬT: Fix Bug 3 - Quét và dọn dẹp TOÀN BỘ "rule ma" của component cũ
             if (editKey != null && finalEditBasePrefix != null) {
                 SharedPreferences.Editor clearEd = prefs.edit();
-                for (String ges : C_GESTURES) {
-                    clearEd.putString(finalEditBasePrefix + ges, "NONE");
-                }
+                for (String ges : C_GESTURES) clearEd.putString(finalEditBasePrefix + ges, "NONE");
                 clearEd.apply();
             }
 
@@ -376,8 +360,6 @@ public class MainActivity extends Activity {
         
         pageDesign.addView(createSectionTitle(T("CORE DESIGN","THIẾT KẾ CỐT LÕI (MÀU/KÍCH THƯỚC)")));
         LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL);
-        
-        // CẬP NHẬT: Thêm nút Tab cho MORSE
         btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
         btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); 
         btnEditMorse = new Button(this); btnEditMorse.setText("MORSE"); LinearLayout.LayoutParams morseP = new LinearLayout.LayoutParams(0, -2, 1f); morseP.setMargins(0,0,10,0); btnEditMorse.setLayoutParams(morseP);
@@ -386,8 +368,7 @@ public class MainActivity extends Activity {
         designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
         
         View.OnClickListener tabLogic = v -> {
-            designTabState = (v==btnEditLock) ? 0 : (v==btnEditHome) ? 1 : (v==btnEditMorse) ? 2 : 3;
-            refreshPreview();
+            designTabState = (v==btnEditLock) ? 0 : (v==btnEditHome) ? 1 : (v==btnEditMorse) ? 2 : 3; refreshPreview();
             btnEditLock.setBackground(getRounded(designTabState==0?"#00E5FF":"#222222", 20f)); btnEditLock.setTextColor(designTabState==0?Color.BLACK:Color.WHITE);
             btnEditHome.setBackground(getRounded(designTabState==1?"#00E5FF":"#222222", 20f)); btnEditHome.setTextColor(designTabState==1?Color.BLACK:Color.WHITE);
             btnEditMorse.setBackground(getRounded(designTabState==2?"#00E5FF":"#222222", 20f)); btnEditMorse.setTextColor(designTabState==2?Color.BLACK:Color.WHITE);
@@ -421,7 +402,6 @@ public class MainActivity extends Activity {
         } else { 
             String prefix = designTabState == 1 ? "home_" : (designTabState == 2 ? "morse_" : "lock_"); 
             
-            // CẬP NHẬT: Không gian MORSE với Master Switch
             if(designTabState == 2) {
                 designSliderContainer.addView(createSectionTitle("LỚP PHỦ CHỐNG CHẠM MORSE"));
                 CheckBox cbMaster = new CheckBox(this); cbMaster.setText("BẬT LỚP PHỦ MORSE (Master Switch)"); cbMaster.setTextColor(Color.parseColor("#E91E63")); cbMaster.setChecked(prefs.getBoolean("morse_master_en", false)); cbMaster.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("morse_master_en", c).apply()); designSliderContainer.addView(wrapCard(cbMaster));
@@ -429,7 +409,7 @@ public class MainActivity extends Activity {
 
             int barCount = designTabState == 2 ? 8 : 5;
             String[] curBars = designTabState == 2 ? new String[]{"r", "l", "t_r", "t_l", "t_c", "b_c", "c_t", "c_b"} : BARS;
-            String[] curBarNames = designTabState == 2 ? new String[]{"Đáy phải", "Đáy trái", "Cạnh Phải", "Cạnh Trái", "Đỉnh giữa", "Đáy giữa (Mới)", "Trung tâm nửa trên (Mới)", "Trung tâm nửa dưới (Mới)"} : BAR_NAMES;
+            String[] curBarNames = designTabState == 2 ? new String[]{"Đáy phải", "Đáy trái", "Cạnh Phải", "Cạnh Trái", "Đỉnh giữa", "Đáy giữa (Mới)", "TT Nửa Trên (Mới)", "TT Nửa Dưới (Mới)"} : BAR_NAMES;
 
             designSliderContainer.addView(createSectionTitle(barCount + " EDGE BARS"));
             for(int i=0; i< barCount; i++) { LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); CheckBox cb = new CheckBox(this); cb.setText("BẬT: " + curBarNames[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+curBars[i]+"_en", i < 2)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+curBars[idx]+"_en", c).apply()); drawerContent.addView(cb); drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+curBars[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0)); drawerContent.addView(createSlider("Độ trong suốt", prefix+curBars[i]+"_alpha", 255, 50)); drawerContent.addView(createSlider("Chiều ngang", prefix+curBars[i]+"_w", 3000, 300)); drawerContent.addView(createSlider("Chiều dọc", prefix+curBars[i]+"_h", 3000, 60)); drawerContent.addView(createSlider("Toạ độ X", prefix+curBars[i]+"_x", 1000, 0)); drawerContent.addView(createSlider("Toạ độ Y", prefix+curBars[i]+"_y", 1000, 0)); designSliderContainer.addView(createDrawer(curBarNames[i], drawerContent)); } 
