@@ -5,22 +5,22 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs; private boolean isVi; 
     private String T(String en, String vi) { return isVi ? vi : en; }
     
-    private String[] ACT_KEYS = new String[24]; private String[] ACT_LABS = new String[24];
+    // V19.11.3.1: Xoá QR, còn 23 mục
+    private String[] ACT_KEYS = new String[23]; private String[] ACT_LABS = new String[23];
     private String[] BARS = {"l", "r", "t_l", "t_r", "t_c"}; private String[] BAR_NAMES; 
     private String[] CORNERS = {"tl", "tr", "bl", "br"}; private String[] CORNER_NAMES;
     private String[] GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold"}; 
     private String[] GESTURE_NAMES; 
-    
-    // V19.11.3: GÓC VIỀN CÓ FULL 13 CỬ CHỈ ĐƯỢC VIỆT HOÁ ĐỒNG BỘ
     private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold"}; 
     private String[] C_GESTURE_NAMES;
     
-    private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA"};
+    // V19.11.3.1: Thêm 6 màu Gradient mới
+    private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "COSMIC", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"};
     private String[] COLOR_NAMES;
 
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabLock, tabHome; private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
-    private int designTabState = 0; private final String CURRENT_VERSION = "V19.11.3"; 
+    private int designTabState = 0; private final String CURRENT_VERSION = "V19.11.3.1"; 
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
 
@@ -31,17 +31,17 @@ public class MainActivity extends Activity {
         GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ")};
         C_GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ"), T("Swipe Diagonal", "Vuốt Chéo"), T("Diag + Hold", "Vuốt Chéo + Giữ")};
         
-        // V19.11.3: THAY GRADIENT ICON BẰNG MÀU AURORA MỚI HOÀN TOÀN
-        COLOR_NAMES = new String[]{T("Pure White", "Trắng Tinh Khiết"), "Neon (Pink-Cyan)", "Cyberpunk (Purple-Gold)", "Lava (Red-Orange)", "Ocean (Blue-Cyan)", "Matrix (Green)", "Sunset (Purple-Orange)", "Google (4 Colors)", "Aurora (Cyan-Purple-Pink)"};
+        COLOR_NAMES = new String[]{T("Pure White", "Trắng Tinh Khiết"), "Neon (Pink-Cyan)", "Cyberpunk (Purple-Gold)", "Lava (Red-Orange)", "Ocean (Blue-Cyan)", "Matrix (Green)", "Sunset (Purple-Orange)", "Google (4 Colors)", "Aurora (Cyan-Purple)", "Cosmic (Purple-Gold)", "Forest (Dark/Light Green)", "Flame (Red-Orange-Yellow)", "Midnight (Blue-Purple)", "Tropical (Teal-Green-Orange)", "Candy (Pink-Cyan-Yellow)"};
 
-        String[] bK = {"NONE", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "QR", "NOTIFICATIONS"}; 
-        String[] bL = {T("None", "Không có"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume Panel", "Menu Âm Lượng"), T("Screenshot", "Chụp ảnh màn hình"), "Camera", "Google Lens (QR)", T("Notifications", "Mở Thông Báo")};
-        for(int i=0; i<9; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; } for(int i=1; i<=15; i++) { ACT_KEYS[8+i]="INTENT_"+i; ACT_LABS[8+i]=T("Fire Intent ", "Gửi Intent ")+i; }
+        // V19.11.3.1: Loại bỏ mục QR
+        String[] bK = {"NONE", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS"}; 
+        String[] bL = {T("None", "Không có"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume Panel", "Menu Âm Lượng"), T("Screenshot", "Chụp ảnh màn hình"), "Camera", T("Notifications", "Mở Thông Báo")};
+        for(int i=0; i<8; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; } for(int i=1; i<=15; i++) { ACT_KEYS[7+i]="INTENT_"+i; ACT_LABS[7+i]=T("Fire Intent ", "Gửi Intent ")+i; }
 
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(Color.parseColor("#121212")); LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(20,40,20,100); 
         
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(Gravity.CENTER_VERTICAL); header.setPadding(0,0,0,30);
-        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe Masterclass"); title.setTextColor(Color.WHITE); title.setTextSize(21); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView title = new TextView(this); title.setText("⚙️ Edge Bar " + CURRENT_VERSION + "\nThe Absolute"); title.setTextColor(Color.WHITE); title.setTextSize(21); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         Button btnLang = new Button(this); btnLang.setText(isVi ? "🇻🇳 VI" : "🇺🇸 EN"); btnLang.setTextColor(Color.WHITE); btnLang.setBackground(getRounded("#2E7D32", 20f)); LinearLayout.LayoutParams lpL = new LinearLayout.LayoutParams(-2, -2); lpL.setMargins(0,0,15,0); btnLang.setLayoutParams(lpL); btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
         Button btnUpdate = new Button(this); btnUpdate.setText(T("CHECK\nUPDATE", "CẬP\nNHẬT")); btnUpdate.setTextColor(Color.parseColor("#00E5FF")); btnUpdate.setBackground(getRounded("#1E1E1E", 25f)); btnUpdate.setPadding(30,20,30,20); btnUpdate.setOnClickListener(v -> checkUpdate());
         header.addView(title); header.addView(btnLang); header.addView(btnUpdate); main.addView(header);
@@ -117,20 +117,25 @@ public class MainActivity extends Activity {
             CheckBox cbAuto = new CheckBox(this); cbAuto.setText(T("Auto-Hide (Google Assistant Flash)","Hiệu ứng Tàng hình thông minh (Nháy sáng khi chạm)")); cbAuto.setTextColor(Color.parseColor("#00E5FF")); cbAuto.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_auto", false)); cbAuto.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idxEn]+"_auto", c).apply()); designSliderContainer.addView(cbAuto); 
         }
 
-        // V19.11.3: SỬA TÊN RUỘT -> LÕI. CHIA TÁCH THANH KÉO DÀI/RỘNG CHO ĐỈNH VÀ ĐÁY.
         designSliderContainer.addView(createSlider(T("Auto-Hide Delay (ms)","Thời gian chờ tắt tàng hình (ms)"), prefix+"corner_hide_dur", 5000, 2500)); 
         designSliderContainer.addView(createSlider(T("Moon Fill Opacity","Độ mờ vùng TRĂNG NON (Lõi)"), prefix+"corner_moon_alpha", 255, 100)); 
         designSliderContainer.addView(createSlider(T("Corner Stroke Opacity","Độ mờ VIỀN GÓC (Vỏ)"), prefix+"corner_stroke_alpha", 255, 200)); 
         
+        // V19.11.3.1: Thêm 2 thanh kéo Di chuyển TẤT CẢ các góc (Global X/Y)
+        designSliderContainer.addView(createSlider(T("Global Shift X (500=Center)","Di chuyển toàn bộ Ngang (X) (500=Giữa)"), prefix+"corner_global_x", 1000, 500)); 
+        designSliderContainer.addView(createSlider(T("Global Shift Y (500=Center)","Di chuyển toàn bộ Dọc (Y) (500=Giữa)"), prefix+"corner_global_y", 1000, 500)); 
+
         designSliderContainer.addView(createSlider(T("Top Length X (Extend)","Kéo giãn Ngang ĐỈNH (X)"), prefix+"corner_top_w", 1000, 0)); 
         designSliderContainer.addView(createSlider(T("Top Length Y (Extend)","Kéo giãn Dọc ĐỈNH (Y)"), prefix+"corner_top_h", 1000, 0)); 
         designSliderContainer.addView(createSlider(T("Bottom Length X (Extend)","Kéo giãn Ngang ĐÁY (X)"), prefix+"corner_bot_w", 1000, 0)); 
         designSliderContainer.addView(createSlider(T("Bottom Length Y (Extend)","Kéo giãn Dọc ĐÁY (Y)"), prefix+"corner_bot_h", 1000, 0)); 
         
-        designSliderContainer.addView(createSlider(T("Position Offset X","Dịch chuyển vị trí Ngang (X)"), prefix+"corner_off_x", 1000, 0)); 
-        designSliderContainer.addView(createSlider(T("Position Offset Y","Dịch chuyển vị trí Dọc (Y)"), prefix+"corner_off_y", 1000, 0)); 
+        designSliderContainer.addView(createSlider(T("Position Offset X (Local)","Dịch chuyển tiểu tiết Ngang (X)"), prefix+"corner_off_x", 1000, 0)); 
+        designSliderContainer.addView(createSlider(T("Position Offset Y (Local)","Dịch chuyển tiểu tiết Dọc (Y)"), prefix+"corner_off_y", 1000, 0)); 
         designSliderContainer.addView(createSlider(T("Stroke Thickness","Độ đậm viền"), prefix+"corner_thick", 50, 8)); 
-        designSliderContainer.addView(createSlider(T("Moon Curve (0=Straight)","Độ cong vòng cung Trăng non (0=Đường chéo thẳng)"), prefix+"corner_rad", 200, 80));
+        
+        // V19.11.3.1: MAX 1000 Cho độ cong mượt mà thoai thoải
+        designSliderContainer.addView(createSlider(T("Moon Curve (0=Straight)","Độ cong vòng cung Trăng non (0=Thẳng)"), prefix+"corner_rad", 1000, 80));
         } }
 
     private LinearLayout wrapCard(View content) { LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 40f)); card.setPadding(40,40,40,40); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,40); card.setLayoutParams(lp); card.addView(content); return card; }
