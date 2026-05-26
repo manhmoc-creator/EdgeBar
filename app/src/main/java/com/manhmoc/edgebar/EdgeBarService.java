@@ -41,6 +41,9 @@ public class EdgeBarService extends AccessibilityService {
             float off = p.getStrokeWidth()/2; 
             float left = (getWidth() - drawW) / 2f + off; float top = (getHeight() - drawH) / 2f + off;
             float right = left + drawW - 2*off; float bottom = top + drawH - 2*off;
+            
+            // V19.11.5: BO TRÒN DASHES
+            p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND);
             if(aStyle > 0) { float perim = 2 * (drawW + drawH); if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, phase)); else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, phase)); else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, phase)); } else { p.setPathEffect(null); }
             canvas.drawRoundRect(left, top, right, bottom, radius, radius, p); 
         } 
@@ -80,33 +83,56 @@ public class EdgeBarService extends AccessibilityService {
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); 
             float w = getWidth(), h = getHeight(), thick = pStroke.getStrokeWidth(); 
             float pad = thick/2;
-            float radSlider = prefs.getInt("lock_corner_rad", 80); 
+            
+            // V19.11.5: TÁCH ĐỘ CONG ĐỈNH / ĐÁY & CHẾ ĐỘ MỞ RỘNG ĐỘC LẬP
+            float radSlider = (type < 2) ? prefs.getInt("lock_corner_bot_rad", 80) : prefs.getInt("lock_corner_top_rad", 80);
+            boolean expandMoon = prefs.getBoolean("lock_corner_"+CORNERS[type]+"_expand", false);
             
             float flatFactor = radSlider / 1000f; 
             Path moonPath = new Path(); Path strokePath = new Path();
 
-            if(type==0) { 
+            if(type==0) { // Bottom Right
                 float startX = w-pad, startY = pad, endX = pad, endY = h-pad;
                 float ctrlX = w-pad - (1f - flatFactor) * (w*0.7f); float ctrlY = h-pad - (1f - flatFactor) * (h*0.7f);
-                if(flatFactor > 0.99) { moonPath.moveTo(w-pad, h-pad); moonPath.lineTo(0, h); moonPath.lineTo(w, 0); moonPath.close(); strokePath.moveTo(0+pad, h-pad); strokePath.lineTo(w-pad, 0+pad);
-                } else { moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(0, h-pad); moonPath.lineTo(0, 0); moonPath.lineTo(w-pad, 0); moonPath.close(); strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); }
-            } else if(type==1) { 
+                if(expandMoon) { // Vỏ giữ nguyên, Lõi bung ra viền
+                    moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(0, 0); moonPath.lineTo(w, 0); moonPath.close(); 
+                    strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY);
+                } else {
+                    if(flatFactor > 0.99) { moonPath.moveTo(w-pad, h-pad); moonPath.lineTo(0, h); moonPath.lineTo(w, 0); moonPath.close(); strokePath.moveTo(0+pad, h-pad); strokePath.lineTo(w-pad, 0+pad); } 
+                    else { moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(0, h-pad); moonPath.lineTo(0, 0); moonPath.lineTo(w-pad, 0); moonPath.close(); strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); }
+                }
+            } else if(type==1) { // Bottom Left
                 float startX = pad, startY = pad, endX = w-pad, endY = h-pad;
                 float ctrlX = pad + (1f - flatFactor) * (w*0.7f); float ctrlY = h-pad - (1f - flatFactor) * (h*0.7f);
-                if(flatFactor > 0.99) { moonPath.moveTo(pad, h-pad); moonPath.lineTo(w, h); moonPath.lineTo(pad, 0); moonPath.close(); strokePath.moveTo(w-pad, h-pad); strokePath.lineTo(pad, 0+pad);
-                } else { moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w, h-pad); moonPath.lineTo(w, 0); moonPath.lineTo(pad, 0); moonPath.close(); strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); }
-            } else if(type==2) { 
+                if(expandMoon) { 
+                    moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w, 0); moonPath.lineTo(0, 0); moonPath.close(); 
+                    strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY);
+                } else {
+                    if(flatFactor > 0.99) { moonPath.moveTo(pad, h-pad); moonPath.lineTo(w, h); moonPath.lineTo(pad, 0); moonPath.close(); strokePath.moveTo(w-pad, h-pad); strokePath.lineTo(pad, 0+pad); } 
+                    else { moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w, h-pad); moonPath.lineTo(w, 0); moonPath.lineTo(pad, 0); moonPath.close(); strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); }
+                }
+            } else if(type==2) { // Top Right
                 float startX = pad, startY = pad, endX = w-pad, endY = h-pad;
                 float ctrlX = w-pad - (1f - flatFactor) * (w*0.7f); float ctrlY = pad + (1f - flatFactor) * (h*0.7f);
-                if(flatFactor > 0.99) { moonPath.moveTo(w-pad, pad); moonPath.lineTo(0, pad); moonPath.lineTo(w, h); moonPath.close(); strokePath.moveTo(0+pad, pad); strokePath.lineTo(w-pad, h-pad);
-                } else { moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w-pad, h); moonPath.lineTo(0, h); moonPath.lineTo(0, pad); moonPath.close(); strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); }
-            } else if(type==3) { 
+                if(expandMoon) { 
+                    moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(0, h); moonPath.lineTo(w, h); moonPath.close(); 
+                    strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY);
+                } else {
+                    if(flatFactor > 0.99) { moonPath.moveTo(w-pad, pad); moonPath.lineTo(0, pad); moonPath.lineTo(w, h); moonPath.close(); strokePath.moveTo(0+pad, pad); strokePath.lineTo(w-pad, h-pad); } 
+                    else { moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w-pad, h); moonPath.lineTo(0, h); moonPath.lineTo(0, pad); moonPath.close(); strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); }
+                }
+            } else if(type==3) { // Top Left
                 float startX = pad, startY = h-pad, endX = w-pad, endY = pad;
                 float ctrlX = pad + (1f - flatFactor) * (w*0.7f); float ctrlY = pad + (1f - flatFactor) * (h*0.7f);
-                if(flatFactor > 0.99) { moonPath.moveTo(pad, pad); moonPath.lineTo(w, pad); moonPath.lineTo(pad, h); moonPath.close(); strokePath.moveTo(w-pad, pad); strokePath.lineTo(pad, h-pad);
-                } else { moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w, pad); moonPath.lineTo(w, h); moonPath.lineTo(pad, h); moonPath.close(); strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); }
+                if(expandMoon) { 
+                    moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w, h); moonPath.lineTo(0, h); moonPath.close(); 
+                    strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY);
+                } else {
+                    if(flatFactor > 0.99) { moonPath.moveTo(pad, pad); moonPath.lineTo(w, pad); moonPath.lineTo(pad, h); moonPath.close(); strokePath.moveTo(w-pad, pad); strokePath.lineTo(pad, h-pad); } 
+                    else { moonPath.moveTo(startX, startY); moonPath.quadTo(ctrlX, ctrlY, endX, endY); moonPath.lineTo(w, pad); moonPath.lineTo(w, h); moonPath.lineTo(pad, h); moonPath.close(); strokePath.moveTo(startX, startY); strokePath.quadTo(ctrlX, ctrlY, endX, endY); }
+                }
             }
-            if(radSlider < 990) canvas.drawPath(moonPath, pFill); 
+            if(radSlider < 990 || expandMoon) canvas.drawPath(moonPath, pFill); 
             canvas.drawPath(strokePath, pStroke); 
         } 
     }
@@ -125,44 +151,27 @@ public class EdgeBarService extends AccessibilityService {
     private void fireIntent(String idx) { try { String act = prefs.getString("i"+idx+"_act", ""); String pkg = prefs.getString("i"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("i"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("i"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("i"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("i"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("i"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     
     private void playAnim() {
-        int style = prefs.getInt("anim_style", 0); int dur = prefs.getInt("anim_dur", 1500); fV.setVisibility(View.VISIBLE); fV.setAlpha(1f);
-        if(style == 0) { ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f, 0f); anim.setDuration(dur); anim.addUpdateListener(a -> { float val = (float)a.getAnimatedValue(); fV.setAlpha(val); }); 
-            // V19.11.4.3: ĐẬP VỠ KÍNH TÀNG HÌNH SAU KHI ANIMATION KẾT THÚC
-            anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); } }); anim.start(); } 
-        else { float wPref = prefs.getInt("anim_w", 0); float hPref = prefs.getInt("anim_h", 0); float drawW = (wPref > 0) ? wPref : fV.getWidth(); float drawH = (hPref > 0) ? hPref : fV.getHeight(); float p = 2 * (drawW + drawH); ValueAnimator anim = ValueAnimator.ofFloat(0f, -p); anim.setDuration(dur); anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue())); 
-            // V19.11.4.3: ĐẬP VỠ KÍNH TÀNG HÌNH
-            anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); } }); anim.start(); } 
+        int style = prefs.getInt("anim_style", 0); int dur = prefs.getInt("anim_dur", 1500); 
+        // V19.11.5: ANTI-TAPJACKING BẬT KÍNH KHI ANIMATE
+        WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams(); fp.width = WindowManager.LayoutParams.MATCH_PARENT; fp.height = WindowManager.LayoutParams.MATCH_PARENT; wm.updateViewLayout(fV, fp);
+        fV.setVisibility(View.VISIBLE); fV.setAlpha(1f);
+        if(style == 0) { ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f, 0f); anim.setDuration(dur); anim.addUpdateListener(a -> { float val = (float)a.getAnimatedValue(); fV.setAlpha(val); }); anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); fp.width = 0; fp.height = 0; wm.updateViewLayout(fV, fp); } }); anim.start(); } 
+        else { float wPref = prefs.getInt("anim_w", 0); float hPref = prefs.getInt("anim_h", 0); float drawW = (wPref > 0) ? wPref : fV.getWidth(); float drawH = (hPref > 0) ? hPref : fV.getHeight(); float p = 2 * (drawW + drawH); ValueAnimator anim = ValueAnimator.ofFloat(0f, -p); anim.setDuration(dur); anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue())); anim.addListener(new AnimatorListenerAdapter() { @Override public void onAnimationEnd(Animator a) { fV.setAlpha(0f); fV.setVisibility(View.GONE); fp.width = 0; fp.height = 0; wm.updateViewLayout(fV, fp); } }); anim.start(); } 
     }
 
     private void handleAction(String key) { String action = prefs.getString(key, "NONE"); if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_vib", true)) { doVibrate(prefs.getInt("vib_dur", 30)); } if (prefs.getBoolean(key + "_anim", true)) { playAnim(); } exec(action); } }
     private void doVibrate(int dur) { if(dur<=0) return; try { if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
 
     private void createFloatingBars() {
-        fV = new FlashView(this); fV.setAlpha(0f); fV.setVisibility(View.GONE); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
+        // V19.11.5: ANTI-TAPJACKING KHỞI TẠO 0x0
+        fV = new FlashView(this); fV.setAlpha(0f); fV.setVisibility(View.GONE); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(0, 0, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
         for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], p); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener("lock_" + BARS[i], null)); } 
         for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], p); } catch(Exception e){} corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_" + CORNERS[i], corners[i])); } updateVisibility();
     }
 
     private void updateVisibility() { 
         boolean isLocked = km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
-        
-        // V19.11.4.3: XOÁ SẠCH DẤU VẾT NẾU VÀO BLACKLIST
-        if(hide && fV != null) fV.setVisibility(View.GONE);
-
-        for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE); if(en && isLocked) { 
-            int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("lock_"+BARS[i]+"_w", 300); int h = prefs.getInt("lock_"+BARS[i]+"_h", 60); int x = prefs.getInt("lock_"+BARS[i]+"_x", 0); int y = prefs.getInt("lock_"+BARS[i]+"_y", 0); 
-            GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); 
-            
-            boolean isPri = prefs.getBoolean("lock_"+BARS[i]+"_pri", true); 
-            boolean isPass = prefs.getBoolean("lock_"+BARS[i]+"_pass", false);
-            
-            int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; 
-            if(isPass) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-            else if(isPri) baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); 
-            else baseFlags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE; 
-            
-            WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); } 
-        } 
+        for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE); if(en && isLocked) { int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("lock_"+BARS[i]+"_w", 300); int h = prefs.getInt("lock_"+BARS[i]+"_h", 60); int x = prefs.getInt("lock_"+BARS[i]+"_x", 0); int y = prefs.getInt("lock_"+BARS[i]+"_y", 0); GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); boolean isPri = prefs.getBoolean("lock_"+BARS[i]+"_pri", true); boolean isPass = prefs.getBoolean("lock_"+BARS[i]+"_pass", false); int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; if(isPass) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else if(isPri) baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); else baseFlags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE; WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); } } 
         
         for(int i=0; i<4; i++) { 
             if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isLocked) { 
@@ -170,14 +179,9 @@ public class EdgeBarService extends AccessibilityService {
                 boolean inv = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_inv", false);
                 ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, inv); 
                 
-                boolean isPri = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_pri", true); 
-                boolean isPass = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_pass", false);
-                
+                boolean isPri = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_pri", true); boolean isPass = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_pass", false);
                 int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; 
-                if(isPass) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                else if(isPri) baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); 
-                else baseFlags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE; 
-                
+                if(isPass) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else if(isPri) baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); else baseFlags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE; 
                 WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.flags = baseFlags; p.gravity = C_GRAV[i]; 
                 
                 int widthPref = (i < 2) ? prefs.getInt("lock_corner_bot_w", 100) : prefs.getInt("lock_corner_top_w", 100);
