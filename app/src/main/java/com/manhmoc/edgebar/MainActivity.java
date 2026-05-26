@@ -11,7 +11,6 @@ public class MainActivity extends Activity {
     private String[] CORNERS = {"br", "bl", "tr", "tl"}; private String[] CORNER_NAMES;
     private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; private String[] COLOR_NAMES;
 
-    // Mở rộng mảng Components để hỗ trợ 3 thanh Bar trung tâm của không gian Morse
     private String[] ALL_COMP_KEYS = {"r", "l", "t_r", "t_l", "t_c", "b_c", "c_t", "c_b", "corner_br", "corner_bl", "corner_tr", "corner_tl"}; 
     private String[] ALL_COMP_NAMES = {"Thanh Đáy Phải", "Thanh Đáy Trái", "Thanh Cạnh Phải", "Thanh Cạnh Trái", "Thanh Đỉnh Giữa", "Thanh Đáy Giữa", "Thanh TT Nửa Trên", "Thanh TT Nửa Dưới", "Góc Viền Đáy Phải", "Góc Viền Đáy Trái", "Góc Viền Đỉnh Phải", "Góc Viền Đỉnh Trái"};
     private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold"}; 
@@ -20,7 +19,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnMorseCond, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.2.0"; 
+    private final String CURRENT_VERSION = "V19.12.2.1"; 
     private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
@@ -103,14 +102,13 @@ public class MainActivity extends Activity {
         setContentView(rootLayout);
     }
 
-    // --- FIX BACKUP / RESTORE CORE ---
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode == RESULT_OK && data != null && data.getData() != null) {
             Uri uri = data.getData();
             try {
-                if (requestCode == 101) { // LƯU FILE
+                if (requestCode == 101) { 
                     OutputStream os = getContentResolver().openOutputStream(uri);
                     Map<String, ?> allEntries = prefs.getAll();
                     StringBuilder sb = new StringBuilder();
@@ -120,7 +118,7 @@ public class MainActivity extends Activity {
                     }
                     os.write(sb.toString().getBytes()); os.close();
                     Toast.makeText(this, T("Backup Successful!","Sao lưu thành công!"), Toast.LENGTH_SHORT).show();
-                } else if (requestCode == 102) { // PHỤC HỒI
+                } else if (requestCode == 102) { 
                     InputStream is = getContentResolver().openInputStream(uri);
                     BufferedReader reader = new BufferedReader(new InputStreamReader(is));
                     SharedPreferences.Editor editor = prefs.edit();
@@ -132,9 +130,8 @@ public class MainActivity extends Activity {
                             String v = line.substring(eqIdx + 1).replace("\\n", "\n");
                             if (v.equals("true") || v.equals("false")) editor.putBoolean(k, Boolean.parseBoolean(v));
                             else { 
-                                try { 
-                                    editor.putInt(k, Integer.parseInt(v)); 
-                                } catch (NumberFormatException e1) { 
+                                try { editor.putInt(k, Integer.parseInt(v)); } 
+                                catch (NumberFormatException e1) { 
                                     try { editor.putFloat(k, Float.parseFloat(v)); } 
                                     catch (NumberFormatException e2) { editor.putString(k, v); } 
                                 } 
@@ -162,9 +159,15 @@ public class MainActivity extends Activity {
     private void buildConditionsSpace() {
         LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 0, 0, 20); 
         btnLock = createTabBtn("LOCKSCREEN"); btnHome = createTabBtn("HOMESCREEN"); btnMorseCond = createTabBtn("MORSE");
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f); p.setMargins(0,0,15,0); 
-        btnLock.setLayoutParams(p); btnHome.setLayoutParams(p);
-        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f); btnMorseCond.setLayoutParams(rp);
+        
+        // VÁ LỖI UI (BUG 4 & 7): Khởi tạo riêng biệt LayoutParams cho từng nút để tránh ghi đè Margin
+        LinearLayout.LayoutParams pLock = new LinearLayout.LayoutParams(0, -2, 1f); pLock.setMargins(0,0,15,0); 
+        btnLock.setLayoutParams(pLock); 
+        LinearLayout.LayoutParams pHome = new LinearLayout.LayoutParams(0, -2, 1f); pHome.setMargins(0,0,15,0); 
+        btnHome.setLayoutParams(pHome);
+        LinearLayout.LayoutParams pMorse = new LinearLayout.LayoutParams(0, -2, 1f); 
+        btnMorseCond.setLayoutParams(pMorse);
+
         tabContainer.addView(btnLock); tabContainer.addView(btnHome); tabContainer.addView(btnMorseCond); pageConditions.addView(tabContainer);
         listRules = new LinearLayout(this); listRules.setOrientation(LinearLayout.VERTICAL); pageConditions.addView(listRules);
         
@@ -183,7 +186,7 @@ public class MainActivity extends Activity {
         listRules.removeAllViews(); String prefix = currentGesTab == 0 ? "lock_" : (currentGesTab == 1 ? "home_" : "morse_");
         LinearLayout currentRow = null; int count = 0;
         for (int c = 0; c < ALL_COMP_KEYS.length; c++) {
-            if (currentGesTab != 2 && c >= 5 && c <= 7) continue; // Bỏ qua 3 thanh Bar giữa của không gian Morse nếu đang ở Home/Lock
+            if (currentGesTab != 2 && c >= 5 && c <= 7) continue; 
             for (int g = 0; g < C_GESTURES.length; g++) {
                 String key = prefix + ALL_COMP_KEYS[c] + "_" + C_GESTURES[g];
                 String action = prefs.getString(key, "NONE");
@@ -237,10 +240,9 @@ public class MainActivity extends Activity {
         LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
         TextView tvC = new TextView(this); tvC.setText(T("1. SELECT COMPONENT", "1. CHỌN VÙNG (COMPONENT)")); tvC.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvC);
         
-        // Lọc danh sách Component tuỳ theo Không gian
         final ArrayList<Integer> validComps = new ArrayList<>();
         for (int i=0; i<ALL_COMP_KEYS.length; i++) {
-            if (currentGesTab != 2 && i >= 5 && i <= 7) continue; // Loại bỏ 3 thanh mới nếu không phải Morse
+            if (currentGesTab != 2 && i >= 5 && i <= 7) continue; 
             validComps.add(i);
         }
         String[] dispNames = new String[validComps.size()];
@@ -248,6 +250,11 @@ public class MainActivity extends Activity {
         for (int i=0; i<validComps.size(); i++) {
             dispNames[i] = ALL_COMP_NAMES[validComps.get(i)];
             if(preComp != -1 && validComps.get(i) == preComp) selectedSpinnerPos = i;
+        }
+        
+        // VÁ LỖI INDEX COMPONENT ẨN (BUG 6): Nếu Edit nhầm component bị filter, gán fallback mượt mà về 0
+        if (preComp != -1 && !validComps.contains(preComp)) {
+            selectedSpinnerPos = 0;
         }
 
         final int[] finalCompIdx = {validComps.get(selectedSpinnerPos)};
@@ -381,7 +388,7 @@ public class MainActivity extends Activity {
         pageDesign.addView(toggleRow); pageDesign.addView(designSliderContainer); btnEditLock.performClick();
     }
 
-    private void showPremiumDialog() { String t = "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật (Bắt buộc cho Trợ Năng):\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n💡 NẾU CÓ ADB, APP SẼ LÀM ĐƯỢC GÌ?\n- Tự cấp quyền Lớp phủ, khỏi cần hỏi hệ thống.\n- Đóng/cắt Trợ năng mọi app trong 1 mili-giây.\n- Sống dai, khó bị hệ thống kill ngầm.\n\n🚀 V19.12.2.0 THE APPLOCK ARCHITECT:\nĐã thêm không gian MORSE - Pháo đài khóa ứng dụng tuyệt mật bằng lớp phủ ưu tiên cao chống chạm, không cần Background service!"; ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); }
+    private void showPremiumDialog() { String t = "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật (Bắt buộc cho Trợ Năng):\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n💡 NẾU CÓ ADB, APP SẼ LÀM ĐƯỢC GÌ?\n- Tự cấp quyền Lớp phủ, khỏi cần hỏi hệ thống.\n- Đóng/cắt Trợ năng mọi app trong 1 mili-giây.\n- Sống dai, khó bị hệ thống kill ngầm.\n\n🚀 V19.12.2.1 THE APPLOCK ARCHITECT:\nĐã thêm không gian MORSE - Pháo đài khóa ứng dụng tuyệt mật bằng lớp phủ ưu tiên cao chống chạm, không cần Background service!"; ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); }
 
     private LinearLayout createDrawer(String title, View content) { LinearLayout container = new LinearLayout(this); container.setOrientation(LinearLayout.VERTICAL); container.setBackground(getRounded("#222222", 20f)); LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1,-2); clp.setMargins(0,0,0,20); container.setLayoutParams(clp); TextView header = new TextView(this); header.setText(title); header.setTextColor(Color.parseColor("#00E5FF")); header.setPadding(30,30,30,30); header.setTextSize(16); content.setVisibility(View.GONE); header.setOnClickListener(v -> { boolean isClosed = content.getVisibility() == View.GONE; content.setVisibility(isClosed ? View.VISIBLE : View.GONE); header.setBackground(getRounded(isClosed ? "#333333" : "#222222", 20f)); }); container.addView(header); container.addView(content); return container; }
     private LinearLayout createComboDropdown(String title, String key, String[] items, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL); l.setGravity(Gravity.CENTER_VERTICAL); l.setPadding(0,10,0,20); TextView tv = new TextView(this); tv.setText(title); tv.setTextColor(Color.parseColor("#E91E63")); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sp = createSpinner(); sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items)); sp.setSelection(prefs.getInt(key, def)); sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt(key,pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sp.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.2f)); l.addView(tv); l.addView(sp); return l; }
