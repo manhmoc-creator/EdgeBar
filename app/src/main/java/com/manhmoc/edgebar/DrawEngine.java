@@ -44,13 +44,13 @@ public class DrawEngine {
                 cornerPath.quadTo(0, 0, 0, cornerRadius);
                 cornerPath.lineTo(0, height);
                 break;
-            case "tr": // Đỉnh Phải (Tự động hoàn thiện)
+            case "tr": // Đỉnh Phải
                 cornerPath.moveTo(0, 0);
                 cornerPath.lineTo(width - cornerRadius, 0);
                 cornerPath.quadTo(width, 0, width, cornerRadius);
                 cornerPath.lineTo(width, height);
                 break;
-            case "bl": // Đáy Trái (Tự động hoàn thiện)
+            case "bl": // Đáy Trái
                 cornerPath.moveTo(width, height);
                 cornerPath.lineTo(cornerRadius, height);
                 cornerPath.quadTo(0, height, 0, height - cornerRadius);
