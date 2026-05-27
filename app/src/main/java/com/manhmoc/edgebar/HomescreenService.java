@@ -98,7 +98,15 @@ public class HomescreenService extends Service {
             else { moonPath.moveTo(mTipX, mRootY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mRootX, mTipY); moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY); }
             moonPath.close();
 
-            canvas.drawPath(moonPath, pFill); canvas.drawPath(strokePath, pStroke); 
+            canvas.drawPath(strokePath, pStroke); 
+
+            // V19.12.1.4: Tịnh tiến Lõi Trăng Non độc lập
+            float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
+            float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
+            canvas.save();
+            canvas.translate(mx, my);
+            canvas.drawPath(moonPath, pFill);
+            canvas.restore();
         } 
     }
 
@@ -124,12 +132,10 @@ public class HomescreenService extends Service {
 
     private void updateVisibility() { 
         boolean isUnlocked = !km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
-        // V19.12.1.3: CÔNG TẮC TÀNG HÌNH (INVISIBLE BUT TOUCHABLE) KHI PREVIEW MÀN KHOÁ
         boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
 
         if(hide && fV != null) fV.setVisibility(View.GONE);
         for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("home_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(en && isUnlocked) { 
-            // Nếu đang preview màn khoá -> Đánh tụt alpha về 0 (Tàng hình)
             int alpha = isPreviewLock ? 0 : prefs.getInt("home_"+BARS[i]+"_alpha", 50); 
             int w = prefs.getInt("home_"+BARS[i]+"_w", 300); int h = prefs.getInt("home_"+BARS[i]+"_h", 60); int x = prefs.getInt("home_"+BARS[i]+"_x", 0); int y = prefs.getInt("home_"+BARS[i]+"_y", 0); 
             GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); 
@@ -142,7 +148,6 @@ public class HomescreenService extends Service {
         for(int i=0; i<4; i++) { 
             if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("home_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { 
                 String ck = "home_corner_" + CORNERS[i] + "_";
-                // Nếu đang preview màn khoá -> Đánh tụt alpha Lõi và Vỏ về 0 (Tàng hình)
                 int moonAlpha = isPreviewLock ? 0 : prefs.getInt("home_corner_moon_alpha", 100); 
                 int strokeAlpha = isPreviewLock ? 0 : prefs.getInt("home_corner_stroke_alpha", 200); 
                 int hideDelay = prefs.getInt("home_corner_hide_dur", 2500); 
@@ -157,7 +162,11 @@ public class HomescreenService extends Service {
                 
                 int wPref = prefs.getInt(ck+"w", 100); int hPref = prefs.getInt(ck+"h", 100);
                 int mwPref = prefs.getInt(ck+"moon_w", 100); int mhPref = prefs.getInt(ck+"moon_h", 100);
-                p.width = Math.max(10, Math.max(wPref, mwPref)); p.height = Math.max(10, Math.max(hPref, mhPref));
+                int mxOffset = Math.abs(prefs.getInt(ck+"moon_x", 1250) - 1250);
+                int myOffset = Math.abs(prefs.getInt(ck+"moon_y", 1250) - 1250);
+                
+                p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset); 
+                p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
                 p.x = prefs.getInt(ck+"x", 0); p.y = prefs.getInt(ck+"y", 0); 
                 wm.updateViewLayout(corners[i], p); 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && corners[i].getVisibility() == View.VISIBLE && priMode == 0) { Rect rect = new Rect(0, 0, p.width, p.height); corners[i].setSystemGestureExclusionRects(Collections.singletonList(rect)); } } 
