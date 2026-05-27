@@ -99,8 +99,6 @@ public class EdgeBarService extends AccessibilityService {
             moonPath.close();
 
             canvas.drawPath(strokePath, pStroke); 
-
-            // V19.12.1.4: Tịnh tiến Lõi Trăng Non độc lập
             float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
             float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
             canvas.save();
@@ -120,6 +118,9 @@ public class EdgeBarService extends AccessibilityService {
     @Override public void onAccessibilityEvent(AccessibilityEvent event) { if(event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) { String pName = event.getPackageName() != null ? event.getPackageName().toString() : ""; String cName = event.getClassName() != null ? event.getClassName().toString() : ""; isKbd = pName.contains("inputmethod") || cName.contains("InputWindow") || cName.contains("keyboard") || cName.contains("Keyboard"); String bl = prefs.getString("blacklist", ""); isBl = !pName.isEmpty() && bl.contains(pName); updateVisibility(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); i.putExtra("isKbd", isKbd); i.putExtra("isBl", isBl); sendBroadcast(i); } }
 
     private void exec(String a) { if (a == null || a.equals("NONE")) return; try { switch(a) { 
+        case "MACRO_1": case "MACRO_2": case "MACRO_3": case "MACRO_4": case "MACRO_5": Intent iM = new Intent("com.manhmoc.edgebar.TOGGLE_MACRO"); iM.putExtra("services", prefs.getString(a.toLowerCase()+"_svcs", "")); sendBroadcast(iM); break; 
+        case "TOGGLE_MORSE": Intent m = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"); sendBroadcast(m); break;
+        case "YTDL_DOWNLOAD": try{android.content.ClipboardManager cb=(android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE); if(cb.hasPrimaryClip()&&cb.getPrimaryClip().getItemCount()>0){CharSequence txt=cb.getPrimaryClip().getItemAt(0).getText(); if(txt!=null&&(txt.toString().startsWith("http"))){Intent y=new Intent(Intent.ACTION_SEND); y.setType("text/plain"); y.putExtra(Intent.EXTRA_TEXT,txt.toString()); y.setPackage("com.deniscerri.ytdlnis"); y.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(y);}}}catch(Exception e){} break; 
         case "BACK": performGlobalAction(GLOBAL_ACTION_BACK); break; case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break; case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break; case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break; case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break; case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break; case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
     private void fireIntent(String idx) { try { String act = prefs.getString("i"+idx+"_act", ""); String pkg = prefs.getString("i"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("i"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("i"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("i"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("i"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("i"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     
@@ -161,28 +162,19 @@ public class EdgeBarService extends AccessibilityService {
         } 
         
         for(int i=0; i<4; i++) { 
-            if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isLocked) { 
+            if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", false); corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isLocked) { 
                 String ck = "lock_corner_" + CORNERS[i] + "_";
                 int moonAlpha = prefs.getInt("lock_corner_moon_alpha", 100); int strokeAlpha = prefs.getInt("lock_corner_stroke_alpha", 200); int hideDelay = prefs.getInt("lock_corner_hide_dur", 2500); 
-                int visMode = prefs.getInt(ck+"vis_mode", 0);
-                boolean isAuto = (visMode == 1); boolean isInv = (visMode == 2);
+                int visMode = prefs.getInt(ck+"vis_mode", 0); boolean isAuto = (visMode == 1); boolean isInv = (visMode == 2);
                 ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv); 
-                
                 int priMode = prefs.getInt(ck+"pri_mode", 0);
                 int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; 
                 if(priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); 
                 WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.flags = baseFlags; p.gravity = C_GRAV[i]; 
-                
-                // V19.12.1.4: Mở rộng khung Bounding Box tự động nếu Moon bị đẩy lệch ra xa
-                int wPref = prefs.getInt(ck+"w", 100); int hPref = prefs.getInt(ck+"h", 100);
-                int mwPref = prefs.getInt(ck+"moon_w", 100); int mhPref = prefs.getInt(ck+"moon_h", 100);
-                int mxOffset = Math.abs(prefs.getInt(ck+"moon_x", 1250) - 1250);
-                int myOffset = Math.abs(prefs.getInt(ck+"moon_y", 1250) - 1250);
-                
-                p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset); 
-                p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
-                p.x = prefs.getInt(ck+"x", 0); p.y = prefs.getInt(ck+"y", 0); 
-                wm.updateViewLayout(corners[i], p); } 
+                int wPref = prefs.getInt(ck+"w", 100); int hPref = prefs.getInt(ck+"h", 100); int mwPref = prefs.getInt(ck+"moon_w", 100); int mhPref = prefs.getInt(ck+"moon_h", 100);
+                int mxOffset = Math.abs(prefs.getInt(ck+"moon_x", 1250) - 1250); int myOffset = Math.abs(prefs.getInt(ck+"moon_y", 1250) - 1250);
+                p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset); p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
+                p.x = prefs.getInt(ck+"x", 0); p.y = prefs.getInt(ck+"y", 0); wm.updateViewLayout(corners[i], p); } 
         }
     }
 
