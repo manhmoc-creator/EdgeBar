@@ -43,7 +43,8 @@ public class EdgeBarService extends AccessibilityService {
             float right = drawW - off; float bottom = drawH - off;
             p.setStrokeCap(Paint.Cap.ROUND);
             if(aStyle > 0) { 
-                float perim = 2 * (drawW + drawH); float currentPhase = -perim * phaseFraction; 
+                float perim = 2 * (drawW + drawH); 
+                float currentPhase = -perim * phaseFraction; 
                 if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, currentPhase)); 
                 else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, currentPhase)); 
                 else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, currentPhase)); 
@@ -137,7 +138,11 @@ public class EdgeBarService extends AccessibilityService {
     }
 
     private void updateVisibility() { 
-        boolean isLocked = km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
+        // V19.12.1.2: BẮT SÓNG LIVE PREVIEW
+        boolean isPreview = prefs.getBoolean("preview_lock", false);
+        boolean isLocked = km.isKeyguardLocked() || isPreview; 
+        boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
+        
         if(hide && fV != null) fV.setVisibility(View.GONE);
         for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE); if(en && isLocked) { 
             int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("lock_"+BARS[i]+"_w", 300); int h = prefs.getInt("lock_"+BARS[i]+"_h", 60); int x = prefs.getInt("lock_"+BARS[i]+"_x", 0); int y = prefs.getInt("lock_"+BARS[i]+"_y", 0); 
