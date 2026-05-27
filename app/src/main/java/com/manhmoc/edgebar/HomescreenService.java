@@ -283,7 +283,7 @@ public class HomescreenService extends Service {
         doVibrate(30);
         if(v != null && v instanceof CornerView) ((CornerView)v).triggerFlash();
         
-        String mappedChar = getMappedCharacter(comp).trim();
+        String mappedChar = mapComponentToNumber(comp);
 
         if (mappedChar.equals("x") || mappedChar.equalsIgnoreCase("X")) { 
             currentMorseAttempt = ""; tvMorseStatus.setText(""); 
