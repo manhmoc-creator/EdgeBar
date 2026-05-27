@@ -45,7 +45,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain;
     private Button btnLock, btnHome, btnMorse, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0;
-    private final String CURRENT_VERSION = "V19.12.3.4.5.1";
+    private final String CURRENT_VERSION = "V19.12.3.4.5.2";
     private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
@@ -514,6 +514,8 @@ public class MainActivity extends Activity {
         title.setPadding(0, 0, 0, 40);
         container.addView(title);
 
+        // Quan trọng: các key này phải khớp với cách map trong service: "morse_map_" + component (sau khi bỏ tiền tố "morse_")
+        // Ở đây component list sẽ lưu với tên gốc trong service (r, l, corner_br, ...) -> key lưu: morse_map_r, morse_map_corner_br,...
         String[] allMorseComponents = {"r", "l", "t_r", "t_l", "t_c", "m_b_c", "m_mid_t", "m_mid_b", "corner_br", "corner_bl", "corner_tr", "corner_tl"};
         String[] displayNames = {
                 T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"), T("Top Right", "Cạnh Phải"), T("Top Left", "Cạnh Trái"),
@@ -551,6 +553,7 @@ public class MainActivity extends Activity {
         dialog.setContentView(container); dialog.show();
     }
 
+    // ------------------- BUILDERS -------------------
     private void buildIntentsSpace() {
         for (int i = 1; i <= 15; i++) {
             LinearLayout sInt = new LinearLayout(this); sInt.setOrientation(LinearLayout.VERTICAL); sInt.setPadding(30,10,30,30);
@@ -610,36 +613,6 @@ public class MainActivity extends Activity {
 
     private void buildDesignSpace() {
         pageDesign.addView(createSectionTitle(T("BACKUP / RESTORE", "KHU VỰC SAO LƯU")));
-        // KHU VỰC TẢI NHẠC YTDLNIS
-        LinearLayout musicArea = new LinearLayout(this);
-        musicArea.setOrientation(LinearLayout.VERTICAL);
-        musicArea.setPadding(30,20,30,20);
-        musicArea.setBackground(getRounded("#1E1E1E", 20f));
-        final EditText etMusic = new EditText(this);
-        etMusic.setHint(T("YouTube URL or song name", "Link YouTube hoặc tên bài hát"));
-        etMusic.setText(prefs.getString("ytdl_last_query", ""));
-        etMusic.setBackground(getRounded("#2C2C2C", 20f));
-        etMusic.setPadding(30,30,30,30);
-        etMusic.setTextColor(Color.WHITE);
-        Button btnMusic = new Button(this);
-        btnMusic.setText(T("🎵 DOWNLOAD", "🎵 TẢI NHẠC"));
-        btnMusic.setBackground(getRounded("#FF5722", 20f));
-        btnMusic.setTextColor(Color.WHITE);
-        btnMusic.setOnClickListener(v -> {
-            String query = etMusic.getText().toString().trim();
-            if (query.isEmpty()) { Toast.makeText(MainActivity.this, T("Enter URL or song name", "Nhập URL hoặc tên bài hát"), Toast.LENGTH_SHORT).show(); return; }
-            prefs.edit().putString("ytdl_last_query", query).apply();
-            Intent yt = new Intent(Intent.ACTION_SEND);
-            yt.setType("text/plain");
-            yt.putExtra(Intent.EXTRA_TEXT, query);
-            yt.setPackage("com.deniscerri.ytdlnis");
-            yt.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try { startActivity(yt); } catch (Exception e) { Toast.makeText(MainActivity.this, "Install YTDLnis first", Toast.LENGTH_LONG).show(); }
-        });
-        musicArea.addView(etMusic);
-        musicArea.addView(btnMusic);
-        pageDesign.addView(createDrawer(T("🎵 MUSIC DOWNLOADER", "🎵 TẢI NHẠC"), musicArea));
-
         LinearLayout backupRow = new LinearLayout(this); backupRow.setOrientation(LinearLayout.HORIZONTAL);
         Button btnBackup = new Button(this); btnBackup.setText(T("BACKUP", "💾 SAO LƯU")); btnBackup.setBackground(getRounded("#2E7D32", 20f)); btnBackup.setTextColor(Color.WHITE);
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, -2, 1f); bp.setMargins(0,0,15,0); btnBackup.setLayoutParams(bp);
@@ -656,32 +629,45 @@ public class MainActivity extends Activity {
         secSys.addView(cbKbd);
         secSys.addView(createSectionTitle("BLACKLIST (Hide Overlay)"));
         secSys.addView(createInput("Packages (com.ex.app)", "blacklist"));
+
+        // LOCKLIST với App Picker thật
         secSys.addView(createSectionTitle("LOCKLIST (Morse AppLock)"));
-                LinearLayout locklistRow = new LinearLayout(this);
-                locklistRow.setOrientation(LinearLayout.HORIZONTAL);
-                locklistRow.setPadding(0,10,0,10);
-                final EditText etLocklist = new EditText(this);
-                etLocklist.setHint(T("Package names (com.example.app)", "Tên gói (com.example.app)"));
-                etLocklist.setText(prefs.getString("locklist", ""));
-                etLocklist.setTag("locklist_input");
-                etLocklist.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-                etLocklist.setBackground(getRounded("#2C2C2C", 20f));
-                etLocklist.setPadding(30,30,30,30);
-                etLocklist.setTextColor(Color.WHITE);
-                etLocklist.addTextChangedListener(new android.text.TextWatcher() {
-                    public void afterTextChanged(android.text.Editable s) { prefs.edit().putString("locklist", s.toString()).apply(); }
-                    public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-                    public void onTextChanged(CharSequence s, int start, int before, int count) {}
-                });
-                Button btnPick = new Button(this);
-                btnPick.setText(T("📱 Pick App", "📱 Chọn App"));
-                btnPick.setBackground(getRounded("#00E5FF", 20f));
-                btnPick.setTextColor(Color.BLACK);
-                btnPick.setOnClickListener(v -> showAppPickerDialog("locklist"));
-                locklistRow.addView(etLocklist);
-                locklistRow.addView(btnPick);
-                secSys.addView(locklistRow);
+        LinearLayout locklistRow = new LinearLayout(this); locklistRow.setOrientation(LinearLayout.HORIZONTAL); locklistRow.setPadding(0,10,0,10);
+        final EditText etLocklist = new EditText(this); etLocklist.setHint(T("Package names", "Tên gói (com.example.app)"));
+        etLocklist.setText(prefs.getString("locklist", ""));
+        etLocklist.setTag("locklist_input");
+        etLocklist.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        etLocklist.setBackground(getRounded("#2C2C2C", 20f)); etLocklist.setPadding(30,30,30,30); etLocklist.setTextColor(Color.WHITE);
+        etLocklist.addTextChangedListener(new android.text.TextWatcher() {
+            public void afterTextChanged(android.text.Editable s) { prefs.edit().putString("locklist", s.toString()).apply(); }
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+        });
+        Button btnPick = new Button(this); btnPick.setText(T("📱 Pick App", "📱 Chọn App"));
+        btnPick.setBackground(getRounded("#00E5FF", 20f)); btnPick.setTextColor(Color.BLACK);
+        btnPick.setOnClickListener(v -> showAppPickerDialog("locklist"));
+        locklistRow.addView(etLocklist); locklistRow.addView(btnPick);
+        secSys.addView(locklistRow);
         pageDesign.addView(wrapCard(secSys));
+
+        // Music Downloader
+        LinearLayout musicArea = new LinearLayout(this); musicArea.setOrientation(LinearLayout.VERTICAL);
+        musicArea.setPadding(30,20,30,20); musicArea.setBackground(getRounded("#1E1E1E", 20f));
+        final EditText etMusic = new EditText(this); etMusic.setHint(T("YouTube URL or song name", "Link YouTube hoặc tên bài hát"));
+        etMusic.setText(prefs.getString("ytdl_last_query", ""));
+        etMusic.setBackground(getRounded("#2C2C2C", 20f)); etMusic.setPadding(30,30,30,30); etMusic.setTextColor(Color.WHITE);
+        Button btnMusic = new Button(this); btnMusic.setText(T("🎵 DOWNLOAD", "🎵 TẢI NHẠC"));
+        btnMusic.setBackground(getRounded("#FF5722", 20f)); btnMusic.setTextColor(Color.WHITE);
+        btnMusic.setOnClickListener(v -> {
+            String query = etMusic.getText().toString().trim();
+            if (query.isEmpty()) { Toast.makeText(MainActivity.this, T("Enter URL or song name", "Nhập URL hoặc tên bài hát"), Toast.LENGTH_SHORT).show(); return; }
+            prefs.edit().putString("ytdl_last_query", query).apply();
+            Intent yt = new Intent(Intent.ACTION_SEND); yt.setType("text/plain"); yt.putExtra(Intent.EXTRA_TEXT, query);
+            yt.setPackage("com.deniscerri.ytdlnis"); yt.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try { startActivity(yt); } catch (Exception e) { Toast.makeText(MainActivity.this, "Install YTDLnis first", Toast.LENGTH_LONG).show(); }
+        });
+        musicArea.addView(etMusic); musicArea.addView(btnMusic);
+        pageDesign.addView(createDrawer(T("🎵 MUSIC DOWNLOADER", "🎵 TẢI NHẠC"), musicArea));
 
         pageDesign.addView(createSectionTitle(T("CORE DESIGN (COLOR/SIZE)", "THIẾT KẾ CỐT LÕI (MÀU/KÍCH THƯỚC)")));
         LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -712,8 +698,40 @@ public class MainActivity extends Activity {
         btnEditAnim.setTextColor(designTabState==3 ? Color.BLACK : Color.WHITE);
     }
 
+    private void showAppPickerDialog(String targetKey) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(T("Choose App", "Chọn ứng dụng"));
+        PackageManager pm = getPackageManager();
+        Intent intent = new Intent(Intent.ACTION_MAIN, null);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        List<ResolveInfo> apps = pm.queryIntentActivities(intent, 0);
+        List<String> appNames = new ArrayList<>();
+        List<String> pkgNames = new ArrayList<>();
+        for (ResolveInfo ri : apps) {
+            appNames.add(ri.loadLabel(pm).toString());
+            pkgNames.add(ri.activityInfo.packageName);
+        }
+        builder.setItems(appNames.toArray(new String[0]), (dialog, which) -> {
+            String current = prefs.getString(targetKey, "");
+            String newPkg = pkgNames.get(which);
+            if (current.contains(newPkg)) {
+                Toast.makeText(MainActivity.this, T("Already in list", "Đã có trong danh sách"), Toast.LENGTH_SHORT).show();
+            } else {
+                String newList = current.isEmpty() ? newPkg : current + "," + newPkg;
+                prefs.edit().putString(targetKey, newList).apply();
+                Toast.makeText(MainActivity.this, T("Added", "Đã thêm") + " " + newPkg, Toast.LENGTH_LONG).show();
+                // Cập nhật lại EditText
+                ViewGroup root = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
+                EditText et = root.findViewWithTag("locklist_input");
+                if (et != null) et.setText(newList);
+            }
+        });
+        builder.setNegativeButton(T("Cancel", "Hủy"), null);
+        builder.show();
+    }
+
     private void showPremiumDialog() {
-        String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🔧 ADVANCED FIXES IN V19.12.3.4.5:\n- Fixed Flashlight state sync\n- Fixed YTDLnis background clipboard (Android 11+)\n- Added App Picker for Locklist\n- Fixed X/> keys in Morse pad\n- Morse overlay only shows on locked apps, not fullscreen", "🔧 LỆNH ADB CỐT LÕI:\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 NÂNG CẤP V19.12.3.4.5:\n- Sửa đèn pin đồng bộ\n- Sửa cướp link YTDLnis (Android 11+)\n- Thêm chọn app cho Locklist\n- Sửa phím X/> trong bàn phím Morse\n- Lớp phủ Morse chỉ che app bị khóa");
+        String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🔧 V19.12.3.4.5.2:\n- Real App Picker for Locklist\n- Fixed Morse corner mapping (unified keys)\n- Music Downloader integrated\n- CPU-safe Scratch effect", "🔧 LỆNH ADB CỐT LÕI:\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 NÂNG CẤP V19.12.3.4.5.2:\n- Thực sự có nút chọn App cho Locklist\n- Sửa ánh xạ góc Morse (đồng nhất key)\n- Tích hợp Music Downloader\n- Hiệu ứng xước màn an toàn cho CPU");
         ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50);
         TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f);
         sv.addView(tv);
@@ -871,73 +889,6 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout createSlider(String t, String k, int max, int def) {
-    private void showAppPickerDialog(String targetKey) {
-        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
-        builder.setTitle(T("Choose App", "Chọn ứng dụng"));
-        android.content.pm.PackageManager pm = getPackageManager();
-        Intent intent = new Intent(Intent.ACTION_MAIN, null);
-        intent.addCategory(Intent.CATEGORY_LAUNCHER);
-        java.util.List<android.content.pm.ResolveInfo> apps = pm.queryIntentActivities(intent, 0);
-        java.util.ArrayList<String> appNames = new java.util.ArrayList<>();
-        java.util.ArrayList<String> pkgNames = new java.util.ArrayList<>();
-        for (android.content.pm.ResolveInfo ri : apps) {
-            appNames.add(ri.loadLabel(pm).toString());
-            pkgNames.add(ri.activityInfo.packageName);
-        }
-        builder.setItems(appNames.toArray(new String[0]), (dialog, which) -> {
-            String current = prefs.getString(targetKey, "");
-            String newPkg = pkgNames.get(which);
-            if (current.contains(newPkg)) {
-                Toast.makeText(MainActivity.this, T("Already in list", "Đã có trong danh sách"), Toast.LENGTH_SHORT).show();
-            } else {
-                String newList = current.isEmpty() ? newPkg : current + "," + newPkg;
-                prefs.edit().putString(targetKey, newList).apply();
-                Toast.makeText(MainActivity.this, T("Added", "Đã thêm") + " " + newPkg, Toast.LENGTH_LONG).show();
-                refreshLocklistInput();
-            }
-        });
-        builder.setNegativeButton(T("Cancel", "Hủy"), null);
-        builder.show();
-    }
-    private void refreshLocklistInput() {
-        // Cập nhật lại ô input hiển thị (nếu có)
-        ViewGroup root = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
-        EditText et = root.findViewWithTag("locklist_input");
-        if (et != null) et.setText(prefs.getString("locklist", ""));
-    }
-    private void showAppPickerDialog(String targetKey) {
-        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
-        builder.setTitle(T("Choose App", "Chọn ứng dụng"));
-        android.content.pm.PackageManager pm = getPackageManager();
-        Intent intent = new Intent(Intent.ACTION_MAIN, null);
-        intent.addCategory(Intent.CATEGORY_LAUNCHER);
-        java.util.List<android.content.pm.ResolveInfo> apps = pm.queryIntentActivities(intent, 0);
-        java.util.ArrayList<String> appNames = new java.util.ArrayList<>();
-        java.util.ArrayList<String> pkgNames = new java.util.ArrayList<>();
-        for (android.content.pm.ResolveInfo ri : apps) {
-            appNames.add(ri.loadLabel(pm).toString());
-            pkgNames.add(ri.activityInfo.packageName);
-        }
-        builder.setItems(appNames.toArray(new String[0]), (dialog, which) -> {
-            String current = prefs.getString(targetKey, "");
-            String newPkg = pkgNames.get(which);
-            if (current.contains(newPkg)) {
-                Toast.makeText(MainActivity.this, T("Already in list", "Đã có trong danh sách"), Toast.LENGTH_SHORT).show();
-            } else {
-                String newList = current.isEmpty() ? newPkg : current + "," + newPkg;
-                prefs.edit().putString(targetKey, newList).apply();
-                Toast.makeText(MainActivity.this, T("Added", "Đã thêm") + " " + newPkg, Toast.LENGTH_LONG).show();
-                refreshLocklistInput();
-            }
-        });
-        builder.setNegativeButton(T("Cancel", "Hủy"), null);
-        builder.show();
-    }
-    private void refreshLocklistInput() {
-        ViewGroup root = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
-        EditText et = root.findViewWithTag("locklist_input");
-        if (et != null) et.setText(prefs.getString("locklist", ""));
-    }
         LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10);
         TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def));
         l.addView(tv);
