@@ -46,6 +46,24 @@ public class HomescreenService extends Service {
         } 
     };
 
+    // V19.12.3.4 FIX: NUMBER MAPPING UX 
+    private String mapComponentToNumber(String comp) {
+        String key = comp.replace("morse_", "").replace("home_", "").replace("lock_", "").replace("corner_", "");
+        switch (key) {
+            case "t_l": return "1";
+            case "m_mid_t": return "2";
+            case "t_r": return "3";
+            case "l": return "4";
+            case "t_c": return "5";
+            case "r": return "6";
+            case "m_mid_b": return "7";
+            case "m_b_c": return "8";
+            case "tl": return "9";
+            case "tr": return "0";
+            default: return "*";
+        }
+    }
+
     private class FlashView extends View { 
         private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phaseFraction = 0f;
         public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); } 
@@ -247,7 +265,7 @@ public class HomescreenService extends Service {
         }
     }
 
-    // FIX BUG: CHECK CHUỖI RỖNG CHỐNG VƯỢT RÀO MORSE LOCK!
+    // FIX BUG: CHECK EMPTY PASSWORD & NUMBER MAPPING UX
     private void handleMorseTap(String comp, View v) {
         doVibrate(30);
         if(v != null && v instanceof CornerView) ((CornerView)v).triggerFlash();
@@ -283,8 +301,7 @@ public class HomescreenService extends Service {
             }
         } 
         else { 
-            if (!currentMorseAttempt.isEmpty()) currentMorseAttempt += ",";
-            currentMorseAttempt += comp.replace("morse_", "");
+            currentMorseAttempt += mapComponentToNumber(comp);
             if (isRecordingMorse) {
                 tvMorseStatus.setText("Seq: " + currentMorseAttempt);
             } else {
@@ -292,8 +309,7 @@ public class HomescreenService extends Service {
                 morseDotHandler.removeCallbacksAndMessages(null);
                 int dotDelay = prefs.getInt("morse_dot_delay", 500);
                 morseDotHandler.postDelayed(() -> {
-                    int len = currentMorseAttempt.split(",").length;
-                    StringBuilder dots = new StringBuilder(); for(int i=0; i<len; i++) dots.append("• ");
+                    StringBuilder dots = new StringBuilder(); for(int i=0; i<currentMorseAttempt.length(); i++) dots.append("• ");
                     tvMorseStatus.setText(dots.toString());
                 }, dotDelay);
             }
@@ -357,5 +373,4 @@ public class HomescreenService extends Service {
                 } 
             } return true; } 
     }
-    @Override public void onInterrupt() {} @Override public void onDestroy() { super.onDestroy(); isRunning = false; try{unregisterReceiver(syncReceiver);}catch(Exception e){} prefs.unregisterOnSharedPreferenceChangeListener(prefListener); for(int i=0; i<5; i++) if(bars[i] != null) wm.removeView(bars[i]); for(int i=0; i<8; i++) if(mBars[i] != null) wm.removeView(mBars[i]); for(int i=0; i<4; i++) { if(corners[i] != null) wm.removeView(corners[i]); if(mCorners[i] != null) wm.removeView(mCorners[i]); } if(morseContainer != null) wm.removeView(morseContainer); if (fV != null) wm.removeView(fV); }
 }

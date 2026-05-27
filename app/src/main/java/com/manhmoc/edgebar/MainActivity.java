@@ -22,12 +22,11 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.3"; 
+    private final String CURRENT_VERSION = "V19.12.3.4"; 
     private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     
-    // FIX BUG: ĐẢM BẢO PREVIEW_MORSE ĐƯỢC GHI ĐÚNG KHI MỞ TAB MORSE
     private void refreshPreview() { 
         boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); 
         boolean pMorse = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==2);
@@ -145,7 +144,6 @@ public class MainActivity extends Activity {
         if(idx==1) renderRulesList();
     }
 
-    // FIX BUG: XÓA TAB MORSE Ở KHÔNG GIAN ĐIỀU KIỆN NHƯ ĐÃ THỐNG NHẤT TỪ BẢN TRƯỚC
     private void buildConditionsSpace() {
         LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 0, 0, 20); 
         btnLock = createTabBtn("LOCKSCREEN"); btnHome = createTabBtn("HOMESCREEN"); 
@@ -305,7 +303,6 @@ public class MainActivity extends Activity {
         LinearLayout secSys = new LinearLayout(this); secSys.setOrientation(LinearLayout.VERTICAL); secSys.addView(createSectionTitle(T("SYSTEM BEHAVIOR", "HÀNH VI HỆ THỐNG"))); CheckBox cbKbd = new CheckBox(this); cbKbd.setText(T("Auto-hide on Keyboard", "Tự ẩn khi hiện Bàn Phím")); cbKbd.setTextColor(Color.WHITE); cbKbd.setChecked(prefs.getBoolean("avoid_kbd", true)); cbKbd.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("avoid_kbd", c).apply()); secSys.addView(cbKbd); 
         secSys.addView(createSectionTitle("BLACKLIST (Hide Overlay)")); secSys.addView(createInput("Packages (com.ex.app)", "blacklist")); 
         
-        // FIX BUG: ĐẢM BẢO CHẮC CHẮN CÓ Ô NHẬP LOCKLIST TRONG TAB SYSTEM
         secSys.addView(createSectionTitle("LOCKLIST (Morse AppLock)")); secSys.addView(createInput("Packages (com.zing.zalo, com.mbmobile)", "locklist")); 
         pageDesign.addView(wrapCard(secSys));
         
@@ -325,7 +322,7 @@ public class MainActivity extends Activity {
         toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addView(btnEditMorse); toggleRow.addView(btnEditAnim); pageDesign.addView(toggleRow); pageDesign.addView(designSliderContainer); btnEditHome.performClick();
     }
 
-    private void showPremiumDialog() { String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow", "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.3 THE IRONCLAD VAULT:\nBít hoàn toàn lỗ hổng Empty Pass và Screen-Off Exploit, tích hợp CI/CD tự động build!"); ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); }
+    private void showPremiumDialog() { String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow", "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4 THE FINAL POLISH:\nKhóa két an toàn khi tắt màn hình, Bảng Number Mapping Morse 12 phím xịn xò, CI/CD tự động build!"); ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); }
 
     private LinearLayout createDrawer(String title, View content) { LinearLayout container = new LinearLayout(this); container.setOrientation(LinearLayout.VERTICAL); container.setBackground(getRounded("#222222", 20f)); LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1,-2); clp.setMargins(0,0,0,20); container.setLayoutParams(clp); TextView header = new TextView(this); header.setText(title); header.setTextColor(Color.parseColor("#00E5FF")); header.setPadding(30,30,30,30); header.setTextSize(16); content.setVisibility(View.GONE); header.setOnClickListener(v -> { boolean isClosed = content.getVisibility() == View.GONE; content.setVisibility(isClosed ? View.VISIBLE : View.GONE); header.setBackground(getRounded(isClosed ? "#333333" : "#222222", 20f)); }); container.addView(header); container.addView(content); return container; }
     private LinearLayout createComboDropdown(String title, String key, String[] items, int def) { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL); l.setGravity(Gravity.CENTER_VERTICAL); l.setPadding(0,10,0,20); TextView tv = new TextView(this); tv.setText(title); tv.setTextColor(Color.parseColor("#E91E63")); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sp = createSpinner(); sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items)); sp.setSelection(prefs.getInt(key, def)); sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt(key,pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sp.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.2f)); l.addView(tv); l.addView(sp); return l; }
@@ -349,7 +346,6 @@ public class MainActivity extends Activity {
             String[] bNames = designTabState == 2 ? M_BAR_NAMES : BAR_NAMES;
 
             if(designTabState == 2) {
-                // FIX BUG: ĐẢM BẢO CHẮC CHẮN NÚT RECORD MORSE VÀ Ô CHỬI MẮNG ĐƯỢC HIỂN THỊ
                 Button btnRecord = new Button(this); btnRecord.setText(T("START RECORDING MORSE", "BẮT ĐẦU GHI MẬT KHẨU")); btnRecord.setBackground(getRounded("#E91E63", 20f)); btnRecord.setTextColor(Color.WHITE); btnRecord.setPadding(0,30,0,30); LinearLayout.LayoutParams recLp = new LinearLayout.LayoutParams(-1,-2); recLp.setMargins(0,0,0,20); btnRecord.setLayoutParams(recLp);
                 btnRecord.setOnClickListener(v -> { Intent i = new Intent("com.manhmoc.edgebar.START_MORSE_RECORD"); sendBroadcast(i); Toast.makeText(this, "Chạm vào các ô để tạo chuỗi!\nGóc Đáy Trái = XÓA | Góc Đáy Phải = LƯU", Toast.LENGTH_LONG).show(); });
                 designSliderContainer.addView(btnRecord);
