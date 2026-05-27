@@ -3,9 +3,6 @@ package com.manhmoc.edgebar;
 import android.animation.ValueAnimator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.Animator;
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
 import android.app.Service;
 import android.app.KeyguardManager;
 import android.content.BroadcastReceiver;
@@ -39,7 +36,6 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
-
 import java.util.Collections;
 import java.util.Random;
 
@@ -50,7 +46,7 @@ public class HomescreenService extends Service {
     private View[] corners = new View[4];
     private RelativeLayout morseContainer;
     private TextView tvMorseStatus;
-    private View scratchView;
+    private ScratchView scratchView; // class riêng
     private View[] mBars = new View[8];
     private View[] mCorners = new View[4];
     private FlashView fV;
@@ -68,19 +64,14 @@ public class HomescreenService extends Service {
     private Handler morseDotHandler = new Handler();
 
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
-    private final int[] GRAV = {Gravity.BOTTOM | Gravity.RIGHT, Gravity.BOTTOM | Gravity.LEFT, Gravity.TOP | Gravity.RIGHT, Gravity.TOP | Gravity.LEFT, Gravity.TOP | Gravity.CENTER_HORIZONTAL};
-
+    private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] M_BARS = {"r", "l", "t_r", "t_l", "t_c", "m_b_c", "m_mid_t", "m_mid_b"};
-    private final int[] M_GRAV = {Gravity.BOTTOM | Gravity.RIGHT, Gravity.BOTTOM | Gravity.LEFT, Gravity.TOP | Gravity.RIGHT, Gravity.TOP | Gravity.LEFT, Gravity.TOP | Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, Gravity.CENTER, Gravity.CENTER};
-
+    private final int[] M_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.CENTER, Gravity.CENTER};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
-    private final int[] C_GRAV = {Gravity.BOTTOM | Gravity.RIGHT, Gravity.BOTTOM | Gravity.LEFT, Gravity.TOP | Gravity.RIGHT, Gravity.TOP | Gravity.LEFT};
+    private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
 
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
-        if (k != null) {
-            updateVisibility();
-            if (fV != null) fV.updateStyle();
-        }
+        if (k != null) { updateVisibility(); if (fV != null) fV.updateStyle(); }
     };
 
     private BroadcastReceiver syncReceiver = new BroadcastReceiver() {
@@ -108,19 +99,21 @@ public class HomescreenService extends Service {
     };
 
     private String mapComponentToNumber(String comp) {
-        // Xử lý đúng: "morse_corner_tl" -> key = "morse_map_corner_tl"
+        // comp có dạng "morse_r" hoặc "morse_corner_tl"
         String key = "morse_map_" + comp.replace("morse_", "");
         return prefs.getString(key, "*");
     }
 
-    // Use separate ScratchView class
+    // Class riêng cho hiệu ứng scratch, tránh vòng lặp vô tận
+    private static class ScratchView extends View {
         private Paint paint = new Paint();
         private Random random = new Random();
         private long lastUpdate = 0;
+        private static final int UPDATE_INTERVAL_MS = 150;
         public ScratchView(Context context) {
             super(context);
             paint.setColor(Color.WHITE);
-            paint.setStrokeWidth(6);
+            paint.setStrokeWidth(5);
             paint.setStyle(Paint.Style.STROKE);
             paint.setAntiAlias(true);
         }
@@ -128,27 +121,27 @@ public class HomescreenService extends Service {
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             long now = System.currentTimeMillis();
-            if (now - lastUpdate > 200) {
+            if (now - lastUpdate >= UPDATE_INTERVAL_MS) {
                 lastUpdate = now;
+                paint.setAlpha(60 + random.nextInt(80));
+                for (int i = 0; i < 8; i++) {
+                    int x1 = random.nextInt(getWidth());
+                    int y1 = random.nextInt(getHeight());
+                    int x2 = x1 + random.nextInt(200) - 100;
+                    int y2 = y1 + random.nextInt(200) - 100;
+                    canvas.drawLine(x1, y1, x2, y2, paint);
+                }
+                paint.setStrokeWidth(2);
+                paint.setAlpha(80);
+                for (int i = 0; i < 12; i++) {
+                    int x1 = random.nextInt(getWidth());
+                    int y1 = random.nextInt(getHeight());
+                    int x2 = x1 + random.nextInt(120) - 60;
+                    int y2 = y1 + random.nextInt(120) - 60;
+                    canvas.drawLine(x1, y1, x2, y2, paint);
+                }
             }
-            paint.setAlpha(70 + random.nextInt(50));
-            for (int i = 0; i < 12; i++) {
-                int x1 = random.nextInt(getWidth());
-                int y1 = random.nextInt(getHeight());
-                int x2 = x1 + random.nextInt(300) - 150;
-                int y2 = y1 + random.nextInt(300) - 150;
-                canvas.drawLine(x1, y1, x2, y2, paint);
-            }
-            paint.setStrokeWidth(3);
-            paint.setAlpha(100);
-            for (int i = 0; i < 20; i++) {
-                int x1 = random.nextInt(getWidth());
-                int y1 = random.nextInt(getHeight());
-                int x2 = x1 + random.nextInt(150) - 75;
-                int y2 = y1 + random.nextInt(150) - 75;
-                canvas.drawLine(x1, y1, x2, y2, paint);
-            }
-            invalidate();
+            postInvalidateDelayed(UPDATE_INTERVAL_MS);
         }
     }
 
@@ -162,30 +155,23 @@ public class HomescreenService extends Service {
                 case "NEON": cArr=new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF"), Color.parseColor("#FF00FF")}; break;
                 case "CYBERPUNK": cArr=new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700"), Color.parseColor("#8A2BE2")}; break;
                 case "LAVA": cArr=new int[]{Color.parseColor("#FF4500"), Color.parseColor("#FF8C00"), Color.parseColor("#FF4500")}; break;
-                case "OCEAN": cArr=new int[]{Color.parseColor("#00BFFF"), Color.parseColor("#1E90FF"), Color.parseColor("#00BFFF")}; break;
-                case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
-                case "SUNSET": cArr=new int[]{Color.parseColor("#FF1493"), Color.parseColor("#FF8C00"), Color.parseColor("#FF1493")}; break;
-                case "GOOGLE": cArr=new int[]{Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4"), Color.parseColor("#EA4335")}; break;
-                case "AURORA": cArr=new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#B388FF"), Color.parseColor("#FF4081")}; break;
-                case "ABYSS": cArr=new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#1DE9B6"), Color.parseColor("#2979FF")}; break;
                 default: cArr=new int[]{Color.WHITE, Color.WHITE}; break;
             }
-            p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR)); p.setShadowLayer(15f, 0, 0, cArr[0]);
+            p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR));
         }
         public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
         @Override protected void onDraw(Canvas canvas) {
             float drawW = getWidth(); float drawH = getHeight();
             if(drawW <= 0 || drawH <= 0) return;
             float off = p.getStrokeWidth()/2;
-            float left = off; float top = off;
-            float right = drawW - off; float bottom = drawH - off;
+            float left = off, top = off, right = drawW - off, bottom = drawH - off;
             p.setStrokeCap(Paint.Cap.ROUND);
             if(aStyle > 0) {
                 float perim = 2 * (drawW + drawH);
                 float currentPhase = -perim * phaseFraction;
                 if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, currentPhase));
                 else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, currentPhase));
-                else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, currentPhase));
+                else p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, currentPhase));
             } else { p.setPathEffect(null); }
             canvas.drawRoundRect(left, top, right, bottom, radius, radius, p);
         }
@@ -195,13 +181,9 @@ public class HomescreenService extends Service {
         private Paint pFill, pStroke; private int type; private String prefix;
         private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
         private boolean isInv = false;
-
         public CornerView(Context c, int type, String prefix) { super(c); this.type = type; this.prefix = prefix; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
-
         public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) { pStroke.setStrokeWidth(thick); this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv; if(!autoHide) { pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); pStroke.setAlpha(strokeAlpha); } else triggerFlash(); if(inv) { pFill.setAlpha(0); pStroke.setAlpha(0); } invalidate(); }
-
         public void triggerFlash() { if(!isAutoHiding || isInv) return; autoHideHandler.removeCallbacksAndMessages(null); pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha + 50), 96, 125, 139)); pStroke.setAlpha(Math.min(255, baseStrokeAlpha + 50)); invalidate(); autoHideHandler.postDelayed(() -> { ValueAnimator a = ValueAnimator.ofFloat(1f, 0f); a.setDuration(1500); a.addUpdateListener(anim -> { float val = (float)anim.getAnimatedValue(); pFill.setColor(Color.argb((int)(baseMoonAlpha * val), 96, 125, 139)); pStroke.setAlpha((int)(baseStrokeAlpha * val)); invalidate(); }); a.start(); }, hideDelay); }
-
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas);
             float tw = getWidth(), th = getHeight(), thick = pStroke.getStrokeWidth(); float pad = thick/2;
             String ck = prefix + "corner_" + CORNERS[type] + "_";
@@ -209,33 +191,28 @@ public class HomescreenService extends Service {
             float sRad = prefs.getInt(ck+"rad", 80) / 1000f; float mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
             float sw = prefs.getInt(ck+"w", 100); float sh = prefs.getInt(ck+"h", 100);
             float mw = prefs.getInt(ck+"moon_w", 100); float mh = prefs.getInt(ck+"moon_h", 100);
-
             Path moonPath = new Path(); Path strokePath = new Path();
             float sRootX=0, sRootY=0, sTipX=0, sTipY=0, sCtrlX=0, sCtrlY=0;
             float mRootX=0, mRootY=0, mTipX=0, mTipY=0, mCtrlX=0, mCtrlY=0;
-
-            if(type==0) {
+            if(type==0) { // BR
                 sRootX=tw-pad; sRootY=th-pad; sTipX=tw-sw+pad; sTipY=th-sh+pad; sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
                 mRootX=tw; mRootY=th; mTipX=tw-mw; mTipY=th-mh; mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
-            } else if(type==1) {
+            } else if(type==1) { // BL
                 sRootX=pad; sRootY=th-pad; sTipX=sw-pad; sTipY=th-sh+pad; sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
                 mRootX=0; mRootY=th; mTipX=mw; mTipY=th-mh; mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
-            } else if(type==2) {
+            } else if(type==2) { // TR
                 sRootX=tw-pad; sRootY=pad; sTipX=tw-sw+pad; sTipY=sh-pad; sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
                 mRootX=tw; mRootY=0; mTipX=tw-mw; mTipY=mh; mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
-            } else {
+            } else { // TL
                 sRootX=pad; sRootY=pad; sTipX=sw-pad; sTipY=sh-pad; sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
                 mRootX=0; mRootY=0; mTipX=mw; mTipY=mh; mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
             }
-
             if(shapeMode == 1) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sTipX, sRootY); }
             else if(shapeMode == 2) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sRootX, sTipY); }
             else { strokePath.moveTo(sRootX, sTipY); strokePath.quadTo(sCtrlX, sCtrlY, sTipX, sRootY); }
-
             if(type==0||type==1) { moonPath.moveTo(mRootX, mTipY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mTipX, mRootY); moonPath.quadTo(mCtrlX, mCtrlY, mRootX, mTipY); }
             else { moonPath.moveTo(mTipX, mRootY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mRootX, mTipY); moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY); }
             moonPath.close();
-
             canvas.drawPath(strokePath, pStroke);
             float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
             float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
@@ -274,7 +251,6 @@ public class HomescreenService extends Service {
         else
             registerReceiver(syncReceiver, filter);
 
-        // No foreground service notification for overlay service (clean)
         fV = new FlashView(this);
         fV.setAlpha(0f);
         fV.setVisibility(View.GONE);
@@ -341,9 +317,7 @@ public class HomescreenService extends Service {
     private void handleMorseTap(String comp, View v) {
         doVibrate(30);
         if (v != null && v instanceof CornerView) ((CornerView) v).triggerFlash();
-
         String mappedKey = mapComponentToNumber(comp);
-
         if (mappedKey.equals("X")) {
             currentMorseAttempt = "";
             tvMorseStatus.setText("");
@@ -394,16 +368,12 @@ public class HomescreenService extends Service {
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hideNormal = (avoidKbd && isKbd) || isBl;
         boolean isPreviewMorse = prefs.getBoolean("preview_morse", false);
-
         if (hideNormal && fV != null && !isMorseLockActive && !isPreviewMorse) fV.setVisibility(View.GONE);
-
         if (isMorseLockActive || isPreviewMorse) {
             morseContainer.setVisibility(View.VISIBLE);
             morseContainer.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
-
             for (int i = 0; i < 5; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
             for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
-
             for (int i = 0; i < 8; i++) {
                 if (mBars[i] == null) continue;
                 boolean en = prefs.getBoolean("morse_" + M_BARS[i] + "_en", false);
@@ -473,7 +443,6 @@ public class HomescreenService extends Service {
             morseContainer.setVisibility(View.GONE);
             for (int i = 0; i < 8; i++) if (mBars[i] != null) mBars[i].setVisibility(View.GONE);
             for (int i = 0; i < 4; i++) if (mCorners[i] != null) mCorners[i].setVisibility(View.GONE);
-
             boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
             for (int i = 0; i < 5; i++) {
                 if (bars[i] == null) continue;
@@ -690,32 +659,16 @@ public class HomescreenService extends Service {
         private GestureDetector gd;
         private float sx, sy;
         private long st;
-
         public SidebarTouchListener(String keyBase, View v) {
             this.prefKeyBase = keyBase;
             this.myView = v;
             this.gd = new GestureDetector(HomescreenService.this, new GestureDetector.SimpleOnGestureListener() {
-                @Override
-                public boolean onSingleTapConfirmed(MotionEvent e) {
-                    handleAction(prefKeyBase + "_tap");
-                    return true;
-                }
-                @Override
-                public boolean onDoubleTap(MotionEvent e) {
-                    handleAction(prefKeyBase + "_dtap");
-                    return true;
-                }
-                @Override
-                public void onLongPress(MotionEvent e) {
-                    handleAction(prefKeyBase + "_long");
-                }
-                @Override
-                public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) {
-                    return false;
-                }
+                @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction(prefKeyBase + "_tap"); return true; }
+                @Override public boolean onDoubleTap(MotionEvent e) { handleAction(prefKeyBase + "_dtap"); return true; }
+                @Override public void onLongPress(MotionEvent e) { handleAction(prefKeyBase + "_long"); }
+                @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { return false; }
             });
         }
-
         @Override
         public boolean onTouch(View v, MotionEvent e) {
             if (isMorseLockActive || prefs.getBoolean("preview_morse", false)) {
@@ -758,10 +711,7 @@ public class HomescreenService extends Service {
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
         for (int i = 0; i < 5; i++) if (bars[i] != null) wm.removeView(bars[i]);
         for (int i = 0; i < 8; i++) if (mBars[i] != null) wm.removeView(mBars[i]);
-        for (int i = 0; i < 4; i++) {
-            if (corners[i] != null) wm.removeView(corners[i]);
-            if (mCorners[i] != null) wm.removeView(mCorners[i]);
-        }
+        for (int i = 0; i < 4; i++) { if (corners[i] != null) wm.removeView(corners[i]); if (mCorners[i] != null) wm.removeView(mCorners[i]); }
         if (morseContainer != null) wm.removeView(morseContainer);
         if (fV != null) wm.removeView(fV);
     }

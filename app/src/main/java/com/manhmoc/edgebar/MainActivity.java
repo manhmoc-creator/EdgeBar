@@ -45,7 +45,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain;
     private Button btnLock, btnHome, btnMorse, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0;
-    private final String CURRENT_VERSION = "V19.12.3.4.5";
+    private final String CURRENT_VERSION = "V19.12.3.4.5.1";
     private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
@@ -610,6 +610,36 @@ public class MainActivity extends Activity {
 
     private void buildDesignSpace() {
         pageDesign.addView(createSectionTitle(T("BACKUP / RESTORE", "KHU VỰC SAO LƯU")));
+        // KHU VỰC TẢI NHẠC YTDLNIS
+        LinearLayout musicArea = new LinearLayout(this);
+        musicArea.setOrientation(LinearLayout.VERTICAL);
+        musicArea.setPadding(30,20,30,20);
+        musicArea.setBackground(getRounded("#1E1E1E", 20f));
+        final EditText etMusic = new EditText(this);
+        etMusic.setHint(T("YouTube URL or song name", "Link YouTube hoặc tên bài hát"));
+        etMusic.setText(prefs.getString("ytdl_last_query", ""));
+        etMusic.setBackground(getRounded("#2C2C2C", 20f));
+        etMusic.setPadding(30,30,30,30);
+        etMusic.setTextColor(Color.WHITE);
+        Button btnMusic = new Button(this);
+        btnMusic.setText(T("🎵 DOWNLOAD", "🎵 TẢI NHẠC"));
+        btnMusic.setBackground(getRounded("#FF5722", 20f));
+        btnMusic.setTextColor(Color.WHITE);
+        btnMusic.setOnClickListener(v -> {
+            String query = etMusic.getText().toString().trim();
+            if (query.isEmpty()) { Toast.makeText(MainActivity.this, T("Enter URL or song name", "Nhập URL hoặc tên bài hát"), Toast.LENGTH_SHORT).show(); return; }
+            prefs.edit().putString("ytdl_last_query", query).apply();
+            Intent yt = new Intent(Intent.ACTION_SEND);
+            yt.setType("text/plain");
+            yt.putExtra(Intent.EXTRA_TEXT, query);
+            yt.setPackage("com.deniscerri.ytdlnis");
+            yt.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try { startActivity(yt); } catch (Exception e) { Toast.makeText(MainActivity.this, "Install YTDLnis first", Toast.LENGTH_LONG).show(); }
+        });
+        musicArea.addView(etMusic);
+        musicArea.addView(btnMusic);
+        pageDesign.addView(createDrawer(T("🎵 MUSIC DOWNLOADER", "🎵 TẢI NHẠC"), musicArea));
+
         LinearLayout backupRow = new LinearLayout(this); backupRow.setOrientation(LinearLayout.HORIZONTAL);
         Button btnBackup = new Button(this); btnBackup.setText(T("BACKUP", "💾 SAO LƯU")); btnBackup.setBackground(getRounded("#2E7D32", 20f)); btnBackup.setTextColor(Color.WHITE);
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, -2, 1f); bp.setMargins(0,0,15,0); btnBackup.setLayoutParams(bp);
