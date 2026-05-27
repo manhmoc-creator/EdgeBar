@@ -6,27 +6,24 @@ public class EdgeBarService extends AccessibilityService {
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"}; private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
     
-    private String currentPackage = ""; 
-    private String unlockedPackage = "";
+    private String currentUnlockedApp = "";
 
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { if(k != null) { updateVisibility(); if(fV != null) fV.updateStyle(); } };
     
-    // FIX BUG: ĐÓNG CỬA MÀN HÌNH TẮT ĐỂ CHỐNG HACK
     private BroadcastReceiver stateReceiver = new BroadcastReceiver() { 
         @Override public void onReceive(Context c, Intent i) { 
-            if("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) { 
-                playAnim(); 
-            } 
+            if("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) { playAnim(); } 
             else if ("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS".equals(i.getAction())) {
-                unlockedPackage = i.getStringExtra("pkg");
+                currentUnlockedApp = i.getStringExtra("pkg");
             }
             else if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
-                unlockedPackage = ""; // BÍT LỖ HỔNG ZERO-DAY KHI TẮT MÀN HÌNH!
+                currentUnlockedApp = ""; // Zero-day Screen-Off Fix
                 updateVisibility();
             }
             else updateVisibility(); 
         } 
     };
+    
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) { exec(i.getStringExtra("act")); } } };
 
     private class FlashView extends View { 
@@ -74,11 +71,11 @@ public class EdgeBarService extends AccessibilityService {
     }
     
     private class CornerView extends View { 
-        private Paint pFill, pStroke; private int type; private String prefix;
+        private Paint pFill, pStroke; private int type; 
         private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
         private boolean isInv = false;
         
-        public CornerView(Context c, int type, String prefix) { super(c); this.type = type; this.prefix = prefix; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); } 
+        public CornerView(Context c, int type) { super(c); this.type = type; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); } 
         
         public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) { pStroke.setStrokeWidth(thick); this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv; if(!autoHide) { pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); pStroke.setAlpha(strokeAlpha); } else triggerFlash(); if(inv) { pFill.setAlpha(0); pStroke.setAlpha(0); } invalidate(); }
         
@@ -86,7 +83,7 @@ public class EdgeBarService extends AccessibilityService {
 
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas); 
             float tw = getWidth(), th = getHeight(), thick = pStroke.getStrokeWidth(); float pad = thick/2;
-            String ck = prefix + "corner_" + CORNERS[type] + "_";
+            String ck = "lock_corner_" + CORNERS[type] + "_";
             int shapeMode = prefs.getInt(ck+"shape", 0);
             float sRad = prefs.getInt(ck+"rad", 80) / 1000f; float mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
             float sw = prefs.getInt(ck+"w", 100); float sh = prefs.getInt(ck+"h", 100);
@@ -139,8 +136,6 @@ public class EdgeBarService extends AccessibilityService {
             isKbd = pName.contains("inputmethod") || cName.contains("InputWindow") || cName.contains("keyboard") || cName.contains("Keyboard"); 
             String bl = prefs.getString("blacklist", ""); isBl = !pName.isEmpty() && bl.contains(pName); 
             
-            if (!pName.isEmpty()) currentPackage = pName;
-
             String locklist = prefs.getString("locklist", "");
             boolean isAppLocked = false;
             if(!pName.isEmpty() && !locklist.isEmpty()) {
@@ -150,13 +145,13 @@ public class EdgeBarService extends AccessibilityService {
             }
 
             if (isAppLocked) {
-                if (!pName.equals(unlockedPackage)) {
+                if (!pName.equals(currentUnlockedApp)) {
                     Intent i = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
                     i.putExtra("pkg", pName);
                     sendBroadcast(i);
                 }
             } else if (!pName.isEmpty() && !pName.contains("systemui") && !isKbd) {
-                unlockedPackage = ""; 
+                currentUnlockedApp = ""; // Xóa bộ nhớ nếu thoát khỏi App Lock
             }
 
             updateVisibility(); 
@@ -166,14 +161,12 @@ public class EdgeBarService extends AccessibilityService {
 
     private void exec(String a) { if (a == null || a.equals("NONE")) return; try { switch(a) { 
         case "MACRO_1": case "MACRO_2": case "MACRO_3": case "MACRO_4": case "MACRO_5": Intent iM = new Intent("com.manhmoc.edgebar.TOGGLE_MACRO"); iM.putExtra("services", prefs.getString(a.toLowerCase()+"_svcs", "")); sendBroadcast(iM); break; 
-        case "TOGGLE_MORSE": Intent m = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"); sendBroadcast(m); break;
         case "YTDL_DOWNLOAD": try{android.content.ClipboardManager cb=(android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE); if(cb.hasPrimaryClip()&&cb.getPrimaryClip().getItemCount()>0){CharSequence txt=cb.getPrimaryClip().getItemAt(0).getText(); if(txt!=null&&(txt.toString().startsWith("http"))){Intent y=new Intent(Intent.ACTION_SEND); y.setType("text/plain"); y.putExtra(Intent.EXTRA_TEXT,txt.toString()); y.setPackage("com.deniscerri.ytdlnis"); y.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(y);}}}catch(Exception e){} break; 
         case "BACK": performGlobalAction(GLOBAL_ACTION_BACK); break; case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break; case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break; case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break; case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break; case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break; case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
     private void fireIntent(String idx) { try { String act = prefs.getString("i"+idx+"_act", ""); String pkg = prefs.getString("i"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("i"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("i"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("i"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("i"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("i"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     
     private void playAnim() {
-        WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams(); fp.width = WindowManager.LayoutParams.MATCH_PARENT; fp.height = WindowManager.LayoutParams.MATCH_PARENT; wm.updateViewLayout(fV, fp);
-        fV.setVisibility(View.VISIBLE);
+        WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams(); fp.width = WindowManager.LayoutParams.MATCH_PARENT; fp.height = WindowManager.LayoutParams.MATCH_PARENT; wm.updateViewLayout(fV, fp); fV.setVisibility(View.VISIBLE);
         fV.post(() -> {
             int style = prefs.getInt("anim_style", 0); int dur = prefs.getInt("anim_dur", 1500); ValueAnimator anim;
             if(style == 0) { anim = ValueAnimator.ofFloat(0f, 1f, 0f); anim.addUpdateListener(a -> fV.setAlpha((float)a.getAnimatedValue())); } 
@@ -184,13 +177,13 @@ public class EdgeBarService extends AccessibilityService {
         });
     }
 
-    private void handleAction(String key) { String action = prefs.getString(key, "NONE"); boolean isOn = prefs.getBoolean(key + "_on", true); if (!action.equals("NONE") && isOn) { if (prefs.getBoolean(key + "_vib", true)) { doVibrate(prefs.getInt("vib_dur", 30)); } if (prefs.getBoolean(key + "_anim", true)) { playAnim(); } String[] acts = action.split(","); for(String a : acts) exec(a.trim()); } }
+    private void handleAction(String key) { String action = prefs.getString(key, "NONE"); boolean isOn = prefs.getBoolean(key + "_on", true); if (!action.equals("NONE") && isOn) { if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30)); if (prefs.getBoolean(key + "_anim", true)) playAnim(); String[] acts = action.split(","); for(String a : acts) exec(a.trim()); } }
     private void doVibrate(int dur) { if(dur<=0) return; try { if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
 
     private void createFloatingBars() {
         fV = new FlashView(this); fV.setAlpha(0f); fV.setVisibility(View.GONE); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(0, 0, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
         for(int i=0; i<5; i++) { bars[i] = new View(this); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(bars[i], p); } catch(Exception e){} bars[i].setOnTouchListener(new SidebarTouchListener("lock_" + BARS[i], null)); } 
-        for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i, "lock_"); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], p); } catch(Exception e){} corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_" + CORNERS[i], corners[i])); } updateVisibility();
+        for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], p); } catch(Exception e){} corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_" + CORNERS[i], corners[i])); } updateVisibility();
     }
 
     private void updateVisibility() { 
@@ -225,12 +218,15 @@ public class EdgeBarService extends AccessibilityService {
         }
     }
 
+    // FIX LỖI COMPILE: TRẢ ONTOUCH VỀ TRẠNG THÁI GỐC KHÔNG MORSE!
     private class SidebarTouchListener implements View.OnTouchListener { 
         private String prefKeyBase; private View myView; private GestureDetector gd; private float sx, sy; private long st;
         public SidebarTouchListener(String keyBase, View v) { this.prefKeyBase = keyBase; this.myView = v; this.gd = new GestureDetector(EdgeBarService.this, new GestureDetector.SimpleOnGestureListener() { @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction(prefKeyBase + "_tap"); return true; } @Override public boolean onDoubleTap(MotionEvent e) { handleAction(prefKeyBase + "_dtap"); return true; } @Override public void onLongPress(MotionEvent e) { handleAction(prefKeyBase + "_long"); } @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { return false; } }); } 
         @Override public boolean onTouch(View v, MotionEvent e) { 
             if(myView != null && myView instanceof CornerView) ((CornerView)myView).triggerFlash();
-            gd.onTouchEvent(e); if (e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis(); } else if (e.getAction() == MotionEvent.ACTION_UP) { 
+            gd.onTouchEvent(e); 
+            if (e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis(); } 
+            else if (e.getAction() == MotionEvent.ACTION_UP) { 
                 float dx = e.getRawX() - sx, dy = e.getRawY() - sy; 
                 if (Math.abs(dx) > 50 || Math.abs(dy) > 50) { 
                     long duration = System.currentTimeMillis() - st; boolean isHold = duration > prefs.getInt("hold_dur", 600); String actionName = ""; 

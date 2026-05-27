@@ -9,7 +9,6 @@ public class HomescreenService extends Service {
     private FlashView fV; private CameraManager cm; private String cId; private boolean fOn = false, isKbd = false, isBl = false; private SharedPreferences prefs; private KeyguardManager km; private Vibrator vibrator;
     
     private boolean isMorseLockActive = false;
-    private boolean isRecordingMorse = false;
     private String currentMorseAttempt = "";
     private int morseFailCount = 0;
     private String lockedPkg = "";
@@ -36,8 +35,6 @@ public class HomescreenService extends Service {
                 playAnim(); 
             } else if (i.getAction().equals("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE")) {
                 isMorseLockActive = true; lockedPkg = i.getStringExtra("pkg"); morseFailCount = 0; currentMorseAttempt = ""; tvMorseStatus.setText(""); updateVisibility();
-            } else if (i.getAction().equals("com.manhmoc.edgebar.START_MORSE_RECORD")) {
-                isRecordingMorse = true; currentMorseAttempt = ""; tvMorseStatus.setText("Recording...\nBL = Clear | BR = Save"); updateVisibility();
             } else if (i.getAction().equals("com.manhmoc.edgebar.TOGGLE_MORSE")) {
                 boolean isM = prefs.getBoolean("morse_mode_en", false);
                 prefs.edit().putBoolean("morse_mode_en", !isM).apply();
@@ -46,21 +43,34 @@ public class HomescreenService extends Service {
         } 
     };
 
-    // V19.12.3.4 FIX: NUMBER MAPPING UX 
-    private String mapComponentToNumber(String comp) {
-        String key = comp.replace("morse_", "").replace("home_", "").replace("lock_", "").replace("corner_", "");
-        switch (key) {
-            case "t_l": return "1";
-            case "m_mid_t": return "2";
-            case "t_r": return "3";
-            case "l": return "4";
-            case "t_c": return "5";
-            case "r": return "6";
-            case "m_mid_b": return "7";
-            case "m_b_c": return "8";
-            case "tl": return "9";
-            case "tr": return "0";
-            default: return "*";
+    private String getMappedCharacter(String comp) {
+        String key = "morse_map_" + comp.replace("morse_", "").replace("home_", "").replace("lock_", "").replace("corner_", "");
+        return prefs.getString(key, "?");
+    }
+
+    private class GlitchView extends View {
+        private Paint p1 = new Paint(); private Paint p2 = new Paint();
+        private Handler h = new Handler();
+        public GlitchView(Context c) { 
+            super(c); 
+            p1.setColor(Color.argb(30, 255, 255, 255));
+            p2.setColor(Color.argb(40, 0, 255, 0));
+        }
+        private Runnable r = new Runnable() {
+            @Override public void run() { invalidate(); h.postDelayed(this, 120); }
+        };
+        @Override protected void onAttachedToWindow() { super.onAttachedToWindow(); h.post(r); }
+        @Override protected void onDetachedFromWindow() { super.onDetachedFromWindow(); h.removeCallbacks(r); }
+        @Override protected void onDraw(Canvas canvas) {
+            if(Math.random() > 0.4) {
+                int y1 = (int)(Math.random() * getHeight());
+                int h1 = (int)(Math.random() * 50);
+                canvas.drawRect(0, y1, getWidth(), y1+h1, p1);
+                
+                int y2 = (int)(Math.random() * getHeight());
+                int h2 = (int)(Math.random() * 10);
+                canvas.drawRect(0, y2, getWidth(), y2+h2, p2);
+            }
         }
     }
 
@@ -166,11 +176,11 @@ public class HomescreenService extends Service {
     @Override public void onCreate() {
         super.onCreate(); isRunning = true; wm = (WindowManager) getSystemService(WINDOW_SERVICE); km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE); vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE); try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return; }
-        prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.SYNC_STATE"); filter.addAction("com.manhmoc.edgebar.TEST_ANIM"); filter.addAction("com.manhmoc.edgebar.IPC_ACTION"); filter.addAction("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE"); filter.addAction("com.manhmoc.edgebar.START_MORSE_RECORD"); filter.addAction("com.manhmoc.edgebar.TOGGLE_MORSE");
+        prefs.registerOnSharedPreferenceChangeListener(prefListener); IntentFilter filter = new IntentFilter(); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.SYNC_STATE"); filter.addAction("com.manhmoc.edgebar.TEST_ANIM"); filter.addAction("com.manhmoc.edgebar.IPC_ACTION"); filter.addAction("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE"); filter.addAction("com.manhmoc.edgebar.TOGGLE_MORSE");
         if(Build.VERSION.SDK_INT >= 33) registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED); else registerReceiver(syncReceiver, filter);
 
         String cid = "eb_19_home"; NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c); 
-        Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar Màn Chính").setSmallIcon(R.drawable.ic_launcher_fg).setOngoing(true).build(); startForeground(2, n);
+        Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar Màn Chính").setSmallIcon(android.R.drawable.ic_menu_crop).setOngoing(true).build(); startForeground(2, n);
         
         fV = new FlashView(this); fV.setAlpha(0f); fV.setVisibility(View.GONE); WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(fV, fp); } catch(Exception e){}
         
@@ -180,6 +190,9 @@ public class HomescreenService extends Service {
         morseContainer = new RelativeLayout(this); morseContainer.setBackgroundColor(Color.BLACK); morseContainer.setVisibility(View.GONE);
         morseContainer.setOnTouchListener((v, e) -> true);
         
+        GlitchView gv = new GlitchView(this);
+        morseContainer.addView(gv, new RelativeLayout.LayoutParams(-1, -1));
+
         tvMorseStatus = new TextView(this); tvMorseStatus.setTextColor(Color.WHITE); tvMorseStatus.setTextSize(30); tvMorseStatus.setGravity(Gravity.CENTER);
         RelativeLayout.LayoutParams tLp = new RelativeLayout.LayoutParams(-1, -2); tLp.addRule(RelativeLayout.CENTER_IN_PARENT);
         morseContainer.addView(tvMorseStatus, tLp);
@@ -200,12 +213,18 @@ public class HomescreenService extends Service {
         boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
         boolean isPreviewMorse = prefs.getBoolean("preview_morse", false);
 
-        if(hideNormal && fV != null && !isMorseLockActive && !isRecordingMorse && !isPreviewMorse) fV.setVisibility(View.GONE);
+        if(hideNormal && fV != null && !isMorseLockActive && !isPreviewMorse) fV.setVisibility(View.GONE);
 
-        if(isMorseLockActive || isRecordingMorse || (isPreviewMorse && isUnlocked)) {
+        if(isMorseLockActive || (isPreviewMorse && isUnlocked)) {
             morseContainer.setVisibility(View.VISIBLE);
             morseContainer.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
             
+            // XUYÊN THẤU KHI ĐANG PREVIEW ĐỂ DỄ DESIGN
+            WindowManager.LayoutParams bgP = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
+            if (isPreviewMorse) bgP.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+            else bgP.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+            wm.updateViewLayout(morseContainer, bgP);
+
             for(int i=0; i<5; i++) if(bars[i]!=null) bars[i].setVisibility(View.GONE);
             for(int i=0; i<4; i++) if(corners[i]!=null) corners[i].setVisibility(View.GONE);
 
@@ -265,54 +284,49 @@ public class HomescreenService extends Service {
         }
     }
 
-    // FIX BUG: CHECK EMPTY PASSWORD & NUMBER MAPPING UX
+    // FIX LỖI: LOGIC MORSE HOÀN MỸ, VÁ LỖI EMPTY VÀ LỌC KÝ TỰ ">"
     private void handleMorseTap(String comp, View v) {
         doVibrate(30);
         if(v != null && v instanceof CornerView) ((CornerView)v).triggerFlash();
         
-        if (comp.endsWith("corner_bl")) { 
-            currentMorseAttempt = ""; tvMorseStatus.setText(isRecordingMorse ? "Cleared" : ""); 
+        String mappedChar = getMappedCharacter(comp).trim();
+
+        if (mappedChar.equals("x") || mappedChar.equalsIgnoreCase("X")) { 
+            currentMorseAttempt = ""; tvMorseStatus.setText(""); 
         } 
-        else if (comp.endsWith("corner_br")) { 
-            if (currentMorseAttempt.isEmpty()) return; // KHÓA ZERO-DAY EXPLOIT MẬT KHẨU RỖNG
-            if (isRecordingMorse) {
-                prefs.edit().putString("morse_password", currentMorseAttempt).apply();
-                isRecordingMorse = false; tvMorseStatus.setText("Saved!");
-                new Handler().postDelayed(() -> { tvMorseStatus.setText(""); updateVisibility(); }, 1500);
+        else if (mappedChar.equals(">")) { 
+            // FIX: NGĂN CHẶN LỖI MẬT KHẨU RỖNG TRƯỚC KHI LƯU HOẶC CHECK
+            String masterPass = prefs.getString("morse_master_pass", "").replace(">", "").trim();
+            if (currentMorseAttempt.isEmpty() || masterPass.isEmpty()) return; 
+            
+            if (currentMorseAttempt.equals(masterPass)) {
+                isMorseLockActive = false; morseFailCount = 0; currentMorseAttempt = "";
+                Intent i = new Intent("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS"); i.putExtra("pkg", lockedPkg); sendBroadcast(i);
+                updateVisibility();
             } else {
-                if (currentMorseAttempt.equals(prefs.getString("morse_password", ""))) {
-                    isMorseLockActive = false; morseFailCount = 0;
-                    Intent i = new Intent("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS"); i.putExtra("pkg", lockedPkg); sendBroadcast(i);
-                    updateVisibility();
-                } else {
-                    morseFailCount++;
-                    int failVib = prefs.getInt("morse_fail_vib", 500);
-                    doVibrate(failVib);
-                    if (morseFailCount == 1) tvMorseStatus.setText(prefs.getString("morse_insult_1", "Who are u?"));
-                    else if (morseFailCount == 2) tvMorseStatus.setText(prefs.getString("morse_insult_2", "What are u doing?"));
-                    else {
-                        tvMorseStatus.setText(prefs.getString("morse_insult_3", "Get out!"));
-                        Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION"); kick.putExtra("act", "HOME"); sendBroadcast(kick);
-                        isMorseLockActive = false;
-                        new Handler().postDelayed(() -> { updateVisibility(); }, 500);
-                    }
-                    currentMorseAttempt = "";
+                morseFailCount++;
+                int failVib = prefs.getInt("morse_fail_vib", 500);
+                doVibrate(failVib);
+                if (morseFailCount == 1) tvMorseStatus.setText(prefs.getString("morse_insult_1", "Who are u?"));
+                else if (morseFailCount == 2) tvMorseStatus.setText(prefs.getString("morse_insult_2", "What are u doing?"));
+                else {
+                    tvMorseStatus.setText(prefs.getString("morse_insult_3", "Get out!"));
+                    Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION"); kick.putExtra("act", "HOME"); sendBroadcast(kick);
+                    isMorseLockActive = false;
+                    new Handler().postDelayed(() -> { updateVisibility(); }, 500);
                 }
+                currentMorseAttempt = "";
             }
         } 
         else { 
-            currentMorseAttempt += mapComponentToNumber(comp);
-            if (isRecordingMorse) {
-                tvMorseStatus.setText("Seq: " + currentMorseAttempt);
-            } else {
-                tvMorseStatus.setText(currentMorseAttempt);
-                morseDotHandler.removeCallbacksAndMessages(null);
-                int dotDelay = prefs.getInt("morse_dot_delay", 500);
-                morseDotHandler.postDelayed(() -> {
-                    StringBuilder dots = new StringBuilder(); for(int i=0; i<currentMorseAttempt.length(); i++) dots.append("• ");
-                    tvMorseStatus.setText(dots.toString());
-                }, dotDelay);
-            }
+            currentMorseAttempt += mappedChar;
+            tvMorseStatus.setText(currentMorseAttempt);
+            morseDotHandler.removeCallbacksAndMessages(null);
+            int dotDelay = prefs.getInt("morse_dot_delay", 500);
+            morseDotHandler.postDelayed(() -> {
+                StringBuilder dots = new StringBuilder(); for(int i=0; i<currentMorseAttempt.length(); i++) dots.append("• ");
+                tvMorseStatus.setText(dots.toString());
+            }, dotDelay);
         }
     }
 
@@ -335,30 +349,18 @@ public class HomescreenService extends Service {
         if (a == null || a.equals("NONE")) return; 
         try { 
             switch(a) { 
-                case "MACRO_1": case "MACRO_2": case "MACRO_3": case "MACRO_4": case "MACRO_5": 
-                    Intent iM = new Intent("com.manhmoc.edgebar.TOGGLE_MACRO"); 
-                    iM.putExtra("services", prefs.getString(a.toLowerCase()+"_svcs", "")); sendBroadcast(iM); break; 
-                case "TOGGLE_MORSE": 
-                    Intent m = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"); sendBroadcast(m); break;
-                case "YTDL_DOWNLOAD": 
-                    try{android.content.ClipboardManager cb=(android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE); if(cb.hasPrimaryClip()&&cb.getPrimaryClip().getItemCount()>0){CharSequence txt=cb.getPrimaryClip().getItemAt(0).getText(); if(txt!=null&&(txt.toString().startsWith("http"))){Intent y=new Intent(Intent.ACTION_SEND); y.setType("text/plain"); y.putExtra(Intent.EXTRA_TEXT,txt.toString()); y.setPackage("com.deniscerri.ytdlnis"); y.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(y);}}}catch(Exception e){} break; 
-                case "BACK": case "HOME": case "RECENTS": case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": case "TOGGLE_OVERLAY": case "TOGGLE_ACC": 
-                    Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", a); sendBroadcast(ipc); break; 
-                case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; 
-                case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; 
-                case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; 
-                default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; 
-            } 
-        } catch (Exception e) {} 
-    }
-    
+                case "MACRO_1": case "MACRO_2": case "MACRO_3": case "MACRO_4": case "MACRO_5": Intent iM = new Intent("com.manhmoc.edgebar.TOGGLE_MACRO"); iM.putExtra("services", prefs.getString(a.toLowerCase()+"_svcs", "")); sendBroadcast(iM); break; 
+                case "TOGGLE_MORSE": Intent m = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"); sendBroadcast(m); break;
+                case "YTDL_DOWNLOAD": try{android.content.ClipboardManager cb=(android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE); if(cb.hasPrimaryClip()&&cb.getPrimaryClip().getItemCount()>0){CharSequence txt=cb.getPrimaryClip().getItemAt(0).getText(); if(txt!=null&&(txt.toString().startsWith("http"))){Intent y=new Intent(Intent.ACTION_SEND); y.setType("text/plain"); y.putExtra(Intent.EXTRA_TEXT,txt.toString()); y.setPackage("com.deniscerri.ytdlnis"); y.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(y);}}}catch(Exception e){} break; 
+                case "BACK": performGlobalAction(GLOBAL_ACTION_BACK); break; case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break; case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break; case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break; case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break; case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break; case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break; case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
     private void fireIntent(String idx) { try { String act = prefs.getString("i"+idx+"_act", ""); String pkg = prefs.getString("i"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("i"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("i"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("i"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("i"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("i"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     
     private class SidebarTouchListener implements View.OnTouchListener { 
         private String prefKeyBase; private View myView; private GestureDetector gd; private float sx, sy; private long st;
         public SidebarTouchListener(String keyBase, View v) { this.prefKeyBase = keyBase; this.myView = v; this.gd = new GestureDetector(HomescreenService.this, new GestureDetector.SimpleOnGestureListener() { @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction(prefKeyBase + "_tap"); return true; } @Override public boolean onDoubleTap(MotionEvent e) { handleAction(prefKeyBase + "_dtap"); return true; } @Override public void onLongPress(MotionEvent e) { handleAction(prefKeyBase + "_long"); } @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { return false; } }); } 
         @Override public boolean onTouch(View v, MotionEvent e) { 
-            if (isMorseLockActive || isRecordingMorse) {
+            // FIX: ACTION_DOWN MORSE CHỈ BẮT KHI ĐANG PREVIEW_MORSE HOẶC ĐANG KHÓA APP (Tránh kẹt tay khi tắt Morse Design)
+            if (isMorseLockActive || (prefs.getBoolean("preview_morse", false) && !km.isKeyguardLocked())) {
                 if (e.getAction() == MotionEvent.ACTION_DOWN) handleMorseTap(prefKeyBase, myView);
                 return true; 
             }
