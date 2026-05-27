@@ -870,6 +870,40 @@ public class MainActivity extends Activity {
         builder.show();
     }
     private void refreshLocklistInput() {
+        // Cập nhật lại ô input hiển thị (nếu có)
+        ViewGroup root = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
+        EditText et = root.findViewWithTag("locklist_input");
+        if (et != null) et.setText(prefs.getString("locklist", ""));
+    }
+    private void showAppPickerDialog(String targetKey) {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle(T("Choose App", "Chọn ứng dụng"));
+        android.content.pm.PackageManager pm = getPackageManager();
+        Intent intent = new Intent(Intent.ACTION_MAIN, null);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        java.util.List<android.content.pm.ResolveInfo> apps = pm.queryIntentActivities(intent, 0);
+        java.util.ArrayList<String> appNames = new java.util.ArrayList<>();
+        java.util.ArrayList<String> pkgNames = new java.util.ArrayList<>();
+        for (android.content.pm.ResolveInfo ri : apps) {
+            appNames.add(ri.loadLabel(pm).toString());
+            pkgNames.add(ri.activityInfo.packageName);
+        }
+        builder.setItems(appNames.toArray(new String[0]), (dialog, which) -> {
+            String current = prefs.getString(targetKey, "");
+            String newPkg = pkgNames.get(which);
+            if (current.contains(newPkg)) {
+                Toast.makeText(MainActivity.this, T("Already in list", "Đã có trong danh sách"), Toast.LENGTH_SHORT).show();
+            } else {
+                String newList = current.isEmpty() ? newPkg : current + "," + newPkg;
+                prefs.edit().putString(targetKey, newList).apply();
+                Toast.makeText(MainActivity.this, T("Added", "Đã thêm") + " " + newPkg, Toast.LENGTH_LONG).show();
+                refreshLocklistInput();
+            }
+        });
+        builder.setNegativeButton(T("Cancel", "Hủy"), null);
+        builder.show();
+    }
+    private void refreshLocklistInput() {
         ViewGroup root = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
         EditText et = root.findViewWithTag("locklist_input");
         if (et != null) et.setText(prefs.getString("locklist", ""));
