@@ -627,7 +627,30 @@ public class MainActivity extends Activity {
         secSys.addView(createSectionTitle("BLACKLIST (Hide Overlay)"));
         secSys.addView(createInput("Packages (com.ex.app)", "blacklist"));
         secSys.addView(createSectionTitle("LOCKLIST (Morse AppLock)"));
-        secSys.addView(createInput("Packages (com.zing.zalo, com.mbmobile)", "locklist"));
+                LinearLayout locklistRow = new LinearLayout(this);
+                locklistRow.setOrientation(LinearLayout.HORIZONTAL);
+                locklistRow.setPadding(0,10,0,10);
+                final EditText etLocklist = new EditText(this);
+                etLocklist.setHint(T("Package names (com.example.app)", "Tên gói (com.example.app)"));
+                etLocklist.setText(prefs.getString("locklist", ""));
+                etLocklist.setTag("locklist_input");
+                etLocklist.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+                etLocklist.setBackground(getRounded("#2C2C2C", 20f));
+                etLocklist.setPadding(30,30,30,30);
+                etLocklist.setTextColor(Color.WHITE);
+                etLocklist.addTextChangedListener(new android.text.TextWatcher() {
+                    public void afterTextChanged(android.text.Editable s) { prefs.edit().putString("locklist", s.toString()).apply(); }
+                    public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                    public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                });
+                Button btnPick = new Button(this);
+                btnPick.setText(T("📱 Pick App", "📱 Chọn App"));
+                btnPick.setBackground(getRounded("#00E5FF", 20f));
+                btnPick.setTextColor(Color.BLACK);
+                btnPick.setOnClickListener(v -> showAppPickerDialog("locklist"));
+                locklistRow.addView(etLocklist);
+                locklistRow.addView(btnPick);
+                secSys.addView(locklistRow);
         pageDesign.addView(wrapCard(secSys));
 
         pageDesign.addView(createSectionTitle(T("CORE DESIGN (COLOR/SIZE)", "THIẾT KẾ CỐT LÕI (MÀU/KÍCH THƯỚC)")));
@@ -818,6 +841,39 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout createSlider(String t, String k, int max, int def) {
+    private void showAppPickerDialog(String targetKey) {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle(T("Choose App", "Chọn ứng dụng"));
+        android.content.pm.PackageManager pm = getPackageManager();
+        Intent intent = new Intent(Intent.ACTION_MAIN, null);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        java.util.List<android.content.pm.ResolveInfo> apps = pm.queryIntentActivities(intent, 0);
+        java.util.ArrayList<String> appNames = new java.util.ArrayList<>();
+        java.util.ArrayList<String> pkgNames = new java.util.ArrayList<>();
+        for (android.content.pm.ResolveInfo ri : apps) {
+            appNames.add(ri.loadLabel(pm).toString());
+            pkgNames.add(ri.activityInfo.packageName);
+        }
+        builder.setItems(appNames.toArray(new String[0]), (dialog, which) -> {
+            String current = prefs.getString(targetKey, "");
+            String newPkg = pkgNames.get(which);
+            if (current.contains(newPkg)) {
+                Toast.makeText(MainActivity.this, T("Already in list", "Đã có trong danh sách"), Toast.LENGTH_SHORT).show();
+            } else {
+                String newList = current.isEmpty() ? newPkg : current + "," + newPkg;
+                prefs.edit().putString(targetKey, newList).apply();
+                Toast.makeText(MainActivity.this, T("Added", "Đã thêm") + " " + newPkg, Toast.LENGTH_LONG).show();
+                refreshLocklistInput();
+            }
+        });
+        builder.setNegativeButton(T("Cancel", "Hủy"), null);
+        builder.show();
+    }
+    private void refreshLocklistInput() {
+        ViewGroup root = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
+        EditText et = root.findViewWithTag("locklist_input");
+        if (et != null) et.setText(prefs.getString("locklist", ""));
+    }
         LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10);
         TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def));
         l.addView(tv);

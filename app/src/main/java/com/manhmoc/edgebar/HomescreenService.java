@@ -108,11 +108,12 @@ public class HomescreenService extends Service {
     };
 
     private String mapComponentToNumber(String comp) {
-        String key = "morse_map_" + comp.replace("morse_", "").replace("home_", "").replace("lock_", "").replace("corner_", "");
+        // Xử lý đúng: "morse_corner_tl" -> key = "morse_map_corner_tl"
+        String key = "morse_map_" + comp.replace("morse_", "");
         return prefs.getString(key, "*");
     }
 
-    private class ScratchView extends View {
+    // Use separate ScratchView class
         private Paint paint = new Paint();
         private Random random = new Random();
         private long lastUpdate = 0;
