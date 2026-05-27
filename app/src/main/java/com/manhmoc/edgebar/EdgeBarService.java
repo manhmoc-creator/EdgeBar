@@ -32,7 +32,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
-import android.widget.Toast;
 
 public class EdgeBarService extends AccessibilityService {
     private WindowManager wm;
@@ -49,15 +48,12 @@ public class EdgeBarService extends AccessibilityService {
     private String unlockedPackage = "";
 
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
-    private final int[] GRAV = {Gravity.BOTTOM | Gravity.RIGHT, Gravity.BOTTOM | Gravity.LEFT, Gravity.TOP | Gravity.RIGHT, Gravity.TOP | Gravity.LEFT, Gravity.TOP | Gravity.CENTER_HORIZONTAL};
+    private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
-    private final int[] C_GRAV = {Gravity.BOTTOM | Gravity.RIGHT, Gravity.BOTTOM | Gravity.LEFT, Gravity.TOP | Gravity.RIGHT, Gravity.TOP | Gravity.LEFT};
+    private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
 
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
-        if (k != null) {
-            updateVisibility();
-            if (fV != null) fV.updateStyle();
-        }
+        if (k != null) { updateVisibility(); if (fV != null) fV.updateStyle(); }
     };
 
     private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
@@ -86,216 +82,75 @@ public class EdgeBarService extends AccessibilityService {
     };
 
     private class FlashView extends View {
-        private Paint p = new Paint();
-        float radius = 40f;
-        String cTheme = "WHITE";
-        int aStyle = 0;
-        private float phaseFraction = 0f;
-
-        public FlashView(Context c) {
-            super(c);
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeCap(Paint.Cap.ROUND);
-            p.setStrokeJoin(Paint.Join.ROUND);
-            p.setAntiAlias(true);
-            setLayerType(LAYER_TYPE_SOFTWARE, p);
-            updateStyle();
-        }
-
-        public void updateStyle() {
-            p.setAlpha(prefs.getInt("anim_alpha", 255));
-            p.setStrokeWidth(prefs.getInt("anim_thick", 12));
-            radius = prefs.getInt("anim_rad", 40);
-            cTheme = prefs.getString("anim_color", "WHITE");
-            aStyle = prefs.getInt("anim_style", 0);
-            if (getWidth() > 0) applyGradient(getWidth(), getHeight());
-            invalidate();
-        }
-
-        @Override
-        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-            super.onSizeChanged(w, h, oldw, oldh);
-            applyGradient(w, h);
-        }
-
+        private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phaseFraction = 0f;
+        public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); }
+        public void updateStyle() { p.setAlpha(prefs.getInt("anim_alpha", 255)); p.setStrokeWidth(prefs.getInt("anim_thick", 12)); radius = prefs.getInt("anim_rad", 40); cTheme = prefs.getString("anim_color", "WHITE"); aStyle = prefs.getInt("anim_style", 0); if(getWidth() > 0) applyGradient(getWidth(), getHeight()); invalidate(); }
+        @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w, h, oldw, oldh); applyGradient(w, h); }
         private void applyGradient(int w, int h) {
-            int[] cArr;
-            switch (cTheme) {
-                case "NEON": cArr = new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF"), Color.parseColor("#FF00FF")}; break;
-                case "CYBERPUNK": cArr = new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700"), Color.parseColor("#8A2BE2")}; break;
-                case "LAVA": cArr = new int[]{Color.parseColor("#FF4500"), Color.parseColor("#FF8C00"), Color.parseColor("#FF4500")}; break;
-                case "OCEAN": cArr = new int[]{Color.parseColor("#00BFFF"), Color.parseColor("#1E90FF"), Color.parseColor("#00BFFF")}; break;
-                case "MATRIX": cArr = new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
-                case "SUNSET": cArr = new int[]{Color.parseColor("#FF1493"), Color.parseColor("#FF8C00"), Color.parseColor("#FF1493")}; break;
-                case "GOOGLE": cArr = new int[]{Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4"), Color.parseColor("#EA4335")}; break;
-                case "AURORA": cArr = new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#B388FF"), Color.parseColor("#FF4081")}; break;
-                case "ABYSS": cArr = new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#1DE9B6"), Color.parseColor("#2979FF")}; break;
-                case "COSMIC": cArr = new int[]{Color.parseColor("#4A148C"), Color.parseColor("#E91E63"), Color.parseColor("#FFD700")}; break;
-                case "FOREST": cArr = new int[]{Color.parseColor("#1B5E20"), Color.parseColor("#4CAF50"), Color.parseColor("#FFEB3B")}; break;
-                case "FLAME": cArr = new int[]{Color.parseColor("#B71C1C"), Color.parseColor("#FF9800"), Color.parseColor("#FFEB3B")}; break;
-                case "MIDNIGHT": cArr = new int[]{Color.parseColor("#1A237E"), Color.parseColor("#7B1FA2"), Color.parseColor("#03A9F4")}; break;
-                case "TROPICAL": cArr = new int[]{Color.parseColor("#00695C"), Color.parseColor("#8BC34A"), Color.parseColor("#FF9800")}; break;
-                case "CANDY": cArr = new int[]{Color.parseColor("#F06292"), Color.parseColor("#4DD0E1"), Color.parseColor("#FFF176")}; break;
-                default: cArr = new int[]{Color.WHITE, Color.WHITE}; break;
+            int[] cArr; switch(cTheme) {
+                case "NEON": cArr=new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF"), Color.parseColor("#FF00FF")}; break;
+                case "CYBERPUNK": cArr=new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700"), Color.parseColor("#8A2BE2")}; break;
+                case "LAVA": cArr=new int[]{Color.parseColor("#FF4500"), Color.parseColor("#FF8C00"), Color.parseColor("#FF4500")}; break;
+                default: cArr=new int[]{Color.WHITE, Color.WHITE}; break;
             }
             p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR));
-            p.setShadowLayer(15f, 0, 0, cArr[0]);
         }
-
         public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
-
-        @Override
-        protected void onDraw(Canvas canvas) {
-            float drawW = getWidth();
-            float drawH = getHeight();
-            if (drawW <= 0 || drawH <= 0) return;
-            float off = p.getStrokeWidth() / 2;
+        @Override protected void onDraw(Canvas canvas) {
+            float drawW = getWidth(); float drawH = getHeight();
+            if(drawW <= 0 || drawH <= 0) return;
+            float off = p.getStrokeWidth()/2;
             float left = off, top = off, right = drawW - off, bottom = drawH - off;
             p.setStrokeCap(Paint.Cap.ROUND);
-            if (aStyle > 0) {
+            if(aStyle > 0) {
                 float perim = 2 * (drawW + drawH);
                 float currentPhase = -perim * phaseFraction;
-                if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim / 4f, 3 * perim / 4f}, currentPhase));
-                else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim / 8f, 3 * perim / 8f}, currentPhase));
-                else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim / 12f, 3 * perim / 12f}, currentPhase));
-            } else {
-                p.setPathEffect(null);
-            }
+                if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, currentPhase));
+                else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, currentPhase));
+                else p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, currentPhase));
+            } else { p.setPathEffect(null); }
             canvas.drawRoundRect(left, top, right, bottom, radius, radius, p);
         }
     }
 
     private class CornerView extends View {
-        private Paint pFill, pStroke;
-        private int type;
-        private Handler autoHideHandler = new Handler();
-        private boolean isAutoHiding = false;
-        private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
-        private boolean isInv = false;
-
-        public CornerView(Context c, int type) {
-            super(c);
-            this.type = type;
-            pFill = new Paint();
-            pFill.setStyle(Paint.Style.FILL);
-            pFill.setAntiAlias(true);
-            pStroke = new Paint();
-            pStroke.setColor(Color.WHITE);
-            pStroke.setStyle(Paint.Style.STROKE);
-            pStroke.setAntiAlias(true);
-            pStroke.setStrokeCap(Paint.Cap.ROUND);
-            pStroke.setStrokeJoin(Paint.Join.ROUND);
-        }
-
-        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) {
-            pStroke.setStrokeWidth(thick);
-            this.baseMoonAlpha = moonAlpha;
-            this.baseStrokeAlpha = strokeAlpha;
-            this.isAutoHiding = autoHide;
-            this.hideDelay = delay;
-            this.isInv = inv;
-            if (!autoHide) {
-                pFill.setColor(Color.argb(moonAlpha, 96, 125, 139));
-                pStroke.setAlpha(strokeAlpha);
-            } else triggerFlash();
-            if (inv) {
-                pFill.setAlpha(0);
-                pStroke.setAlpha(0);
-            }
-            invalidate();
-        }
-
-        public void triggerFlash() {
-            if (!isAutoHiding || isInv) return;
-            autoHideHandler.removeCallbacksAndMessages(null);
-            pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha + 50), 96, 125, 139));
-            pStroke.setAlpha(Math.min(255, baseStrokeAlpha + 50));
-            invalidate();
-            autoHideHandler.postDelayed(() -> {
-                ValueAnimator a = ValueAnimator.ofFloat(1f, 0f);
-                a.setDuration(1500);
-                a.addUpdateListener(anim -> {
-                    float val = (float) anim.getAnimatedValue();
-                    pFill.setColor(Color.argb((int) (baseMoonAlpha * val), 96, 125, 139));
-                    pStroke.setAlpha((int) (baseStrokeAlpha * val));
-                    invalidate();
-                });
-                a.start();
-            }, hideDelay);
-        }
-
-        @Override
-        protected void onDraw(Canvas canvas) {
-            super.onDraw(canvas);
-            float tw = getWidth(), th = getHeight(), thick = pStroke.getStrokeWidth();
-            float pad = thick / 2;
+        private Paint pFill, pStroke; private int type; private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay; private boolean isInv = false;
+        public CornerView(Context c, int type) { super(c); this.type = type; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
+        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) { pStroke.setStrokeWidth(thick); this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv; if(!autoHide) { pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); pStroke.setAlpha(strokeAlpha); } else triggerFlash(); if(inv) { pFill.setAlpha(0); pStroke.setAlpha(0); } invalidate(); }
+        public void triggerFlash() { if(!isAutoHiding || isInv) return; autoHideHandler.removeCallbacksAndMessages(null); pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha + 50), 96, 125, 139)); pStroke.setAlpha(Math.min(255, baseStrokeAlpha + 50)); invalidate(); autoHideHandler.postDelayed(() -> { ValueAnimator a = ValueAnimator.ofFloat(1f, 0f); a.setDuration(1500); a.addUpdateListener(anim -> { float val = (float)anim.getAnimatedValue(); pFill.setColor(Color.argb((int)(baseMoonAlpha * val), 96, 125, 139)); pStroke.setAlpha((int)(baseStrokeAlpha * val)); invalidate(); }); a.start(); }, hideDelay); }
+        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas);
+            float tw = getWidth(), th = getHeight(), thick = pStroke.getStrokeWidth(); float pad = thick/2;
             String ck = "lock_corner_" + CORNERS[type] + "_";
-            int shapeMode = prefs.getInt(ck + "shape", 0);
-            float sRad = prefs.getInt(ck + "rad", 80) / 1000f;
-            float mRad = prefs.getInt(ck + "moon_rad", 80) / 1000f;
-            float sw = prefs.getInt(ck + "w", 100);
-            float sh = prefs.getInt(ck + "h", 100);
-            float mw = prefs.getInt(ck + "moon_w", 100);
-            float mh = prefs.getInt(ck + "moon_h", 100);
-
-            Path moonPath = new Path();
-            Path strokePath = new Path();
-            float sRootX = 0, sRootY = 0, sTipX = 0, sTipY = 0, sCtrlX = 0, sCtrlY = 0;
-            float mRootX = 0, mRootY = 0, mTipX = 0, mTipY = 0, mCtrlX = 0, mCtrlY = 0;
-
-            if (type == 0) {
-                sRootX = tw - pad; sRootY = th - pad; sTipX = tw - sw + pad; sTipY = th - sh + pad;
-                sCtrlX = sRootX - (1f - sRad) * (sw * 0.7f); sCtrlY = sRootY - (1f - sRad) * (sh * 0.7f);
-                mRootX = tw; mRootY = th; mTipX = tw - mw; mTipY = th - mh;
-                mCtrlX = mRootX - (1f - mRad) * (mw * 0.7f); mCtrlY = mRootY - (1f - mRad) * (mh * 0.7f);
-            } else if (type == 1) {
-                sRootX = pad; sRootY = th - pad; sTipX = sw - pad; sTipY = th - sh + pad;
-                sCtrlX = sRootX + (1f - sRad) * (sw * 0.7f); sCtrlY = sRootY - (1f - sRad) * (sh * 0.7f);
-                mRootX = 0; mRootY = th; mTipX = mw; mTipY = th - mh;
-                mCtrlX = mRootX + (1f - mRad) * (mw * 0.7f); mCtrlY = mRootY - (1f - mRad) * (mh * 0.7f);
-            } else if (type == 2) {
-                sRootX = tw - pad; sRootY = pad; sTipX = tw - sw + pad; sTipY = sh - pad;
-                sCtrlX = sRootX - (1f - sRad) * (sw * 0.7f); sCtrlY = sRootY + (1f - sRad) * (sh * 0.7f);
-                mRootX = tw; mRootY = 0; mTipX = tw - mw; mTipY = mh;
-                mCtrlX = mRootX - (1f - mRad) * (mw * 0.7f); mCtrlY = mRootY + (1f - mRad) * (mh * 0.7f);
+            int shapeMode = prefs.getInt(ck+"shape", 0);
+            float sRad = prefs.getInt(ck+"rad", 80) / 1000f; float mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
+            float sw = prefs.getInt(ck+"w", 100); float sh = prefs.getInt(ck+"h", 100);
+            float mw = prefs.getInt(ck+"moon_w", 100); float mh = prefs.getInt(ck+"moon_h", 100);
+            Path moonPath = new Path(); Path strokePath = new Path();
+            float sRootX=0, sRootY=0, sTipX=0, sTipY=0, sCtrlX=0, sCtrlY=0;
+            float mRootX=0, mRootY=0, mTipX=0, mTipY=0, mCtrlX=0, mCtrlY=0;
+            if(type==0) {
+                sRootX=tw-pad; sRootY=th-pad; sTipX=tw-sw+pad; sTipY=th-sh+pad; sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
+                mRootX=tw; mRootY=th; mTipX=tw-mw; mTipY=th-mh; mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
+            } else if(type==1) {
+                sRootX=pad; sRootY=th-pad; sTipX=sw-pad; sTipY=th-sh+pad; sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
+                mRootX=0; mRootY=th; mTipX=mw; mTipY=th-mh; mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
+            } else if(type==2) {
+                sRootX=tw-pad; sRootY=pad; sTipX=tw-sw+pad; sTipY=sh-pad; sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
+                mRootX=tw; mRootY=0; mTipX=tw-mw; mTipY=mh; mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
             } else {
-                sRootX = pad; sRootY = pad; sTipX = sw - pad; sTipY = sh - pad;
-                sCtrlX = sRootX + (1f - sRad) * (sw * 0.7f); sCtrlY = sRootY + (1f - sRad) * (sh * 0.7f);
-                mRootX = 0; mRootY = 0; mTipX = mw; mTipY = mh;
-                mCtrlX = mRootX + (1f - mRad) * (mw * 0.7f); mCtrlY = mRootY + (1f - mRad) * (mh * 0.7f);
+                sRootX=pad; sRootY=pad; sTipX=sw-pad; sTipY=sh-pad; sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
+                mRootX=0; mRootY=0; mTipX=mw; mTipY=mh; mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
             }
-
-            if (shapeMode == 1) {
-                strokePath.moveTo(sRootX, sRootY);
-                strokePath.lineTo(sTipX, sRootY);
-            } else if (shapeMode == 2) {
-                strokePath.moveTo(sRootX, sRootY);
-                strokePath.lineTo(sRootX, sTipY);
-            } else {
-                strokePath.moveTo(sRootX, sTipY);
-                strokePath.quadTo(sCtrlX, sCtrlY, sTipX, sRootY);
-            }
-
-            if (type == 0 || type == 1) {
-                moonPath.moveTo(mRootX, mTipY);
-                moonPath.lineTo(mRootX, mRootY);
-                moonPath.lineTo(mTipX, mRootY);
-                moonPath.quadTo(mCtrlX, mCtrlY, mRootX, mTipY);
-            } else {
-                moonPath.moveTo(mTipX, mRootY);
-                moonPath.lineTo(mRootX, mRootY);
-                moonPath.lineTo(mRootX, mTipY);
-                moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY);
-            }
+            if(shapeMode == 1) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sTipX, sRootY); }
+            else if(shapeMode == 2) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sRootX, sTipY); }
+            else { strokePath.moveTo(sRootX, sTipY); strokePath.quadTo(sCtrlX, sCtrlY, sTipX, sRootY); }
+            if(type==0||type==1) { moonPath.moveTo(mRootX, mTipY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mTipX, mRootY); moonPath.quadTo(mCtrlX, mCtrlY, mRootX, mTipY); }
+            else { moonPath.moveTo(mTipX, mRootY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mRootX, mTipY); moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY); }
             moonPath.close();
-
             canvas.drawPath(strokePath, pStroke);
-            float mx = prefs.getInt(ck + "moon_x", 1250) - 1250;
-            float my = prefs.getInt(ck + "moon_y", 1250) - 1250;
-            canvas.save();
-            canvas.translate(mx, my);
-            canvas.drawPath(moonPath, pFill);
-            canvas.restore();
+            float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
+            float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
+            canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill); canvas.restore();
         }
     }
 
@@ -307,14 +162,7 @@ public class EdgeBarService extends AccessibilityService {
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
         cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-        try {
-            if (cm != null) {
-                String[] ids = cm.getCameraIdList();
-                if (ids != null && ids.length > 0) cId = ids[0];
-            }
-        } catch (Exception e) {
-            cId = null;
-        }
+        try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
         prefs.registerOnSharedPreferenceChangeListener(prefListener);
 
         IntentFilter filter = new IntentFilter();
@@ -330,7 +178,6 @@ public class EdgeBarService extends AccessibilityService {
         else
             registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"));
 
-        // KHÔNG startForeground() vì AccessibilityService đã có đặc quyền cao, tránh rác thông báo
         createFloatingBars();
     }
 
@@ -382,7 +229,6 @@ public class EdgeBarService extends AccessibilityService {
                     sendBroadcast(m);
                     break;
                 case "YTDL_DOWNLOAD":
-                    // TRÊN ANDROID 11+, APP NỀN KHÔNG ĐỌC DC CLIPBOARD -> DÙNG NOTIFICATION TRICK (TẠM BỎ QUA)
                     try {
                         android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                         if (cb.hasPrimaryClip() && cb.getPrimaryClip().getItemCount() > 0) {
@@ -407,9 +253,7 @@ public class EdgeBarService extends AccessibilityService {
                 case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break;
                 case "FLASH":
                     fOn = !fOn;
-                    if (cId != null && cm != null) {
-                        try { cm.setTorchMode(cId, fOn); } catch (Exception e) { Toast.makeText(this, "Camera error", Toast.LENGTH_SHORT).show(); }
-                    }
+                    if (cId != null) try { cm.setTorchMode(cId, fOn); } catch (Exception e) {}
                     break;
                 case "CAMERA":
                     Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE);
@@ -606,58 +450,25 @@ public class EdgeBarService extends AccessibilityService {
     }
 
     private class SidebarTouchListener implements View.OnTouchListener {
-        private String prefKeyBase;
-        private View myView;
-        private GestureDetector gd;
-        private float sx, sy;
-        private long st;
-
-        public SidebarTouchListener(String keyBase, View v) {
-            this.prefKeyBase = keyBase;
-            this.myView = v;
-            this.gd = new GestureDetector(EdgeBarService.this, new GestureDetector.SimpleOnGestureListener() {
-                @Override
-                public boolean onSingleTapConfirmed(MotionEvent e) {
-                    handleAction(prefKeyBase + "_tap");
-                    return true;
-                }
-                @Override
-                public boolean onDoubleTap(MotionEvent e) {
-                    handleAction(prefKeyBase + "_dtap");
-                    return true;
-                }
-                @Override
-                public void onLongPress(MotionEvent e) {
-                    handleAction(prefKeyBase + "_long");
-                }
-                @Override
-                public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) {
-                    return false;
-                }
-            });
-        }
-
-        @Override
-        public boolean onTouch(View v, MotionEvent e) {
+        private String prefKeyBase; private View myView; private GestureDetector gd; private float sx, sy; private long st;
+        public SidebarTouchListener(String keyBase, View v) { this.prefKeyBase = keyBase; this.myView = v; this.gd = new GestureDetector(EdgeBarService.this, new GestureDetector.SimpleOnGestureListener() {
+            @Override public boolean onSingleTapConfirmed(MotionEvent e) { handleAction(prefKeyBase + "_tap"); return true; }
+            @Override public boolean onDoubleTap(MotionEvent e) { handleAction(prefKeyBase + "_dtap"); return true; }
+            @Override public void onLongPress(MotionEvent e) { handleAction(prefKeyBase + "_long"); }
+            @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) { return false; }
+        }); }
+        @Override public boolean onTouch(View v, MotionEvent e) {
             if (myView != null && myView instanceof CornerView) ((CornerView) myView).triggerFlash();
             gd.onTouchEvent(e);
-            if (e.getAction() == MotionEvent.ACTION_DOWN) {
-                sx = e.getRawX();
-                sy = e.getRawY();
-                st = System.currentTimeMillis();
-            } else if (e.getAction() == MotionEvent.ACTION_UP) {
+            if (e.getAction() == MotionEvent.ACTION_DOWN) { sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis(); }
+            else if (e.getAction() == MotionEvent.ACTION_UP) {
                 float dx = e.getRawX() - sx, dy = e.getRawY() - sy;
                 if (Math.abs(dx) > 50 || Math.abs(dy) > 50) {
                     long duration = System.currentTimeMillis() - st;
                     boolean isHold = duration > prefs.getInt("hold_dur", 600);
                     String actionName = "";
-                    if (myView instanceof CornerView && Math.abs(dx) > 40 && Math.abs(dy) > 40) {
-                        actionName = "diag" + (isHold ? "_hold" : "");
-                    } else {
-                        if (Math.abs(dx) > Math.abs(dy)) actionName = dx > 0 ? "right" : "left";
-                        else actionName = dy > 0 ? "down" : "up";
-                        if (isHold) actionName += "_hold";
-                    }
+                    if (myView instanceof CornerView && Math.abs(dx) > 40 && Math.abs(dy) > 40) { actionName = "diag" + (isHold ? "_hold" : ""); }
+                    else { if (Math.abs(dx) > Math.abs(dy)) actionName = dx > 0 ? "right" : "left"; else actionName = dy > 0 ? "down" : "up"; if (isHold) actionName += "_hold"; }
                     handleAction(prefKeyBase + "_" + actionName);
                     return true;
                 }
@@ -666,11 +477,8 @@ public class EdgeBarService extends AccessibilityService {
         }
     }
 
-    @Override
-    public void onInterrupt() {}
-
-    @Override
-    public void onDestroy() {
+    @Override public void onInterrupt() {}
+    @Override public void onDestroy() {
         super.onDestroy();
         try { unregisterReceiver(stateReceiver); } catch (Exception e) {}
         try { unregisterReceiver(ipcReceiver); } catch (Exception e) {}

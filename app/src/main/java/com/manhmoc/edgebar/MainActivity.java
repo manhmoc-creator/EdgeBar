@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain;
     private Button btnLock, btnHome, btnMorse, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0;
-    private final String CURRENT_VERSION = "V19.12.3.4.5.2";
+    private final String CURRENT_VERSION = "V19.12.3.4.5.3";
     private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
@@ -551,21 +551,24 @@ public class MainActivity extends Activity {
         dialog.setContentView(container); dialog.show();
     }
 
-    // ---------------------- APP PICKER THẬT CHO LOCKLIST ----------------------
+    // APP PICKER MỞ RỘNG (LẤY TẤT CẢ APP, HIỂN THỊ TÊN + PACKAGE)
     private void showAppPickerDialog(String targetKey) {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle(T("Choose App", "Chọn ứng dụng"));
         PackageManager pm = getPackageManager();
-        Intent intent = new Intent(Intent.ACTION_MAIN, null);
-        intent.addCategory(Intent.CATEGORY_LAUNCHER);
-        List<ResolveInfo> apps = pm.queryIntentActivities(intent, 0);
-        ArrayList<String> appNames = new ArrayList<>();
+        // Lấy tất cả các ứng dụng đã cài đặt (kể cả không có icon)
+        List<android.content.pm.ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
+        ArrayList<String> appLabels = new ArrayList<>();
         ArrayList<String> pkgNames = new ArrayList<>();
-        for (ResolveInfo ri : apps) {
-            appNames.add(ri.loadLabel(pm).toString());
-            pkgNames.add(ri.activityInfo.packageName);
+        for (android.content.pm.ApplicationInfo app : apps) {
+            // Chỉ lấy ứng dụng của người dùng (không lấy hệ thống trừ khi muốn)
+            // if ((app.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0) continue;
+            String label = app.loadLabel(pm).toString();
+            String pkg = app.packageName;
+            appLabels.add(label + " (" + pkg + ")");
+            pkgNames.add(pkg);
         }
-        builder.setItems(appNames.toArray(new String[0]), (dialog, which) -> {
+        builder.setItems(appLabels.toArray(new String[0]), (dialog, which) -> {
             String current = prefs.getString(targetKey, "");
             String newPkg = pkgNames.get(which);
             if (current.contains(newPkg)) {
@@ -582,12 +585,12 @@ public class MainActivity extends Activity {
     }
 
     private void refreshLocklistInput() {
-        ViewGroup root = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
-        EditText et = root.findViewWithTag("locklist_input");
+        ViewGroup rootView = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
+        EditText et = rootView.findViewWithTag("locklist_input");
         if (et != null) et.setText(prefs.getString("locklist", ""));
     }
 
-    // ---------------------- MUSIC DOWNLOADER UI ----------------------
+    // MUSIC DOWNLOADER
     private void addMusicDownloaderUI() {
         LinearLayout musicArea = new LinearLayout(this);
         musicArea.setOrientation(LinearLayout.VERTICAL);
@@ -615,8 +618,10 @@ public class MainActivity extends Activity {
             yt.putExtra(Intent.EXTRA_TEXT, query);
             yt.setPackage("com.deniscerri.ytdlnis");
             yt.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try { startActivity(yt); } catch (Exception e) {
-                Toast.makeText(MainActivity.this, "Install YTDLnis first", Toast.LENGTH_LONG).show();
+            try {
+                startActivity(yt);
+            } catch (Exception e) {
+                Toast.makeText(MainActivity.this, "Install YTDLnis first\nhttps://github.com/deniscerri/ytdlnis", Toast.LENGTH_LONG).show();
             }
         });
         musicArea.addView(etMusic);
@@ -700,7 +705,6 @@ public class MainActivity extends Activity {
         secSys.addView(createSectionTitle("BLACKLIST (Hide Overlay)"));
         secSys.addView(createInput("Packages (com.ex.app)", "blacklist"));
         secSys.addView(createSectionTitle("LOCKLIST (Morse AppLock)"));
-        // Tạo row locklist có nút pick app
         LinearLayout locklistRow = new LinearLayout(this); locklistRow.setOrientation(LinearLayout.HORIZONTAL);
         locklistRow.setPadding(0,10,0,10);
         final EditText etLocklist = new EditText(this);
@@ -743,7 +747,7 @@ public class MainActivity extends Activity {
         pageDesign.addView(toggleRow); pageDesign.addView(designSliderContainer);
         btnEditHome.performClick();
 
-        // Thêm music downloader
+        // Thêm music downloader UI
         addMusicDownloaderUI();
     }
 
@@ -759,7 +763,7 @@ public class MainActivity extends Activity {
     }
 
     private void showPremiumDialog() {
-        String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4.5.2:\n- Real App Picker for Locklist\n- Fixed Morse corner mapping (keys tl,tr,bl,br)\n- Music downloader UI\n- Fixed CPU overdraw in ScratchView", "🔧 LỆNH ADB CỐT LÕI:\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4.5.2:\n- App Picker thật cho Locklist\n- Sửa ánh xạ góc Morse (tl,tr,bl,br)\n- Giao diện tải nhạc\n- Sửa lỗi vòng lặp vô tận ScratchView");
+        String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4.5.3:\n- Fixed App Picker (all apps)\n- Removed Morse flash, keep only scratch\n- Fixed YTDLnis intent\n- Added Morse mode toggle in design\n- Fixed '>' key crash\n- Touch through Morse overlay in app\n- Fixed Locklist not working", "🔧 LỆNH ADB CỐT LÕI:\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4.5.3:\n- Sửa App Picker (tất cả app)\n- Bỏ hiệu ứng nháy Morse, chỉ giữ sọc màn\n- Sửa nút YTDLnis\n- Thêm nút bật tắt Morse trong design\n- Sửa lỗi crash phím '>'\n- Cho touch xuyên qua khi design\n- Fix Locklist không hoạt động");
         ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50);
         TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f);
         sv.addView(tv);
@@ -806,8 +810,7 @@ public class MainActivity extends Activity {
 
     private void renderSliders() {
         designSliderContainer.removeAllViews();
-        if (designTabState == 3) {
-            // Animation (giữ nguyên code cũ)
+        if (designTabState == 3) { // ANIMA
             Button btnTest = new Button(this); btnTest.setText("▶ THỬ NGAY HIỆU ỨNG");
             btnTest.setBackground(getRounded("#FFC107", 20f)); btnTest.setTextColor(Color.BLACK);
             btnTest.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(-1,-2); testLp.setMargins(0,0,0,20);
@@ -843,6 +846,27 @@ public class MainActivity extends Activity {
             String[] bNames = designTabState == 2 ? M_BAR_NAMES : BAR_NAMES;
 
             if (designTabState == 2) {
+                // Thêm nút bật/tắt lớp phủ Morse
+                LinearLayout toggleMorseArea = new LinearLayout(this);
+                toggleMorseArea.setOrientation(LinearLayout.HORIZONTAL);
+                toggleMorseArea.setPadding(30,20,30,20);
+                toggleMorseArea.setBackground(getRounded("#222222", 20f));
+                TextView toggleLabel = new TextView(this);
+                toggleLabel.setText(T("Enable Morse Overlay", "Bật lớp phủ Morse"));
+                toggleLabel.setTextColor(Color.WHITE);
+                toggleLabel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+                Switch swMorse = new Switch(this);
+                swMorse.setChecked(prefs.getBoolean("morse_mode_en", false));
+                swMorse.setOnCheckedChangeListener((v, isChecked) -> {
+                    prefs.edit().putBoolean("morse_mode_en", isChecked).apply();
+                    Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE");
+                    sendBroadcast(i);
+                });
+                toggleMorseArea.addView(toggleLabel);
+                toggleMorseArea.addView(swMorse);
+                designSliderContainer.addView(createDrawer(T("🔐 MORSE MODE", "🔐 CHẾ ĐỘ MORSE"), toggleMorseArea));
+
+                // Mật khẩu Morse
                 LinearLayout passDrawer = new LinearLayout(this); passDrawer.setOrientation(LinearLayout.VERTICAL);
                 passDrawer.setPadding(30, 20, 30, 20); passDrawer.setBackground(getRounded("#222222", 20f));
                 TextView passTitle = new TextView(this); passTitle.setText("🔐 MẬT KHẨU MORSE (CHỈ SỐ)");
