@@ -12,14 +12,29 @@ public class HomescreenService extends Service {
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     
     private final String[] M_BARS = {"r", "l", "t_r", "t_l", "t_c", "m_b_c", "m_mid_t", "m_mid_b"};
-    // FIX LỖI 3: SET GRAVITY CENTER CHO HAI THANH MID_T VÀ MID_B
     private final int[] M_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.CENTER, Gravity.CENTER};
 
     private final String[] CORNERS = {"br", "bl", "tr", "tl"}; 
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
     
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> { if(k != null) { updateVisibility(); if(fV != null) fV.updateStyle(); } };
-    private BroadcastReceiver syncReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { if(i.getAction().equals("com.manhmoc.edgebar.SYNC_STATE")) { isKbd = i.getBooleanExtra("isKbd", false); isBl = i.getBooleanExtra("isBl", false); updateVisibility(); } else if (i.getAction().equals("com.manhmoc.edgebar.TEST_ANIM")) { playAnim(); } } };
+    
+    // FIX 1: LẮNG NGHE TOGGLE_MORSE VÀ ĐẢO TRẠNG THÁI
+    private BroadcastReceiver syncReceiver = new BroadcastReceiver() { 
+        @Override public void onReceive(Context c, Intent i) { 
+            if(i.getAction().equals("com.manhmoc.edgebar.SYNC_STATE")) { 
+                isKbd = i.getBooleanExtra("isKbd", false); 
+                isBl = i.getBooleanExtra("isBl", false); 
+                updateVisibility(); 
+            } else if (i.getAction().equals("com.manhmoc.edgebar.TEST_ANIM")) { 
+                playAnim(); 
+            } else if (i.getAction().equals("com.manhmoc.edgebar.TOGGLE_MORSE")) {
+                boolean isM = prefs.getBoolean("morse_mode_en", false);
+                prefs.edit().putBoolean("morse_mode_en", !isM).apply();
+                updateVisibility();
+            }
+        } 
+    };
 
     private class FlashView extends View { 
         private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phaseFraction = 0f;
@@ -110,7 +125,6 @@ public class HomescreenService extends Service {
             moonPath.close();
 
             canvas.drawPath(strokePath, pStroke); 
-
             float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
             float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
             canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill); canvas.restore();
@@ -136,7 +150,6 @@ public class HomescreenService extends Service {
         for(int i=0; i<4; i++) { corners[i] = new CornerView(this, i, "home_"); WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT); try { wm.addView(corners[i], p); } catch(Exception e){} corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i])); } 
         
         morseBg = new View(this); morseBg.setBackgroundColor(Color.BLACK); morseBg.setVisibility(View.GONE);
-        // FIX LỖI 2: CHẶN ĐỨNG MỌI CẢM ỨNG XUYÊN QUA MÀN ĐEN MORSE!
         morseBg.setOnTouchListener((v, e) -> true);
         
         WindowManager.LayoutParams bgP = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT); try { wm.addView(morseBg, bgP); } catch(Exception e){}
@@ -148,13 +161,16 @@ public class HomescreenService extends Service {
     }
 
     private void updateVisibility() { 
-        boolean isUnlocked = !km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
+        boolean isUnlocked = !km.isKeyguardLocked(); 
+        boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); 
+        boolean hideNormal = (avoidKbd && isKbd) || isBl; 
+        
         boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
         boolean isMorse = prefs.getBoolean("morse_mode_en", false);
 
-        if(hide && fV != null) fV.setVisibility(View.GONE);
+        if(hideNormal && fV != null && !isMorse) fV.setVisibility(View.GONE);
 
-        if(isMorse && isUnlocked && !hide) {
+        if(isMorse && isUnlocked) {
             morseBg.setVisibility(View.VISIBLE);
             morseBg.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
             
@@ -191,7 +207,7 @@ public class HomescreenService extends Service {
             for(int i=0; i<8; i++) if(mBars[i]!=null) mBars[i].setVisibility(View.GONE);
             for(int i=0; i<4; i++) if(mCorners[i]!=null) mCorners[i].setVisibility(View.GONE);
 
-            for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("home_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(en && isUnlocked) { 
+            for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("home_"+BARS[i]+"_en", false); bars[i].setVisibility((en && isUnlocked && !hideNormal) ? View.VISIBLE : View.GONE); if(en && isUnlocked) { 
                 int alpha = isPreviewLock ? 0 : prefs.getInt("home_"+BARS[i]+"_alpha", 50); 
                 int w = prefs.getInt("home_"+BARS[i]+"_w", 300); int h = prefs.getInt("home_"+BARS[i]+"_h", 60); int x = prefs.getInt("home_"+BARS[i]+"_x", 0); int y = prefs.getInt("home_"+BARS[i]+"_y", 0); 
                 GradientDrawable gd = new GradientDrawable(); gd.setColor(Color.argb(alpha, 96, 125, 139)); gd.setCornerRadius(24f); bars[i].setBackground(gd); 
@@ -201,7 +217,7 @@ public class HomescreenService extends Service {
                 WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams(); p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i]; wm.updateViewLayout(bars[i], p); 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && bars[i].getVisibility() == View.VISIBLE && priMode == 0) { Rect rect = new Rect(0, 0, w, h); bars[i].setSystemGestureExclusionRects(Collections.singletonList(rect)); } } 
             } 
-            for(int i=0; i<4; i++) { if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("home_corner_"+CORNERS[i]+"_en", true); corners[i].setVisibility((cornEn && isUnlocked && !hide) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { 
+            for(int i=0; i<4; i++) { if(corners[i] == null) continue; boolean cornEn = prefs.getBoolean("home_corner_"+CORNERS[i]+"_en", false); corners[i].setVisibility((cornEn && isUnlocked && !hideNormal) ? View.VISIBLE : View.GONE); if(cornEn && isUnlocked) { 
                 String ck = "home_corner_" + CORNERS[i] + "_";
                 int moonAlpha = isPreviewLock ? 0 : prefs.getInt("home_corner_moon_alpha", 100); 
                 int strokeAlpha = isPreviewLock ? 0 : prefs.getInt("home_corner_stroke_alpha", 200); 
@@ -236,12 +252,37 @@ public class HomescreenService extends Service {
     private void handleAction(String key) { String action = prefs.getString(key, "NONE"); boolean isOn = prefs.getBoolean(key + "_on", true); if (!action.equals("NONE") && isOn) { if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30)); if (prefs.getBoolean(key + "_anim", true)) playAnim(); String[] acts = action.split(","); for(String a : acts) exec(a.trim()); } }
     private void doVibrate(int dur) { if(dur<=0) return; try { if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
     
-    private void exec(String a) { if (a == null || a.equals("NONE")) return; try { switch(a) { 
-        case "MACRO_1": case "MACRO_2": case "MACRO_3": case "MACRO_4": case "MACRO_5": Intent iM = new Intent("com.manhmoc.edgebar.TOGGLE_MACRO"); iM.putExtra("services", prefs.getString(a.toLowerCase()+"_svcs", "")); sendBroadcast(iM); break; 
-        case "YTDL_DOWNLOAD": try{android.content.ClipboardManager cb=(android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE); if(cb.hasPrimaryClip()&&cb.getPrimaryClip().getItemCount()>0){CharSequence txt=cb.getPrimaryClip().getItemAt(0).getText(); if(txt!=null&&(txt.toString().startsWith("http"))){Intent y=new Intent(Intent.ACTION_SEND); y.setType("text/plain"); y.putExtra(Intent.EXTRA_TEXT,txt.toString()); y.setPackage("com.deniscerri.ytdlnis"); y.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(y);}}}catch(Exception e){} break; 
-        case "TOGGLE_MORSE": Intent m = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"); sendBroadcast(m); break;
-        case "BACK": case "HOME": case "RECENTS": case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": case "TOGGLE_OVERLAY": case "TOGGLE_ACC": Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); ipc.putExtra("act", a); sendBroadcast(ipc); break; 
-        case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break; case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; case "VOLUME": ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; default: if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; } } catch (Exception e) {} }
+    // FIX 2: SỬ DỤNG IPC ĐỂ NHỜ EDGE BAR SERVICE XỬ LÝ (TRÁNH CRASH)
+    private void exec(String a) { 
+        if (a == null || a.equals("NONE")) return; 
+        try { 
+            switch(a) { 
+                case "MACRO_1": case "MACRO_2": case "MACRO_3": case "MACRO_4": case "MACRO_5": 
+                    Intent iM = new Intent("com.manhmoc.edgebar.TOGGLE_MACRO"); 
+                    iM.putExtra("services", prefs.getString(a.toLowerCase()+"_svcs", "")); 
+                    sendBroadcast(iM); break; 
+                case "TOGGLE_MORSE": 
+                    Intent m = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"); 
+                    sendBroadcast(m); break;
+                case "YTDL_DOWNLOAD": 
+                    try{android.content.ClipboardManager cb=(android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE); if(cb.hasPrimaryClip()&&cb.getPrimaryClip().getItemCount()>0){CharSequence txt=cb.getPrimaryClip().getItemAt(0).getText(); if(txt!=null&&(txt.toString().startsWith("http"))){Intent y=new Intent(Intent.ACTION_SEND); y.setType("text/plain"); y.putExtra(Intent.EXTRA_TEXT,txt.toString()); y.setPackage("com.deniscerri.ytdlnis"); y.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(y);}}}catch(Exception e){} break; 
+                case "BACK": case "HOME": case "RECENTS": case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": case "TOGGLE_OVERLAY": case "TOGGLE_ACC": 
+                    Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION"); 
+                    ipc.putExtra("act", a); 
+                    sendBroadcast(ipc); break; 
+                case "FLASH": 
+                    fOn = !fOn; cm.setTorchMode(cId, fOn); break; 
+                case "CAMERA": 
+                    Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); 
+                    c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break; 
+                case "VOLUME": 
+                    ((AudioManager)getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break; 
+                default: 
+                    if(a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break; 
+            } 
+        } catch (Exception e) {} 
+    }
+    
     private void fireIntent(String idx) { try { String act = prefs.getString("i"+idx+"_act", ""); String pkg = prefs.getString("i"+idx+"_pkg", ""); Intent i; if (act.isEmpty() && !pkg.isEmpty()) { i = getPackageManager().getLaunchIntentForPackage(pkg); if (i == null) return; } else { i = new Intent(act); if(!pkg.isEmpty()) i.setPackage(pkg); String cls = prefs.getString("i"+idx+"_cls", ""); if(!pkg.isEmpty() && !cls.isEmpty()) i.setComponent(new android.content.ComponentName(pkg, cls)); String data = prefs.getString("i"+idx+"_data", ""); if(!data.isEmpty()) i.setData(android.net.Uri.parse(data)); String cat = prefs.getString("i"+idx+"_cat", ""); if(!cat.isEmpty()) i.addCategory(cat); String flg = prefs.getString("i"+idx+"_flags", ""); if(!flg.isEmpty()) i.addFlags(Integer.parseInt(flg)); } if(prefs.getBoolean("i"+idx+"_br", true) && !act.isEmpty()) { sendBroadcast(i); } else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); } } catch (Exception e) {} }
     
     private class SidebarTouchListener implements View.OnTouchListener { 
