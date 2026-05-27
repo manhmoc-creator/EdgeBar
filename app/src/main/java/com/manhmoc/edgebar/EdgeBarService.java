@@ -43,8 +43,7 @@ public class EdgeBarService extends AccessibilityService {
             float right = drawW - off; float bottom = drawH - off;
             p.setStrokeCap(Paint.Cap.ROUND);
             if(aStyle > 0) { 
-                float perim = 2 * (drawW + drawH); 
-                float currentPhase = -perim * phaseFraction; 
+                float perim = 2 * (drawW + drawH); float currentPhase = -perim * phaseFraction; 
                 if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, currentPhase)); 
                 else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, currentPhase)); 
                 else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, currentPhase)); 
@@ -98,15 +97,7 @@ public class EdgeBarService extends AccessibilityService {
             else { moonPath.moveTo(mTipX, mRootY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mRootX, mTipY); moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY); }
             moonPath.close();
 
-            canvas.drawPath(strokePath, pStroke); 
-
-            // V19.12.1.4: Tịnh tiến Lõi Trăng Non độc lập
-            float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
-            float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
-            canvas.save();
-            canvas.translate(mx, my);
-            canvas.drawPath(moonPath, pFill);
-            canvas.restore();
+            canvas.drawPath(moonPath, pFill); canvas.drawPath(strokePath, pStroke); 
         } 
     }
 
@@ -136,7 +127,7 @@ public class EdgeBarService extends AccessibilityService {
         });
     }
 
-    private void handleAction(String key) { String action = prefs.getString(key, "NONE"); boolean isOn = prefs.getBoolean(key + "_on", true); if (!action.equals("NONE") && isOn) { if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30)); if (prefs.getBoolean(key + "_anim", true)) playAnim(); String[] acts = action.split(","); for(String a : acts) exec(a.trim()); } }
+    private void handleAction(String key) { String action = prefs.getString(key, "NONE"); if (!action.equals("NONE")) { if (prefs.getBoolean(key + "_vib", true)) { doVibrate(prefs.getInt("vib_dur", 30)); } if (prefs.getBoolean(key + "_anim", true)) { playAnim(); } exec(action); } }
     private void doVibrate(int dur) { if(dur<=0) return; try { if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
 
     private void createFloatingBars() {
@@ -146,10 +137,7 @@ public class EdgeBarService extends AccessibilityService {
     }
 
     private void updateVisibility() { 
-        boolean isPreview = prefs.getBoolean("preview_lock", false);
-        boolean isLocked = km.isKeyguardLocked() || isPreview; 
-        boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
-        
+        boolean isLocked = km.isKeyguardLocked(); boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
         if(hide && fV != null) fV.setVisibility(View.GONE);
         for(int i=0; i<5; i++) { if(bars[i] == null) continue; boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", i < 2); bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE); if(en && isLocked) { 
             int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha", 50); int w = prefs.getInt("lock_"+BARS[i]+"_w", 300); int h = prefs.getInt("lock_"+BARS[i]+"_h", 60); int x = prefs.getInt("lock_"+BARS[i]+"_x", 0); int y = prefs.getInt("lock_"+BARS[i]+"_y", 0); 
@@ -173,14 +161,9 @@ public class EdgeBarService extends AccessibilityService {
                 if(priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); 
                 WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.flags = baseFlags; p.gravity = C_GRAV[i]; 
                 
-                // V19.12.1.4: Mở rộng khung Bounding Box tự động nếu Moon bị đẩy lệch ra xa
                 int wPref = prefs.getInt(ck+"w", 100); int hPref = prefs.getInt(ck+"h", 100);
                 int mwPref = prefs.getInt(ck+"moon_w", 100); int mhPref = prefs.getInt(ck+"moon_h", 100);
-                int mxOffset = Math.abs(prefs.getInt(ck+"moon_x", 1250) - 1250);
-                int myOffset = Math.abs(prefs.getInt(ck+"moon_y", 1250) - 1250);
-                
-                p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset); 
-                p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
+                p.width = Math.max(10, Math.max(wPref, mwPref)); p.height = Math.max(10, Math.max(hPref, mhPref));
                 p.x = prefs.getInt(ck+"x", 0); p.y = prefs.getInt(ck+"y", 0); 
                 wm.updateViewLayout(corners[i], p); } 
         }
