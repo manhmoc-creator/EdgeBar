@@ -846,6 +846,19 @@ public class MainActivity extends Activity {
             String[] bNames = designTabState == 2 ? M_BAR_NAMES : BAR_NAMES;
 
             if (designTabState == 2) {
+                // Nút bật/tắt lớp phủ Morse (chỉ preview trong design)
+                LinearLayout toggleMorseRow = new LinearLayout(this); toggleMorseRow.setOrientation(LinearLayout.HORIZONTAL); toggleMorseRow.setGravity(Gravity.CENTER_VERTICAL); toggleMorseRow.setPadding(0,10,0,20);
+                TextView tvToggle = new TextView(this); tvToggle.setText(T("Morse Overlay: ", "Lớp phủ Morse: ")); tvToggle.setTextColor(Color.WHITE); tvToggle.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+                final Button btnToggleMorse = new Button(this); btnToggleMorse.setText(prefs.getBoolean("morse_mode_en", false) ? "ON" : "OFF"); btnToggleMorse.setBackground(getRounded("#00E5FF", 20f)); btnToggleMorse.setTextColor(Color.BLACK);
+                btnToggleMorse.setOnClickListener(v -> {
+                    boolean isOn = !prefs.getBoolean("morse_mode_en", false);
+                    prefs.edit().putBoolean("morse_mode_en", isOn).apply();
+                    btnToggleMorse.setText(isOn ? "ON" : "OFF");
+                    Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i);
+                    Toast.makeText(MainActivity.this, T("Morse overlay " + (isOn ? "enabled" : "disabled"), "Lớp phủ Morse " + (isOn ? "bật" : "tắt")), Toast.LENGTH_SHORT).show();
+                });
+                toggleMorseRow.addView(tvToggle); toggleMorseRow.addView(btnToggleMorse);
+                designSliderContainer.addView(toggleMorseRow);
                 // Thêm nút bật/tắt lớp phủ Morse
                 LinearLayout toggleMorseArea = new LinearLayout(this);
                 toggleMorseArea.setOrientation(LinearLayout.HORIZONTAL);

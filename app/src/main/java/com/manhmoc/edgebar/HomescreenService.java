@@ -49,6 +49,7 @@ public class HomescreenService extends Service {
     private ScratchView scratchView;
     private View[] mBars = new View[8];
     private View[] mCorners = new View[4];
+    private FlashView fV;
     private CameraManager cm;
     private String cId;
     private boolean fOn = false, isKbd = false, isBl = false;
@@ -70,7 +71,7 @@ public class HomescreenService extends Service {
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
 
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
-        if (k != null) { updateVisibility(); }
+        if (k != null) { updateVisibility(); if (fV != null) fV.updateStyle(); }
     };
 
     private BroadcastReceiver syncReceiver = new BroadcastReceiver() {
@@ -80,6 +81,8 @@ public class HomescreenService extends Service {
                 isKbd = i.getBooleanExtra("isKbd", false);
                 isBl = i.getBooleanExtra("isBl", false);
                 updateVisibility();
+            } else if (i.getAction().equals("com.manhmoc.edgebar.TEST_ANIM")) {
+                playAnim();
             } else if (i.getAction().equals("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE")) {
                 isMorseLockActive = true;
                 lockedPkg = i.getStringExtra("pkg");
@@ -95,6 +98,7 @@ public class HomescreenService extends Service {
         }
     };
 
+    // Ánh xạ đúng: "morse_corner_tl" -> key "morse_map_tl"
     private String mapComponentToNumber(String comp) {
         String prefix = "morse_map_";
         if (comp.startsWith("morse_corner_")) {
@@ -144,6 +148,38 @@ public class HomescreenService extends Service {
                 }
             }
             postInvalidateDelayed(UPDATE_INTERVAL_MS);
+        }
+    }
+
+    private class FlashView extends View {
+        private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phaseFraction = 0f;
+        public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); }
+        public void updateStyle() { p.setAlpha(prefs.getInt("anim_alpha", 255)); p.setStrokeWidth(prefs.getInt("anim_thick", 12)); radius = prefs.getInt("anim_rad", 40); cTheme = prefs.getString("anim_color", "WHITE"); aStyle = prefs.getInt("anim_style", 0); if(getWidth() > 0) applyGradient(getWidth(), getHeight()); invalidate(); }
+        @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w, h, oldw, oldh); applyGradient(w, h); }
+        private void applyGradient(int w, int h) {
+            int[] cArr; switch(cTheme) {
+                case "NEON": cArr=new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF"), Color.parseColor("#FF00FF")}; break;
+                case "CYBERPUNK": cArr=new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700"), Color.parseColor("#8A2BE2")}; break;
+                case "LAVA": cArr=new int[]{Color.parseColor("#FF4500"), Color.parseColor("#FF8C00"), Color.parseColor("#FF4500")}; break;
+                default: cArr=new int[]{Color.WHITE, Color.WHITE}; break;
+            }
+            p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR));
+        }
+        public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
+        @Override protected void onDraw(Canvas canvas) {
+            float drawW = getWidth(); float drawH = getHeight();
+            if(drawW <= 0 || drawH <= 0) return;
+            float off = p.getStrokeWidth()/2;
+            float left = off, top = off, right = drawW - off, bottom = drawH - off;
+            p.setStrokeCap(Paint.Cap.ROUND);
+            if(aStyle > 0) {
+                float perim = 2 * (drawW + drawH);
+                float currentPhase = -perim * phaseFraction;
+                if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, currentPhase));
+                else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, currentPhase));
+                else p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, currentPhase));
+            } else { p.setPathEffect(null); }
+            canvas.drawRoundRect(left, top, right, bottom, radius, radius, p);
         }
     }
 
@@ -212,6 +248,8 @@ public class HomescreenService extends Service {
         filter.addAction(Intent.ACTION_SCREEN_ON);
         filter.addAction(Intent.ACTION_USER_PRESENT);
         filter.addAction("com.manhmoc.edgebar.SYNC_STATE");
+        filter.addAction("com.manhmoc.edgebar.TEST_ANIM");
+        filter.addAction("com.manhmoc.edgebar.IPC_ACTION");
         filter.addAction("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
         filter.addAction("com.manhmoc.edgebar.TOGGLE_MORSE");
         if (Build.VERSION.SDK_INT >= 33)
@@ -219,7 +257,14 @@ public class HomescreenService extends Service {
         else
             registerReceiver(syncReceiver, filter);
 
-        // Không còn FlashView (đã bỏ)
+        fV = new FlashView(this);
+        fV.setAlpha(0f);
+        fV.setVisibility(View.GONE);
+        WindowManager.LayoutParams fp = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+        try { wm.addView(fV, fp); } catch (Exception e) {}
 
         for (int i = 0; i < 5; i++) {
             bars[i] = new View(this);
@@ -237,10 +282,11 @@ public class HomescreenService extends Service {
         morseContainer = new RelativeLayout(this);
         morseContainer.setBackgroundColor(Color.BLACK);
         morseContainer.setVisibility(View.GONE);
-        // Cho touch xuyên qua khi đang preview (trong app), chặn khi lock thật
+        // QUAN TRỌNG: Chỉ chặn touch khi KHÔNG ở chế độ preview (preview_morse == false)
+        // preview_morse được bật khi người dùng mở Design Space tab MORSE
         morseContainer.setOnTouchListener((v, e) -> {
             boolean isPreview = prefs.getBoolean("preview_morse", false);
-            return !isPreview; // nếu preview -> không chặn (return false)
+            return !isPreview; // true = chặn, false = không chặn
         });
 
         tvMorseStatus = new TextView(this);
@@ -276,22 +322,20 @@ public class HomescreenService extends Service {
         sendSyncState();
     }
 
+    // SỬA LỖI: X xóa ký tự cuối, > so sánh đúng, không crash
     private void handleMorseTap(String comp, View v) {
         doVibrate(30);
         if (v != null && v instanceof CornerView) ((CornerView) v).triggerFlash();
         String mappedKey = mapComponentToNumber(comp);
         if (mappedKey.equals("X")) {
-            // Xóa ký tự cuối cùng
             if (currentMorseAttempt.length() > 0) {
                 currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length() - 1);
-                tvMorseStatus.setText(currentMorseAttempt.isEmpty() ? "" : currentMorseAttempt);
             }
+            tvMorseStatus.setText(currentMorseAttempt);
         } else if (mappedKey.equals(">")) {
             String masterPass = prefs.getString("morse_master_pass", "");
             if (currentMorseAttempt.isEmpty() || masterPass.isEmpty()) {
-                doVibrate(200);
-                tvMorseStatus.setText(T("Empty password!", "Mật khẩu trống!"));
-                new Handler().postDelayed(() -> { if (tvMorseStatus != null) tvMorseStatus.setText(currentMorseAttempt); }, 1000);
+                tvMorseStatus.setText("Empty password!");
                 return;
             }
             String cleanMaster = masterPass.replace(">", "");
@@ -326,11 +370,9 @@ public class HomescreenService extends Service {
             morseDotHandler.removeCallbacksAndMessages(null);
             int dotDelay = prefs.getInt("morse_dot_delay", 500);
             morseDotHandler.postDelayed(() -> {
-                if (tvMorseStatus != null) {
-                    StringBuilder dots = new StringBuilder();
-                    for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
-                    tvMorseStatus.setText(dots.toString());
-                }
+                StringBuilder dots = new StringBuilder();
+                for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
+                tvMorseStatus.setText(dots.toString());
             }, dotDelay);
         }
     }
@@ -340,7 +382,7 @@ public class HomescreenService extends Service {
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hideNormal = (avoidKbd && isKbd) || isBl;
         boolean isPreviewMorse = prefs.getBoolean("preview_morse", false);
-
+        if (hideNormal && fV != null && !isMorseLockActive && !isPreviewMorse) fV.setVisibility(View.GONE);
         if (isMorseLockActive || isPreviewMorse) {
             morseContainer.setVisibility(View.VISIBLE);
             morseContainer.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
@@ -488,11 +530,46 @@ public class HomescreenService extends Service {
         }
     }
 
+    private void playAnim() {
+        if (fV == null) return;
+        WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams();
+        fp.width = WindowManager.LayoutParams.MATCH_PARENT;
+        fp.height = WindowManager.LayoutParams.MATCH_PARENT;
+        wm.updateViewLayout(fV, fp);
+        fV.setVisibility(View.VISIBLE);
+        fV.post(() -> {
+            int style = prefs.getInt("anim_style", 0);
+            int dur = prefs.getInt("anim_dur", 1500);
+            ValueAnimator anim;
+            if (style == 0) {
+                anim = ValueAnimator.ofFloat(0f, 1f, 0f);
+                anim.addUpdateListener(a -> fV.setAlpha((float) a.getAnimatedValue()));
+            } else {
+                fV.setAlpha(1f);
+                anim = ValueAnimator.ofFloat(0f, 1f);
+                anim.addUpdateListener(a -> fV.setPhase((float) a.getAnimatedValue()));
+            }
+            anim.setDuration(dur);
+            anim.addListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator a) {
+                    fV.setAlpha(0f);
+                    fV.setVisibility(View.GONE);
+                    fp.width = 0;
+                    fp.height = 0;
+                    wm.updateViewLayout(fV, fp);
+                }
+            });
+            anim.start();
+        });
+    }
+
     private void handleAction(String key) {
         String action = prefs.getString(key, "NONE");
         boolean isOn = prefs.getBoolean(key + "_on", true);
         if (!action.equals("NONE") && isOn) {
             if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
+            if (prefs.getBoolean(key + "_anim", true)) playAnim();
             String[] acts = action.split(",");
             for (String a : acts) exec(a.trim());
         }
@@ -650,6 +727,6 @@ public class HomescreenService extends Service {
         for (int i = 0; i < 8; i++) if (mBars[i] != null) wm.removeView(mBars[i]);
         for (int i = 0; i < 4; i++) { if (corners[i] != null) wm.removeView(corners[i]); if (mCorners[i] != null) wm.removeView(mCorners[i]); }
         if (morseContainer != null) wm.removeView(morseContainer);
-        if (scratchView != null) morseContainer.removeView(scratchView);
+        if (fV != null) wm.removeView(fV);
     }
 }
