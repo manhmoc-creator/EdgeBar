@@ -4,9 +4,6 @@ import android.accessibilityservice.AccessibilityService;
 import android.animation.ValueAnimator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.Animator;
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
 import android.app.KeyguardManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -21,22 +18,29 @@ import android.graphics.PixelFormat;
 import android.graphics.LinearGradient;
 import android.graphics.Shader;
 import android.graphics.DashPathEffect;
+import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CameraManager.TorchCallback;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.MediaStore;
-import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
+
+import java.util.Collections;
+import java.util.Random;
 
 public class EdgeBarService extends AccessibilityService {
+    // ==================== BIẾN ====================
     private WindowManager wm;
     private View[] bars = new View[5];
     private View[] corners = new View[4];
@@ -48,13 +52,29 @@ public class EdgeBarService extends AccessibilityService {
     private SharedPreferences prefs;
     private Vibrator vibrator;
 
+    // Morse
+    private RelativeLayout morseContainer;
+    private TextView tvMorseStatus;
+    private GlitchView glitchView;
+    private View[] mBars = new View[8];
+    private View[] mCorners = new View[4];
+    private boolean isMorseActive = false;
+    private String currentMorseAttempt = "";
+    private int morseFailCount = 0;
+    private String lockedPkg = "";
+    private Handler morseDotHandler = new Handler();
+
     private String unlockedPackage = "";
 
+    // ==================== HẰNG SỐ ====================
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
+    private final String[] M_BARS = {"r", "l", "t_r", "t_l", "t_c", "m_b_c", "m_mid_t", "m_mid_b"};
+    private final int[] M_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.CENTER, Gravity.CENTER};
 
+    // ==================== RECEIVERS ====================
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
         if (k != null) {
             updateVisibility();
@@ -62,14 +82,22 @@ public class EdgeBarService extends AccessibilityService {
         }
     };
 
+    private TorchCallback torchCallback = new TorchCallback() {
+        @Override
+        public void onTorchModeChanged(String cameraId, boolean enabled) {
+            if (cameraId.equals(cId)) {
+                fOn = enabled;
+            }
+        }
+    };
+
     private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
-            if ("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) {
+            String action = i.getAction();
+            if ("com.manhmoc.edgebar.TEST_ANIM".equals(action)) {
                 playAnim();
-            } else if ("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS".equals(i.getAction())) {
-                unlockedPackage = i.getStringExtra("pkg");
-            } else if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
+            } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                 unlockedPackage = "";
                 updateVisibility();
             } else {
@@ -77,6 +105,7 @@ public class EdgeBarService extends AccessibilityService {
             }
         }
     };
+    
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
@@ -164,14 +193,16 @@ public class EdgeBarService extends AccessibilityService {
     private class CornerView extends View {
         private Paint pFill, pStroke;
         private int type;
+        private String prefix;
         private Handler autoHideHandler = new Handler();
         private boolean isAutoHiding = false;
         private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
         private boolean isInv = false;
 
-        public CornerView(Context c, int type) {
+        public CornerView(Context c, int type, String prefix) {
             super(c);
             this.type = type;
+            this.prefix = prefix;
             pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true);
             pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE);
             pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND);
@@ -213,7 +244,7 @@ public class EdgeBarService extends AccessibilityService {
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             float tw = getWidth(), th = getHeight(), thick = pStroke.getStrokeWidth(), pad = thick/2;
-            String ck = "lock_corner_" + CORNERS[type] + "_";
+            String ck = prefix + "corner_" + CORNERS[type] + "_";
             int shapeMode = prefs.getInt(ck+"shape", 0);
             float sRad = prefs.getInt(ck+"rad", 80) / 1000f;
             float mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
@@ -261,8 +292,51 @@ public class EdgeBarService extends AccessibilityService {
         }
     }
 
+    // ==================== GLITCH VIEW (NỨT VỠ MÀN HÌNH) ====================
+    private class GlitchView extends View {
+        private Paint crackPaint;
+        private Random random = new Random();
+        private java.util.List<float[]> cracks = new java.util.ArrayList<>();
+
+        public GlitchView(Context c) {
+            super(c);
+            crackPaint = new Paint();
+            crackPaint.setColor(Color.argb(80, 255, 255, 255));
+            crackPaint.setStrokeWidth(2.5f);
+            crackPaint.setAntiAlias(true);
+        }
+
+        private void generateCracks(int w, int h) {
+            cracks.clear();
+            int numCracks = 12 + random.nextInt(18);
+            for (int i = 0; i < numCracks; i++) {
+                float startX = random.nextFloat() * w;
+                float startY = random.nextFloat() * h;
+                float endX = startX + (random.nextFloat() - 0.5f) * 700;
+                float endY = startY + (random.nextFloat() - 0.5f) * 700;
+                cracks.add(new float[]{startX, startY, endX, endY});
+            }
+        }
+
+        @Override
+        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            generateCracks(w, h);
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            canvas.drawColor(Color.argb(120, 0, 0, 0));
+            for (float[] crack : cracks) {
+                canvas.drawLine(crack[0], crack[1], crack[2], crack[3], crackPaint);
+            }
+        }
+    }
+
     // ==================== SERVICE LIFECYCLE ====================
-    @Override protected void onServiceConnected() {
+    @Override
+    protected void onServiceConnected() {
         super.onServiceConnected();
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
@@ -270,26 +344,23 @@ public class EdgeBarService extends AccessibilityService {
         cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
         try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
+        if (cId != null) {
+            cm.registerTorchCallback(torchCallback, null);
+        }
         prefs.registerOnSharedPreferenceChangeListener(prefListener);
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON);
         filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.TEST_ANIM");
-        filter.addAction("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS");
         registerReceiver(stateReceiver, filter);
         if (Build.VERSION.SDK_INT >= 33)
             registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"), Context.RECEIVER_NOT_EXPORTED);
         else
             registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"));
-
-        String cid = "eb_19_acc";
-        NotificationChannel c = new NotificationChannel(cid, "Edge Bar đang chạy nền", NotificationManager.IMPORTANCE_LOW);
-        getSystemService(NotificationManager.class).createNotificationChannel(c);
-        Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build();
-        startForeground(1, n);
         createFloatingBars();
     }
 
-    @Override public void onAccessibilityEvent(AccessibilityEvent event) {
+    @Override
+    public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
             String cName = event.getClassName() != null ? event.getClassName().toString() : "";
@@ -305,14 +376,20 @@ public class EdgeBarService extends AccessibilityService {
             }
             if (isAppLocked) {
                 if (!pName.equals(unlockedPackage)) {
-                    Intent i = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
-                    i.putExtra("pkg", pName);
-                    sendBroadcast(i);
+                    isMorseActive = true;
+                    lockedPkg = pName;
+                    currentMorseAttempt = "";
+                    morseFailCount = 0;
+                    tvMorseStatus.setText("");
+                    updateVisibility();
                 }
             } else if (!pName.isEmpty() && !pName.contains("systemui") && !isKbd) {
+                if (isMorseActive) {
+                    isMorseActive = false;
+                    updateVisibility();
+                }
                 unlockedPackage = "";
             }
-            updateVisibility();
             Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE");
             i.putExtra("isKbd", isKbd); i.putExtra("isBl", isBl);
             sendBroadcast(i);
@@ -328,10 +405,12 @@ public class EdgeBarService extends AccessibilityService {
                     iM.putExtra("services", prefs.getString(a.toLowerCase()+"_svcs", ""));
                     sendBroadcast(iM); break;
                 case "TOGGLE_MORSE":
-                    Intent m = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE");
-                    sendBroadcast(m); break;
+                    boolean isM = prefs.getBoolean("morse_mode_en", false);
+                    prefs.edit().putBoolean("morse_mode_en", !isM).apply();
+                    updateVisibility();
+                    break;
                 case "YTDL_DOWNLOAD":
-                    try{
+                    try {
                         android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                         if (cb.hasPrimaryClip() && cb.getPrimaryClip().getItemCount() > 0) {
                             CharSequence txt = cb.getPrimaryClip().getItemAt(0).getText();
@@ -352,14 +431,19 @@ public class EdgeBarService extends AccessibilityService {
                 case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break;
                 case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break;
                 case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break;
-                case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break;
+                case "FLASH":
+                    if (cId != null) {
+                        fOn = !fOn;
+                        cm.setTorchMode(cId, fOn);
+                    }
+                    break;
                 case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break;
                 case "VOLUME": ((AudioManager) getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break;
                 default: if (a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break;
             }
         } catch (Exception e) {}
     }
-    private void fireIntent(String idx) { /* giữ nguyên từ bản cũ – không thay đổi */ }
+    private void fireIntent(String idx) { /* Giữ nguyên code từ bản 19.12.3.4 */ }
 
     private void playAnim() {
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams();
@@ -403,6 +487,69 @@ public class EdgeBarService extends AccessibilityService {
     }
     private void doVibrate(int dur) { if (dur<=0) return; try { if (Build.VERSION.SDK_INT>=26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
 
+    private String mapComponentToNumber(String comp) {
+        String key = comp.replace("morse_", "").replace("corner_", "");
+        switch (key) {
+            case "t_l": return "1";
+            case "m_mid_t": return "2";
+            case "t_r": return "3";
+            case "l": return "4";
+            case "t_c": return "5";
+            case "r": return "6";
+            case "m_mid_b": return "7";
+            case "m_b_c": return "8";
+            case "tl": return "9";
+            case "tr": return "0";
+            default: return "";
+        }
+    }
+
+    private void handleMorseTap(String comp, View v) {
+        doVibrate(30);
+        if (v instanceof CornerView) ((CornerView) v).triggerFlash();
+        if (comp.endsWith("corner_bl")) {
+            if (!currentMorseAttempt.isEmpty()) {
+                currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length() - 1);
+                tvMorseStatus.setText(currentMorseAttempt.isEmpty() ? "" : currentMorseAttempt);
+            }
+        } else if (comp.endsWith("corner_br")) {
+            if (currentMorseAttempt.isEmpty()) return;
+            String savedPass = prefs.getString("morse_password", "");
+            if (currentMorseAttempt.equals(savedPass)) {
+                isMorseActive = false;
+                unlockedPackage = lockedPkg;
+                morseFailCount = 0;
+                updateVisibility();
+            } else {
+                morseFailCount++;
+                int failVib = prefs.getInt("morse_fail_vib", 500);
+                doVibrate(failVib);
+                if (morseFailCount == 1) tvMorseStatus.setText(prefs.getString("morse_insult_1", "Who are u?"));
+                else if (morseFailCount == 2) tvMorseStatus.setText(prefs.getString("morse_insult_2", "What are u doing?"));
+                else {
+                    tvMorseStatus.setText(prefs.getString("morse_insult_3", "Get out!"));
+                    performGlobalAction(GLOBAL_ACTION_HOME);
+                    isMorseActive = false;
+                    new Handler().postDelayed(() -> updateVisibility(), 500);
+                }
+                currentMorseAttempt = "";
+            }
+        } else {
+            String num = mapComponentToNumber(comp);
+            if (!num.isEmpty()) {
+                currentMorseAttempt += num;
+                tvMorseStatus.setText(currentMorseAttempt);
+                morseDotHandler.removeCallbacksAndMessages(null);
+                int dotDelay = prefs.getInt("morse_dot_delay", 500);
+                morseDotHandler.postDelayed(() -> {
+                    StringBuilder dots = new StringBuilder();
+                    for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
+                    tvMorseStatus.setText(dots.toString());
+                }, dotDelay);
+            }
+        }
+    }
+
     private void createFloatingBars() {
         fV = new FlashView(this);
         fV.setAlpha(0f); fV.setVisibility(View.GONE);
@@ -417,10 +564,42 @@ public class EdgeBarService extends AccessibilityService {
             bars[i].setOnTouchListener(new SidebarTouchListener("lock_"+BARS[i], null));
         }
         for (int i=0;i<4;i++) {
-            corners[i] = new CornerView(this,i);
+            corners[i] = new CornerView(this,i, "lock_");
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,0,PixelFormat.TRANSLUCENT);
             try { wm.addView(corners[i], p); } catch(Exception e){}
             corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_"+CORNERS[i], corners[i]));
+        }
+        // Morse UI
+        morseContainer = new RelativeLayout(this);
+        morseContainer.setVisibility(View.GONE);
+        morseContainer.setBackgroundColor(Color.BLACK);
+        morseContainer.setOnTouchListener((v, e) -> true);
+        glitchView = new GlitchView(this);
+        RelativeLayout.LayoutParams gLp = new RelativeLayout.LayoutParams(-1, -1);
+        morseContainer.addView(glitchView, gLp);
+        tvMorseStatus = new TextView(this);
+        tvMorseStatus.setTextColor(Color.WHITE);
+        tvMorseStatus.setTextSize(32);
+        tvMorseStatus.setGravity(Gravity.CENTER);
+        RelativeLayout.LayoutParams tLp = new RelativeLayout.LayoutParams(-1, -2);
+        tLp.addRule(RelativeLayout.CENTER_IN_PARENT);
+        morseContainer.addView(tvMorseStatus, tLp);
+        WindowManager.LayoutParams bgP = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH, PixelFormat.TRANSLUCENT);
+        try { wm.addView(morseContainer, bgP); } catch(Exception e){}
+        for (int i=0;i<8;i++) {
+            mBars[i] = new View(this);
+            WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
+            try { wm.addView(mBars[i], p); } catch(Exception e){}
+            mBars[i].setOnTouchListener(new MorseTouchListener("morse_"+M_BARS[i], null));
+        }
+        for (int i=0;i<4;i++) {
+            mCorners[i] = new CornerView(this,i, "morse_");
+            WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
+            try { wm.addView(mCorners[i], p); } catch(Exception e){}
+            mCorners[i].setOnTouchListener(new MorseTouchListener("morse_corner_"+CORNERS[i], mCorners[i]));
         }
         updateVisibility();
     }
@@ -431,56 +610,131 @@ public class EdgeBarService extends AccessibilityService {
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hide = (avoidKbd && isKbd) || isBl;
         if (hide && fV != null) fV.setVisibility(View.GONE);
-        for (int i=0;i<5;i++) {
-            if (bars[i]==null) continue;
-            boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", false);
-            bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE);
-            if (en && isLocked) {
-                int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha",50);
-                int w = prefs.getInt("lock_"+BARS[i]+"_w",300);
-                int h = prefs.getInt("lock_"+BARS[i]+"_h",60);
-                int x = prefs.getInt("lock_"+BARS[i]+"_x",0);
-                int y = prefs.getInt("lock_"+BARS[i]+"_y",0);
-                GradientDrawable gd = new GradientDrawable();
-                gd.setColor(Color.argb(alpha,96,125,139));
-                gd.setCornerRadius(24f);
-                bars[i].setBackground(gd);
-                int priMode = prefs.getInt("lock_"+BARS[i]+"_pri_mode",0);
-                int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-                if (priMode==1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-                WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams();
-                p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i];
-                wm.updateViewLayout(bars[i], p);
+        if (isMorseActive) {
+            morseContainer.setVisibility(View.VISIBLE);
+            morseContainer.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
+            if (glitchView != null) glitchView.invalidate();
+            for (int i=0;i<5;i++) if(bars[i]!=null) bars[i].setVisibility(View.GONE);
+            for (int i=0;i<4;i++) if(corners[i]!=null) corners[i].setVisibility(View.GONE);
+            for (int i=0;i<8;i++) {
+                if (mBars[i]==null) continue;
+                boolean en = prefs.getBoolean("morse_"+M_BARS[i]+"_en", false);
+                mBars[i].setVisibility(en ? View.VISIBLE : View.GONE);
+                if (en) {
+                    int alpha = prefs.getInt("morse_"+M_BARS[i]+"_alpha", 50);
+                    int w = prefs.getInt("morse_"+M_BARS[i]+"_w", 300);
+                    int h = prefs.getInt("morse_"+M_BARS[i]+"_h", 60);
+                    int x = prefs.getInt("morse_"+M_BARS[i]+"_x", 0);
+                    int y = prefs.getInt("morse_"+M_BARS[i]+"_y", 0);
+                    GradientDrawable gd = new GradientDrawable();
+                    gd.setColor(Color.argb(alpha, 96, 125, 139));
+                    gd.setCornerRadius(24f);
+                    mBars[i].setBackground(gd);
+                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) mBars[i].getLayoutParams();
+                    p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = M_GRAV[i];
+                    wm.updateViewLayout(mBars[i], p);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mBars[i].getVisibility() == View.VISIBLE) {
+                        Rect rect = new Rect(0, 0, w, h);
+                        mBars[i].setSystemGestureExclusionRects(Collections.singletonList(rect));
+                    }
+                }
+            }
+            for (int i=0;i<4;i++) {
+                if (mCorners[i]==null) continue;
+                boolean cornEn = prefs.getBoolean("morse_corner_"+CORNERS[i]+"_en", false);
+                mCorners[i].setVisibility(cornEn ? View.VISIBLE : View.GONE);
+                if (cornEn) {
+                    String ck = "morse_corner_"+CORNERS[i]+"_";
+                    int moonAlpha = prefs.getInt("morse_corner_moon_alpha", 100);
+                    int strokeAlpha = prefs.getInt("morse_corner_stroke_alpha", 200);
+                    int hideDelay = prefs.getInt("morse_corner_hide_dur", 2500);
+                    int visMode = prefs.getInt(ck+"vis_mode", 0);
+                    ((CornerView)mCorners[i]).updateProps(prefs.getInt("morse_corner_thick",8), moonAlpha, strokeAlpha, visMode==1, hideDelay, visMode==2);
+                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) mCorners[i].getLayoutParams();
+                    p.gravity = C_GRAV[i];
+                    int wPref = prefs.getInt(ck+"w",100), hPref = prefs.getInt(ck+"h",100);
+                    int mwPref = prefs.getInt(ck+"moon_w",100), mhPref = prefs.getInt(ck+"moon_h",100);
+                    int mxOffset = Math.abs(prefs.getInt(ck+"moon_x",1250)-1250);
+                    int myOffset = Math.abs(prefs.getInt(ck+"moon_y",1250)-1250);
+                    p.width = Math.max(10, Math.max(wPref, mwPref)+mxOffset);
+                    p.height = Math.max(10, Math.max(hPref, mhPref)+myOffset);
+                    p.x = prefs.getInt(ck+"x",0); p.y = prefs.getInt(ck+"y",0);
+                    wm.updateViewLayout(mCorners[i], p);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mCorners[i].getVisibility() == View.VISIBLE) {
+                        Rect rect = new Rect(0, 0, p.width, p.height);
+                        mCorners[i].setSystemGestureExclusionRects(Collections.singletonList(rect));
+                    }
+                }
+            }
+        } else {
+            morseContainer.setVisibility(View.GONE);
+            for (int i=0;i<8;i++) if(mBars[i]!=null) mBars[i].setVisibility(View.GONE);
+            for (int i=0;i<4;i++) if(mCorners[i]!=null) mCorners[i].setVisibility(View.GONE);
+            for (int i=0;i<5;i++) {
+                if (bars[i]==null) continue;
+                boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", false);
+                bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE);
+                if (en && isLocked) {
+                    int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha",50);
+                    int w = prefs.getInt("lock_"+BARS[i]+"_w",300);
+                    int h = prefs.getInt("lock_"+BARS[i]+"_h",60);
+                    int x = prefs.getInt("lock_"+BARS[i]+"_x",0);
+                    int y = prefs.getInt("lock_"+BARS[i]+"_y",0);
+                    GradientDrawable gd = new GradientDrawable();
+                    gd.setColor(Color.argb(alpha,96,125,139));
+                    gd.setCornerRadius(24f);
+                    bars[i].setBackground(gd);
+                    int priMode = prefs.getInt("lock_"+BARS[i]+"_pri_mode",0);
+                    int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+                    if (priMode==1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams();
+                    p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i];
+                    wm.updateViewLayout(bars[i], p);
+                }
+            }
+            for (int i=0;i<4;i++) {
+                if (corners[i]==null) continue;
+                boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", false);
+                corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE);
+                if (cornEn && isLocked) {
+                    String ck = "lock_corner_"+CORNERS[i]+"_";
+                    int moonAlpha = prefs.getInt("lock_corner_moon_alpha",100);
+                    int strokeAlpha = prefs.getInt("lock_corner_stroke_alpha",200);
+                    int hideDelay = prefs.getInt("lock_corner_hide_dur",2500);
+                    int visMode = prefs.getInt(ck+"vis_mode",0);
+                    boolean isAuto = (visMode==1), isInv = (visMode==2);
+                    ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick",8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv);
+                    int priMode = prefs.getInt(ck+"pri_mode",0);
+                    int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+                    if (priMode==1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams();
+                    p.flags = baseFlags; p.gravity = C_GRAV[i];
+                    int wPref = prefs.getInt(ck+"w",100), hPref = prefs.getInt(ck+"h",100);
+                    int mwPref = prefs.getInt(ck+"moon_w",100), mhPref = prefs.getInt(ck+"moon_h",100);
+                    int mxOffset = Math.abs(prefs.getInt(ck+"moon_x",1250)-1250);
+                    int myOffset = Math.abs(prefs.getInt(ck+"moon_y",1250)-1250);
+                    p.width = Math.max(10, Math.max(wPref, mwPref)+mxOffset);
+                    p.height = Math.max(10, Math.max(hPref, mhPref)+myOffset);
+                    p.x = prefs.getInt(ck+"x",0); p.y = prefs.getInt(ck+"y",0);
+                    wm.updateViewLayout(corners[i], p);
+                }
             }
         }
-        for (int i=0;i<4;i++) {
-            if (corners[i]==null) continue;
-            boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", false);
-            corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE);
-            if (cornEn && isLocked) {
-                String ck = "lock_corner_"+CORNERS[i]+"_";
-                int moonAlpha = prefs.getInt("lock_corner_moon_alpha",100);
-                int strokeAlpha = prefs.getInt("lock_corner_stroke_alpha",200);
-                int hideDelay = prefs.getInt("lock_corner_hide_dur",2500);
-                int visMode = prefs.getInt(ck+"vis_mode",0);
-                boolean isAuto = (visMode==1), isInv = (visMode==2);
-                ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick",8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv);
-                int priMode = prefs.getInt(ck+"pri_mode",0);
-                int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-                if (priMode==1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-                WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams();
-                p.flags = baseFlags; p.gravity = C_GRAV[i];
-                int wPref = prefs.getInt(ck+"w",100), hPref = prefs.getInt(ck+"h",100);
-                int mwPref = prefs.getInt(ck+"moon_w",100), mhPref = prefs.getInt(ck+"moon_h",100);
-                int mxOffset = Math.abs(prefs.getInt(ck+"moon_x",1250)-1250);
-                int myOffset = Math.abs(prefs.getInt(ck+"moon_y",1250)-1250);
-                p.width = Math.max(10, Math.max(wPref, mwPref)+mxOffset);
-                p.height = Math.max(10, Math.max(hPref, mhPref)+myOffset);
-                p.x = prefs.getInt(ck+"x",0); p.y = prefs.getInt(ck+"y",0);
-                wm.updateViewLayout(corners[i], p);
+    }
+
+    private class MorseTouchListener implements View.OnTouchListener {
+        private String key;
+        private View view;
+        MorseTouchListener(String key, View v) { this.key = key; this.view = v; }
+        @Override
+        public boolean onTouch(View v, MotionEvent event) {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                handleMorseTap(key, view);
+                return true;
             }
+            return false;
         }
     }
 
@@ -525,9 +779,15 @@ public class EdgeBarService extends AccessibilityService {
         super.onDestroy();
         try{ unregisterReceiver(stateReceiver); }catch(Exception e){}
         try{ unregisterReceiver(ipcReceiver); }catch(Exception e){}
+        if (cId != null) {
+            cm.unregisterTorchCallback(torchCallback);
+        }
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
         for (int i=0;i<5;i++) if (bars[i]!=null) wm.removeView(bars[i]);
         for (int i=0;i<4;i++) if (corners[i]!=null) wm.removeView(corners[i]);
+        for (int i=0;i<8;i++) if (mBars[i]!=null) wm.removeView(mBars[i]);
+        for (int i=0;i<4;i++) if (mCorners[i]!=null) wm.removeView(mCorners[i]);
+        if (morseContainer != null) wm.removeView(morseContainer);
         if (fV != null) wm.removeView(fV);
     }
 }
