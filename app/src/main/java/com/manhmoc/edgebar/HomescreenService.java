@@ -46,7 +46,7 @@ public class HomescreenService extends Service {
     private View[] corners = new View[4];
     private RelativeLayout morseContainer;
     private TextView tvMorseStatus;
-    private ScratchView scratchView; // class riêng
+    private ScratchView scratchView;
     private View[] mBars = new View[8];
     private View[] mCorners = new View[4];
     private FlashView fV;
@@ -98,13 +98,20 @@ public class HomescreenService extends Service {
         }
     };
 
+    // Ánh xạ đúng: "morse_corner_tl" -> "morse_map_tl" (vì key lưu trong DB là "morse_map_tl")
     private String mapComponentToNumber(String comp) {
-        // comp có dạng "morse_r" hoặc "morse_corner_tl"
-        String key = "morse_map_" + comp.replace("morse_", "");
-        return prefs.getString(key, "*");
+        String prefix = "morse_map_";
+        if (comp.startsWith("morse_corner_")) {
+            // comp = "morse_corner_tl" -> lấy "tl"
+            String suffix = comp.substring(13); // "tl"
+            return prefs.getString(prefix + suffix, "*");
+        } else if (comp.startsWith("morse_")) {
+            String suffix = comp.substring(6); // "r", "l", "t_r", ...
+            return prefs.getString(prefix + suffix, "*");
+        }
+        return "*";
     }
 
-    // Class riêng cho hiệu ứng scratch, tránh vòng lặp vô tận
     private static class ScratchView extends View {
         private Paint paint = new Paint();
         private Random random = new Random();
