@@ -115,40 +115,36 @@ public class HomescreenService extends Service {
     private class ScratchView extends View {
         private Paint paint = new Paint();
         private Random random = new Random();
-        private int[] crackPoints;
-
+        private long lastUpdate = 0;
         public ScratchView(Context context) {
             super(context);
             paint.setColor(Color.WHITE);
             paint.setStrokeWidth(6);
             paint.setStyle(Paint.Style.STROKE);
             paint.setAntiAlias(true);
-            generateCracks();
         }
-
-        private void generateCracks() {
-            crackPoints = new int[20];
-            for (int i = 0; i < 20; i += 2) {
-                crackPoints[i] = random.nextInt(2000);
-                crackPoints[i + 1] = random.nextInt(3000);
-            }
-        }
-
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            if (crackPoints == null) generateCracks();
-            paint.setAlpha(80);
-            for (int i = 0; i < crackPoints.length - 2; i += 2) {
-                canvas.drawLine(crackPoints[i], crackPoints[i + 1], crackPoints[i + 2], crackPoints[i + 3], paint);
+            long now = System.currentTimeMillis();
+            if (now - lastUpdate > 200) {
+                lastUpdate = now;
             }
-            paint.setStrokeWidth(3);
-            paint.setAlpha(120);
-            for (int i = 0; i < 15; i++) {
+            paint.setAlpha(70 + random.nextInt(50));
+            for (int i = 0; i < 12; i++) {
                 int x1 = random.nextInt(getWidth());
                 int y1 = random.nextInt(getHeight());
-                int x2 = x1 + random.nextInt(200) - 100;
-                int y2 = y1 + random.nextInt(200) - 100;
+                int x2 = x1 + random.nextInt(300) - 150;
+                int y2 = y1 + random.nextInt(300) - 150;
+                canvas.drawLine(x1, y1, x2, y2, paint);
+            }
+            paint.setStrokeWidth(3);
+            paint.setAlpha(100);
+            for (int i = 0; i < 20; i++) {
+                int x1 = random.nextInt(getWidth());
+                int y1 = random.nextInt(getHeight());
+                int x2 = x1 + random.nextInt(150) - 75;
+                int y2 = y1 + random.nextInt(150) - 75;
                 canvas.drawLine(x1, y1, x2, y2, paint);
             }
             invalidate();
@@ -171,12 +167,6 @@ public class HomescreenService extends Service {
                 case "GOOGLE": cArr=new int[]{Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4"), Color.parseColor("#EA4335")}; break;
                 case "AURORA": cArr=new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#B388FF"), Color.parseColor("#FF4081")}; break;
                 case "ABYSS": cArr=new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#1DE9B6"), Color.parseColor("#2979FF")}; break;
-                case "COSMIC": cArr=new int[]{Color.parseColor("#4A148C"), Color.parseColor("#E91E63"), Color.parseColor("#FFD700")}; break;
-                case "FOREST": cArr=new int[]{Color.parseColor("#1B5E20"), Color.parseColor("#4CAF50"), Color.parseColor("#FFEB3B")}; break;
-                case "FLAME": cArr=new int[]{Color.parseColor("#B71C1C"), Color.parseColor("#FF9800"), Color.parseColor("#FFEB3B")}; break;
-                case "MIDNIGHT": cArr=new int[]{Color.parseColor("#1A237E"), Color.parseColor("#7B1FA2"), Color.parseColor("#03A9F4")}; break;
-                case "TROPICAL": cArr=new int[]{Color.parseColor("#00695C"), Color.parseColor("#8BC34A"), Color.parseColor("#FF9800")}; break;
-                case "CANDY": cArr=new int[]{Color.parseColor("#F06292"), Color.parseColor("#4DD0E1"), Color.parseColor("#FFF176")}; break;
                 default: cArr=new int[]{Color.WHITE, Color.WHITE}; break;
             }
             p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR)); p.setShadowLayer(15f, 0, 0, cArr[0]);
@@ -223,16 +213,16 @@ public class HomescreenService extends Service {
             float sRootX=0, sRootY=0, sTipX=0, sTipY=0, sCtrlX=0, sCtrlY=0;
             float mRootX=0, mRootY=0, mTipX=0, mTipY=0, mCtrlX=0, mCtrlY=0;
 
-            if(type==0) { // BR
+            if(type==0) {
                 sRootX=tw-pad; sRootY=th-pad; sTipX=tw-sw+pad; sTipY=th-sh+pad; sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
                 mRootX=tw; mRootY=th; mTipX=tw-mw; mTipY=th-mh; mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
-            } else if(type==1) { // BL
+            } else if(type==1) {
                 sRootX=pad; sRootY=th-pad; sTipX=sw-pad; sTipY=th-sh+pad; sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
                 mRootX=0; mRootY=th; mTipX=mw; mTipY=th-mh; mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
-            } else if(type==2) { // TR
+            } else if(type==2) {
                 sRootX=tw-pad; sRootY=pad; sTipX=tw-sw+pad; sTipY=sh-pad; sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
                 mRootX=tw; mRootY=0; mTipX=tw-mw; mTipY=mh; mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
-            } else if(type==3) { // TL
+            } else {
                 sRootX=pad; sRootY=pad; sTipX=sw-pad; sTipY=sh-pad; sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
                 mRootX=0; mRootY=0; mTipX=mw; mTipY=mh; mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
             }
@@ -283,15 +273,7 @@ public class HomescreenService extends Service {
         else
             registerReceiver(syncReceiver, filter);
 
-        String cid = "eb_19_home";
-        NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW);
-        getSystemService(NotificationManager.class).createNotificationChannel(c);
-        Notification n = new Notification.Builder(this, cid)
-                .setContentTitle("Edge Bar Màn Chính")
-                .setSmallIcon(R.drawable.ic_launcher_fg)
-                .setOngoing(true).build();
-        startForeground(2, n);
-
+        // No foreground service notification for overlay service (clean)
         fV = new FlashView(this);
         fV.setAlpha(0f);
         fV.setVisibility(View.GONE);
@@ -301,7 +283,6 @@ public class HomescreenService extends Service {
                 PixelFormat.TRANSLUCENT);
         try { wm.addView(fV, fp); } catch (Exception e) {}
 
-        // Home layers
         for (int i = 0; i < 5; i++) {
             bars[i] = new View(this);
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
@@ -315,7 +296,6 @@ public class HomescreenService extends Service {
             corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i]));
         }
 
-        // Morse container
         morseContainer = new RelativeLayout(this);
         morseContainer.setBackgroundColor(Color.BLACK);
         morseContainer.setVisibility(View.GONE);
@@ -340,7 +320,6 @@ public class HomescreenService extends Service {
                         WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
         try { wm.addView(morseContainer, bgP); } catch (Exception e) {}
 
-        // Morse bars & corners
         for (int i = 0; i < 8; i++) {
             mBars[i] = new View(this);
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
@@ -568,6 +547,7 @@ public class HomescreenService extends Service {
     }
 
     private void playAnim() {
+        if (fV == null) return;
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams();
         fp.width = WindowManager.LayoutParams.MATCH_PARENT;
         fp.height = WindowManager.LayoutParams.MATCH_PARENT;
@@ -624,11 +604,7 @@ public class HomescreenService extends Service {
         if (a == null || a.equals("NONE")) return;
         try {
             switch (a) {
-                case "MACRO_1":
-                case "MACRO_2":
-                case "MACRO_3":
-                case "MACRO_4":
-                case "MACRO_5":
+                case "MACRO_1": case "MACRO_2": case "MACRO_3": case "MACRO_4": case "MACRO_5":
                     Intent iM = new Intent("com.manhmoc.edgebar.TOGGLE_MACRO");
                     iM.putExtra("services", prefs.getString(a.toLowerCase() + "_svcs", ""));
                     sendBroadcast(iM);
@@ -653,22 +629,14 @@ public class HomescreenService extends Service {
                         }
                     } catch (Exception e) {}
                     break;
-                case "BACK":
-                case "HOME":
-                case "RECENTS":
-                case "SCREEN_OFF":
-                case "POWER_DIALOG":
-                case "SCREENSHOT":
-                case "NOTIFICATIONS":
-                case "TOGGLE_OVERLAY":
-                case "TOGGLE_ACC":
+                case "BACK": case "HOME": case "RECENTS": case "SCREEN_OFF": case "POWER_DIALOG": case "SCREENSHOT": case "NOTIFICATIONS": case "TOGGLE_OVERLAY": case "TOGGLE_ACC":
                     Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
                     ipc.putExtra("act", a);
                     sendBroadcast(ipc);
                     break;
                 case "FLASH":
                     fOn = !fOn;
-                    cm.setTorchMode(cId, fOn);
+                    if (cId != null) try { cm.setTorchMode(cId, fOn); } catch (Exception e) {}
                     break;
                 case "CAMERA":
                     Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE);

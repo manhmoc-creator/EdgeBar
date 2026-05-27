@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -16,11 +17,11 @@ import android.net.Uri;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.*;
 import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs; private boolean isVi;
@@ -44,7 +45,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain;
     private Button btnLock, btnHome, btnMorse, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0;
-    private final String CURRENT_VERSION = "V19.12.4.1";
+    private final String CURRENT_VERSION = "V19.12.3.4.5";
     private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
@@ -112,7 +113,6 @@ public class MainActivity extends Activity {
     private void closeDesignSpace() {
         pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(View.VISIBLE);
         View fab = rootLayout.findViewWithTag("fab"); if (fab != null) fab.setVisibility(View.VISIBLE);
-        View fabMorseToggle = rootLayout.findViewWithTag("fabMorseToggle"); if (fabMorseToggle != null) fabMorseToggle.setVisibility(View.GONE);
         View fabNewMorse = rootLayout.findViewWithTag("fabNewMorse"); if (fabNewMorse != null) fabNewMorse.setVisibility(View.GONE);
         refreshPreview();
     }
@@ -122,7 +122,6 @@ public class MainActivity extends Activity {
         pageConditions.setVisibility(View.GONE); pageIntents.setVisibility(View.GONE); pageTiles.setVisibility(View.GONE); pageMacros.setVisibility(View.GONE);
         pageDesign.setVisibility(View.VISIBLE);
         View fab = rootLayout.findViewWithTag("fab"); if (fab != null) fab.setVisibility(View.GONE);
-        View fabMorseToggle = rootLayout.findViewWithTag("fabMorseToggle"); if (fabMorseToggle != null) fabMorseToggle.setVisibility(View.GONE);
         View fabNewMorse = rootLayout.findViewWithTag("fabNewMorse"); if (fabNewMorse != null) fabNewMorse.setVisibility(View.GONE);
     }
 
@@ -206,27 +205,13 @@ public class MainActivity extends Activity {
         bottomBar.addView(btnUpdate); bottomBar.addView(btnPremium); bottomBar.addView(spacer); bottomBar.addView(fab); bottomBar.addView(btnDesign);
         rootLayout.addView(bottomBar);
 
-        // Nút bật/tắt Morse (chỉ hiện khi ở tab MORSE trong DESIGN)
-        Button fabMorseToggle = new Button(this); fabMorseToggle.setText("🔒"); fabMorseToggle.setTextColor(Color.WHITE);
-        fabMorseToggle.setBackground(getRounded("#333333", 100f)); fabMorseToggle.setTag("fabMorseToggle"); fabMorseToggle.setVisibility(View.GONE);
-        RelativeLayout.LayoutParams toggleLp = new RelativeLayout.LayoutParams(130, 130);
-        toggleLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); toggleLp.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
-        toggleLp.setMargins(40, 0, 0, 200); fabMorseToggle.setLayoutParams(toggleLp);
-        fabMorseToggle.setOnClickListener(v -> {
-            boolean isM = prefs.getBoolean("morse_mode_en", false);
-            prefs.edit().putBoolean("morse_mode_en", !isM).apply();
-            Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i);
-            fabMorseToggle.setText(!isM ? "🔓" : "🔒");
-        });
-        rootLayout.addView(fabMorseToggle);
-
-        // Nút NEW MORSE (cấu hình bàn phím)
-        Button fabNewMorse = new Button(this); fabNewMorse.setText("🔢"); fabNewMorse.setTextColor(Color.BLACK);
+        // Nút NEW MORSE (chỉ hiện khi ở tab MORSE trong CONDITIONS)
+        Button fabNewMorse = new Button(this); fabNewMorse.setText("+ NEW MORSE"); fabNewMorse.setTextColor(Color.BLACK);
         fabNewMorse.setBackground(getRounded("#00E5FF", 100f)); fabNewMorse.setTag("fabNewMorse"); fabNewMorse.setVisibility(View.GONE);
         RelativeLayout.LayoutParams newMorseLp = new RelativeLayout.LayoutParams(-2, -2);
         newMorseLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); newMorseLp.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
         newMorseLp.setMargins(0, 0, 40, 200); fabNewMorse.setLayoutParams(newMorseLp);
-        fabNewMorse.setPadding(40, 40, 40, 40);
+        fabNewMorse.setPadding(40, 30, 40, 30);
         fabNewMorse.setOnClickListener(v -> openMorseMapperDialog());
         rootLayout.addView(fabNewMorse);
 
@@ -675,7 +660,7 @@ public class MainActivity extends Activity {
     }
 
     private void showPremiumDialog() {
-        String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow", "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.4.1 THE IRON VAULT:\n- Slider X/Y lên 2500\n- Copy rule\n- Bàn phím Morse 12 phím\n- Xóa zombie code");
+        String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🔧 ADVANCED FIXES IN V19.12.3.4.5:\n- Fixed Flashlight state sync\n- Fixed YTDLnis background clipboard (Android 11+)\n- Added App Picker for Locklist\n- Fixed X/> keys in Morse pad\n- Morse overlay only shows on locked apps, not fullscreen", "🔧 LỆNH ADB CỐT LÕI:\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 NÂNG CẤP V19.12.3.4.5:\n- Sửa đèn pin đồng bộ\n- Sửa cướp link YTDLnis (Android 11+)\n- Thêm chọn app cho Locklist\n- Sửa phím X/> trong bàn phím Morse\n- Lớp phủ Morse chỉ che app bị khóa");
         ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50);
         TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f);
         sv.addView(tv);
@@ -723,7 +708,6 @@ public class MainActivity extends Activity {
     private void renderSliders() {
         designSliderContainer.removeAllViews();
         if (designTabState == 3) {
-            // Animation
             Button btnTest = new Button(this); btnTest.setText("▶ THỬ NGAY HIỆU ỨNG");
             btnTest.setBackground(getRounded("#FFC107", 20f)); btnTest.setTextColor(Color.BLACK);
             btnTest.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(-1,-2); testLp.setMargins(0,0,0,20);
@@ -759,7 +743,6 @@ public class MainActivity extends Activity {
             String[] bNames = designTabState == 2 ? M_BAR_NAMES : BAR_NAMES;
 
             if (designTabState == 2) {
-                // Mật khẩu
                 LinearLayout passDrawer = new LinearLayout(this); passDrawer.setOrientation(LinearLayout.VERTICAL);
                 passDrawer.setPadding(30, 20, 30, 20); passDrawer.setBackground(getRounded("#222222", 20f));
                 TextView passTitle = new TextView(this); passTitle.setText("🔐 MẬT KHẨU MORSE (CHỈ SỐ)");
