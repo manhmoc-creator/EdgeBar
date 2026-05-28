@@ -4,7 +4,7 @@ android {
     compileSdk 34
     defaultConfig {
         applicationId "com.manhmoc.edgebar"
-        minSdk 26; targetSdk 34; versionCode 63; versionName "19.12.3.4"
+        minSdk 26; targetSdk 34; versionCode 85; versionName "19.12.3.4.7"
     }
     buildTypes {
         debug { }
