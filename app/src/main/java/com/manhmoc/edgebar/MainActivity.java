@@ -7,7 +7,7 @@ public class MainActivity extends Activity {
     private String T(String en, String vi) { return isVi ? vi : en; }
     
     // Data arrays
-    private String[] ACT_KEYS = new String[32]; private String[] ACT_LABS = new String[32];
+    private String[] ACT_KEYS = new String[34]; private String[] ACT_LABS = new String[34];
     private String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; private String[] BAR_NAMES; 
     private String[] CORNERS = {"br", "bl", "tr", "tl"}; private String[] CORNER_NAMES;
     private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; private String[] COLOR_NAMES;
@@ -19,7 +19,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.1.8"; 
+    private final String CURRENT_VERSION = "V19.12.4.0"; 
     
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     private void refreshPreview() { boolean p = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); prefs.edit().putBoolean("preview_lock", p).apply(); }
@@ -30,14 +30,11 @@ public class MainActivity extends Activity {
         String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD"}; 
         String[] bL = {"Không có", "Quay lại", "Màn hình chính", "Đa nhiệm", "Tắt màn hình", "Đèn pin", "Menu Nguồn", "Menu Âm Lượng", "Chụp ảnh màn hình", "Camera", "Mở Thông Báo", "Bật/Tắt Trợ Năng", "Bật/Tắt Lớp Phủ", "Tải bằng YTDLnis"};
         for(int i=0; i<14; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; } 
-        for(int i=1; i<=13; i++) { ACT_KEYS[13+i]="INTENT_"+i; ACT_LABS[13+i] = prefs.getString("intent_"+i+"_name", "Intent " + i); }
-        for(int i=1; i<=5; i++) { ACT_KEYS[26+i]="MACRO_"+i; ACT_LABS[26+i] = prefs.getString("macro_"+i+"_name", "Macro " + i); }
+        for(int i=1; i<=15; i++) { ACT_KEYS[13+i]="INTENT_"+i; ACT_LABS[13+i] = prefs.getString("intent_"+i+"_name", "Intent " + i); }
+        for(int i=1; i<=5; i++) { ACT_KEYS[28+i]="MACRO_"+i; ACT_LABS[28+i] = prefs.getString("macro_"+i+"_name", "Macro " + i); }
     }
     
-    @Override public void onBackPressed() {
-        if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) closeDesignSpace();
-        else super.onBackPressed();
-    }
+    @Override public void onBackPressed() { if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); } else super.onBackPressed(); }
     private void closeDesignSpace() { pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(View.VISIBLE); View fab = findViewById(android.R.id.content).getRootView().findViewWithTag("fab"); if(fab != null) fab.setVisibility(View.VISIBLE); refreshPreview(); }
     private void openDesignSpace() { currentMainTab = 0; refreshPreview(); navMain.setVisibility(View.GONE); pageConditions.setVisibility(View.GONE); pageIntents.setVisibility(View.GONE); pageTiles.setVisibility(View.GONE); pageMacros.setVisibility(View.GONE); pageDesign.setVisibility(View.VISIBLE); View fab = findViewById(android.R.id.content).getRootView().findViewWithTag("fab"); if(fab != null) fab.setVisibility(View.GONE); }
     
@@ -75,7 +72,7 @@ public class MainActivity extends Activity {
         
         Button fab = new Button(this); fab.setText("+ NEW EB"); fab.setTextColor(Color.BLACK); fab.setBackground(getRounded("#00E5FF", 100f));
         RelativeLayout.LayoutParams fabLp = new RelativeLayout.LayoutParams(-2, -2); fabLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); fabLp.addRule(RelativeLayout.ALIGN_PARENT_RIGHT); fabLp.setMargins(0,0,50,60); fab.setLayoutParams(fabLp); fab.setPadding(40,30,40,30); fab.setTag("fab");
-        fab.setOnClickListener(v -> openRuleBuilderDialog());
+        fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1));
         rootLayout.addView(fab);
         
         btnNavCond.setOnClickListener(v->switchMainTab(1, btnNavCond, btnNavInt, btnNavTiles, btnNavMacs, fab)); 
@@ -111,74 +108,102 @@ public class MainActivity extends Activity {
     
     private void renderRulesList() {
         listRules.removeAllViews(); String prefix = currentGesTab == 0 ? "lock_" : "home_";
+        LinearLayout currentRow = null; int count = 0;
         for (int c = 0; c < ALL_COMP_KEYS.length; c++) {
             for (int g = 0; g < C_GESTURES.length; g++) {
                 String key = prefix + ALL_COMP_KEYS[c] + "_" + C_GESTURES[g];
                 String action = prefs.getString(key, "NONE");
                 if (!action.equals("NONE")) {
-                    LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 20f)); card.setPadding(30,30,30,30); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,20); card.setLayoutParams(lp);
-                    TextView tCond = new TextView(this); tCond.setText("⚙ " + ALL_COMP_NAMES[c] + "  ➔  " + C_GESTURE_NAMES[g]); tCond.setTextColor(Color.parseColor("#BBBBBB")); tCond.setTextSize(14); card.addView(tCond);
-                    LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
-                    TextView tAct = new TextView(this); 
-                    String[] acts = action.split(","); StringBuilder actName = new StringBuilder();
-                    for(String a : acts) {
-                        for(int i=0;i<ACT_KEYS.length;i++) if(ACT_KEYS[i].equals(a.trim())) { if(actName.length()>0) actName.append(" + "); actName.append(ACT_LABS[i]); }
-                    }
-                    tAct.setText(actName.toString().isEmpty() ? "Hành động lỗi" : actName.toString()); 
-                    tAct.setTextColor(Color.parseColor("#00E5FF")); tAct.setTextSize(17); tAct.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-                    Button btnDel = new Button(this); btnDel.setText("XÓA"); btnDel.setBackground(getRounded("#D32F2F", 15f)); btnDel.setTextColor(Color.WHITE); btnDel.setOnClickListener(v -> { prefs.edit().putString(key, "NONE").apply(); renderRulesList(); });
-                    row.addView(tAct); row.addView(btnDel); card.addView(row); listRules.addView(card);
+                    if(count % 2 == 0) { currentRow = new LinearLayout(this); currentRow.setOrientation(LinearLayout.HORIZONTAL); currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1,-2)); listRules.addView(currentRow); }
+                    
+                    LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 25f)); card.setPadding(35,35,35,35); 
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,-2, 1f); lp.setMargins(15,15,15,15); card.setLayoutParams(lp);
+                    
+                    LinearLayout rowTop = new LinearLayout(this); rowTop.setOrientation(LinearLayout.HORIZONTAL); rowTop.setGravity(Gravity.CENTER_VERTICAL);
+                    Switch swOn = new Switch(this); swOn.setChecked(prefs.getBoolean(key+"_on", true)); swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(key+"_on", chk).apply());
+                    TextView tIcons = new TextView(this); tIcons.setText((prefs.getBoolean(key+"_vib",true)?"📳 ":"") + (prefs.getBoolean(key+"_anim",true)?"✨":"")); tIcons.setGravity(Gravity.RIGHT); tIcons.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+                    rowTop.addView(swOn); rowTop.addView(tIcons); card.addView(rowTop);
+                    
+                    TextView tCond = new TextView(this); tCond.setText(ALL_COMP_NAMES[c] + "\n➔ " + C_GESTURE_NAMES[g]); tCond.setTextColor(Color.parseColor("#BBBBBB")); tCond.setTextSize(13); tCond.setPadding(0,15,0,15); card.addView(tCond);
+                    
+                    TextView tAct = new TextView(this); String[] acts = action.split(","); StringBuilder actName = new StringBuilder();
+                    for(String a : acts) { for(int i=0;i<ACT_KEYS.length;i++) { if(ACT_KEYS[i].equals(a.trim())) { if(actName.length()>0) actName.append(" + "); actName.append(ACT_LABS[i]); } } }
+                    tAct.setText(actName.toString().isEmpty() ? "Lỗi" : actName.toString()); tAct.setTextColor(Color.parseColor("#00E5FF")); tAct.setTextSize(15); card.addView(tAct);
+                    
+                    final int finalC = c; final int finalG = g;
+                    card.setOnClickListener(v -> openRuleBuilderDialog(key, finalC, finalG));
+                    card.setOnLongClickListener(v -> { new AlertDialog.Builder(this).setTitle("Xóa Quy tắc?").setPositiveButton("XÓA", (d,w)->{prefs.edit().putString(key, "NONE").apply(); renderRulesList();}).setNegativeButton("HỦY", null).show(); return true; });
+                    currentRow.addView(card); count++;
                 }
             }
         }
-        if(listRules.getChildCount() == 0) { TextView empty = new TextView(this); empty.setText("Chưa có quy tắc nào.\nBấm + NEW EB để tạo."); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); listRules.addView(empty); }
+        if(count % 2 != 0 && currentRow != null) { View dummy = new View(this); dummy.setLayoutParams(new LinearLayout.LayoutParams(0,1,1f)); currentRow.addView(dummy); }
+        if(count == 0) { TextView empty = new TextView(this); empty.setText("Chưa có quy tắc nào.\nBấm + NEW EB để tạo."); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); listRules.addView(empty); }
     }
     
-    private void openRuleBuilderDialog() { Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen); d.setContentView(buildRuleEditor(d)); d.show(); }
+    private void openRuleBuilderDialog(String editKey, int preComp, int preGes) { Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen); d.setContentView(buildRuleEditor(d, editKey, preComp, preGes)); d.show(); }
     
-    private View buildRuleEditor(Dialog dialog) {
+    private View buildRuleEditor(Dialog dialog, String editKey, int preComp, int preGes) {
         reloadActionLabels();
-        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,30,30,30);
+        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30, 120, 30, 30);
+        
         LinearLayout tabs = new LinearLayout(this); tabs.setOrientation(LinearLayout.HORIZONTAL);
         Button bTrig = createTabBtn("TRIGGER"); Button bAct = createTabBtn("ACTION"); Button bOpt = createTabBtn("OPTIONS");
-        bTrig.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); bAct.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); bOpt.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+        LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(0,-2,1f); tabLp.setMargins(10,0,10,0);
+        bTrig.setLayoutParams(tabLp); bAct.setLayoutParams(tabLp); bOpt.setLayoutParams(tabLp);
         tabs.addView(bTrig); tabs.addView(bAct); tabs.addView(bOpt); root.addView(tabs);
+        
         ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(0,40,0,0); scroll.addView(content); root.addView(scroll);
-        final int[] selectedComp = {0}; ArrayList<CheckBox> gestureBoxes = new ArrayList<>(); ArrayList<CheckBox> actionBoxes = new ArrayList<>(); CheckBox cbVib = new CheckBox(this); CheckBox cbAnim = new CheckBox(this);
+        
+        final int[] selectedComp = {preComp != -1 ? preComp : 0}; 
+        ArrayList<CheckBox> gestureBoxes = new ArrayList<>(); ArrayList<CheckBox> actionBoxes = new ArrayList<>();
+        CheckBox cbVib = new CheckBox(this); CheckBox cbAnim = new CheckBox(this);
+        
         LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
         TextView tvC = new TextView(this); tvC.setText("1. CHỌN VÙNG (COMPONENT)"); tvC.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvC);
-        Spinner spComp = createSpinner(); spComp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, ALL_COMP_NAMES)); spComp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){selectedComp[0] = pos;}public void onNothingSelected(AdapterView<?> p){}}); vTrig.addView(spComp);
-        TextView tvG = new TextView(this); tvG.setText("\n2. CHỌN CỬ CHỈ (Được chọn nhiều)"); tvG.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvG);
-        for (String gName : C_GESTURE_NAMES) { CheckBox cb = new CheckBox(this); cb.setText(gName); cb.setTextColor(Color.WHITE); cb.setPadding(0,20,0,20); gestureBoxes.add(cb); vTrig.addView(cb); }
+        Spinner spComp = createSpinner(); spComp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, ALL_COMP_NAMES)); spComp.setSelection(selectedComp[0]); spComp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){selectedComp[0] = pos;}public void onNothingSelected(AdapterView<?> p){}}); vTrig.addView(spComp);
+        TextView tvG = new TextView(this); tvG.setText("\n2. CHỌN CỬ CHỈ (Được chọn nhiều - Lệnh OR)"); tvG.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvG);
+        for (int i=0; i<C_GESTURES.length; i++) { CheckBox cb = new CheckBox(this); cb.setText(C_GESTURE_NAMES[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0,20,0,20); if(editKey != null && i == preGes) cb.setChecked(true); gestureBoxes.add(cb); vTrig.addView(cb); }
+        
         LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
         TextView tvA = new TextView(this); tvA.setText("CHỌN HÀNH ĐỘNG THỰC THI (Được chọn nhiều)"); tvA.setTextColor(Color.parseColor("#00E5FF")); tvA.setPadding(0,0,0,20); vAct.addView(tvA);
-        for (int i=1; i<ACT_LABS.length; i++) { CheckBox cbAct = new CheckBox(this); cbAct.setText(ACT_LABS[i]); cbAct.setTextColor(Color.WHITE); cbAct.setPadding(0,20,0,20); actionBoxes.add(cbAct); vAct.addView(cbAct); }
+        
+        String savedActs = editKey != null ? prefs.getString(editKey, "") : "";
+        String[] savedArray = savedActs.split(",");
+        for (int i=1; i<ACT_LABS.length; i++) { 
+            CheckBox cbAct = new CheckBox(this); cbAct.setText(ACT_LABS[i]); cbAct.setTextColor(Color.WHITE); cbAct.setPadding(0,20,0,20); 
+            boolean isChecked = false;
+            for(String sa : savedArray) { if(sa.trim().equals(ACT_KEYS[i])) { isChecked = true; break; } }
+            cbAct.setChecked(isChecked); actionBoxes.add(cbAct); vAct.addView(cbAct); 
+        }
+        
         LinearLayout vOpt = new LinearLayout(this); vOpt.setOrientation(LinearLayout.VERTICAL); vOpt.setVisibility(View.GONE);
-        cbVib.setText("Bật Rung (Haptic Feedback)"); cbVib.setTextColor(Color.WHITE); cbVib.setChecked(true); vOpt.addView(cbVib);
-        cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)"); cbAnim.setTextColor(Color.WHITE); cbAnim.setChecked(true); vOpt.addView(cbAnim);
+        cbVib.setText("Bật Rung (Haptic Feedback)"); cbVib.setTextColor(Color.WHITE); cbVib.setChecked(editKey == null || prefs.getBoolean(editKey+"_vib", true)); vOpt.addView(cbVib);
+        cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)"); cbAnim.setTextColor(Color.WHITE); cbAnim.setChecked(editKey == null || prefs.getBoolean(editKey+"_anim", true)); vOpt.addView(cbAnim);
+        
         content.addView(vTrig); content.addView(vAct); content.addView(vOpt);
-        View.OnClickListener tabClick = v -> {
-            bTrig.setBackground(getRounded(v==bTrig?"#00E5FF":"#222222", 15f)); bTrig.setTextColor(v==bTrig?Color.BLACK:Color.WHITE);
-            bAct.setBackground(getRounded(v==bAct?"#00E5FF":"#222222", 15f)); bAct.setTextColor(v==bAct?Color.BLACK:Color.WHITE);
-            bOpt.setBackground(getRounded(v==bOpt?"#00E5FF":"#222222", 15f)); bOpt.setTextColor(v==bOpt?Color.BLACK:Color.WHITE);
-            vTrig.setVisibility(v==bTrig?View.VISIBLE:View.GONE); vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE); vOpt.setVisibility(v==bOpt?View.VISIBLE:View.GONE);
-        }; bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick); bOpt.setOnClickListener(tabClick); bTrig.performClick();
+        
+        View.OnClickListener tabClick = v -> { bTrig.setBackground(getRounded(v==bTrig?"#00E5FF":"#222222", 15f)); bTrig.setTextColor(v==bTrig?Color.BLACK:Color.WHITE); bAct.setBackground(getRounded(v==bAct?"#00E5FF":"#222222", 15f)); bAct.setTextColor(v==bAct?Color.BLACK:Color.WHITE); bOpt.setBackground(getRounded(v==bOpt?"#00E5FF":"#222222", 15f)); bOpt.setTextColor(v==bOpt?Color.BLACK:Color.WHITE); vTrig.setVisibility(v==bTrig?View.VISIBLE:View.GONE); vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE); vOpt.setVisibility(v==bOpt?View.VISIBLE:View.GONE); }; bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick); bOpt.setOnClickListener(tabClick); bTrig.performClick();
+        
         LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL);
         Button bCancel = new Button(this); bCancel.setText("HỦY"); bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
         Button bSave = new Button(this); bSave.setText("LƯU QUY TẮC"); bSave.setBackground(getRounded("#4CAF50", 20f)); bSave.setTextColor(Color.WHITE); LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0); bSave.setLayoutParams(slp);
         footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
+        
         bCancel.setOnClickListener(v -> dialog.dismiss());
         bSave.setOnClickListener(v -> {
-            ArrayList<String> acts = new ArrayList<>();
-            for(int i=0; i<actionBoxes.size(); i++) if(actionBoxes.get(i).isChecked()) acts.add(ACT_KEYS[i+1]);
+            ArrayList<String> acts = new ArrayList<>(); for(int i=0; i<actionBoxes.size(); i++) { if(actionBoxes.get(i).isChecked()) acts.add(ACT_KEYS[i+1]); }
             if(acts.isEmpty()) { Toast.makeText(this, "Hãy chọn ít nhất 1 Hành động bên tab ACTION!", Toast.LENGTH_SHORT).show(); return; }
             String joinedActions = TextUtils.join(",", acts);
             String prefix = currentGesTab == 0 ? "lock_" : "home_";
             String compKey = ALL_COMP_KEYS[selectedComp[0]]; boolean hasChecked = false;
-            for(int i=0; i<gestureBoxes.size(); i++) if(gestureBoxes.get(i).isChecked()) {
-                hasChecked = true; String finalKey = prefix + compKey + "_" + C_GESTURES[i];
-                prefs.edit().putString(finalKey, joinedActions).putBoolean(finalKey+"_vib", cbVib.isChecked()).putBoolean(finalKey+"_anim", cbAnim.isChecked()).apply();
+            if(editKey != null) prefs.edit().putString(editKey, "NONE").apply();
+            for(int i=0; i<gestureBoxes.size(); i++) {
+                if(gestureBoxes.get(i).isChecked()) {
+                    hasChecked = true; String finalKey = prefix + compKey + "_" + C_GESTURES[i];
+                    prefs.edit().putString(finalKey, joinedActions).putBoolean(finalKey+"_vib", cbVib.isChecked()).putBoolean(finalKey+"_anim", cbAnim.isChecked()).apply();
+                }
             }
             if(!hasChecked) { Toast.makeText(this, "Hãy chọn ít nhất 1 Cử chỉ bên tab TRIGGER!", Toast.LENGTH_SHORT).show(); return; }
             renderRulesList(); dialog.dismiss();
@@ -187,7 +212,7 @@ public class MainActivity extends Activity {
     }
     
     private void buildIntentsSpace() {
-        for (int i = 1; i <= 13; i++) { 
+        for (int i = 1; i <= 15; i++) { 
             LinearLayout sInt = new LinearLayout(this); sInt.setOrientation(LinearLayout.VERTICAL); sInt.setPadding(30,10,30,30);
             sInt.addView(createInput("Tên gợi nhớ (VD: Mở Facebook)", "intent_"+i+"_name"));
             sInt.addView(createInput("Action", "i"+i+"_act")); sInt.addView(createInput("Package", "i"+i+"_pkg")); sInt.addView(createInput("Class Name", "i"+i+"_cls")); sInt.addView(createInput("Data URI (acc://pkg/.cls)", "i"+i+"_data")); sInt.addView(createInput("Categories", "i"+i+"_cat")); sInt.addView(createInput("Flags", "i"+i+"_flags")); 
@@ -214,6 +239,7 @@ public class MainActivity extends Activity {
             TextView tv = new TextView(this); tv.setText("Tile " + i); tv.setTextColor(Color.WHITE); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
             Spinner s = createSpinner(); s.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, ACT_LABS)); String v = prefs.getString("tile_"+i+"_act","NONE"); for(int j=0;j<ACT_KEYS.length;j++) if(ACT_KEYS[j].equals(v)) s.setSelection(j); final int idx=i; s.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putString("tile_"+idx+"_act",ACT_KEYS[pos]).apply();}public void onNothingSelected(AdapterView<?> p){}}); s.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); 
             row.addView(tv); row.addView(s); card.addView(row);
+            
             CheckBox cbShow = new CheckBox(this); cbShow.setText("Bật Tile này lên Hệ thống (Quick Settings)"); cbShow.setTextColor(Color.parseColor("#4CAF50")); cbShow.setPadding(0,20,0,0);
             ComponentName comp = new ComponentName(this, "com.manhmoc.edgebar.Tile" + i); int state = getPackageManager().getComponentEnabledSetting(comp);
             cbShow.setChecked(state == PackageManager.COMPONENT_ENABLED_STATE_ENABLED);
@@ -223,12 +249,15 @@ public class MainActivity extends Activity {
     }
     
     private void buildDesignSpace() {
-        Button btnBack = new Button(this); btnBack.setText("⬅ ĐÓNG KHÔNG GIAN THIẾT KẾ"); btnBack.setBackground(getRounded("#D32F2F", 20f)); btnBack.setTextColor(Color.WHITE); btnBack.setOnClickListener(v -> closeDesignSpace());
-        pageDesign.addView(btnBack); pageDesign.addView(createSectionTitle("\nKHÔNG GIAN THIẾT KẾ CỐT LÕI"));
+        pageDesign.addView(createSectionTitle("KHÔNG GIAN THIẾT KẾ CỐT LÕI"));
         LinearLayout backupRow = new LinearLayout(this); backupRow.setOrientation(LinearLayout.HORIZONTAL);
         Button btnBackup = new Button(this); btnBackup.setText("💾 SAO LƯU"); btnBackup.setBackground(getRounded("#2E7D32", 20f)); btnBackup.setTextColor(Color.WHITE); LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, -2, 1f); bp.setMargins(0,0,15,0); btnBackup.setLayoutParams(bp); Button btnRestore = new Button(this); btnRestore.setText("📂 PHỤC HỒI"); btnRestore.setBackground(getRounded("#EF6C00", 20f)); btnRestore.setTextColor(Color.WHITE); LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f); btnRestore.setLayoutParams(rp);
         btnBackup.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("text/plain"); i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup.txt"); startActivityForResult(i, 101); }); btnRestore.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, 102); }); backupRow.addView(btnBackup); backupRow.addView(btnRestore); pageDesign.addView(wrapCard(backupRow));
-        LinearLayout secSys = new LinearLayout(this); secSys.setOrientation(LinearLayout.VERTICAL); secSys.addView(createSectionTitle("HÀNH VI HỆ THỐNG")); CheckBox cbKbd = new CheckBox(this); cbKbd.setText("Tự ẩn khi hiện Bàn Phím"); cbKbd.setTextColor(Color.WHITE); cbKbd.setChecked(prefs.getBoolean("avoid_kbd", true)); cbKbd.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("avoid_kbd", c).apply()); secSys.addView(cbKbd); secSys.addView(createSectionTitle("DANH SÁCH ĐEN")); secSys.addView(createInput("Packages (com.ex.app)", "blacklist")); pageDesign.addView(wrapCard(secSys));
+        
+        LinearLayout secSys = new LinearLayout(this); secSys.setOrientation(LinearLayout.VERTICAL); secSys.addView(createSectionTitle("HÀNH VI HỆ THỐNG")); CheckBox cbKbd = new CheckBox(this); cbKbd.setText("Tự ẩn khi hiện Bàn Phím"); cbKbd.setTextColor(Color.WHITE); cbKbd.setChecked(prefs.getBoolean("avoid_kbd", true)); cbKbd.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("avoid_kbd", c).apply()); secSys.addView(cbKbd); secSys.addView(createSectionTitle("DANH SÁCH ĐEN")); secSys.addView(createInput("Packages (com.ex.app)", "blacklist")); 
+        secSys.addView(createSectionTitle("DANH SÁCH KHÓA (MORSE)")); secSys.addView(createInput("Packages (com.zing.zalo, com.mbmobile)", "locklist")); pageDesign.addView(wrapCard(secSys));
+        
+        pageDesign.addView(createSectionTitle("THIẾT KẾ CỐT LÕI (MÀU/KÍCH THƯỚC)"));
         LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL);
         btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
         designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
@@ -239,8 +268,35 @@ public class MainActivity extends Activity {
     }
     
     private void showPremiumDialog() { 
-        String t = "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật (Bắt buộc cho Trợ Năng):\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n💡 NẾU CÓ ADB, APP SẼ LÀM ĐƯỢC GÌ?\n- Tự cấp quyền Lớp phủ, khỏi cần hỏi hệ thống.\n- Đóng/cắt Trợ năng mọi app trong 1 mili-giây.\n- Sống dai, khó bị hệ thống kill ngầm.\n\n🚀 V19.12.1.8 - THE ULTIMATE ARCHITECT:\n- Multi-Action (chọn nhiều hành động cho 1 cử chỉ)\n- 15 QS Tiles tùy chỉnh\n- 5 Macro bật/tắt hàng loạt Trợ năng\n- Lõi Trăng Non & Vỏ Viền hoàn toàn độc lập\n- Live Preview Lockscreen khi chỉnh\n- Homescreen tàng hình khi Preview\n- Animation đã sửa lỗi đứng hình\n- Toggle bất kỳ app trợ năng nào qua Data URI"; 
+        String t = "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật (Bắt buộc cho Trợ Năng):\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n💡 NẾU CÓ ADB, APP SẼ LÀM ĐƯỢC GÌ?\n- Tự cấp quyền Lớp phủ, khỏi cần hỏi hệ thống.\n- Đóng/cắt Trợ năng mọi app trong 1 mili-giây.\n- Sống dai, khó bị hệ thống kill ngầm.\n\n🚀 V19.12.4.0: Tổng hợp tất cả tính năng, fix lỗi Morse Lock, tối ưu UI, 15 QS Tiles, Rule Engine đa hành động."; 
         ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); 
+    }
+    
+    @Override public void onActivityResult(int req, int res, Intent data) { 
+        super.onActivityResult(req, res, data); 
+        if(res == RESULT_OK && data != null && data.getData() != null) { 
+            try { 
+                if(req == 101) { 
+                    java.io.OutputStream os = getContentResolver().openOutputStream(data.getData()); 
+                    os.write(new JSONObject(prefs.getAll()).toString().getBytes()); os.close(); 
+                    Toast.makeText(this, "Đã Lưu Cấu Hình Backup!", Toast.LENGTH_SHORT).show(); 
+                } else if(req == 102) { 
+                    java.io.InputStream is = getContentResolver().openInputStream(data.getData()); 
+                    java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(is)); 
+                    StringBuilder s = new StringBuilder(); String line; while((line=r.readLine())!=null) s.append(line); r.close(); 
+                    JSONObject j = new JSONObject(s.toString()); SharedPreferences.Editor ed = prefs.edit(); 
+                    Iterator<String> k = j.keys(); 
+                    while(k.hasNext()) { 
+                        String key = k.next(); Object v = j.get(key); 
+                        if(v instanceof Boolean) ed.putBoolean(key, (Boolean)v); 
+                        else if (v instanceof Integer) ed.putInt(key, (Integer)v); 
+                        else if (v instanceof Long) ed.putInt(key, ((Long)v).intValue()); 
+                        else if (v instanceof String) ed.putString(key, (String)v); 
+                    } 
+                    ed.commit(); Toast.makeText(this, "Đã Khôi Phục Cấu Hình!", Toast.LENGTH_LONG).show(); recreate();
+                } 
+            } catch(Exception e) { Toast.makeText(this, "Lỗi file!", Toast.LENGTH_LONG).show(); } 
+        } 
     }
     
     private LinearLayout createDrawer(String title, View content) { LinearLayout container = new LinearLayout(this); container.setOrientation(LinearLayout.VERTICAL); container.setBackground(getRounded("#222222", 20f)); LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1,-2); clp.setMargins(0,0,0,20); container.setLayoutParams(clp); TextView header = new TextView(this); header.setText(title); header.setTextColor(Color.parseColor("#00E5FF")); header.setPadding(30,30,30,30); header.setTextSize(16); content.setVisibility(View.GONE); header.setOnClickListener(v -> { boolean isClosed = content.getVisibility() == View.GONE; content.setVisibility(isClosed ? View.VISIBLE : View.GONE); header.setBackground(getRounded(isClosed ? "#333333" : "#222222", 20f)); }); container.addView(header); container.addView(content); return container; }
