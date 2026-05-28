@@ -100,24 +100,20 @@ public class HomescreenService extends Service {
                 prefs.edit().putBoolean("morse_mode_en", !isM).apply();
                 updateVisibility();
             } else if ("com.manhmoc.edgebar.START_MORSE_RECORD".equals(action)) {
-                // Ghi mật khẩu mới
                 showRecordingDialog();
             }
         }
     };
 
     private void showRecordingDialog() {
-        // Tạo một dialog đơn giản để ghi mật khẩu (thực tế sẽ ghi qua các nút Morse)
-        // Ở đây ta chỉ cần bật flag recording, việc nhập sẽ qua các nút Morse
         prefs.edit().putBoolean("morse_recording", true).apply();
-        isMorseLockActive = true; // kích hoạt giao diện Morse để nhập
+        isMorseLockActive = true;
         currentMorseAttempt = "";
         tvMorseStatus.setText("Recording...\nGóc Đáy Trái = XÓA | Góc Đáy Phải = LƯU");
         updateVisibility();
     }
 
     private String mapComponentToNumber(String comp) {
-        // Mapping mặc định: có thể tùy chỉnh sau
         String key = comp.replace("morse_", "").replace("corner_", "");
         switch (key) {
             case "t_l": return "1";
@@ -130,8 +126,8 @@ public class HomescreenService extends Service {
             case "m_b_c": return "8";
             case "tl": return "9";
             case "tr": return "0";
-            case "bl": return "X"; // Xóa
-            case "br": return ">"; // Lưu
+            case "bl": return "X";
+            case "br": return ">";
             default: return "*";
         }
     }
@@ -302,7 +298,6 @@ public class HomescreenService extends Service {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
         try { wm.addView(fV, fp); } catch (Exception e) {}
 
-        // Home layers
         for (int i=0; i<5; i++) {
             bars[i] = new View(this);
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,0,PixelFormat.TRANSLUCENT);
@@ -316,7 +311,6 @@ public class HomescreenService extends Service {
             corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_"+CORNERS[i], corners[i]));
         }
 
-        // Morse container
         morseContainer = new RelativeLayout(this);
         morseContainer.setBackgroundColor(Color.BLACK);
         morseContainer.setVisibility(View.GONE);
@@ -335,7 +329,6 @@ public class HomescreenService extends Service {
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
         try { wm.addView(morseContainer, bgP); } catch (Exception e) {}
 
-        // Morse bars & corners
         for (int i=0; i<8; i++) {
             mBars[i] = new View(this);
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,0,PixelFormat.TRANSLUCENT);

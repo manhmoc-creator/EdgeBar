@@ -1,8 +1,41 @@
-plugins { id 'com.android.application' }
+plugins {
+    id 'com.android.application'
+}
 android {
     namespace 'com.manhmoc.edgebar'
     compileSdk 34
-    signingConfigs { release { storeFile file("../edge.keystore"); storePassword "edge19"; keyAlias "edge19"; keyPassword "edge19" } }
-    defaultConfig { applicationId "com.manhmoc.edgebar"; minSdk 26; targetSdk 34; versionCode 70; versionName "19.12.3.5" }
-    buildTypes { debug { signingConfig signingConfigs.release }; release { signingConfig signingConfigs.release; minifyEnabled false } }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("../edge.keystore")
+            storePassword "edge19"
+            keyAlias "edge19"
+            keyPassword "edge19"
+        }
+    }
+    defaultConfig {
+        applicationId "com.manhmoc.edgebar"
+        minSdk 26
+        targetSdk 34
+        versionCode 70
+        versionName "19.12.3.5"
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.release
+        }
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+}
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
 }
