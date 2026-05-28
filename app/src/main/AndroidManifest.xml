@@ -1,147 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-    <uses-permission android:name="android.permission.VIBRATE"/>
-    <uses-permission android:name="android.permission.CAMERA"/>
-    <uses-feature android:name="android.hardware.camera.flash" android:required="false"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions"/>
-    <application
-        android:allowBackup="true"
-        android:icon="@drawable/ic_launcher"
-        android:label="Edge Bar"
-        android:supportsRtl="true"
-        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+
+    <application android:allowBackup="true" android:icon="@drawable/ic_launcher" android:label="Edge Bar" android:supportsRtl="true" android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
+            <intent-filter> <action android:name="android.intent.action.MAIN" /> <category android:name="android.intent.category.LAUNCHER" /> </intent-filter>
         </activity>
-        <activity android:name=".ScannerHelper"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:exported="true"/>
+        <activity android:name=".ScannerHelper" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:exported="true" />
         <receiver android:name=".ToggleReceiver" android:exported="true">
             <intent-filter>
-                <action android:name="com.manhmoc.edgebar.TOGGLE_LOCK"/>
-                <action android:name="com.manhmoc.edgebar.TOGGLE_HOME"/>
-                <action android:name="com.manhmoc.edgebar.TOGGLE_MACRO"/>
-                <action android:name="com.manhmoc.edgebar.TOGGLE_APP"/>
-                <action android:name="com.manhmoc.edgebar.TOGGLE_MORSE"/>
+                <action android:name="com.manhmoc.edgebar.TOGGLE_LOCK" />
+                <action android:name="com.manhmoc.edgebar.TOGGLE_HOME" />
+                <action android:name="com.manhmoc.edgebar.TOGGLE_MACRO" />
+                <action android:name="com.manhmoc.edgebar.TOGGLE_APP" />
+                <action android:name="com.manhmoc.edgebar.TOGGLE_MORSE" />
             </intent-filter>
         </receiver>
-        <service android:name=".EdgeBarService" android:exported="true"
-            android:label="Edge Bar Trợ Năng"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService"/>
-            </intent-filter>
-            <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config"/>
+        <service android:name=".EdgeBarService" android:exported="true" android:label="Edge Bar Trợ Năng" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter> <action android:name="android.accessibilityservice.AccessibilityService" /> </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config" />
         </service>
-        <service android:name=".HomescreenService" android:exported="false"/>
-        <service android:name=".QsLockTile" android:label="EB Trợ Năng"
-            android:icon="@android:drawable/ic_lock_lock"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
+        <service android:name=".HomescreenService" android:exported="false" />
+        <service android:name=".QsLockTile" android:label="EB Trợ Năng" android:icon="@android:drawable/ic_lock_lock" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
+            <intent-filter> <action android:name="android.service.quicksettings.action.QS_TILE" /> </intent-filter>
         </service>
-        <service android:name=".QsHomeTile" android:label="EB Màn Chính"
-            android:icon="@android:drawable/ic_menu_crop"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
+        <service android:name=".QsHomeTile" android:label="EB Màn Chính" android:icon="@android:drawable/ic_menu_crop" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
+            <intent-filter> <action android:name="android.service.quicksettings.action.QS_TILE" /> </intent-filter>
         </service>
-        <service android:name=".Tile1" android:label="Tile 1"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile2" android:label="Tile 2"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile3" android:label="Tile 3"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile4" android:label="Tile 4"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile5" android:label="Tile 5"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile6" android:label="Tile 6"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile7" android:label="Tile 7"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile8" android:label="Tile 8"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile9" android:label="Tile 9"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile10" android:label="Tile 10"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile11" android:label="Tile 11"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile12" android:label="Tile 12"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile13" android:label="Tile 13"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile14" android:label="Tile 14"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
-        <service android:name=".Tile15" android:label="Tile 15"
-            android:icon="@drawable/ic_launcher_fg"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-        </service>
+        <service android:name=".Tile1" android:label="Tile 1" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile2" android:label="Tile 2" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile3" android:label="Tile 3" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile4" android:label="Tile 4" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile5" android:label="Tile 5" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile6" android:label="Tile 6" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile7" android:label="Tile 7" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile8" android:label="Tile 8" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile9" android:label="Tile 9" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile10" android:label="Tile 10" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile11" android:label="Tile 11" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile12" android:label="Tile 12" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile13" android:label="Tile 13" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile14" android:label="Tile 14" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".Tile15" android:label="Tile 15" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
     </application>
 </manifest>
