@@ -235,5 +235,6 @@ public class EdgeBarService extends AccessibilityService {
                 } 
             } return true; } 
     }
+    @Override public void onInterrupt() {} 
     @Override public void onDestroy() { super.onDestroy(); try{unregisterReceiver(stateReceiver); unregisterReceiver(ipcReceiver);}catch(Exception e){} if(cId!=null) try{cm.unregisterTorchCallback(torchCallback);}catch(Exception e){} prefs.unregisterOnSharedPreferenceChangeListener(prefListener); for(int i=0; i<5; i++) if(bars[i] != null) wm.removeView(bars[i]); for(int i=0; i<4; i++) if(corners[i] != null) wm.removeView(corners[i]); if (fV != null) wm.removeView(fV); }
 }
