@@ -87,6 +87,7 @@ public class EdgeBarService extends AccessibilityService {
         }
     };
 
+    // === FlashView ===
     private class FlashView extends View {
         private Paint p = new Paint();
         float radius = 40f;
@@ -144,10 +145,7 @@ public class EdgeBarService extends AccessibilityService {
             p.setShadowLayer(15f, 0, 0, cArr[0]);
         }
 
-        public void setPhase(float fraction) {
-            this.phaseFraction = fraction;
-            invalidate();
-        }
+        public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
 
         @Override
         protected void onDraw(Canvas canvas) {
@@ -163,12 +161,9 @@ public class EdgeBarService extends AccessibilityService {
             if (aStyle > 0) {
                 float perim = 2 * (drawW + drawH);
                 float currentPhase = -perim * phaseFraction;
-                if (aStyle == 1)
-                    p.setPathEffect(new DashPathEffect(new float[]{perim / 4f, 3 * perim / 4f}, currentPhase));
-                else if (aStyle == 2)
-                    p.setPathEffect(new DashPathEffect(new float[]{perim / 8f, 3 * perim / 8f}, currentPhase));
-                else if (aStyle == 3)
-                    p.setPathEffect(new DashPathEffect(new float[]{perim / 12f, 3 * perim / 12f}, currentPhase));
+                if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim / 4f, 3 * perim / 4f}, currentPhase));
+                else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim / 8f, 3 * perim / 8f}, currentPhase));
+                else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim / 12f, 3 * perim / 12f}, currentPhase));
             } else {
                 p.setPathEffect(null);
             }
@@ -176,6 +171,7 @@ public class EdgeBarService extends AccessibilityService {
         }
     }
 
+    // === CornerView ===
     private class CornerView extends View {
         private Paint pFill, pStroke;
         private int type;
