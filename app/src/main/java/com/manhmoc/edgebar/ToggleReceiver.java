@@ -22,7 +22,8 @@ public class ToggleReceiver extends BroadcastReceiver {
                     if (en) cur = cur.replace(":" + mySvc, "").replace(mySvc + ":", "").replace(mySvc, "");
                     else cur = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
                 }
-                try { Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, cur); Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, "1"); } catch (Exception e) {}
+                Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, cur);
+                Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, "1");
             }
         } else if ("com.manhmoc.edgebar.TOGGLE_APP".equals(action)) {
             String data = i.getDataString();
