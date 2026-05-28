@@ -24,8 +24,7 @@ public class ToggleReceiver extends BroadcastReceiver {
             String data = i.getDataString();
             if (data != null && data.startsWith("acc://")) toggleAcc(c, data.substring(6));
         } else if ("com.manhmoc.edgebar.TOGGLE_MORSE".equals(i.getAction())) {
-            boolean isM = c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE).getBoolean("morse_mode_en", false);
-            c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE).edit().putBoolean("morse_mode_en", !isM).apply();
+            Intent s = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"); c.sendBroadcast(s);
         }
     }
     private void toggleAcc(Context c, String mySvc) {
