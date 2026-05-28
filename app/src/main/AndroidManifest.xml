@@ -12,7 +12,6 @@
             <intent-filter> <action android:name="android.intent.action.MAIN" /> <category android:name="android.intent.category.LAUNCHER" /> </intent-filter>
         </activity>
         <activity android:name=".ScannerHelper" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:exported="true" />
-        <receiver android:name=".ToggleReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="com.manhmoc.edgebar.TOGGLE_LOCK" />
                 <action android:name="com.manhmoc.edgebar.TOGGLE_HOME" />
@@ -27,7 +26,6 @@
         <service android:name=".QsLockTile" android:label="EB Trợ Năng" android:icon="@android:drawable/ic_lock_lock" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true" android:enabled="true">
             <intent-filter> <action android:name="android.service.quicksettings.action.QS_TILE" /> </intent-filter>
         </service>
-        <service android:name=".QsHomeTile" android:label="EB Màn Chính" android:icon="@android:drawable/ic_menu_crop" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true" android:enabled="true">
             <intent-filter> <action android:name="android.service.quicksettings.action.QS_TILE" /> </intent-filter>
         </service>
         <service android:name=".Tile1" android:label="Tile 1" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true" android:enabled="false"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
