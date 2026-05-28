@@ -66,6 +66,7 @@ public class HomescreenService extends Service {
     private int morseFailCount = 0;
     private String lockedPkg = "";
     private Handler morseDotHandler = new Handler();
+    private boolean isPreviewMorse = false;  // lưu trạng thái preview để xuyên thấu
 
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
@@ -89,6 +90,7 @@ public class HomescreenService extends Service {
             if (i.getAction().equals("com.manhmoc.edgebar.SYNC_STATE")) {
                 isKbd = i.getBooleanExtra("isKbd", false);
                 isBl = i.getBooleanExtra("isBl", false);
+                isPreviewMorse = prefs.getBoolean("preview_morse", false);
                 updateVisibility();
             } else if (i.getAction().equals("com.manhmoc.edgebar.TEST_ANIM")) {
                 playAnim();
@@ -112,6 +114,7 @@ public class HomescreenService extends Service {
         return prefs.getString(key, "*");
     }
 
+    // ScratchView cải tiến: nhiều vết nứt, đậm hơn, không invalidate liên tục
     private class ScratchView extends View {
         private Paint paint = new Paint();
         private Random random = new Random();
@@ -120,15 +123,16 @@ public class HomescreenService extends Service {
         public ScratchView(Context context) {
             super(context);
             paint.setColor(Color.WHITE);
-            paint.setStrokeWidth(6);
+            paint.setStrokeWidth(8);
             paint.setStyle(Paint.Style.STROKE);
             paint.setAntiAlias(true);
             generateCracks();
         }
 
         private void generateCracks() {
-            crackPoints = new int[20];
-            for (int i = 0; i < 20; i += 2) {
+            // Tạo nhiều điểm nứt hơn
+            crackPoints = new int[40];
+            for (int i = 0; i < 40; i += 2) {
                 crackPoints[i] = random.nextInt(2000);
                 crackPoints[i + 1] = random.nextInt(3000);
             }
@@ -138,20 +142,20 @@ public class HomescreenService extends Service {
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             if (crackPoints == null) generateCracks();
-            paint.setAlpha(80);
+            paint.setAlpha(200);
             for (int i = 0; i < crackPoints.length - 2; i += 2) {
                 canvas.drawLine(crackPoints[i], crackPoints[i+1], crackPoints[i+2], crackPoints[i+3], paint);
             }
-            paint.setStrokeWidth(3);
-            paint.setAlpha(120);
-            for (int i = 0; i < 15; i++) {
+            paint.setStrokeWidth(5);
+            paint.setAlpha(180);
+            for (int i = 0; i < 30; i++) {
                 int x1 = random.nextInt(getWidth());
                 int y1 = random.nextInt(getHeight());
-                int x2 = x1 + random.nextInt(200) - 100;
-                int y2 = y1 + random.nextInt(200) - 100;
+                int x2 = x1 + random.nextInt(300) - 150;
+                int y2 = y1 + random.nextInt(300) - 150;
                 canvas.drawLine(x1, y1, x2, y2, paint);
             }
-            invalidate();
+            // KHÔNG invalidate() liên tục -> không nháy
         }
     }
 
@@ -317,7 +321,8 @@ public class HomescreenService extends Service {
         morseContainer = new RelativeLayout(this);
         morseContainer.setBackgroundColor(Color.BLACK);
         morseContainer.setVisibility(View.GONE);
-        morseContainer.setOnTouchListener((v, e) -> true);
+        // Touch listener sẽ được set động dựa trên preview_morse
+        morseContainer.setOnTouchListener((v, e) -> isPreviewMorse ? false : true); // preview thì không chặn
 
         tvMorseStatus = new TextView(this);
         tvMorseStatus.setTextColor(Color.WHITE);
@@ -352,18 +357,27 @@ public class HomescreenService extends Service {
         sendSyncState();
     }
 
-    private void handleMorseTap(String comp, View v) {
+    // Xóa 1 ký tự (X) và xóa toàn bộ khi nhấn giữ
+    private void handleMorseTap(String comp, View v, boolean isLongPress) {
         doVibrate(30);
         if (v != null && v instanceof CornerView) ((CornerView) v).triggerFlash();
 
         String mappedKey = mapComponentToNumber(comp);
 
         if (mappedKey.equals("X")) {
-            currentMorseAttempt = "";
-            tvMorseStatus.setText("");
+            if (isLongPress) {
+                currentMorseAttempt = "";
+                tvMorseStatus.setText("");
+            } else {
+                if (currentMorseAttempt.length() > 0) {
+                    currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length() - 1);
+                    tvMorseStatus.setText(currentMorseAttempt);
+                }
+            }
         } else if (mappedKey.equals(">")) {
             String masterPass = prefs.getString("morse_master_pass", "");
             if (currentMorseAttempt.isEmpty() || masterPass.isEmpty()) return;
+            // So sánh chính xác
             if (currentMorseAttempt.equals(masterPass)) {
                 isMorseLockActive = false;
                 morseFailCount = 0;
@@ -391,13 +405,18 @@ public class HomescreenService extends Service {
             }
         } else {
             currentMorseAttempt += mappedKey;
-            tvMorseStatus.setText(currentMorseAttempt);
+            // Hiển thị dấu chấm thay vì số
+            StringBuilder dots = new StringBuilder();
+            for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
+            tvMorseStatus.setText(dots.toString());
             morseDotHandler.removeCallbacksAndMessages(null);
             int dotDelay = prefs.getInt("morse_dot_delay", 500);
             morseDotHandler.postDelayed(() -> {
-                StringBuilder dots = new StringBuilder();
-                for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
-                tvMorseStatus.setText(dots.toString());
+                if (currentMorseAttempt.length() > 0) {
+                    StringBuilder d = new StringBuilder();
+                    for (int i = 0; i < currentMorseAttempt.length(); i++) d.append("• ");
+                    tvMorseStatus.setText(d.toString());
+                }
             }, dotDelay);
         }
     }
@@ -406,13 +425,28 @@ public class HomescreenService extends Service {
         boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hideNormal = (avoidKbd && isKbd) || isBl;
-        boolean isPreviewMorse = prefs.getBoolean("preview_morse", false);
-
+        isPreviewMorse = prefs.getBoolean("preview_morse", false);
+        boolean isMorseGlobal = prefs.getBoolean("morse_mode_en", false);
+        String currentPkg = ""; // cần lấy package hiện tại? Thực tế biến này có thể lấy từ bên ngoài, nhưng ta sẽ dùng locklist check trong onAccessibilityEvent.
+        // Tuy nhiên, ở đây updateVisibility chỉ chạy khi có sync, ta cần một biến lưu package đang mở.
+        // Ta sẽ sử dụng biến lockedPkg (khi đang active) hoặc check locklist qua một biến toàn cục.
+        // Giải pháp: lưu currentForegroundPkg từ EdgeBarService gửi qua SYNC_STATE.
+        // Ta sẽ thêm extra vào SYNC_STATE từ EdgeBarService.
+        // Nhưng hiện tại chưa có, tạm thời nếu isMorseLockActive thì hiện, nếu preview thì hiện và xuyên thấu.
+        // Còn nếu isMorseGlobal và app nằm trong locklist thì hiện.
+        // Để đơn giản, ta dùng biến isMorseLockActive do MORSE_LOCK_ENGAGE kích hoạt. Khi không có lock engage, không hiện.
+        // Yêu cầu: chỉ hiện khi vào app bị khóa. Vậy chúng ta sẽ chỉ hiện khi isMorseLockActive == true hoặc preview_morse == true.
         if (hideNormal && fV != null && !isMorseLockActive && !isPreviewMorse) fV.setVisibility(View.GONE);
 
         if (isMorseLockActive || isPreviewMorse) {
             morseContainer.setVisibility(View.VISIBLE);
             morseContainer.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
+            // Xuyên thấu nếu đang preview
+            if (isPreviewMorse) {
+                morseContainer.setOnTouchListener((v, e) -> false);
+            } else {
+                morseContainer.setOnTouchListener((v, e) -> true);
+            }
 
             for (int i = 0; i < 5; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
             for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
@@ -432,7 +466,7 @@ public class HomescreenService extends Service {
                     gd.setCornerRadius(24f);
                     mBars[i].setBackground(gd);
                     int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS |
-                            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
+                            (isPreviewMorse ? 0 : (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH));
                     WindowManager.LayoutParams p = (WindowManager.LayoutParams) mBars[i].getLayoutParams();
                     p.flags = baseFlags;
                     p.width = w;
@@ -461,7 +495,7 @@ public class HomescreenService extends Service {
                     boolean isInv = (visMode == 2);
                     ((CornerView) mCorners[i]).updateProps(prefs.getInt("morse_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv);
                     int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS |
-                            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
+                            (isPreviewMorse ? 0 : (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH));
                     WindowManager.LayoutParams p = (WindowManager.LayoutParams) mCorners[i].getLayoutParams();
                     p.flags = baseFlags;
                     p.gravity = C_GRAV[i];
@@ -639,7 +673,7 @@ public class HomescreenService extends Service {
                                 Intent y = new Intent(Intent.ACTION_SEND);
                                 y.setType("text/plain");
                                 y.putExtra(Intent.EXTRA_TEXT, txt.toString());
-                                y.setPackage("com.deniscerri.ytdlnis");
+                                y.setPackage("com.deniscerri.ytdl");
                                 y.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                                 startActivity(y);
                             }
@@ -714,6 +748,8 @@ public class HomescreenService extends Service {
         private GestureDetector gd;
         private float sx, sy;
         private long st;
+        private Handler longPressHandler = new Handler();
+        private boolean longPressTriggered = false;
 
         public SidebarTouchListener(String keyBase, View v) {
             this.prefKeyBase = keyBase;
@@ -742,8 +778,19 @@ public class HomescreenService extends Service {
 
         @Override
         public boolean onTouch(View v, MotionEvent e) {
-            if (isMorseLockActive || prefs.getBoolean("preview_morse", false)) {
-                if (e.getAction() == MotionEvent.ACTION_DOWN) handleMorseTap(prefKeyBase, myView);
+            if (isMorseLockActive || isPreviewMorse) {
+                if (e.getAction() == MotionEvent.ACTION_DOWN) {
+                    longPressTriggered = false;
+                    longPressHandler.postDelayed(() -> {
+                        longPressTriggered = true;
+                        handleMorseTap(prefKeyBase, myView, true);
+                    }, 600);
+                } else if (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL) {
+                    longPressHandler.removeCallbacksAndMessages(null);
+                    if (!longPressTriggered) {
+                        handleMorseTap(prefKeyBase, myView, false);
+                    }
+                }
                 return true;
             }
             if (myView != null && myView instanceof CornerView) ((CornerView) myView).triggerFlash();
