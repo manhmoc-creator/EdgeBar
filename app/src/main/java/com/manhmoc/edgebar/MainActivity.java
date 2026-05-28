@@ -18,7 +18,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout pageDesign, pageGestures, pageIntents, designSliderContainer; private Button btnNavDes, btnNavGes, btnNavInt;
     private LinearLayout tabLock, tabHome; private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
-    private int designTabState = 0; private final String CURRENT_VERSION = "V19.12.1.3"; 
+    private int designTabState = 0; private final String CURRENT_VERSION = "V19.12.1.2"; 
 
     // V19.12.1.2: State Trackers cho Live Preview
     private int currentMainTab = 1; private int currentGesTab = 0;
