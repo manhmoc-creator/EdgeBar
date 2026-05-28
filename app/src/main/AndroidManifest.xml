@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <application android:allowBackup="true" android:icon="@drawable/ic_launcher" android:label="Edge Bar" android:supportsRtl="true" android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter> <action android:name="android.intent.action.MAIN" /> <category android:name="android.intent.category.LAUNCHER" /> </intent-filter>
@@ -45,5 +47,6 @@
         <service android:name=".Tile13" android:label="Tile 13" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true" android:enabled="false"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
         <service android:name=".Tile14" android:label="Tile 14" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true" android:enabled="false"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
         <service android:name=".Tile15" android:label="Tile 15" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true" android:enabled="false"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+        <service android:name=".RecorderService" android:exported="false" android:foregroundServiceType="microphone" />
     </application>
 </manifest>
