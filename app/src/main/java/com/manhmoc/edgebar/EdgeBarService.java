@@ -98,7 +98,15 @@ public class EdgeBarService extends AccessibilityService {
             else { moonPath.moveTo(mTipX, mRootY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mRootX, mTipY); moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY); }
             moonPath.close();
 
-            canvas.drawPath(moonPath, pFill); canvas.drawPath(strokePath, pStroke); 
+            canvas.drawPath(strokePath, pStroke); 
+
+            // V19.12.1.4: Tịnh tiến Lõi Trăng Non độc lập
+            float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
+            float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
+            canvas.save();
+            canvas.translate(mx, my);
+            canvas.drawPath(moonPath, pFill);
+            canvas.restore();
         } 
     }
 
@@ -138,7 +146,6 @@ public class EdgeBarService extends AccessibilityService {
     }
 
     private void updateVisibility() { 
-        // V19.12.1.2: BẮT SÓNG LIVE PREVIEW
         boolean isPreview = prefs.getBoolean("preview_lock", false);
         boolean isLocked = km.isKeyguardLocked() || isPreview; 
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true); boolean hide = (avoidKbd && isKbd) || isBl; 
@@ -166,9 +173,14 @@ public class EdgeBarService extends AccessibilityService {
                 if(priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH); 
                 WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams(); p.flags = baseFlags; p.gravity = C_GRAV[i]; 
                 
+                // V19.12.1.4: Mở rộng khung Bounding Box tự động nếu Moon bị đẩy lệch ra xa
                 int wPref = prefs.getInt(ck+"w", 100); int hPref = prefs.getInt(ck+"h", 100);
                 int mwPref = prefs.getInt(ck+"moon_w", 100); int mhPref = prefs.getInt(ck+"moon_h", 100);
-                p.width = Math.max(10, Math.max(wPref, mwPref)); p.height = Math.max(10, Math.max(hPref, mhPref));
+                int mxOffset = Math.abs(prefs.getInt(ck+"moon_x", 1250) - 1250);
+                int myOffset = Math.abs(prefs.getInt(ck+"moon_y", 1250) - 1250);
+                
+                p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset); 
+                p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
                 p.x = prefs.getInt(ck+"x", 0); p.y = prefs.getInt(ck+"y", 0); 
                 wm.updateViewLayout(corners[i], p); } 
         }
