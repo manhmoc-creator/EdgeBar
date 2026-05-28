@@ -20,11 +20,6 @@ public class ToggleReceiver extends BroadcastReceiver {
                 }
                 try { Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, cur); Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, "1"); } catch(Exception e){}
             }
-        } else if ("com.manhmoc.edgebar.TOGGLE_APP".equals(i.getAction())) {
-            String data = i.getDataString();
-            if (data != null && data.startsWith("acc://")) toggleAcc(c, data.substring(6));
-        } else if ("com.manhmoc.edgebar.TOGGLE_MORSE".equals(i.getAction())) {
-            Intent s = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"); c.sendBroadcast(s);
         }
     }
     private void toggleAcc(Context c, String mySvc) {
