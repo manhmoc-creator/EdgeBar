@@ -1,4 +1,5 @@
 package com.manhmoc.edgebar;
+
 import android.app.Activity; import android.app.AlertDialog; import android.app.Dialog; import android.app.DownloadManager; import android.content.BroadcastReceiver; import android.content.ComponentName; import android.content.Context; import android.content.Intent; import android.content.IntentFilter; import android.content.SharedPreferences; import android.content.pm.PackageManager; import android.graphics.Color; import android.graphics.drawable.GradientDrawable; import android.os.Bundle; import android.os.Environment; import android.provider.Settings; import android.net.Uri; import android.text.TextUtils; import android.view.Gravity; import android.view.View; import android.view.ViewGroup; import android.widget.*; import org.json.JSONObject; import java.util.ArrayList; import java.util.Iterator; import java.net.HttpURLConnection; import java.net.URL; import java.io.InputStreamReader; import java.io.BufferedReader;
 
 public class MainActivity extends Activity {
@@ -18,7 +19,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.4.4"; 
+    private final String CURRENT_VERSION = "V19.12.1.8"; 
     
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     private void refreshPreview() { boolean p = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); prefs.edit().putBoolean("preview_lock", p).apply(); }
@@ -238,7 +239,7 @@ public class MainActivity extends Activity {
     }
     
     private void showPremiumDialog() { 
-        String t = "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật (Bắt buộc cho Trợ Năng):\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n💡 NẾU CÓ ADB, APP SẼ LÀM ĐƯỢC GÌ?\n- Tự cấp quyền Lớp phủ, khỏi cần hỏi hệ thống.\n- Đóng/cắt Trợ năng mọi app trong 1 mili-giây.\n- Sống dai, khó bị hệ thống kill ngầm.\n\n🚀 V19.12.3.4.4 - THE FINAL VAULT:\n- Multi-Action (chọn nhiều hành động cho 1 cử chỉ)\n- 15 QS Tiles tùy chỉnh\n- 5 Macro bật/tắt hàng loạt Trợ năng\n- Lõi Trăng Non & Vỏ Viền hoàn toàn độc lập\n- Live Preview Lockscreen khi chỉnh\n- Homescreen tàng hình khi Preview\n- Animation đã sửa lỗi đứng hình\n- Toggle bất kỳ app trợ năng nào qua Data URI"; 
+        String t = "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật (Bắt buộc cho Trợ Năng):\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n💡 NẾU CÓ ADB, APP SẼ LÀM ĐƯỢC GÌ?\n- Tự cấp quyền Lớp phủ, khỏi cần hỏi hệ thống.\n- Đóng/cắt Trợ năng mọi app trong 1 mili-giây.\n- Sống dai, khó bị hệ thống kill ngầm.\n\n🚀 V19.12.1.8 - THE ULTIMATE ARCHITECT:\n- Multi-Action (chọn nhiều hành động cho 1 cử chỉ)\n- 15 QS Tiles tùy chỉnh\n- 5 Macro bật/tắt hàng loạt Trợ năng\n- Lõi Trăng Non & Vỏ Viền hoàn toàn độc lập\n- Live Preview Lockscreen khi chỉnh\n- Homescreen tàng hình khi Preview\n- Animation đã sửa lỗi đứng hình\n- Toggle bất kỳ app trợ năng nào qua Data URI"; 
         ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); 
     }
     
