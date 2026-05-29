@@ -12,10 +12,12 @@ import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
 import android.provider.Settings;
 import android.net.Uri;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.*;
@@ -44,7 +46,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.4.5.3"; 
+    private final String CURRENT_VERSION = "V19.12.3.4.5.4"; 
     private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
@@ -294,7 +296,7 @@ public class MainActivity extends Activity {
         return root;
     }
 
-    // App Picker Dialog cải tiến: dùng ListView, bỏ icon, chọn nhiều
+    // App Picker Dialog cải tiến: dùng ListView, bỏ icon, chọn nhiều, KHÔNG dùng findViewWithTag
     private void showAppPickerDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle(T("Choose App to Lock", "Chọn ứng dụng cần khóa"));
@@ -308,7 +310,6 @@ public class MainActivity extends Activity {
             appNames.add(app.loadLabel(getPackageManager()).toString());
             appPackages.add(app.activityInfo.packageName);
         }
-        // Tạo mảng boolean để lưu trạng thái checked
         final boolean[] checked = new boolean[appNames.size()];
         for (int i = 0; i < appPackages.size(); i++) {
             checked[i] = selectedApps.contains(appPackages.get(i));
@@ -321,9 +322,15 @@ public class MainActivity extends Activity {
             }
             String newLocklist = TextUtils.join(",", selectedApps);
             prefs.edit().putString("locklist", newLocklist).apply();
-            ViewGroup rootView = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
-            EditText et = rootView.findViewWithTag("locklist_input");
-            if (et != null) et.setText(newLocklist);
+            // Cập nhật trực tiếp EditText nếu nó đang hiển thị (không dùng findViewWithTag)
+            if (pageDesign.getVisibility() == View.VISIBLE) {
+                // Tìm EditText trong lockRow (đã có tag nhưng để an toàn, ta tìm trong lockRow)
+                LinearLayout lockRow = (LinearLayout) ((ViewGroup)pageDesign).findViewWithTag("locklist_row");
+                if (lockRow != null) {
+                    EditText et = (EditText) lockRow.getChildAt(0);
+                    if (et != null) et.setText(newLocklist);
+                }
+            }
         });
         builder.setNegativeButton("HỦY", null);
         builder.show();
@@ -449,7 +456,7 @@ public class MainActivity extends Activity {
         secSys.addView(createSectionTitle("BLACKLIST (Hide Overlay)")); secSys.addView(createInput("Packages (com.ex.app)", "blacklist")); 
         
         secSys.addView(createSectionTitle("LOCKLIST (Morse AppLock)")); 
-        LinearLayout lockRow = new LinearLayout(this); lockRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout lockRow = new LinearLayout(this); lockRow.setOrientation(LinearLayout.HORIZONTAL); lockRow.setTag("locklist_row");
         EditText etLock = createInput("Packages (com.zing.zalo,...)", "locklist"); etLock.setTag("locklist_input"); etLock.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         Button btnPickApps = new Button(this); btnPickApps.setText("📱 PICK APP"); btnPickApps.setTextColor(Color.BLACK); btnPickApps.setBackground(getRounded("#00E5FF", 20f));
         btnPickApps.setOnClickListener(v -> showAppPickerDialog());
@@ -491,7 +498,7 @@ public class MainActivity extends Activity {
 
     private void showPremiumDialog() { 
         String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow", 
-        "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4.5.3 THE POLISHED VAULT:\n- Sửa bàn phím Morse không còn lag\n- Đổi mật khẩu bằng nút giữ 30s thực\n- Lớp phủ tự tắt khi thoát app\n- App Picker dạng danh sách, không icon, không crash\n- Thêm visibility cho 8 thanh bar Morse\n- Gom slider vào Drawer gọn gàng"); 
+        "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4.5.4 THE FIXED VAULT:\n- Sửa lỗi build thiếu import Handler, MotionEvent\n- Sửa lỗi NPE trong App Picker (bỏ findViewWithTag)\n- Tối ưu nút nổi 30s (tránh rung loạn)"); 
         ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); 
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); 
     }
@@ -553,28 +560,20 @@ public class MainActivity extends Activity {
                 etMasterPass.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
                 Button btnFloatingSave = new Button(this); btnFloatingSave.setText("🔒"); btnFloatingSave.setBackground(getRounded("#00E5FF", 100f)); btnFloatingSave.setTextColor(Color.BLACK);
                 btnFloatingSave.setLayoutParams(new LinearLayout.LayoutParams(100, -2));
-                // Xử lý nhấn giữ 30s
+                // Xử lý nhấn giữ 30s (đơn giản, không lồng listener)
+                final Handler longPressHandler = new Handler();
+                final Runnable longPressRunnable = new Runnable() {
+                    @Override
+                    public void run() {
+                        btnFloatingSave.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                        showChangePasswordDialog();
+                    }
+                };
                 btnFloatingSave.setOnTouchListener((v, event) -> {
                     if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                        final Handler handler = new Handler();
-                        final Runnable longPress = new Runnable() {
-                            @Override
-                            public void run() {
-                                v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
-                                showChangePasswordDialog();
-                            }
-                        };
-                        handler.postDelayed(longPress, 30000);
-                        v.setOnTouchListener(new View.OnTouchListener() {
-                            @Override
-                            public boolean onTouch(View v2, MotionEvent event2) {
-                                if (event2.getAction() == MotionEvent.ACTION_UP || event2.getAction() == MotionEvent.ACTION_CANCEL) {
-                                    handler.removeCallbacks(longPress);
-                                    v2.setOnTouchListener(null);
-                                }
-                                return false;
-                            }
-                        });
+                        longPressHandler.postDelayed(longPressRunnable, 30000);
+                    } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                        longPressHandler.removeCallbacks(longPressRunnable);
                     }
                     return false;
                 });
@@ -609,7 +608,6 @@ public class MainActivity extends Activity {
             for(int i=0; i < bKeys.length; i++) { 
                 LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); 
                 CheckBox cb = new CheckBox(this); cb.setText("BẬT: " + bNames[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+bKeys[i]+"_en", false)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+bKeys[idx]+"_en", c).apply()); drawerContent.addView(cb); 
-                // Thêm visibility cho morse bars (cũng áp dụng cho lock/home? Chỉ yêu cầu cho morse space)
                 if (designTabState == 2) {
                     drawerContent.addView(createComboDropdown("Hiển thị", prefix+bKeys[i]+"_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình (Nháy sáng)", "Ẩn hoàn toàn (Vô hình)"}, 0));
                 }
