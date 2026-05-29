@@ -49,6 +49,7 @@ public class EdgeBarService extends AccessibilityService {
     private Vibrator vibrator;
 
     private String unlockedPackage = "";
+    private String currentForegroundPackage = "";
 
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
@@ -290,6 +291,7 @@ public class EdgeBarService extends AccessibilityService {
         if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
             String cName = event.getClassName() != null ? event.getClassName().toString() : "";
+            currentForegroundPackage = pName;
             isKbd = pName.contains("inputmethod") || cName.contains("InputWindow") || cName.contains("keyboard") || cName.contains("Keyboard");
             String bl = prefs.getString("blacklist", "");
             isBl = !pName.isEmpty() && bl.contains(pName);
@@ -299,6 +301,12 @@ public class EdgeBarService extends AccessibilityService {
                 for (String pkg : locklist.split(",")) {
                     if (pkg.trim().equals(pName)) { isAppLocked = true; break; }
                 }
+            }
+            // Nếu app hiện tại không nằm trong locklist, gửi lệnh dismiss
+            if (!isAppLocked && !pName.isEmpty() && !pName.contains("systemui") && !isKbd && !pName.equals(getPackageName())) {
+                Intent dismiss = new Intent("com.manhmoc.edgebar.MORSE_LOCK_DISMISS");
+                sendBroadcast(dismiss);
+                unlockedPackage = "";
             }
             if (isAppLocked) {
                 if (!pName.equals(unlockedPackage)) {
@@ -336,7 +344,7 @@ public class EdgeBarService extends AccessibilityService {
                                 Intent y = new Intent(Intent.ACTION_SEND);
                                 y.setType("text/plain");
                                 y.putExtra(Intent.EXTRA_TEXT, txt.toString());
-                                y.setPackage("com.deniscerri.ytdlnis");
+                                y.setPackage("com.deniscerri.ytdl");
                                 y.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                                 startActivity(y);
                             }
