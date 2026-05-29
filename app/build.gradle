@@ -3,6 +3,6 @@ android {
     namespace 'com.manhmoc.edgebar'
     compileSdk 34
     signingConfigs { release { storeFile file("../edge.keystore"); storePassword "edge19"; keyAlias "edge19"; keyPassword "edge19" } }
-    defaultConfig { applicationId "com.manhmoc.edgebar"; minSdk 26; targetSdk 34; versionCode 88; versionName "19.12.3.4.5.1" }
+    defaultConfig { applicationId "com.manhmoc.edgebar"; minSdk 26; targetSdk 34; versionCode 89; versionName "19.12.3.4.5.2" }
     buildTypes { debug { signingConfig signingConfigs.release }; release { signingConfig signingConfigs.release; minifyEnabled false } }
 }
