@@ -393,9 +393,11 @@ public class HomescreenService extends Service {
                 if (currentMorseAttempt.length() > 0) {
                     currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length() - 1);
             return;
+            return;
                     StringBuilder dots = new StringBuilder();
                     for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
                     tvMorseStatus.setText(dots.toString());
+            return;
             return;
                 }
             }
@@ -500,6 +502,13 @@ public class HomescreenService extends Service {
                 }
             } else {
                 morseContainer.setOnTouchListener((v, e) -> true);
+        WindowManager.LayoutParams p2 = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
+        if (p2 != null) {
+            p2.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
+                      WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN |
+                      WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+            wm.updateViewLayout(morseContainer, p2);
+        };
         WindowManager.LayoutParams p2 = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
         if (p2 != null) {
             p2.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
