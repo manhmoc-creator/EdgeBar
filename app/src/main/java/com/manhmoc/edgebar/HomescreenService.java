@@ -68,6 +68,8 @@ public class HomescreenService extends Service {
     private Handler morseDotHandler = new Handler();
     private boolean isPreviewMorse = false;
     private long lockUntilTime = 0;
+    private Handler numberDisplayHandler = new Handler();
+    private Runnable hideNumberRunnable;
 
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
@@ -341,6 +343,7 @@ public class HomescreenService extends Service {
         morseContainer = new RelativeLayout(this);
         morseContainer.setBackgroundColor(Color.BLACK);
         morseContainer.setVisibility(View.GONE);
+        // Xuyên thấu khi preview_morse (isPreviewMorse)
         morseContainer.setOnTouchListener((v, e) -> isPreviewMorse ? false : true);
 
         tvMorseStatus = new TextView(this);
@@ -376,7 +379,7 @@ public class HomescreenService extends Service {
         sendSyncState();
     }
 
-    // Xóa 1 ký tự (X) và xóa toàn bộ khi nhấn giữ
+    // Xóa 1 ký tự (X) và xóa toàn bộ khi nhấn giữ - KHÔNG thêm ký tự vào chuỗi
     private void handleMorseTap(String comp, View v, boolean isLongPress) {
         doVibrate(30);
         if (v != null && v instanceof CornerView) ((CornerView) v).triggerFlash();
@@ -385,7 +388,7 @@ public class HomescreenService extends Service {
         String masterPass = prefs.getString("morse_master_pass", "");
         int realMaxLen = masterPass.length();
 
-        // Xử lý riêng nút X và >
+        // Xử lý nút X (xóa)
         if (mappedKey.equals("X")) {
             if (isLongPress) {
                 currentMorseAttempt = "";
@@ -393,13 +396,19 @@ public class HomescreenService extends Service {
             } else {
                 if (currentMorseAttempt.length() > 0) {
                     currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length() - 1);
-                    StringBuilder dots = new StringBuilder();
-                    for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
-                    tvMorseStatus.setText(dots.toString());
+                    if (currentMorseAttempt.isEmpty()) {
+                        tvMorseStatus.setText("");
+                    } else {
+                        StringBuilder dots = new StringBuilder();
+                        for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
+                        tvMorseStatus.setText(dots.toString());
+                    }
                 }
             }
             return;
-        } else if (mappedKey.equals(">")) {
+        }
+        // Xử lý nút > (enter)
+        else if (mappedKey.equals(">")) {
             if (currentMorseAttempt.isEmpty() || masterPass.isEmpty()) return;
             if (currentMorseAttempt.equals(masterPass)) {
                 isMorseLockActive = false;
@@ -430,7 +439,6 @@ public class HomescreenService extends Service {
         }
 
         // Xử lý phím số
-        // Nếu vượt quá độ dài thực của mật khẩu thì coi như sai ngay
         if (currentMorseAttempt.length() >= realMaxLen && realMaxLen > 0) {
             morseFailCount++;
             int failVib = prefs.getInt("morse_fail_vib", 500);
@@ -450,10 +458,17 @@ public class HomescreenService extends Service {
         }
 
         currentMorseAttempt += mappedKey;
-        StringBuilder dots = new StringBuilder();
-        for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
-        tvMorseStatus.setText(dots.toString());
-        morseDotHandler.removeCallbacksAndMessages(null);
+        // Hiển thị số thay vì dấu chấm ngay lập tức
+        tvMorseStatus.setText(currentMorseAttempt);
+        // Hủy delay cũ
+        if (hideNumberRunnable != null) numberDisplayHandler.removeCallbacks(hideNumberRunnable);
+        int showNumberMs = prefs.getInt("morse_show_number_ms", 800);
+        hideNumberRunnable = () -> {
+            StringBuilder dots = new StringBuilder();
+            for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
+            tvMorseStatus.setText(dots.toString());
+        };
+        numberDisplayHandler.postDelayed(hideNumberRunnable, showNumberMs);
     }
 
     private void updateVisibility() {
@@ -468,11 +483,8 @@ public class HomescreenService extends Service {
         if ((isMorseLockActive && !timeLocked) || isPreviewMorse) {
             morseContainer.setVisibility(View.VISIBLE);
             morseContainer.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
-            if (isPreviewMorse) {
-                morseContainer.setOnTouchListener((v, e) -> false);
-            } else {
-                morseContainer.setOnTouchListener((v, e) -> true);
-            }
+            // Xuyên thấu khi preview
+            morseContainer.setOnTouchListener((v, e) -> isPreviewMorse ? false : true);
 
             for (int i = 0; i < 5; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
             for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
@@ -805,7 +817,6 @@ public class HomescreenService extends Service {
         @Override
         public boolean onTouch(View v, MotionEvent e) {
             if (isMorseLockActive || isPreviewMorse) {
-                // Xác định xem có phải nút X không (dựa vào mapped key)
                 String mapped = mapComponentToNumber(prefKeyBase);
                 if (e.getAction() == MotionEvent.ACTION_DOWN) {
                     if (mapped.equals("X")) {

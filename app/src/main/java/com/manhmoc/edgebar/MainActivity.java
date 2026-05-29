@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.4.5.4"; 
+    private final String CURRENT_VERSION = "V19.12.3.4.5.5"; 
     private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
@@ -600,6 +600,7 @@ public class MainActivity extends Activity {
                 sliderDrawerContent.addView(createSlider("Thời gian khóa sau 5 lần sai (phút)", "morse_lock_minutes", 60, 30));
                 sliderDrawerContent.addView(createSlider("Độ mờ màn chắn Morse (Alpha Đen)", "morse_bg_alpha", 255, 180));
                 sliderDrawerContent.addView(createSlider("Thời gian hiện dấu chấm (ms)", "morse_dot_delay", 2000, 500));
+                sliderDrawerContent.addView(createSlider("Thời gian hiện số (ms) trước khi thành dấu chấm", "morse_show_number_ms", 3000, 800));
                 sliderDrawerContent.addView(createSlider("Độ rung khi nhập sai (ms)", "morse_fail_vib", 1500, 500));
                 designSliderContainer.addView(createDrawer("CÀI ĐẶT MORSE NÂNG CAO", sliderDrawerContent));
             }
