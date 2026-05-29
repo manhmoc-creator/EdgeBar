@@ -343,8 +343,7 @@ public class HomescreenService extends Service {
         morseContainer = new RelativeLayout(this);
         morseContainer.setBackgroundColor(Color.BLACK);
         morseContainer.setVisibility(View.GONE);
-        // Xuyên thấu khi preview_morse (isPreviewMorse)
-        morseContainer.setOnTouchListener((v, e) -> isPreviewMorse ? false : true);
+        // Touch listener sẽ được set động trong updateVisibility
 
         tvMorseStatus = new TextView(this);
         tvMorseStatus.setTextColor(Color.WHITE);
@@ -379,7 +378,7 @@ public class HomescreenService extends Service {
         sendSyncState();
     }
 
-    // Xóa 1 ký tự (X) và xóa toàn bộ khi nhấn giữ - KHÔNG thêm ký tự vào chuỗi
+    // Xóa 1 ký tự (X) và xóa toàn bộ khi nhấn giữ
     private void handleMorseTap(String comp, View v, boolean isLongPress) {
         doVibrate(30);
         if (v != null && v instanceof CornerView) ((CornerView) v).triggerFlash();
@@ -388,7 +387,6 @@ public class HomescreenService extends Service {
         String masterPass = prefs.getString("morse_master_pass", "");
         int realMaxLen = masterPass.length();
 
-        // Xử lý nút X (xóa)
         if (mappedKey.equals("X")) {
             if (isLongPress) {
                 currentMorseAttempt = "";
@@ -406,9 +404,7 @@ public class HomescreenService extends Service {
                 }
             }
             return;
-        }
-        // Xử lý nút > (enter)
-        else if (mappedKey.equals(">")) {
+        } else if (mappedKey.equals(">")) {
             if (currentMorseAttempt.isEmpty() || masterPass.isEmpty()) return;
             if (currentMorseAttempt.equals(masterPass)) {
                 isMorseLockActive = false;
@@ -417,6 +413,7 @@ public class HomescreenService extends Service {
                 Intent i = new Intent("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS");
                 i.putExtra("pkg", lockedPkg);
                 sendBroadcast(i);
+                // Đóng lớp phủ
                 updateVisibility();
             } else {
                 morseFailCount++;
@@ -438,7 +435,7 @@ public class HomescreenService extends Service {
             return;
         }
 
-        // Xử lý phím số
+        // Phím số
         if (currentMorseAttempt.length() >= realMaxLen && realMaxLen > 0) {
             morseFailCount++;
             int failVib = prefs.getInt("morse_fail_vib", 500);
@@ -458,9 +455,7 @@ public class HomescreenService extends Service {
         }
 
         currentMorseAttempt += mappedKey;
-        // Hiển thị số thay vì dấu chấm ngay lập tức
         tvMorseStatus.setText(currentMorseAttempt);
-        // Hủy delay cũ
         if (hideNumberRunnable != null) numberDisplayHandler.removeCallbacks(hideNumberRunnable);
         int showNumberMs = prefs.getInt("morse_show_number_ms", 800);
         hideNumberRunnable = () -> {
@@ -483,8 +478,18 @@ public class HomescreenService extends Service {
         if ((isMorseLockActive && !timeLocked) || isPreviewMorse) {
             morseContainer.setVisibility(View.VISIBLE);
             morseContainer.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
-            // Xuyên thấu khi preview
-            morseContainer.setOnTouchListener((v, e) -> isPreviewMorse ? false : true);
+            // Nếu đang preview -> xuyên thấu (thêm FLAG_NOT_TOUCHABLE)
+            if (isPreviewMorse) {
+                WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
+                p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                wm.updateViewLayout(morseContainer, p);
+                morseContainer.setOnTouchListener((v, e) -> false);
+            } else {
+                WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
+                p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                wm.updateViewLayout(morseContainer, p);
+                morseContainer.setOnTouchListener((v, e) -> true);
+            }
 
             for (int i = 0; i < 5; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
             for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
@@ -503,8 +508,12 @@ public class HomescreenService extends Service {
                     gd.setColor(Color.argb(alpha, 96, 125, 139));
                     gd.setCornerRadius(24f);
                     mBars[i].setBackground(gd);
-                    int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS |
-                            (isPreviewMorse ? 0 : (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH));
+                    int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+                    if (isPreviewMorse) {
+                        baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; // Xuyên thấu
+                    } else {
+                        baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+                    }
                     WindowManager.LayoutParams p = (WindowManager.LayoutParams) mBars[i].getLayoutParams();
                     p.flags = baseFlags;
                     p.width = w;
@@ -513,7 +522,7 @@ public class HomescreenService extends Service {
                     p.y = y;
                     p.gravity = M_GRAV[i];
                     wm.updateViewLayout(mBars[i], p);
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mBars[i].getVisibility() == View.VISIBLE) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mBars[i].getVisibility() == View.VISIBLE && !isPreviewMorse) {
                         Rect rect = new Rect(0, 0, w, h);
                         mBars[i].setSystemGestureExclusionRects(Collections.singletonList(rect));
                     }
@@ -532,8 +541,12 @@ public class HomescreenService extends Service {
                     boolean isAuto = (visMode == 1);
                     boolean isInv = (visMode == 2);
                     ((CornerView) mCorners[i]).updateProps(prefs.getInt("morse_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv);
-                    int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS |
-                            (isPreviewMorse ? 0 : (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH));
+                    int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+                    if (isPreviewMorse) {
+                        baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    } else {
+                        baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+                    }
                     WindowManager.LayoutParams p = (WindowManager.LayoutParams) mCorners[i].getLayoutParams();
                     p.flags = baseFlags;
                     p.gravity = C_GRAV[i];
@@ -548,7 +561,7 @@ public class HomescreenService extends Service {
                     p.x = prefs.getInt(ck + "x", 0);
                     p.y = prefs.getInt(ck + "y", 0);
                     wm.updateViewLayout(mCorners[i], p);
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mCorners[i].getVisibility() == View.VISIBLE) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mCorners[i].getVisibility() == View.VISIBLE && !isPreviewMorse) {
                         Rect rect = new Rect(0, 0, p.width, p.height);
                         mCorners[i].setSystemGestureExclusionRects(Collections.singletonList(rect));
                     }
@@ -826,7 +839,6 @@ public class HomescreenService extends Service {
                             handleMorseTap(prefKeyBase, myView, true);
                         }, 600);
                     } else {
-                        // Xử lý ngay lập tức cho các phím số và >
                         handleMorseTap(prefKeyBase, myView, false);
                     }
                 } else if (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL) {
