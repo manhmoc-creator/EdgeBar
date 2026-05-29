@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.4.5.7"; 
+    private final String CURRENT_VERSION = "V19.12.3.4.5.8"; 
     private RelativeLayout rootLayout;
 
     // Ecosystem
@@ -89,6 +89,9 @@ public class MainActivity extends Activity {
                     java.io.OutputStream os = getContentResolver().openOutputStream(data.getData()); 
                     os.write(new JSONObject(prefs.getAll()).toString().getBytes()); os.close(); 
                     Toast.makeText(this, T("Backup Saved!", "Đã Lưu Cấu Hình Backup!"), Toast.LENGTH_SHORT).show(); 
+                else if(req == 103) {
+                    try { prefs.edit().putString("morse_bg_image", data.getData().toString()).apply(); prefs.edit().putInt("morse_bg_type", 1).apply(); Toast.makeText(this, "Đã chọn ảnh nền!", Toast.LENGTH_SHORT).show(); } catch(Exception e) {}
+                }
                 } else if(req == 102) { 
                     java.io.InputStream is = getContentResolver().openInputStream(data.getData()); 
                     java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(is)); 
@@ -624,6 +627,10 @@ public class MainActivity extends Activity {
                 sliderDrawerContent.addView(createSlider("Thời gian hiện dấu chấm (ms)", "morse_dot_delay", 2000, 500));
                 sliderDrawerContent.addView(createSlider("Thời gian hiện số (ms) trước khi thành dấu chấm", "morse_show_number_ms", 3000, 800));
                 sliderDrawerContent.addView(createSlider("Độ rung khi nhập sai (ms)", "morse_fail_vib", 1500, 500));
+                CheckBox cbVibEn = new CheckBox(this); cbVibEn.setText("Bật rung bàn phím Morse"); cbVibEn.setTextColor(Color.WHITE); cbVibEn.setChecked(prefs.getBoolean("morse_vib_en", true)); cbVibEn.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("morse_vib_en", c).apply()); sliderDrawerContent.addView(cbVibEn); 
+                sliderDrawerContent.addView(createSlider("Độ rung khi gõ (ms)", "morse_vib_dur", 200, 30)); 
+                sliderDrawerContent.addView(createComboDropdown("Nền lớp phủ", "morse_bg_type", new String[]{"Hiệu ứng Glitch", "Ảnh tùy chọn"}, prefs.getInt("morse_bg_type",0))); 
+                Button btnPickBg = new Button(this); btnPickBg.setText("📁 CHỌN ẢNH NỀN"); btnPickBg.setBackground(getRounded("#2196F3",20f)); btnPickBg.setTextColor(Color.WHITE); btnPickBg.setOnClickListener(v -> { Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("image/*"); startActivityForResult(intent, 103); }); sliderDrawerContent.addView(btnPickBg);
                 designSliderContainer.addView(createDrawer("CÀI ĐẶT MORSE NÂNG CAO", sliderDrawerContent));
             }
             designSliderContainer.addView(createSectionTitle("EDGE BARS (" + bKeys.length + " THANH)"));

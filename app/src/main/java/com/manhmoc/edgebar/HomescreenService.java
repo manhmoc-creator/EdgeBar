@@ -13,6 +13,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -22,9 +24,12 @@ import android.graphics.LinearGradient;
 import android.graphics.Shader;
 import android.graphics.DashPathEffect;
 import android.graphics.Rect;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.VibrationEffect;
@@ -40,6 +45,8 @@ import android.view.WindowManager;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
+import java.io.FileNotFoundException;
+import java.io.InputStream;
 import java.util.Collections;
 import java.util.Random;
 
@@ -71,6 +78,10 @@ public class HomescreenService extends Service {
     private Handler numberDisplayHandler = new Handler();
     private Runnable hideNumberRunnable;
 
+    private int bgType = 0; // 0=glitch, 1=image
+    private String bgImagePath = "";
+    private Bitmap bgBitmap = null;
+
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
 
@@ -82,10 +93,25 @@ public class HomescreenService extends Service {
 
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
         if (k != null) {
+            if (k.equals("morse_bg_type") || k.equals("morse_bg_image")) reloadBackground();
             updateVisibility();
             if (fV != null) fV.updateStyle();
         }
     };
+
+    private void reloadBackground() {
+        bgType = prefs.getInt("morse_bg_type", 0);
+        bgImagePath = prefs.getString("morse_bg_image", "");
+        if (bgType == 1 && !bgImagePath.isEmpty()) {
+            try {
+                InputStream is = getContentResolver().openInputStream(Uri.parse(bgImagePath));
+                bgBitmap = BitmapFactory.decodeStream(is);
+                if (scratchView != null) scratchView.invalidate();
+            } catch (Exception e) { bgBitmap = null; }
+        } else {
+            if (scratchView != null) scratchView.invalidate();
+        }
+    }
 
     private BroadcastReceiver syncReceiver = new BroadcastReceiver() {
         @Override
@@ -129,54 +155,72 @@ public class HomescreenService extends Service {
         return prefs.getString(key, "*");
     }
 
-    private class ScratchView extends View {
+    // GlitchView thay thế ScratchView (sọc màn, không rối)
+    private class GlitchView extends View {
         private Paint paint = new Paint();
         private Random random = new Random();
-        private int[] crackPoints;
-        private boolean visible = true;
+        private int[] stripHeights;
+        private int frame = 0;
 
-        public ScratchView(Context context) {
+        public GlitchView(Context context) {
             super(context);
             paint.setColor(Color.WHITE);
-            paint.setStrokeWidth(8);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setAntiAlias(true);
-            generateCracks();
+            paint.setAlpha(80);
+            generateStrips();
         }
 
-        private void generateCracks() {
-            crackPoints = new int[80];
-            for (int i = 0; i < 80; i += 2) {
-                crackPoints[i] = random.nextInt(2000);
-                crackPoints[i + 1] = random.nextInt(3000);
+        private void generateStrips() {
+            stripHeights = new int[40];
+            for (int i = 0; i < stripHeights.length; i++) {
+                stripHeights[i] = 20 + random.nextInt(80);
             }
         }
 
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            if (!visible) return;
-            if (crackPoints == null) generateCracks();
-            paint.setAlpha(200);
-            for (int i = 0; i < crackPoints.length - 2; i += 2) {
-                canvas.drawLine(crackPoints[i], crackPoints[i+1], crackPoints[i+2], crackPoints[i+3], paint);
+            if (bgType == 1 && bgBitmap != null) {
+                canvas.drawBitmap(bgBitmap, null, new Rect(0, 0, getWidth(), getHeight()), null);
+                return;
             }
-            paint.setStrokeWidth(5);
-            paint.setAlpha(180);
-            for (int i = 0; i < 40; i++) {
-                int x1 = random.nextInt(getWidth());
-                int y1 = random.nextInt(getHeight());
-                int x2 = x1 + random.nextInt(400) - 200;
-                int y2 = y1 + random.nextInt(400) - 200;
-                canvas.drawLine(x1, y1, x2, y2, paint);
+            // Hiệu ứng glitch: các vạch ngang trắng/xanh/đỏ lệch màu
+            int width = getWidth();
+            int height = getHeight();
+            int y = 0;
+            for (int i = 0; i < stripHeights.length && y < height; i++) {
+                int h = stripHeights[i];
+                if (y + h > height) h = height - y;
+                // Chọn màu ngẫu nhiên
+                int color;
+                switch (random.nextInt(5)) {
+                    case 0: color = Color.argb(100, 255, 255, 255); break;
+                    case 1: color = Color.argb(100, 0, 255, 255); break;
+                    case 2: color = Color.argb(100, 255, 0, 255); break;
+                    case 3: color = Color.argb(100, 255, 255, 0); break;
+                    default: color = Color.argb(80, 0, 255, 0); break;
+                }
+                paint.setColor(color);
+                canvas.drawRect(0, y, width, y + h, paint);
+                // Thêm hiệu ứng lệch ngang
+                if (random.nextFloat() > 0.7f) {
+                    int offset = random.nextInt(50) - 25;
+                    paint.setColor(Color.argb(120, 255, 255, 255));
+                    canvas.drawRect(offset, y, width + offset, y + h, paint);
+                }
+                y += h;
             }
-        }
-
-        @Override
-        protected void onVisibilityChanged(View changedView, int visibility) {
-            super.onVisibilityChanged(changedView, visibility);
-            visible = (visibility == View.VISIBLE);
-            if (visible) invalidate();
+            // Vẽ thêm nhiễu
+            paint.setColor(Color.argb(30, 255, 255, 255));
+            for (int i = 0; i < 200; i++) {
+                canvas.drawPoint(random.nextInt(width), random.nextInt(height), paint);
+            }
+            frame++;
+            if (frame % 10 == 0) {
+                generateStrips();
+                invalidate();
+            } else {
+                postInvalidateDelayed(150);
+            }
         }
     }
 
@@ -343,7 +387,6 @@ public class HomescreenService extends Service {
         morseContainer = new RelativeLayout(this);
         morseContainer.setBackgroundColor(Color.BLACK);
         morseContainer.setVisibility(View.GONE);
-        // Touch listener sẽ được set động trong updateVisibility
 
         tvMorseStatus = new TextView(this);
         tvMorseStatus.setTextColor(Color.WHITE);
@@ -353,7 +396,19 @@ public class HomescreenService extends Service {
         tLp.addRule(RelativeLayout.CENTER_IN_PARENT);
         morseContainer.addView(tvMorseStatus, tLp);
 
-        scratchView = new ScratchView(this);
+        reloadBackground();
+        if (bgType == 0) scratchView = new GlitchView(this);
+        else scratchView = new View(this) { // fallback, sẽ được thay bằng GlitchView? Thực tế luôn dùng GlitchView nếu bgType=0
+            @Override protected void onDraw(Canvas canvas) {
+                if (bgType == 1 && bgBitmap != null) canvas.drawBitmap(bgBitmap, null, new Rect(0,0,getWidth(),getHeight()), null);
+            }
+        };
+        if (bgType == 0) scratchView = new GlitchView(this);
+        else scratchView = new View(this) {
+            @Override protected void onDraw(Canvas canvas) {
+                if (bgType == 1 && bgBitmap != null) canvas.drawBitmap(bgBitmap, null, new Rect(0,0,getWidth(),getHeight()), null);
+            }
+        };
         morseContainer.addView(scratchView, new RelativeLayout.LayoutParams(-1, -1));
 
         WindowManager.LayoutParams bgP = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -378,9 +433,20 @@ public class HomescreenService extends Service {
         sendSyncState();
     }
 
-    // Xóa 1 ký tự (X) và xóa toàn bộ khi nhấn giữ
+    private void doMorseVibrate() {
+        if (prefs.getBoolean("morse_vib_en", true)) {
+            int dur = prefs.getInt("morse_vib_dur", 30);
+            if (dur <= 0) return;
+            try {
+                if (Build.VERSION.SDK_INT >= 26)
+                    vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE));
+                else vibrator.vibrate(dur);
+            } catch (Exception e) {}
+        }
+    }
+
     private void handleMorseTap(String comp, View v, boolean isLongPress) {
-        doVibrate(30);
+        doMorseVibrate();
         if (v != null && v instanceof CornerView) ((CornerView) v).triggerFlash();
 
         String mappedKey = mapComponentToNumber(comp);
@@ -394,9 +460,8 @@ public class HomescreenService extends Service {
             } else {
                 if (currentMorseAttempt.length() > 0) {
                     currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length() - 1);
-                    if (currentMorseAttempt.isEmpty()) {
-                        tvMorseStatus.setText("");
-                    } else {
+                    if (currentMorseAttempt.isEmpty()) tvMorseStatus.setText("");
+                    else {
                         StringBuilder dots = new StringBuilder();
                         for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
                         tvMorseStatus.setText(dots.toString());
@@ -413,12 +478,10 @@ public class HomescreenService extends Service {
                 Intent i = new Intent("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS");
                 i.putExtra("pkg", lockedPkg);
                 sendBroadcast(i);
-                // Đóng lớp phủ
                 updateVisibility();
             } else {
                 morseFailCount++;
-                int failVib = prefs.getInt("morse_fail_vib", 500);
-                doVibrate(failVib);
+                doMorseVibrate();
                 String insult = prefs.getString("morse_insult_" + Math.min(morseFailCount,5), "Sai rồi!");
                 tvMorseStatus.setText(insult);
                 if (morseFailCount >= 5) {
@@ -438,8 +501,7 @@ public class HomescreenService extends Service {
         // Phím số
         if (currentMorseAttempt.length() >= realMaxLen && realMaxLen > 0) {
             morseFailCount++;
-            int failVib = prefs.getInt("morse_fail_vib", 500);
-            doVibrate(failVib);
+            doMorseVibrate();
             String insult = prefs.getString("morse_insult_" + Math.min(morseFailCount,5), "Quá dài!");
             tvMorseStatus.setText(insult);
             currentMorseAttempt = "";
@@ -455,6 +517,7 @@ public class HomescreenService extends Service {
         }
 
         currentMorseAttempt += mappedKey;
+        // Hiển thị số ngay lập tức
         tvMorseStatus.setText(currentMorseAttempt);
         if (hideNumberRunnable != null) numberDisplayHandler.removeCallbacks(hideNumberRunnable);
         int showNumberMs = prefs.getInt("morse_show_number_ms", 800);
@@ -478,7 +541,6 @@ public class HomescreenService extends Service {
         if ((isMorseLockActive && !timeLocked) || isPreviewMorse) {
             morseContainer.setVisibility(View.VISIBLE);
             morseContainer.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
-            // Nếu đang preview -> xuyên thấu (thêm FLAG_NOT_TOUCHABLE)
             if (isPreviewMorse) {
                 WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
                 p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -509,11 +571,8 @@ public class HomescreenService extends Service {
                     gd.setCornerRadius(24f);
                     mBars[i].setBackground(gd);
                     int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-                    if (isPreviewMorse) {
-                        baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; // Xuyên thấu
-                    } else {
-                        baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-                    }
+                    if (isPreviewMorse) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
                     WindowManager.LayoutParams p = (WindowManager.LayoutParams) mBars[i].getLayoutParams();
                     p.flags = baseFlags;
                     p.width = w;
@@ -542,11 +601,8 @@ public class HomescreenService extends Service {
                     boolean isInv = (visMode == 2);
                     ((CornerView) mCorners[i]).updateProps(prefs.getInt("morse_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv);
                     int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-                    if (isPreviewMorse) {
-                        baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                    } else {
-                        baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-                    }
+                    if (isPreviewMorse) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
                     WindowManager.LayoutParams p = (WindowManager.LayoutParams) mCorners[i].getLayoutParams();
                     p.flags = baseFlags;
                     p.gravity = C_GRAV[i];
