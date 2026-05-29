@@ -392,11 +392,9 @@ public class HomescreenService extends Service {
             } else {
                 if (currentMorseAttempt.length() > 0) {
                     currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length() - 1);
-            return;
                     StringBuilder dots = new StringBuilder();
                     for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
                     tvMorseStatus.setText(dots.toString());
-            return;
                 }
             }
             return;
@@ -475,15 +473,7 @@ public class HomescreenService extends Service {
             morseContainer.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
             
             if (isPreviewMorse) {
-                morseContainer.setOnTouchListener(null);
-        WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
-        if (p != null) {
-            p.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
-                      WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
-                      WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN |
-                      WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-            wm.updateViewLayout(morseContainer, p);
-        };
+                morseContainer.setOnTouchListener((v, e) -> false);
                 for (int i = 0; i < mBars.length; i++) {
                     if (mBars[i] != null) {
                         WindowManager.LayoutParams p = (WindowManager.LayoutParams) mBars[i].getLayoutParams();
@@ -500,13 +490,6 @@ public class HomescreenService extends Service {
                 }
             } else {
                 morseContainer.setOnTouchListener((v, e) -> true);
-        WindowManager.LayoutParams p2 = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
-        if (p2 != null) {
-            p2.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
-                      WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN |
-                      WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-            wm.updateViewLayout(morseContainer, p2);
-        };
                 for (int i = 0; i < mBars.length; i++) {
                     if (mBars[i] != null) {
                         WindowManager.LayoutParams p = (WindowManager.LayoutParams) mBars[i].getLayoutParams();

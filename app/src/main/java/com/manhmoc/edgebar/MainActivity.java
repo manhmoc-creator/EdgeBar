@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.4.5.4"; 
+    private final String CURRENT_VERSION = "V19.12.3.4.5.5"; 
     private RelativeLayout rootLayout;
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
@@ -322,9 +322,7 @@ public class MainActivity extends Activity {
             }
             String newLocklist = TextUtils.join(",", selectedApps);
             prefs.edit().putString("locklist", newLocklist).apply();
-            // Cập nhật trực tiếp EditText nếu nó đang hiển thị (không dùng findViewWithTag)
             if (pageDesign.getVisibility() == View.VISIBLE) {
-                // Tìm EditText trong lockRow (đã có tag nhưng để an toàn, ta tìm trong lockRow)
                 LinearLayout lockRow = (LinearLayout) ((ViewGroup)pageDesign).findViewWithTag("locklist_row");
                 if (lockRow != null) {
                     EditText et = (EditText) lockRow.getChildAt(0);
@@ -498,7 +496,7 @@ public class MainActivity extends Activity {
 
     private void showPremiumDialog() { 
         String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow", 
-        "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4.5.4 THE FIXED VAULT:\n- Sửa lỗi build thiếu import Handler, MotionEvent\n- Sửa lỗi NPE trong App Picker (bỏ findViewWithTag)\n- Tối ưu nút nổi 30s (tránh rung loạn)"); 
+        "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4.5.5 THE FIXED VAULT:\n- Sửa lỗi chạm xuyên trong preview Morse\n- Thêm hiển thị số trước khi thành dấu chấm\n- Fix nút X và > không thêm vào mật khẩu\n- Nút Morse dùng broadcast TOGGLE_MORSE"); 
         ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); 
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); 
     }
@@ -542,25 +540,22 @@ public class MainActivity extends Activity {
             if(designTabState == 2) {
                 LinearLayout mRow = new LinearLayout(this); mRow.setOrientation(LinearLayout.HORIZONTAL);
                 Button btnTestM = new Button(this); btnTestM.setText("👁️ THỬ MORSE"); btnTestM.setBackground(getRounded("#FFC107", 20f)); btnTestM.setTextColor(Color.BLACK); LinearLayout.LayoutParams tm = new LinearLayout.LayoutParams(0,-2,1f); tm.setMargins(0,0,10,20); btnTestM.setLayoutParams(tm);
-                btnTestM.setOnClickListener(v->{ 
-                    boolean cur = prefs.getBoolean("morse_mode_en", false);
-                    prefs.edit().putBoolean("morse_mode_en", !cur).apply();
-                    Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE");
+                // SỬA: gửi broadcast TOGGLE_MORSE thay vì tự toggle
+                btnTestM.setOnClickListener(v -> {
+                    Intent i = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE");
                     sendBroadcast(i);
-                    Toast.makeText(this, !cur ? "Bật lớp phủ Morse" : "Tắt lớp phủ Morse", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "Đã gửi lệnh bật/tắt Morse", Toast.LENGTH_SHORT).show();
                 });
                 Button btnMap = new Button(this); btnMap.setText("🔢 MAP KEYS"); btnMap.setBackground(getRounded("#E91E63", 20f)); btnMap.setTextColor(Color.WHITE); LinearLayout.LayoutParams mk = new LinearLayout.LayoutParams(0,-2,1f); mk.setMargins(10,0,0,20); btnMap.setLayoutParams(mk);
                 btnMap.setOnClickListener(v -> openMorseMapDialog());
                 mRow.addView(btnTestM); mRow.addView(btnMap); designSliderContainer.addView(mRow);
                 
-                // Ô nhập mật khẩu Master + nút nổi lưu (giữ 30s thực)
                 LinearLayout passRow = new LinearLayout(this); passRow.setOrientation(LinearLayout.HORIZONTAL); passRow.setPadding(0,20,0,10);
                 EditText etMasterPass = new EditText(this); etMasterPass.setHint("Mật khẩu Master"); etMasterPass.setText(prefs.getString("morse_master_pass", ""));
                 etMasterPass.setBackground(getRounded("#2C2C2C", 20f)); etMasterPass.setPadding(30,30,30,30); etMasterPass.setTextColor(Color.WHITE);
                 etMasterPass.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
                 Button btnFloatingSave = new Button(this); btnFloatingSave.setText("🔒"); btnFloatingSave.setBackground(getRounded("#00E5FF", 100f)); btnFloatingSave.setTextColor(Color.BLACK);
                 btnFloatingSave.setLayoutParams(new LinearLayout.LayoutParams(100, -2));
-                // Xử lý nhấn giữ 30s (đơn giản, không lồng listener)
                 final Handler longPressHandler = new Handler();
                 final Runnable longPressRunnable = new Runnable() {
                     @Override
@@ -589,7 +584,6 @@ public class MainActivity extends Activity {
                 passRow.addView(etMasterPass); passRow.addView(btnFloatingSave);
                 designSliderContainer.addView(passRow);
                 
-                // Gom các slider vào một drawer
                 LinearLayout sliderDrawerContent = new LinearLayout(this); sliderDrawerContent.setOrientation(LinearLayout.VERTICAL);
                 sliderDrawerContent.addView(createInput("Text nhập sai lần 1", "morse_insult_1"));
                 sliderDrawerContent.addView(createInput("Text nhập sai lần 2", "morse_insult_2"));
@@ -601,6 +595,8 @@ public class MainActivity extends Activity {
                 sliderDrawerContent.addView(createSlider("Độ mờ màn chắn Morse (Alpha Đen)", "morse_bg_alpha", 255, 180));
                 sliderDrawerContent.addView(createSlider("Thời gian hiện dấu chấm (ms)", "morse_dot_delay", 2000, 500));
                 sliderDrawerContent.addView(createSlider("Độ rung khi nhập sai (ms)", "morse_fail_vib", 1500, 500));
+                // THÊM SLIDER: thời gian hiển thị số trước khi thành chấm
+                sliderDrawerContent.addView(createSlider("Thời gian hiện số (ms) trước khi thành chấm", "morse_number_delay", 2000, 800));
                 designSliderContainer.addView(createDrawer("CÀI ĐẶT MORSE NÂNG CAO", sliderDrawerContent));
             }
 
