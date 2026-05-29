@@ -10,6 +10,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -44,8 +45,9 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageIntents, pageTiles, pageMacros, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.4.5.1"; 
+    private final String CURRENT_VERSION = "V19.12.3.4.5.2"; 
     private RelativeLayout rootLayout;
+    private TextView floatingPasswordDisplay; // nút nổi hiển thị mật khẩu đã lưu
 
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     
@@ -294,7 +296,7 @@ public class MainActivity extends Activity {
         return root;
     }
 
-    // App Picker Dialog
+    // App Picker Dialog có icon
     private void showAppPickerDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle(T("Choose App to Lock", "Chọn ứng dụng cần khóa"));
@@ -304,13 +306,17 @@ public class MainActivity extends Activity {
         String currentLocklist = prefs.getString("locklist", "");
         List<String> selectedApps = new ArrayList<>(Arrays.asList(currentLocklist.split(",")));
         for (ResolveInfo app : apps) {
+            LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(0,10,0,10);
+            Drawable icon = app.loadIcon(getPackageManager());
+            ImageView iv = new ImageView(this); iv.setImageDrawable(icon); iv.setMaxWidth(50); iv.setMaxHeight(50);
             CheckBox cb = new CheckBox(this); cb.setText(app.loadLabel(getPackageManager())); cb.setTextColor(Color.WHITE);
             cb.setChecked(selectedApps.contains(app.activityInfo.packageName));
             cb.setOnCheckedChangeListener((v, isChecked) -> {
                 if (isChecked) selectedApps.add(app.activityInfo.packageName);
                 else selectedApps.remove(app.activityInfo.packageName);
             });
-            layout.addView(cb);
+            row.addView(iv); row.addView(cb);
+            layout.addView(row);
         }
         ScrollView sv = new ScrollView(this); sv.addView(layout); builder.setView(sv);
         builder.setPositiveButton("LƯU", (d, w) -> {
@@ -323,7 +329,7 @@ public class MainActivity extends Activity {
         builder.setNegativeButton("HỦY", null); builder.show();
     }
 
-    // Morse Map Dialog (có hỗ trợ Xóa và Enter)
+    // Morse Map Dialog
     private void openMorseMapDialog() {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40, 120, 40, 40);
@@ -364,7 +370,7 @@ public class MainActivity extends Activity {
         d.setContentView(root); d.show();
     }
 
-    // YTDL Design (đã sửa package thành com.deniscerri.ytdl)
+    // YTDL Design
     private void addYTDLDesign(LinearLayout parent) {
         LinearLayout ytdlDrawer = new LinearLayout(this); ytdlDrawer.setOrientation(LinearLayout.VERTICAL);
         ytdlDrawer.setPadding(30, 20, 30, 20); ytdlDrawer.setBackground(getRounded("#222222", 20f));
@@ -487,7 +493,7 @@ public class MainActivity extends Activity {
 
     private void showPremiumDialog() { 
         String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow", 
-        "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4.5 THE GRAND RESTORATION + YTDL:\nGiao diện đẹp, App Picker, Copy Rule, Map Keys, và ô tải nhạc YTDLnis."); 
+        "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4.5.2 THE ULTIMATE VAULT:\n- Nút nổi lưu mật khẩu (nhấn giữ 30s hoặc nhập mật khẩu cũ mới được đổi)\n- Thanh kéo thời gian khóa (0-60 phút)\n- Đếm lần sai, hiện insult, tự động khóa\n- Lớp phủ chỉ hiện khi cần (app trong locklist)\n- Xuyên thấu khi ở không gian thiết kế"); 
         ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); 
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); 
     }
@@ -544,13 +550,49 @@ public class MainActivity extends Activity {
                 
                 mRow.addView(btnTestM); mRow.addView(btnMap); designSliderContainer.addView(mRow);
                 
-                designSliderContainer.addView(createInput("Mật khẩu Master (VD: 12345)", "morse_master_pass"));
+                // Ô nhập mật khẩu Master + nút nổi lưu
+                LinearLayout passRow = new LinearLayout(this); passRow.setOrientation(LinearLayout.HORIZONTAL); passRow.setPadding(0,20,0,10);
+                EditText etMasterPass = new EditText(this); etMasterPass.setHint("Mật khẩu Master"); etMasterPass.setText(prefs.getString("morse_master_pass", ""));
+                etMasterPass.setBackground(getRounded("#2C2C2C", 20f)); etMasterPass.setPadding(30,30,30,30); etMasterPass.setTextColor(Color.WHITE);
+                etMasterPass.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+                Button btnFloatingSave = new Button(this); btnFloatingSave.setText("🔒"); btnFloatingSave.setBackground(getRounded("#00E5FF", 100f)); btnFloatingSave.setTextColor(Color.BLACK);
+                btnFloatingSave.setLayoutParams(new LinearLayout.LayoutParams(100, -2));
+                btnFloatingSave.setOnLongClickListener(v -> {
+                    // Nhấn giữ 30 giây để đổi mật khẩu, cần xác thực mật khẩu cũ
+                    new AlertDialog.Builder(this).setTitle("Xác thực mật khẩu cũ").setMessage("Nhập mật khẩu hiện tại để được đổi mật khẩu mới")
+                        .setView(etMasterPass).setPositiveButton("Xác nhận", (d,w) -> {
+                            String oldPass = etMasterPass.getText().toString();
+                            if (oldPass.equals(prefs.getString("morse_master_pass", ""))) {
+                                showChangePasswordDialog();
+                            } else {
+                                Toast.makeText(this, "Mật khẩu cũ không đúng!", Toast.LENGTH_SHORT).show();
+                            }
+                        }).setNegativeButton("Hủy", null).show();
+                    return true;
+                });
+                btnFloatingSave.setOnClickListener(v -> {
+                    // Lưu mật khẩu vào nút nổi (hiển thị trên màn hình)
+                    String newPass = etMasterPass.getText().toString();
+                    if (!newPass.isEmpty()) {
+                        prefs.edit().putString("morse_master_pass", newPass).apply();
+                        Toast.makeText(this, "Đã lưu mật khẩu vào kho bảo mật!", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(this, "Mật khẩu không được để trống!", Toast.LENGTH_SHORT).show();
+                    }
+                });
+                passRow.addView(etMasterPass); passRow.addView(btnFloatingSave);
+                designSliderContainer.addView(passRow);
+                
                 designSliderContainer.addView(createInput("Text nhập sai lần 1", "morse_insult_1"));
                 designSliderContainer.addView(createInput("Text nhập sai lần 2", "morse_insult_2"));
-                designSliderContainer.addView(createInput("Text nhập sai lần 3 (Kick out!)", "morse_insult_3"));
-
+                designSliderContainer.addView(createInput("Text nhập sai lần 3", "morse_insult_3"));
+                designSliderContainer.addView(createInput("Text nhập sai lần 4", "morse_insult_4"));
+                designSliderContainer.addView(createInput("Text nhập sai lần 5", "morse_insult_5"));
+                
+                designSliderContainer.addView(createSlider("Độ dài tối đa mật khẩu", "morse_max_len", 20, 10));
+                designSliderContainer.addView(createSlider("Thời gian khóa sau 5 lần sai (phút)", "morse_lock_minutes", 60, 30));
                 designSliderContainer.addView(createSlider("Độ mờ màn chắn Morse (Alpha Đen)", "morse_bg_alpha", 255, 180));
-                designSliderContainer.addView(createSlider("Thời gian hiện số (ms) trước khi ẩn", "morse_dot_delay", 2000, 500));
+                designSliderContainer.addView(createSlider("Thời gian hiện dấu chấm (ms)", "morse_dot_delay", 2000, 500));
                 designSliderContainer.addView(createSlider("Độ rung khi nhập sai (ms)", "morse_fail_vib", 1500, 500));
             }
 
@@ -567,6 +609,26 @@ public class MainActivity extends Activity {
             
             LinearLayout globalDrawer = new LinearLayout(this); globalDrawer.setOrientation(LinearLayout.VERTICAL); globalDrawer.setPadding(30,10,30,30); globalDrawer.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500)); globalDrawer.addView(createSlider("Độ mờ vùng TRĂNG NON (Đậm/Nhạt)", prefix+"corner_moon_alpha", 255, 100)); globalDrawer.addView(createSlider("Độ mờ VIỀN GÓC (Đậm/Nhạt)", prefix+"corner_stroke_alpha", 255, 200)); globalDrawer.addView(createSlider("Độ đậm viền (Dày/Mỏng)", prefix+"corner_thick", 50, 8)); designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", globalDrawer));
         } 
+    }
+
+    private void showChangePasswordDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Đổi mật khẩu Morse");
+        LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL); layout.setPadding(40,40,40,40);
+        EditText etNew = new EditText(this); etNew.setHint("Mật khẩu mới"); etNew.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        layout.addView(etNew);
+        builder.setView(layout);
+        builder.setPositiveButton("Lưu", (d,w) -> {
+            String newPass = etNew.getText().toString().trim();
+            if (!newPass.isEmpty()) {
+                prefs.edit().putString("morse_master_pass", newPass).apply();
+                Toast.makeText(this, "Đã đổi mật khẩu thành công!", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "Mật khẩu không hợp lệ!", Toast.LENGTH_SHORT).show();
+            }
+        });
+        builder.setNegativeButton("Hủy", null);
+        builder.show();
     }
 
     private LinearLayout createSlider(String t, String k, int max, int def) { 
