@@ -54,7 +54,7 @@ public class HomescreenService extends Service {
     private View[] corners = new View[4];
     private RelativeLayout morseContainer;
     private TextView tvMorseStatus;
-    private View scratchView;
+    private MorseBackgroundView bgView;
     private View[] mBars = new View[8];
     private View[] mCorners = new View[4];
     private FlashView fV;
@@ -69,7 +69,6 @@ public class HomescreenService extends Service {
     private String currentMorseAttempt = "";
     private int morseFailCount = 0;
     private String lockedPkg = "";
-    private Handler morseDotHandler = new Handler();
     private boolean isPreviewMorse = false;
     private long lockUntilTime = 0;
     private Handler numberDisplayHandler = new Handler();
@@ -78,6 +77,7 @@ public class HomescreenService extends Service {
     private int bgType = 0;
     private String bgImagePath = "";
     private Bitmap bgBitmap = null;
+    private int bgAlpha = 180;
 
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
@@ -88,133 +88,24 @@ public class HomescreenService extends Service {
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
 
-    private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
-        if (k != null) {
-            if (k.equals("morse_bg_type") || k.equals("morse_bg_image")) reloadBackground();
-            updateVisibility();
-            if (fV != null) fV.updateStyle();
-        }
-    };
-
-    private void reloadBackground() {
-        bgType = prefs.getInt("morse_bg_type", 0);
-        bgImagePath = prefs.getString("morse_bg_image", "");
-        if (bgType == 1 && !bgImagePath.isEmpty()) {
-            try {
-                InputStream is = getContentResolver().openInputStream(Uri.parse(bgImagePath));
-                bgBitmap = BitmapFactory.decodeStream(is);
-                if (scratchView != null) scratchView.invalidate();
-            } catch (Exception e) { bgBitmap = null; }
-        } else {
-            if (scratchView != null) scratchView.invalidate();
-        }
-    }
-
-    private BroadcastReceiver syncReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context c, Intent i) {
-            if (i.getAction().equals("com.manhmoc.edgebar.SYNC_STATE")) {
-                isKbd = i.getBooleanExtra("isKbd", false);
-                isBl = i.getBooleanExtra("isBl", false);
-                isPreviewMorse = prefs.getBoolean("preview_morse", false);
-                updateVisibility();
-            } else if (i.getAction().equals("com.manhmoc.edgebar.TEST_ANIM")) {
-                playAnim();
-            } else if (i.getAction().equals("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE")) {
-                if (System.currentTimeMillis() > lockUntilTime) {
-                    isMorseLockActive = true;
-                    lockedPkg = i.getStringExtra("pkg");
-                    morseFailCount = 0;
-                    currentMorseAttempt = "";
-                    tvMorseStatus.setText("");
-                    updateVisibility();
-                } else {
-                    Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-                    kick.putExtra("act", "HOME");
-                    sendBroadcast(kick);
-                }
-            } else if (i.getAction().equals("com.manhmoc.edgebar.MORSE_LOCK_DISMISS")) {
-                isMorseLockActive = false;
-                morseFailCount = 0;
-                currentMorseAttempt = "";
-                lockedPkg = "";
-                updateVisibility();
-            } else if (i.getAction().equals("com.manhmoc.edgebar.TOGGLE_MORSE")) {
-                boolean isM = prefs.getBoolean("morse_mode_en", false);
-                prefs.edit().putBoolean("morse_mode_en", !isM).apply();
-                updateVisibility();
-            }
-        }
-    };
-
-    private String mapComponentToNumber(String comp) {
-        String key = "morse_map_" + comp.replace("morse_", "").replace("home_", "").replace("lock_", "").replace("corner_", "");
-        String val = prefs.getString(key, "*");
-        if (val.equals("X") || val.equals(">")) return val;
-        if (val.matches("\\d")) return val;
-        return "*";
-    }
-
-    private class GlitchView extends View {
+    // Lớp nền mờ tĩnh, không vẽ liên tục, tiết kiệm pin
+    private class MorseBackgroundView extends View {
         private Paint paint = new Paint();
-        private Random random = new Random();
-        private int[] stripHeights;
-        private int frame = 0;
-
-        public GlitchView(Context context) {
+        public MorseBackgroundView(Context context) {
             super(context);
-            paint.setColor(Color.WHITE);
-            paint.setAlpha(80);
-            generateStrips();
+            setWillNotDraw(false);
         }
-
-        private void generateStrips() {
-            stripHeights = new int[40];
-            for (int i = 0; i < stripHeights.length; i++) {
-                stripHeights[i] = 20 + random.nextInt(80);
-            }
-        }
-
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            if (bgType == 1 && bgBitmap != null) {
-                canvas.drawBitmap(bgBitmap, null, new Rect(0, 0, getWidth(), getHeight()), null);
-                return;
-            }
-            int width = getWidth();
-            int height = getHeight();
-            int y = 0;
-            for (int i = 0; i < stripHeights.length && y < height; i++) {
-                int h = stripHeights[i];
-                if (y + h > height) h = height - y;
-                int color;
-                switch (random.nextInt(5)) {
-                    case 0: color = Color.argb(100, 255, 255, 255); break;
-                    case 1: color = Color.argb(100, 0, 255, 255); break;
-                    case 2: color = Color.argb(100, 255, 0, 255); break;
-                    case 3: color = Color.argb(100, 255, 255, 0); break;
-                    default: color = Color.argb(80, 0, 255, 0); break;
-                }
-                paint.setColor(color);
-                canvas.drawRect(0, y, width, y + h, paint);
-                if (random.nextFloat() > 0.7f) {
-                    int offset = random.nextInt(50) - 25;
-                    paint.setColor(Color.argb(120, 255, 255, 255));
-                    canvas.drawRect(offset, y, width + offset, y + h, paint);
-                }
-                y += h;
-            }
-            paint.setColor(Color.argb(30, 255, 255, 255));
-            for (int i = 0; i < 200; i++) {
-                canvas.drawPoint(random.nextInt(width), random.nextInt(height), paint);
-            }
-            frame++;
-            if (frame % 10 == 0) {
-                generateStrips();
-                invalidate();
+            bgAlpha = prefs.getInt("morse_bg_alpha", 180);
+            if (bgType == 1 && bgBitmap != null && !bgBitmap.isRecycled()) {
+                // Vẽ ảnh với độ mờ
+                paint.setAlpha(bgAlpha);
+                canvas.drawBitmap(bgBitmap, null, new Rect(0, 0, getWidth(), getHeight()), paint);
             } else {
-                postInvalidateDelayed(150);
+                // Nền đen mờ
+                canvas.drawColor(Color.argb(bgAlpha, 0, 0, 0));
             }
         }
     }
@@ -316,6 +207,76 @@ public class HomescreenService extends Service {
         }
     }
 
+    private void reloadBackground() {
+        bgType = prefs.getInt("morse_bg_type", 0);
+        bgImagePath = prefs.getString("morse_bg_image", "");
+        if (bgType == 1 && !bgImagePath.isEmpty()) {
+            try {
+                InputStream is = getContentResolver().openInputStream(Uri.parse(bgImagePath));
+                bgBitmap = BitmapFactory.decodeStream(is);
+                if (bgView != null) bgView.invalidate();
+            } catch (Exception e) { bgBitmap = null; }
+        } else {
+            if (bgView != null) bgView.invalidate();
+        }
+    }
+
+    private BroadcastReceiver syncReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            String action = i.getAction();
+            if (action.equals("com.manhmoc.edgebar.SYNC_STATE")) {
+                isKbd = i.getBooleanExtra("isKbd", false);
+                isBl = i.getBooleanExtra("isBl", false);
+                isPreviewMorse = prefs.getBoolean("preview_morse", false);
+                updateVisibility();
+            } else if (action.equals("com.manhmoc.edgebar.TEST_ANIM")) {
+                playAnim();
+            } else if (action.equals("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE")) {
+                if (System.currentTimeMillis() > lockUntilTime) {
+                    isMorseLockActive = true;
+                    lockedPkg = i.getStringExtra("pkg");
+                    morseFailCount = 0;
+                    currentMorseAttempt = "";
+                    if (tvMorseStatus != null) tvMorseStatus.setText("");
+                    updateVisibility();
+                } else {
+                    Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+                    kick.putExtra("act", "HOME");
+                    sendBroadcast(kick);
+                }
+            } else if (action.equals("com.manhmoc.edgebar.MORSE_LOCK_DISMISS")) {
+                isMorseLockActive = false;
+                morseFailCount = 0;
+                currentMorseAttempt = "";
+                lockedPkg = "";
+                updateVisibility();
+            } else if (action.equals("com.manhmoc.edgebar.TOGGLE_MORSE")) {
+                boolean isM = prefs.getBoolean("morse_mode_en", false);
+                prefs.edit().putBoolean("morse_mode_en", !isM).apply();
+                updateVisibility();
+            } else if (action.equals(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)) {
+                String reason = i.getStringExtra("reason");
+                if ("recentapps".equals(reason)) {
+                    // Vuốt recent apps -> ẩn lớp phủ nếu đang hiển thị
+                    if (isMorseLockActive && !isPreviewMorse) {
+                        isMorseLockActive = false;
+                        updateVisibility();
+                    }
+                }
+            }
+        }
+    };
+
+    private String mapComponentToNumber(String comp) {
+        // Xử lý đúng cho cả bar và corner, trả về số, X, >, hoặc * (bỏ qua)
+        String key = "morse_map_" + comp.replace("morse_", "").replace("home_", "").replace("lock_", "").replace("corner_", "");
+        String val = prefs.getString(key, "*");
+        if (val.equals("X") || val.equals(">")) return val;
+        if (val.matches("\\d")) return val;
+        return "*";
+    }
+
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) { isRunning = true; sendSyncState(); return START_STICKY; }
     private void sendSyncState() { Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
@@ -337,6 +298,7 @@ public class HomescreenService extends Service {
         filter.addAction(Intent.ACTION_SCREEN_OFF);
         filter.addAction(Intent.ACTION_SCREEN_ON);
         filter.addAction(Intent.ACTION_USER_PRESENT);
+        filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
         filter.addAction("com.manhmoc.edgebar.SYNC_STATE");
         filter.addAction("com.manhmoc.edgebar.TEST_ANIM");
         filter.addAction("com.manhmoc.edgebar.IPC_ACTION");
@@ -380,25 +342,20 @@ public class HomescreenService extends Service {
         }
 
         morseContainer = new RelativeLayout(this);
-        morseContainer.setBackgroundColor(Color.BLACK);
+        morseContainer.setBackgroundColor(Color.TRANSPARENT);
         morseContainer.setVisibility(View.GONE);
 
         tvMorseStatus = new TextView(this);
         tvMorseStatus.setTextColor(Color.WHITE);
         tvMorseStatus.setTextSize(30);
         tvMorseStatus.setGravity(Gravity.CENTER);
+        tvMorseStatus.setShadowLayer(5, 2, 2, Color.BLACK); // đổ bóng để đọc rõ trên ảnh
         RelativeLayout.LayoutParams tLp = new RelativeLayout.LayoutParams(-1, -2);
         tLp.addRule(RelativeLayout.CENTER_IN_PARENT);
         morseContainer.addView(tvMorseStatus, tLp);
 
-        reloadBackground();
-        if (bgType == 0) scratchView = new GlitchView(this);
-        else scratchView = new View(this) {
-            @Override protected void onDraw(Canvas canvas) {
-                if (bgType == 1 && bgBitmap != null) canvas.drawBitmap(bgBitmap, null, new Rect(0,0,getWidth(),getHeight()), null);
-            }
-        };
-        morseContainer.addView(scratchView, new RelativeLayout.LayoutParams(-1, -1));
+        bgView = new MorseBackgroundView(this);
+        morseContainer.addView(bgView, new RelativeLayout.LayoutParams(-1, -1));
 
         WindowManager.LayoutParams bgP = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN |
@@ -418,9 +375,19 @@ public class HomescreenService extends Service {
             mCorners[i].setOnTouchListener(new SidebarTouchListener("morse_corner_" + CORNERS[i], mCorners[i]));
         }
 
+        reloadBackground();
         updateVisibility();
         sendSyncState();
     }
+
+    private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
+        if (k != null) {
+            if (k.equals("morse_bg_type") || k.equals("morse_bg_image")) reloadBackground();
+            if (k.equals("morse_bg_alpha") && bgView != null) bgView.invalidate();
+            updateVisibility();
+            if (fV != null) fV.updateStyle();
+        }
+    };
 
     private void doMorseVibrate() {
         if (prefs.getBoolean("morse_vib_en", true)) {
@@ -442,6 +409,7 @@ public class HomescreenService extends Service {
         String masterPass = prefs.getString("morse_master_pass", "");
         int realMaxLen = masterPass.length();
 
+        // Xử lý X (xóa ký tự)
         if (mappedKey.equals("X")) {
             if (isLongPress) {
                 currentMorseAttempt = "";
@@ -451,23 +419,33 @@ public class HomescreenService extends Service {
                     currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length() - 1);
                     if (currentMorseAttempt.isEmpty()) tvMorseStatus.setText("");
                     else {
-                        StringBuilder dots = new StringBuilder();
-                        for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
-                        tvMorseStatus.setText(dots.toString());
+                        // Hiển thị số hoặc dấu chấm tùy theo cài đặt
+                        int showNumberMs = prefs.getInt("morse_show_number_ms", 800);
+                        tvMorseStatus.setText(currentMorseAttempt);
+                        if (hideNumberRunnable != null) numberDisplayHandler.removeCallbacks(hideNumberRunnable);
+                        hideNumberRunnable = () -> {
+                            StringBuilder dots = new StringBuilder();
+                            for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
+                            tvMorseStatus.setText(dots.toString());
+                        };
+                        numberDisplayHandler.postDelayed(hideNumberRunnable, showNumberMs);
                     }
                 }
             }
             return;
-        } else if (mappedKey.equals(">")) {
+        }
+        // Xử lý > (mở khóa)
+        else if (mappedKey.equals(">")) {
             if (currentMorseAttempt.isEmpty() || masterPass.isEmpty()) return;
             if (currentMorseAttempt.equals(masterPass)) {
+                // Mở khóa thành công -> tắt lớp phủ ngay
                 isMorseLockActive = false;
                 morseFailCount = 0;
                 lockUntilTime = 0;
                 Intent i = new Intent("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS");
                 i.putExtra("pkg", lockedPkg);
                 sendBroadcast(i);
-                updateVisibility();
+                updateVisibility(); // Ẩn lớp phủ
             } else {
                 morseFailCount++;
                 doMorseVibrate();
@@ -487,6 +465,7 @@ public class HomescreenService extends Service {
             return;
         }
 
+        // Phím số
         if (currentMorseAttempt.length() >= realMaxLen && realMaxLen > 0) {
             morseFailCount++;
             doMorseVibrate();
@@ -504,6 +483,7 @@ public class HomescreenService extends Service {
             return;
         }
 
+        // Thêm ký tự
         currentMorseAttempt += mappedKey;
         tvMorseStatus.setText(currentMorseAttempt);
         if (hideNumberRunnable != null) numberDisplayHandler.removeCallbacks(hideNumberRunnable);
@@ -523,11 +503,9 @@ public class HomescreenService extends Service {
         isPreviewMorse = prefs.getBoolean("preview_morse", false);
         boolean timeLocked = (System.currentTimeMillis() < lockUntilTime);
 
-        if (hideNormal && fV != null && !isMorseLockActive && !isPreviewMorse) fV.setVisibility(View.GONE);
-
         if ((isMorseLockActive && !timeLocked) || isPreviewMorse) {
             morseContainer.setVisibility(View.VISIBLE);
-            morseContainer.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
+            // Độ mờ đã được xử lý trong MorseBackgroundView
             if (isPreviewMorse) {
                 WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
                 p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -543,6 +521,7 @@ public class HomescreenService extends Service {
             for (int i = 0; i < 5; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
             for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
 
+            // Hiển thị các thanh Morse
             for (int i = 0; i < 8; i++) {
                 if (mBars[i] == null) continue;
                 boolean en = prefs.getBoolean("morse_" + M_BARS[i] + "_en", false);
@@ -574,6 +553,7 @@ public class HomescreenService extends Service {
                     }
                 }
             }
+            // Hiển thị các góc Morse
             for (int i = 0; i < 4; i++) {
                 if (mCorners[i] == null) continue;
                 boolean cornEn = prefs.getBoolean("morse_corner_" + CORNERS[i] + "_en", false);
@@ -615,6 +595,7 @@ public class HomescreenService extends Service {
             for (int i = 0; i < 8; i++) if (mBars[i] != null) mBars[i].setVisibility(View.GONE);
             for (int i = 0; i < 4; i++) if (mCorners[i] != null) mCorners[i].setVisibility(View.GONE);
 
+            // Hiển thị thanh home/lock
             boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
             for (int i = 0; i < 5; i++) {
                 if (bars[i] == null) continue;
@@ -688,7 +669,7 @@ public class HomescreenService extends Service {
         }
     }
 
-    private void playAnim() {
+    private void playAnim() { /* giữ nguyên như cũ */ 
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams();
         fp.width = WindowManager.LayoutParams.MATCH_PARENT;
         fp.height = WindowManager.LayoutParams.MATCH_PARENT;
@@ -721,7 +702,7 @@ public class HomescreenService extends Service {
         });
     }
 
-    private void handleAction(String key) {
+    private void handleAction(String key) { /* giữ nguyên */ 
         String action = prefs.getString(key, "NONE");
         boolean isOn = prefs.getBoolean(key + "_on", true);
         if (!action.equals("NONE") && isOn) {
@@ -732,7 +713,7 @@ public class HomescreenService extends Service {
         }
     }
 
-    private void doVibrate(int dur) {
+    private void doVibrate(int dur) { /* giữ nguyên */ 
         if (dur <= 0) return;
         try {
             if (Build.VERSION.SDK_INT >= 26)
@@ -741,7 +722,7 @@ public class HomescreenService extends Service {
         } catch (Exception e) {}
     }
 
-    private void exec(String a) {
+    private void exec(String a) { /* giữ nguyên từ bản 19.12.3.4.5.8 */ 
         if (a == null || a.equals("NONE")) return;
         try {
             switch (a) {
@@ -806,7 +787,7 @@ public class HomescreenService extends Service {
         } catch (Exception e) {}
     }
 
-    private void fireIntent(String idx) {
+    private void fireIntent(String idx) { /* giữ nguyên */ 
         try {
             String act = prefs.getString("i" + idx + "_act", "");
             String pkg = prefs.getString("i" + idx + "_pkg", "");
@@ -936,5 +917,6 @@ public class HomescreenService extends Service {
         }
         if (morseContainer != null) wm.removeView(morseContainer);
         if (fV != null) wm.removeView(fV);
+        if (bgBitmap != null && !bgBitmap.isRecycled()) bgBitmap.recycle();
     }
 }

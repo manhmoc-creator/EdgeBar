@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.4.5.8"; 
+    private final String CURRENT_VERSION = "V19.12.3.4.5.9"; 
     private RelativeLayout rootLayout;
 
     // Ecosystem
