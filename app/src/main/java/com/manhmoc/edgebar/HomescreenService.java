@@ -24,8 +24,6 @@ import android.graphics.LinearGradient;
 import android.graphics.Shader;
 import android.graphics.DashPathEffect;
 import android.graphics.Rect;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
@@ -45,7 +43,6 @@ import android.view.WindowManager;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
-import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.util.Collections;
 import java.util.Random;
@@ -78,7 +75,7 @@ public class HomescreenService extends Service {
     private Handler numberDisplayHandler = new Handler();
     private Runnable hideNumberRunnable;
 
-    private int bgType = 0; // 0=glitch, 1=image
+    private int bgType = 0;
     private String bgImagePath = "";
     private Bitmap bgBitmap = null;
 
@@ -152,10 +149,12 @@ public class HomescreenService extends Service {
 
     private String mapComponentToNumber(String comp) {
         String key = "morse_map_" + comp.replace("morse_", "").replace("home_", "").replace("lock_", "").replace("corner_", "");
-        return prefs.getString(key, "*");
+        String val = prefs.getString(key, "*");
+        if (val.equals("X") || val.equals(">")) return val;
+        if (val.matches("\\d")) return val;
+        return "*";
     }
 
-    // GlitchView thay thế ScratchView (sọc màn, không rối)
     private class GlitchView extends View {
         private Paint paint = new Paint();
         private Random random = new Random();
@@ -183,14 +182,12 @@ public class HomescreenService extends Service {
                 canvas.drawBitmap(bgBitmap, null, new Rect(0, 0, getWidth(), getHeight()), null);
                 return;
             }
-            // Hiệu ứng glitch: các vạch ngang trắng/xanh/đỏ lệch màu
             int width = getWidth();
             int height = getHeight();
             int y = 0;
             for (int i = 0; i < stripHeights.length && y < height; i++) {
                 int h = stripHeights[i];
                 if (y + h > height) h = height - y;
-                // Chọn màu ngẫu nhiên
                 int color;
                 switch (random.nextInt(5)) {
                     case 0: color = Color.argb(100, 255, 255, 255); break;
@@ -201,7 +198,6 @@ public class HomescreenService extends Service {
                 }
                 paint.setColor(color);
                 canvas.drawRect(0, y, width, y + h, paint);
-                // Thêm hiệu ứng lệch ngang
                 if (random.nextFloat() > 0.7f) {
                     int offset = random.nextInt(50) - 25;
                     paint.setColor(Color.argb(120, 255, 255, 255));
@@ -209,7 +205,6 @@ public class HomescreenService extends Service {
                 }
                 y += h;
             }
-            // Vẽ thêm nhiễu
             paint.setColor(Color.argb(30, 255, 255, 255));
             for (int i = 0; i < 200; i++) {
                 canvas.drawPoint(random.nextInt(width), random.nextInt(height), paint);
@@ -358,7 +353,7 @@ public class HomescreenService extends Service {
         getSystemService(NotificationManager.class).createNotificationChannel(c);
         Notification n = new Notification.Builder(this, cid)
                 .setContentTitle("Edge Bar Màn Chính")
-                .setSmallIcon(R.drawable.ic_launcher_fg)
+                .setSmallIcon(android.R.drawable.ic_menu_edit)
                 .setOngoing(true).build();
         startForeground(2, n);
 
@@ -397,12 +392,6 @@ public class HomescreenService extends Service {
         morseContainer.addView(tvMorseStatus, tLp);
 
         reloadBackground();
-        if (bgType == 0) scratchView = new GlitchView(this);
-        else scratchView = new View(this) { // fallback, sẽ được thay bằng GlitchView? Thực tế luôn dùng GlitchView nếu bgType=0
-            @Override protected void onDraw(Canvas canvas) {
-                if (bgType == 1 && bgBitmap != null) canvas.drawBitmap(bgBitmap, null, new Rect(0,0,getWidth(),getHeight()), null);
-            }
-        };
         if (bgType == 0) scratchView = new GlitchView(this);
         else scratchView = new View(this) {
             @Override protected void onDraw(Canvas canvas) {
@@ -498,7 +487,6 @@ public class HomescreenService extends Service {
             return;
         }
 
-        // Phím số
         if (currentMorseAttempt.length() >= realMaxLen && realMaxLen > 0) {
             morseFailCount++;
             doMorseVibrate();
@@ -517,7 +505,6 @@ public class HomescreenService extends Service {
         }
 
         currentMorseAttempt += mappedKey;
-        // Hiển thị số ngay lập tức
         tvMorseStatus.setText(currentMorseAttempt);
         if (hideNumberRunnable != null) numberDisplayHandler.removeCallbacks(hideNumberRunnable);
         int showNumberMs = prefs.getInt("morse_show_number_ms", 800);
