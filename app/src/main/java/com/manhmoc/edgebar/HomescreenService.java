@@ -472,7 +472,6 @@ public class HomescreenService extends Service {
             morseContainer.setVisibility(View.VISIBLE);
             morseContainer.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
             
-            // FIX 1: XUYÊN THẤU TUYỆT ĐỐI TRONG KHÔNG GIAN DESIGN
             if (isPreviewMorse) {
                 morseContainer.setOnTouchListener((v, e) -> false);
                 for (int i = 0; i < mBars.length; i++) {
