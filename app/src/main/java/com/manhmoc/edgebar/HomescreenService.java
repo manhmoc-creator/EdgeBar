@@ -377,7 +377,6 @@ public class HomescreenService extends Service {
         sendSyncState();
     }
 
-    // FIX 1: Xử lý riêng nút X và >, không thêm vào chuỗi mật khẩu
     private void handleMorseTap(String comp, View v, boolean isLongPress) {
         doVibrate(30);
         if (v != null && v instanceof CornerView) ((CornerView) v).triggerFlash();
@@ -386,7 +385,6 @@ public class HomescreenService extends Service {
         String masterPass = prefs.getString("morse_master_pass", "");
         int realMaxLen = masterPass.length();
 
-        // Xử lý riêng nút X và >
         if (mappedKey.equals("X")) {
             if (isLongPress) {
                 currentMorseAttempt = "";
@@ -430,7 +428,6 @@ public class HomescreenService extends Service {
             return;
         }
 
-        // Xử lý phím số
         if (currentMorseAttempt.length() >= realMaxLen && realMaxLen > 0) {
             morseFailCount++;
             int failVib = prefs.getInt("morse_fail_vib", 500);
@@ -450,7 +447,6 @@ public class HomescreenService extends Service {
         }
 
         currentMorseAttempt += mappedKey;
-        // FIX 3: Hiển thị số trong khoảng thời gian trước khi chuyển thành dấu chấm
         String tempNumber = currentMorseAttempt;
         tvMorseStatus.setText(tempNumber);
         numberDisplayHandler.removeCallbacksAndMessages(null);
@@ -476,10 +472,9 @@ public class HomescreenService extends Service {
             morseContainer.setVisibility(View.VISIBLE);
             morseContainer.setAlpha(prefs.getInt("morse_bg_alpha", 180) / 255f);
             
-            // FIX 1: TRONG KHÔNG GIAN DESIGN, LỚP PHỦ SẼ TRỞ NÊN XUYÊN THẤU HOÀN TOÀN
+            // FIX 1: XUYÊN THẤU TUYỆT ĐỐI TRONG KHÔNG GIAN DESIGN
             if (isPreviewMorse) {
-                morseContainer.setOnTouchListener((v, e) -> false); // Xuyên thấu tuyệt đối
-                // Gỡ bỏ FLAG_NOT_TOUCHABLE cho toàn bộ các view con trong morseContainer
+                morseContainer.setOnTouchListener((v, e) -> false);
                 for (int i = 0; i < mBars.length; i++) {
                     if (mBars[i] != null) {
                         WindowManager.LayoutParams p = (WindowManager.LayoutParams) mBars[i].getLayoutParams();
@@ -496,7 +491,6 @@ public class HomescreenService extends Service {
                 }
             } else {
                 morseContainer.setOnTouchListener((v, e) -> true);
-                // Khôi phục lại cờ chặn touch
                 for (int i = 0; i < mBars.length; i++) {
                     if (mBars[i] != null) {
                         WindowManager.LayoutParams p = (WindowManager.LayoutParams) mBars[i].getLayoutParams();
