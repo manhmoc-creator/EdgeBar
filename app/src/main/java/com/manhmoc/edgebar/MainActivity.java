@@ -3,16 +3,21 @@ package com.manhmoc.edgebar;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.LauncherApps;
+import android.content.pm.LauncherActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.Settings;
 import android.net.Uri;
 import android.text.TextUtils;
@@ -46,14 +51,12 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.4.6"; 
+    private final String CURRENT_VERSION = "V19.12.3.4.6.1"; 
     private RelativeLayout rootLayout;
 
-    // Ecosystem
     private int ecoType = 0;
     private LinearLayout ecoContainer;
 
-    // ==================== UTILS ====================
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     
     private void refreshPreview() { 
@@ -113,7 +116,6 @@ public class MainActivity extends Activity {
                     Toast.makeText(this, T("Restored Successfully!", "Đã Khôi Phục Cấu Hình!"), Toast.LENGTH_LONG).show();
                     recreate();
                 } else if (req == 103) {
-                    // Xử lý chọn ảnh nền cho Morse
                     String imagePath = data.getData().toString();
                     prefs.edit().putString("morse_bg_image", imagePath).apply();
                     prefs.edit().putInt("morse_bg_type", 1).apply();
@@ -131,7 +133,6 @@ public class MainActivity extends Activity {
 
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
-    // ==================== ON CREATE ====================
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); isVi = prefs.getBoolean("lang_vi", true); reloadActionLabels();
         
@@ -159,7 +160,6 @@ public class MainActivity extends Activity {
         main.addView(pageDesign); main.addView(pageConditions); main.addView(pageEcosystem);
         scroll.addView(main); rootLayout.addView(scroll);
 
-        // Bottom bar
         LinearLayout bottomBar = new LinearLayout(this); bottomBar.setOrientation(LinearLayout.HORIZONTAL); bottomBar.setGravity(Gravity.CENTER_VERTICAL); bottomBar.setBackground(getRounded("#1E1E1E", 100f)); bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
         Button btnUpdate = createCircleBtn("U", "#333333"); btnUpdate.setTextSize(20); btnUpdate.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
@@ -537,7 +537,7 @@ public class MainActivity extends Activity {
         secSys.addView(createSectionTitle("LOCKLIST (Morse AppLock)")); 
         LinearLayout lockRow = new LinearLayout(this); lockRow.setOrientation(LinearLayout.HORIZONTAL);
         EditText etLock = createInput("Packages (com.zing.zalo,...)", "locklist"); etLock.setTag("locklist_input"); etLock.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        Button btnPickApps = new Button(this); btnPickApps.setText("📱 PICK APP"); btnPickApps.setTextColor(Color.BLACK); btnPickApps.setBackground(getRounded("#00E5FF", 20f));
+        Button btnPickApps = new Button(this); btnPickApps.setText("📱 PICK APP (SIÊU QUÉT)"); btnPickApps.setTextColor(Color.BLACK); btnPickApps.setBackground(getRounded("#00E5FF", 20f));
         btnPickApps.setOnClickListener(v -> showAppPickerDialog());
         lockRow.addView(etLock); lockRow.addView(btnPickApps);
         secSys.addView(lockRow);
@@ -589,7 +589,7 @@ public class MainActivity extends Activity {
                 btnTestM.setOnClickListener(v->{ 
                     boolean cur = prefs.getBoolean("morse_mode_en", false);
                     prefs.edit().putBoolean("morse_mode_en", !cur).apply();
-                    Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE");
+                    Intent i = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE");
                     sendBroadcast(i);
                     Toast.makeText(this, !cur ? "Bật lớp phủ Morse" : "Tắt lớp phủ Morse", Toast.LENGTH_SHORT).show();
                 });
@@ -630,7 +630,6 @@ public class MainActivity extends Activity {
                 passRow.addView(etMasterPass); passRow.addView(btnFloatingSave);
                 designSliderContainer.addView(passRow);
 
-                // ========== PHẦN MỚI CHO MORSE (nền, rung) ==========
                 LinearLayout sliderDrawerContent = new LinearLayout(this);
                 sliderDrawerContent.setOrientation(LinearLayout.VERTICAL);
                 // Tùy chọn rung
@@ -641,8 +640,10 @@ public class MainActivity extends Activity {
                 cbVibEn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("morse_vib_en", c).apply());
                 sliderDrawerContent.addView(cbVibEn);
                 sliderDrawerContent.addView(createSlider("Độ rung khi gõ (ms)", "morse_vib_dur", 200, 30));
+                // Thanh trượt Grace Period (1s - 10 phút)
+                sliderDrawerContent.addView(createSlider("Thời gian tạm tha (giây)", "morse_grace_seconds", 600, 10));
                 // Tùy chọn nền
-                sliderDrawerContent.addView(createComboDropdown("Nền lớp phủ", "morse_bg_type", new String[]{"Hiệu ứng Glitch", "Ảnh tùy chọn"}, prefs.getInt("morse_bg_type", 0)));
+                sliderDrawerContent.addView(createComboDropdown("Nền lớp phủ", "morse_bg_type", new String[]{"Nền đen mờ", "Ảnh tùy chọn"}, prefs.getInt("morse_bg_type", 0)));
                 Button btnPickBg = new Button(this);
                 btnPickBg.setText("📁 CHỌN ẢNH NỀN");
                 btnPickBg.setBackground(getRounded("#2196F3", 20f));
@@ -662,7 +663,7 @@ public class MainActivity extends Activity {
                 sliderDrawerContent.addView(createInput("Text nhập sai lần 5", "morse_insult_5"));
                 sliderDrawerContent.addView(createSlider("Độ dài tối đa mật khẩu", "morse_max_len", 20, 10));
                 sliderDrawerContent.addView(createSlider("Thời gian khóa sau 5 lần sai (phút)", "morse_lock_minutes", 60, 30));
-                sliderDrawerContent.addView(createSlider("Độ mờ màn chắn Morse (Alpha Đen)", "morse_bg_alpha", 255, 180));
+                sliderDrawerContent.addView(createSlider("Độ mờ màn chắn Morse (Alpha)", "morse_bg_alpha", 255, 180));
                 sliderDrawerContent.addView(createSlider("Thời gian hiện dấu chấm (ms)", "morse_dot_delay", 2000, 500));
                 sliderDrawerContent.addView(createSlider("Thời gian hiện số (ms) trước khi thành dấu chấm", "morse_show_number_ms", 3000, 800));
                 sliderDrawerContent.addView(createSlider("Độ rung khi nhập sai (ms)", "morse_fail_vib", 1500, 500));
@@ -706,31 +707,88 @@ public class MainActivity extends Activity {
         } 
     }
 
-    // ==================== CÁC HÀM PHỤ TRỢ CHUNG ====================
+    // ==================== SIÊU TRÌNH QUÉT APP (ISLAND/WORK PROFILE) ====================
     private void showAppPickerDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle(T("Choose App to Lock", "Chọn ứng dụng cần khóa"));
-        Intent intent = new Intent(Intent.ACTION_MAIN); intent.addCategory(Intent.CATEGORY_LAUNCHER);
-        List<ResolveInfo> apps = getPackageManager().queryIntentActivities(intent, 0);
+        builder.setTitle("Chọn Ứng dụng cần Khóa (Morse)");
+        
+        LinearLayout layout = new LinearLayout(this); 
+        layout.setOrientation(LinearLayout.VERTICAL); 
+        layout.setPadding(40, 20, 40, 20);
+
         String currentLocklist = prefs.getString("locklist", "");
-        final List<String> selectedApps = new ArrayList<>(Arrays.asList(currentLocklist.split(",")));
-        final List<String> appNames = new ArrayList<>();
-        final List<String> appPackages = new ArrayList<>();
-        for (ResolveInfo app : apps) {
-            appNames.add(app.loadLabel(getPackageManager()).toString());
-            appPackages.add(app.activityInfo.packageName);
+        ArrayList<String> selectedApps = new ArrayList<>(Arrays.asList(currentLocklist.split(",")));
+
+        try {
+            LauncherApps launcherApps = (LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
+            UserManager userManager = (UserManager) getSystemService(Context.USER_SERVICE);
+            
+            // Quét qua mọi User Profiles (Bao gồm Main, Work Profile, Dual Apps)
+            for (UserHandle profile : userManager.getUserProfiles()) {
+                List<LauncherActivityInfo> activities = launcherApps.getActivityList(null, profile);
+                for (LauncherActivityInfo app : activities) {
+                    String pkgName = app.getApplicationInfo().packageName;
+                    if(pkgName.equals(getPackageName())) continue; // Bỏ qua chính app Edge Bar
+
+                    LinearLayout row = new LinearLayout(this); 
+                    row.setOrientation(LinearLayout.HORIZONTAL); 
+                    row.setGravity(Gravity.CENTER_VERTICAL); 
+                    row.setPadding(0, 15, 0, 15);
+                    
+                    // Lấy Icon và Tên App
+                    ImageView iv = new ImageView(this); 
+                    Drawable icon = app.getIcon(0);
+                    if (icon != null) {
+                        iv.setImageDrawable(icon);
+                    } else {
+                        iv.setImageDrawable(getDrawable(android.R.drawable.sym_def_app_icon));
+                    }
+                    iv.setLayoutParams(new LinearLayout.LayoutParams(90, 90)); 
+                    
+                    CheckBox cb = new CheckBox(this); 
+                    String appName = app.getLabel().toString();
+                    // Nếu là app nhân bản / Island, thêm icon cái cặp 💼 để phân biệt
+                    if(!profile.equals(android.os.Process.myUserHandle())) {
+                        appName += " 💼"; 
+                    }
+                    cb.setText("  " + appName); 
+                    cb.setTextColor(Color.WHITE);
+                    cb.setChecked(selectedApps.contains(pkgName));
+                    
+                    cb.setOnCheckedChangeListener((v, isChecked) -> {
+                        if (isChecked) {
+                            if (!selectedApps.contains(pkgName)) selectedApps.add(pkgName);
+                        } else {
+                            selectedApps.remove(pkgName);
+                        }
+                    });
+                    
+                    row.addView(iv); 
+                    row.addView(cb); 
+                    layout.addView(row);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            TextView errorView = new TextView(this);
+            errorView.setText("Lỗi khi quét ứng dụng: " + e.getMessage());
+            errorView.setTextColor(Color.RED);
+            layout.addView(errorView);
         }
-        final boolean[] checked = new boolean[appNames.size()];
-        for (int i = 0; i < appPackages.size(); i++) checked[i] = selectedApps.contains(appPackages.get(i));
-        builder.setMultiChoiceItems(appNames.toArray(new String[0]), checked, (dialog, which, isChecked) -> checked[which] = isChecked);
+
+        ScrollView sv = new ScrollView(this); 
+        sv.addView(layout); 
+        builder.setView(sv);
+        
         builder.setPositiveButton("LƯU", (d, w) -> {
-            selectedApps.clear();
-            for (int i = 0; i < appPackages.size(); i++) if (checked[i]) selectedApps.add(appPackages.get(i));
+            selectedApps.remove(""); // Lọc rác
             String newLocklist = TextUtils.join(",", selectedApps);
             prefs.edit().putString("locklist", newLocklist).apply();
+            
             ViewGroup rootView = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
             EditText et = rootView.findViewWithTag("locklist_input");
             if (et != null) et.setText(newLocklist);
+            Toast.makeText(this, "Đã cập nhật Locklist!", Toast.LENGTH_SHORT).show();
         });
         builder.setNegativeButton("HỦY", null);
         builder.show();
@@ -826,7 +884,7 @@ public class MainActivity extends Activity {
 
     private void showPremiumDialog() { 
         String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow", 
-        "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4.5.8 POLISHED PHANTOM:\n- Sửa corner mapping, hiển thị số\n- Nền glitch / ảnh tùy chọn\n- Rung Morse riêng\n- Unlock hoạt động\n- Ẩn khi recent apps"); 
+        "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 V19.12.3.4.6.1 ISLAND SCANNER:\n- Quét app xuyên Island/Work Profile\n- Grace Period (chống khóa kép)\n- Instant Vanish\n- Tối ưu pin/RAM"); 
         ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); 
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); 
     }

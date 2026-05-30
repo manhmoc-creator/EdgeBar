@@ -73,6 +73,10 @@ public class HomescreenService extends Service {
     private Handler numberDisplayHandler = new Handler();
     private Runnable hideNumberRunnable;
 
+    // Grace Period (chống khóa kép)
+    private String lastUnlockedApp = "";
+    private long lastUnlockedTime = 0;
+
     private int bgType = 0;
     private String bgImagePath = "";
     private Bitmap bgBitmap = null;
@@ -87,7 +91,6 @@ public class HomescreenService extends Service {
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
 
-    // ==== Nền tĩnh, chỉ vẽ khi có thay đổi (tiết kiệm pin) ====
     private class MorseBackgroundView extends View {
         private Paint paint = new Paint();
         public MorseBackgroundView(Context context) {
@@ -111,7 +114,7 @@ public class HomescreenService extends Service {
         public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); }
         public void updateStyle() { p.setAlpha(prefs.getInt("anim_alpha", 255)); p.setStrokeWidth(prefs.getInt("anim_thick", 12)); radius = prefs.getInt("anim_rad", 40); cTheme = prefs.getString("anim_color", "WHITE"); aStyle = prefs.getInt("anim_style", 0); if(getWidth() > 0) applyGradient(getWidth(), getHeight()); invalidate(); }
         @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w, h, oldw, oldh); applyGradient(w, h); }
-        private void applyGradient(int w, int h) { /* giữ nguyên */ 
+        private void applyGradient(int w, int h) {
             int[] cArr; switch(cTheme) {
                 case "NEON": cArr=new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF"), Color.parseColor("#FF00FF")}; break;
                 case "CYBERPUNK": cArr=new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700"), Color.parseColor("#8A2BE2")}; break;
@@ -217,16 +220,11 @@ public class HomescreenService extends Service {
         }
     }
 
-    // SỬA LỖI CORNER MAPPING – QUAN TRỌNG NHẤT
     private String mapComponentToNumber(String comp) {
-        // comp có dạng: "morse_r", "morse_l", ..., "morse_corner_br", ...
-        // Nếu là corner thì giữ nguyên "corner_", không xóa
         String key;
         if (comp.contains("corner_")) {
-            // ví dụ "morse_corner_br" -> "morse_map_corner_br"
-            key = "morse_map_" + comp.substring(6); // bỏ "morse_"
+            key = "morse_map_" + comp.substring(6);
         } else {
-            // thanh bar: "morse_r" -> "morse_map_r"
             key = "morse_map_" + comp.substring(6);
         }
         String val = prefs.getString(key, "*");
@@ -247,9 +245,16 @@ public class HomescreenService extends Service {
             } else if (action.equals("com.manhmoc.edgebar.TEST_ANIM")) {
                 playAnim();
             } else if (action.equals("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE")) {
-                if (System.currentTimeMillis() > lockUntilTime) {
+                String pkg = i.getStringExtra("pkg");
+                long now = System.currentTimeMillis();
+                int graceSec = prefs.getInt("morse_grace_seconds", 10);
+                // Nếu cùng app và trong thời gian grace period => bỏ qua
+                if (pkg != null && pkg.equals(lastUnlockedApp) && (now - lastUnlockedTime) < graceSec * 1000L) {
+                    return;
+                }
+                if (now > lockUntilTime) {
                     isMorseLockActive = true;
-                    lockedPkg = i.getStringExtra("pkg");
+                    lockedPkg = pkg;
                     morseFailCount = 0;
                     currentMorseAttempt = "";
                     if (tvMorseStatus != null) tvMorseStatus.setText("");
@@ -273,9 +278,6 @@ public class HomescreenService extends Service {
                 String reason = i.getStringExtra("reason");
                 if ("recentapps".equals(reason)) {
                     if (isMorseLockActive && !isPreviewMorse) {
-                        // Khi vào đa nhiệm, tạm ẩn lớp phủ để không che các app khác
-                        // nhưng vẫn giữ trạng thái khóa, sau đó sẽ bật lại khi chọn app
-                        // Tuy nhiên Android không có broadcast khi quay lại, nên ta dùng handler
                         morseContainer.setVisibility(View.GONE);
                         new Handler().postDelayed(() -> {
                             if (isMorseLockActive && !isPreviewMorse) {
@@ -284,6 +286,9 @@ public class HomescreenService extends Service {
                         }, 500);
                     }
                 }
+            } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
+                // Khi tắt màn hình, xóa trạng thái unlock để bảo mật
+                lastUnlockedApp = "";
             }
         }
     };
@@ -446,14 +451,19 @@ public class HomescreenService extends Service {
         else if (mappedKey.equals(">")) {
             if (currentMorseAttempt.isEmpty() || masterPass.isEmpty()) return;
             if (currentMorseAttempt.equals(masterPass)) {
-                // UNLOCK THÀNH CÔNG – ẨN LỚP PHỦ NGAY LẬP TỨC
+                // UNLOCK THÀNH CÔNG – LƯU GRACE PERIOD VÀ ẨN LỚP PHỦ TỨC THÌ
+                lastUnlockedApp = lockedPkg;
+                lastUnlockedTime = System.currentTimeMillis();
                 isMorseLockActive = false;
                 morseFailCount = 0;
                 lockUntilTime = 0;
+                // Ẩn ngay lập tức (Instant Vanish)
+                morseContainer.setVisibility(View.GONE);
+                // Đồng thời gửi broadcast để service khác (nếu có) cập nhật
                 Intent success = new Intent("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS");
                 success.putExtra("pkg", lockedPkg);
                 sendBroadcast(success);
-                updateVisibility(); // Lệnh này sẽ ẩn morseContainer
+                updateVisibility(); // đồng bộ trạng thái toàn bộ
             } else {
                 morseFailCount++;
                 doMorseVibrate();
