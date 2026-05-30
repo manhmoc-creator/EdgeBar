@@ -54,7 +54,7 @@ public class HomescreenService extends Service {
     private RelativeLayout morseContainer;
     private TextView tvMorseStatus;
     private MorseBackgroundView bgView;
-    private View[] mBars = new View[8];
+    private MorseBarView[] mBars = new MorseBarView[8];
     private View[] mCorners = new View[4];
     private FlashView fV;
     private CameraManager cm;
@@ -73,7 +73,6 @@ public class HomescreenService extends Service {
     private Handler numberDisplayHandler = new Handler();
     private Runnable hideNumberRunnable;
 
-    // Grace Period (chống khóa kép)
     private String lastUnlockedApp = "";
     private long lastUnlockedTime = 0;
 
@@ -90,6 +89,52 @@ public class HomescreenService extends Service {
 
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
+
+    // Lớp thanh bar có hỗ trợ tàng hình (auto-hide) giống corner
+    private class MorseBarView extends View {
+        private Handler autoHideHandler = new Handler();
+        private int normalAlpha = 50;
+        private int hideDelay = 2500;
+        private int visMode = 0; // 0=normal, 1=auto-hide, 2=invisible
+        private boolean isAutoHiding = false;
+        private GradientDrawable gd;
+
+        public MorseBarView(Context context) {
+            super(context);
+            gd = new GradientDrawable();
+            gd.setCornerRadius(24f);
+            setBackground(gd);
+        }
+
+        public void updateProps(int alpha, int mode, int delay) {
+            this.normalAlpha = alpha;
+            this.visMode = mode;
+            this.hideDelay = delay;
+            if (mode == 0) {
+                setAlpha(alpha / 255f);
+                if (autoHideHandler != null) autoHideHandler.removeCallbacksAndMessages(null);
+                isAutoHiding = false;
+            } else if (mode == 1) {
+                setAlpha(0f);
+                isAutoHiding = true;
+            } else {
+                setAlpha(0f);
+                isAutoHiding = false;
+            }
+            gd.setColor(Color.argb(alpha, 96, 125, 139));
+        }
+
+        public void triggerFlash() {
+            if (visMode != 1 || !isAutoHiding) return;
+            autoHideHandler.removeCallbacksAndMessages(null);
+            setAlpha(1f);
+            autoHideHandler.postDelayed(() -> {
+                if (visMode == 1) {
+                    setAlpha(0f);
+                }
+            }, hideDelay);
+        }
+    }
 
     private class MorseBackgroundView extends View {
         private Paint paint = new Paint();
@@ -248,7 +293,6 @@ public class HomescreenService extends Service {
                 String pkg = i.getStringExtra("pkg");
                 long now = System.currentTimeMillis();
                 int graceSec = prefs.getInt("morse_grace_seconds", 10);
-                // Nếu cùng app và trong thời gian grace period => bỏ qua
                 if (pkg != null && pkg.equals(lastUnlockedApp) && (now - lastUnlockedTime) < graceSec * 1000L) {
                     return;
                 }
@@ -258,6 +302,8 @@ public class HomescreenService extends Service {
                     morseFailCount = 0;
                     currentMorseAttempt = "";
                     if (tvMorseStatus != null) tvMorseStatus.setText("");
+                    // Hiển thị ngay lập tức
+                    morseContainer.setVisibility(View.VISIBLE);
                     updateVisibility();
                 } else {
                     Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
@@ -269,6 +315,7 @@ public class HomescreenService extends Service {
                 morseFailCount = 0;
                 currentMorseAttempt = "";
                 lockedPkg = "";
+                morseContainer.setVisibility(View.GONE);
                 updateVisibility();
             } else if (action.equals("com.manhmoc.edgebar.TOGGLE_MORSE")) {
                 boolean isM = prefs.getBoolean("morse_mode_en", false);
@@ -287,7 +334,6 @@ public class HomescreenService extends Service {
                     }
                 }
             } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
-                // Khi tắt màn hình, xóa trạng thái unlock để bảo mật
                 lastUnlockedApp = "";
             }
         }
@@ -379,10 +425,10 @@ public class HomescreenService extends Service {
         try { wm.addView(morseContainer, bgP); } catch (Exception e) {}
 
         for (int i = 0; i < 8; i++) {
-            mBars[i] = new View(this);
+            mBars[i] = new MorseBarView(this);
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
             try { wm.addView(mBars[i], p); } catch (Exception e) {}
-            mBars[i].setOnTouchListener(new SidebarTouchListener("morse_" + M_BARS[i], null));
+            mBars[i].setOnTouchListener(new SidebarTouchListener("morse_" + M_BARS[i], mBars[i]));
         }
         for (int i = 0; i < 4; i++) {
             mCorners[i] = new CornerView(this, i, "morse_");
@@ -419,7 +465,10 @@ public class HomescreenService extends Service {
 
     private void handleMorseTap(String comp, View v, boolean isLongPress) {
         doMorseVibrate();
-        if (v != null && v instanceof CornerView) ((CornerView) v).triggerFlash();
+        if (v != null) {
+            if (v instanceof CornerView) ((CornerView) v).triggerFlash();
+            else if (v instanceof MorseBarView) ((MorseBarView) v).triggerFlash();
+        }
 
         String mappedKey = mapComponentToNumber(comp);
         String masterPass = prefs.getString("morse_master_pass", "");
@@ -451,19 +500,16 @@ public class HomescreenService extends Service {
         else if (mappedKey.equals(">")) {
             if (currentMorseAttempt.isEmpty() || masterPass.isEmpty()) return;
             if (currentMorseAttempt.equals(masterPass)) {
-                // UNLOCK THÀNH CÔNG – LƯU GRACE PERIOD VÀ ẨN LỚP PHỦ TỨC THÌ
                 lastUnlockedApp = lockedPkg;
                 lastUnlockedTime = System.currentTimeMillis();
                 isMorseLockActive = false;
                 morseFailCount = 0;
                 lockUntilTime = 0;
-                // Ẩn ngay lập tức (Instant Vanish)
                 morseContainer.setVisibility(View.GONE);
-                // Đồng thời gửi broadcast để service khác (nếu có) cập nhật
                 Intent success = new Intent("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS");
                 success.putExtra("pkg", lockedPkg);
                 sendBroadcast(success);
-                updateVisibility(); // đồng bộ trạng thái toàn bộ
+                updateVisibility();
             } else {
                 morseFailCount++;
                 doMorseVibrate();
@@ -483,7 +529,6 @@ public class HomescreenService extends Service {
             return;
         }
 
-        // Phím số
         if (currentMorseAttempt.length() >= realMaxLen && realMaxLen > 0) {
             morseFailCount++;
             doMorseVibrate();
@@ -549,10 +594,9 @@ public class HomescreenService extends Service {
                     int h = prefs.getInt("morse_" + M_BARS[i] + "_h", 60);
                     int x = prefs.getInt("morse_" + M_BARS[i] + "_x", 0);
                     int y = prefs.getInt("morse_" + M_BARS[i] + "_y", 0);
-                    GradientDrawable gd = new GradientDrawable();
-                    gd.setColor(Color.argb(alpha, 96, 125, 139));
-                    gd.setCornerRadius(24f);
-                    mBars[i].setBackground(gd);
+                    int visMode = prefs.getInt("morse_" + M_BARS[i] + "_vis_mode", 0);
+                    int hideDelay = prefs.getInt("morse_corner_hide_dur", 2500);
+                    ((MorseBarView) mBars[i]).updateProps(alpha, visMode, hideDelay);
                     int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                     if (isPreviewMorse) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
                     else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
@@ -889,6 +933,7 @@ public class HomescreenService extends Service {
                 return true;
             }
             if (myView != null && myView instanceof CornerView) ((CornerView) myView).triggerFlash();
+            else if (myView != null && myView instanceof MorseBarView) ((MorseBarView) myView).triggerFlash();
             gd.onTouchEvent(e);
             if (e.getAction() == MotionEvent.ACTION_DOWN) {
                 sx = e.getRawX();
