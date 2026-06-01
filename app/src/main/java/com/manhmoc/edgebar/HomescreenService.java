@@ -159,7 +159,7 @@ public class HomescreenService extends Service {
         public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); }
         public void updateStyle() { p.setAlpha(prefs.getInt("anim_alpha", 255)); p.setStrokeWidth(prefs.getInt("anim_thick", 12)); radius = prefs.getInt("anim_rad", 40); cTheme = prefs.getString("anim_color", "WHITE"); aStyle = prefs.getInt("anim_style", 0); if(getWidth() > 0) applyGradient(getWidth(), getHeight()); invalidate(); }
         @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w, h, oldw, oldh); applyGradient(w, h); }
-        private void applyGradient(int w, int h) {
+        private void applyGradient(int w, int h) { /* như cũ */ 
             int[] cArr; switch(cTheme) {
                 case "NEON": cArr=new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF"), Color.parseColor("#FF00FF")}; break;
                 case "CYBERPUNK": cArr=new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700"), Color.parseColor("#8A2BE2")}; break;
@@ -302,7 +302,6 @@ public class HomescreenService extends Service {
                     morseFailCount = 0;
                     currentMorseAttempt = "";
                     if (tvMorseStatus != null) tvMorseStatus.setText("");
-                    // Hiển thị ngay lập tức
                     morseContainer.setVisibility(View.VISIBLE);
                     updateVisibility();
                 } else {

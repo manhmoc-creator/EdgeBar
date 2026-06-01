@@ -49,7 +49,6 @@ public class EdgeBarService extends AccessibilityService {
     private Vibrator vibrator;
 
     private String unlockedPackage = "";
-    private String currentForegroundPackage = "";
 
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
@@ -88,134 +87,65 @@ public class EdgeBarService extends AccessibilityService {
     };
 
     private class FlashView extends View {
-        private Paint p = new Paint();
-        float radius = 40f;
-        String cTheme = "WHITE";
-        int aStyle = 0;
-        private float phaseFraction = 0f;
-
-        public FlashView(Context c) {
-            super(c);
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeCap(Paint.Cap.ROUND);
-            p.setStrokeJoin(Paint.Join.ROUND);
-            p.setAntiAlias(true);
-            setLayerType(LAYER_TYPE_SOFTWARE, p);
-            updateStyle();
-        }
-
-        public void updateStyle() {
-            p.setAlpha(prefs.getInt("anim_alpha", 255));
-            p.setStrokeWidth(prefs.getInt("anim_thick", 12));
-            radius = prefs.getInt("anim_rad", 40);
-            cTheme = prefs.getString("anim_color", "WHITE");
-            aStyle = prefs.getInt("anim_style", 0);
-            if (getWidth() > 0) applyGradient(getWidth(), getHeight());
-            invalidate();
-        }
-
-        @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-            super.onSizeChanged(w, h, oldw, oldh);
-            applyGradient(w, h);
-        }
-
-        private void applyGradient(int w, int h) {
-            int[] cArr;
-            switch (cTheme) {
-                case "NEON": cArr = new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF"), Color.parseColor("#FF00FF")}; break;
-                case "CYBERPUNK": cArr = new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700"), Color.parseColor("#8A2BE2")}; break;
-                case "LAVA": cArr = new int[]{Color.parseColor("#FF4500"), Color.parseColor("#FF8C00"), Color.parseColor("#FF4500")}; break;
-                case "OCEAN": cArr = new int[]{Color.parseColor("#00BFFF"), Color.parseColor("#1E90FF"), Color.parseColor("#00BFFF")}; break;
-                case "MATRIX": cArr = new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
-                case "SUNSET": cArr = new int[]{Color.parseColor("#FF1493"), Color.parseColor("#FF8C00"), Color.parseColor("#FF1493")}; break;
-                case "GOOGLE": cArr = new int[]{Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4"), Color.parseColor("#EA4335")}; break;
-                case "AURORA": cArr = new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#B388FF"), Color.parseColor("#FF4081")}; break;
-                case "ABYSS": cArr = new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#1DE9B6"), Color.parseColor("#2979FF")}; break;
-                case "COSMIC": cArr = new int[]{Color.parseColor("#4A148C"), Color.parseColor("#E91E63"), Color.parseColor("#FFD700")}; break;
-                case "FOREST": cArr = new int[]{Color.parseColor("#1B5E20"), Color.parseColor("#4CAF50"), Color.parseColor("#FFEB3B")}; break;
-                case "FLAME": cArr = new int[]{Color.parseColor("#B71C1C"), Color.parseColor("#FF9800"), Color.parseColor("#FFEB3B")}; break;
-                case "MIDNIGHT": cArr = new int[]{Color.parseColor("#1A237E"), Color.parseColor("#7B1FA2"), Color.parseColor("#03A9F4")}; break;
-                case "TROPICAL": cArr = new int[]{Color.parseColor("#00695C"), Color.parseColor("#8BC34A"), Color.parseColor("#FF9800")}; break;
-                case "CANDY": cArr = new int[]{Color.parseColor("#F06292"), Color.parseColor("#4DD0E1"), Color.parseColor("#FFF176")}; break;
-                default: cArr = new int[]{Color.WHITE, Color.WHITE}; break;
+        private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phaseFraction = 0f;
+        public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); }
+        public void updateStyle() { p.setAlpha(prefs.getInt("anim_alpha", 255)); p.setStrokeWidth(prefs.getInt("anim_thick", 12)); radius = prefs.getInt("anim_rad", 40); cTheme = prefs.getString("anim_color", "WHITE"); aStyle = prefs.getInt("anim_style", 0); if(getWidth() > 0) applyGradient(getWidth(), getHeight()); invalidate(); }
+        @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w, h, oldw, oldh); applyGradient(w, h); }
+        private void applyGradient(int w, int h) { /* giống các bản trước */ 
+            int[] cArr; switch(cTheme) {
+                case "NEON": cArr=new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF"), Color.parseColor("#FF00FF")}; break;
+                case "CYBERPUNK": cArr=new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700"), Color.parseColor("#8A2BE2")}; break;
+                case "LAVA": cArr=new int[]{Color.parseColor("#FF4500"), Color.parseColor("#FF8C00"), Color.parseColor("#FF4500")}; break;
+                case "OCEAN": cArr=new int[]{Color.parseColor("#00BFFF"), Color.parseColor("#1E90FF"), Color.parseColor("#00BFFF")}; break;
+                case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
+                case "SUNSET": cArr=new int[]{Color.parseColor("#FF1493"), Color.parseColor("#FF8C00"), Color.parseColor("#FF1493")}; break;
+                case "GOOGLE": cArr=new int[]{Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4"), Color.parseColor("#EA4335")}; break;
+                case "AURORA": cArr=new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#B388FF"), Color.parseColor("#FF4081")}; break;
+                case "ABYSS": cArr=new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#1DE9B6"), Color.parseColor("#2979FF")}; break;
+                case "COSMIC": cArr=new int[]{Color.parseColor("#4A148C"), Color.parseColor("#E91E63"), Color.parseColor("#FFD700")}; break;
+                case "FOREST": cArr=new int[]{Color.parseColor("#1B5E20"), Color.parseColor("#4CAF50"), Color.parseColor("#FFEB3B")}; break;
+                case "FLAME": cArr=new int[]{Color.parseColor("#B71C1C"), Color.parseColor("#FF9800"), Color.parseColor("#FFEB3B")}; break;
+                case "MIDNIGHT": cArr=new int[]{Color.parseColor("#1A237E"), Color.parseColor("#7B1FA2"), Color.parseColor("#03A9F4")}; break;
+                case "TROPICAL": cArr=new int[]{Color.parseColor("#00695C"), Color.parseColor("#8BC34A"), Color.parseColor("#FF9800")}; break;
+                case "CANDY": cArr=new int[]{Color.parseColor("#F06292"), Color.parseColor("#4DD0E1"), Color.parseColor("#FFF176")}; break;
+                default: cArr=new int[]{Color.WHITE, Color.WHITE}; break;
             }
-            p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR));
-            p.setShadowLayer(15f, 0, 0, cArr[0]);
+            p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR)); p.setShadowLayer(15f, 0, 0, cArr[0]);
         }
         public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
         @Override protected void onDraw(Canvas canvas) {
-            float drawW = getWidth(), drawH = getHeight();
-            if (drawW <= 0 || drawH <= 0) return;
+            float drawW = getWidth(); float drawH = getHeight();
+            if(drawW <= 0 || drawH <= 0) return;
             float off = p.getStrokeWidth()/2;
-            float left = off, top = off, right = drawW - off, bottom = drawH - off;
+            float left = off; float top = off;
+            float right = drawW - off; float bottom = drawH - off;
             p.setStrokeCap(Paint.Cap.ROUND);
-            if (aStyle > 0) {
+            if(aStyle > 0) {
                 float perim = 2 * (drawW + drawH);
                 float currentPhase = -perim * phaseFraction;
                 if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, currentPhase));
                 else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, currentPhase));
                 else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, currentPhase));
-            } else p.setPathEffect(null);
+            } else { p.setPathEffect(null); }
             canvas.drawRoundRect(left, top, right, bottom, radius, radius, p);
         }
     }
 
     private class CornerView extends View {
-        private Paint pFill, pStroke;
-        private int type;
-        private Handler autoHideHandler = new Handler();
-        private boolean isAutoHiding = false;
-        private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
+        private Paint pFill, pStroke; private int type;
+        private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
         private boolean isInv = false;
 
-        public CornerView(Context c, int type) {
-            super(c);
-            this.type = type;
-            pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true);
-            pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE);
-            pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND);
-        }
+        public CornerView(Context c, int type) { super(c); this.type = type; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
 
-        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) {
-            pStroke.setStrokeWidth(thick);
-            this.baseMoonAlpha = moonAlpha;
-            this.baseStrokeAlpha = strokeAlpha;
-            this.isAutoHiding = autoHide;
-            this.hideDelay = delay;
-            this.isInv = inv;
-            if (!autoHide) {
-                pFill.setColor(Color.argb(moonAlpha, 96, 125, 139));
-                pStroke.setAlpha(strokeAlpha);
-            } else triggerFlash();
-            if (inv) { pFill.setAlpha(0); pStroke.setAlpha(0); }
-            invalidate();
-        }
-        public void triggerFlash() {
-            if (!isAutoHiding || isInv) return;
-            autoHideHandler.removeCallbacksAndMessages(null);
-            pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha+50), 96,125,139));
-            pStroke.setAlpha(Math.min(255, baseStrokeAlpha+50));
-            invalidate();
-            autoHideHandler.postDelayed(() -> {
-                ValueAnimator a = ValueAnimator.ofFloat(1f,0f);
-                a.setDuration(1500);
-                a.addUpdateListener(anim -> {
-                    float val = (float) anim.getAnimatedValue();
-                    pFill.setColor(Color.argb((int)(baseMoonAlpha*val), 96,125,139));
-                    pStroke.setAlpha((int)(baseStrokeAlpha*val));
-                    invalidate();
-                });
-                a.start();
-            }, hideDelay);
-        }
+        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) { pStroke.setStrokeWidth(thick); this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv; if(!autoHide) { pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); pStroke.setAlpha(strokeAlpha); } else triggerFlash(); if(inv) { pFill.setAlpha(0); pStroke.setAlpha(0); } invalidate(); }
+        public void triggerFlash() { if(!isAutoHiding || isInv) return; autoHideHandler.removeCallbacksAndMessages(null); pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha+50), 96,125,139)); pStroke.setAlpha(Math.min(255, baseStrokeAlpha+50)); invalidate(); autoHideHandler.postDelayed(() -> { ValueAnimator a = ValueAnimator.ofFloat(1f,0f); a.setDuration(1500); a.addUpdateListener(anim -> { float val = (float)anim.getAnimatedValue(); pFill.setColor(Color.argb((int)(baseMoonAlpha*val), 96,125,139)); pStroke.setAlpha((int)(baseStrokeAlpha*val)); invalidate(); }); a.start(); }, hideDelay); }
 
-        @Override protected void onDraw(Canvas canvas) {
-            super.onDraw(canvas);
+        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas);
             float tw = getWidth(), th = getHeight(), thick = pStroke.getStrokeWidth(), pad = thick/2;
             String ck = "lock_corner_" + CORNERS[type] + "_";
             int shapeMode = prefs.getInt(ck+"shape", 0);
-            float sRad = prefs.getInt(ck+"rad", 80) / 1000f;
-            float mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
+            float sRad = prefs.getInt(ck+"rad", 80) / 1000f; float mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
             float sw = prefs.getInt(ck+"w", 100), sh = prefs.getInt(ck+"h", 100);
             float mw = prefs.getInt(ck+"moon_w", 100), mh = prefs.getInt(ck+"moon_h", 100);
 
@@ -245,11 +175,11 @@ public class EdgeBarService extends AccessibilityService {
                 mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
             }
 
-            if (shapeMode == 1) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sTipX, sRootY); }
-            else if (shapeMode == 2) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sRootX, sTipY); }
+            if(shapeMode == 1) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sTipX, sRootY); }
+            else if(shapeMode == 2) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sRootX, sTipY); }
             else { strokePath.moveTo(sRootX, sTipY); strokePath.quadTo(sCtrlX, sCtrlY, sTipX, sRootY); }
 
-            if (type==0||type==1) { moonPath.moveTo(mRootX, mTipY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mTipX, mRootY); moonPath.quadTo(mCtrlX, mCtrlY, mRootX, mTipY); }
+            if(type==0||type==1) { moonPath.moveTo(mRootX, mTipY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mTipX, mRootY); moonPath.quadTo(mCtrlX, mCtrlY, mRootX, mTipY); }
             else { moonPath.moveTo(mTipX, mRootY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mRootX, mTipY); moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY); }
             moonPath.close();
 
@@ -270,8 +200,10 @@ public class EdgeBarService extends AccessibilityService {
         try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
         prefs.registerOnSharedPreferenceChangeListener(prefListener);
         IntentFilter filter = new IntentFilter();
-        filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON);
-        filter.addAction(Intent.ACTION_USER_PRESENT); filter.addAction("com.manhmoc.edgebar.TEST_ANIM");
+        filter.addAction(Intent.ACTION_SCREEN_OFF);
+        filter.addAction(Intent.ACTION_SCREEN_ON);
+        filter.addAction(Intent.ACTION_USER_PRESENT);
+        filter.addAction("com.manhmoc.edgebar.TEST_ANIM");
         filter.addAction("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS");
         registerReceiver(stateReceiver, filter);
         if (Build.VERSION.SDK_INT >= 33)
@@ -291,7 +223,6 @@ public class EdgeBarService extends AccessibilityService {
         if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
             String cName = event.getClassName() != null ? event.getClassName().toString() : "";
-            currentForegroundPackage = pName;
             isKbd = pName.contains("inputmethod") || cName.contains("InputWindow") || cName.contains("keyboard") || cName.contains("Keyboard");
             String bl = prefs.getString("blacklist", "");
             isBl = !pName.isEmpty() && bl.contains(pName);
@@ -301,12 +232,6 @@ public class EdgeBarService extends AccessibilityService {
                 for (String pkg : locklist.split(",")) {
                     if (pkg.trim().equals(pName)) { isAppLocked = true; break; }
                 }
-            }
-            // Nếu app hiện tại không nằm trong locklist, gửi lệnh dismiss
-            if (!isAppLocked && !pName.isEmpty() && !pName.contains("systemui") && !isKbd && !pName.equals(getPackageName())) {
-                Intent dismiss = new Intent("com.manhmoc.edgebar.MORSE_LOCK_DISMISS");
-                sendBroadcast(dismiss);
-                unlockedPackage = "";
             }
             if (isAppLocked) {
                 if (!pName.equals(unlockedPackage)) {
