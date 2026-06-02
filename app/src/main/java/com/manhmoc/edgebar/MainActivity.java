@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.4.6.3"; 
+   private final String CURRENT_VERSION = "V19.12.3.4.6.4"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -131,6 +131,53 @@ public class MainActivity extends Activity {
         headerRow.addView(title); headerRow.addView(btnLang); main.addView(headerRow);
         
         if (!Settings.canDrawOverlays(this)) { Button btnReq = new Button(this); btnReq.setText(T("⚠️ GRANT OVERLAY", "⚠️ CẤP QUYỀN LỚP PHỦ")); btnReq.setBackground(getRounded("#D32F2F", 25f)); btnReq.setTextColor(Color.WHITE); btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))); main.addView(btnReq); }
+
+// --- DEVICE ADMIN ---
+        android.app.admin.DevicePolicyManager dpm =
+            (android.app.admin.DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
+        ComponentName adminComp = new ComponentName(this, EdgeAdminReceiver.class);
+        if (!dpm.isAdminActive(adminComp)) {
+            Button btnAdmin = new Button(this);
+            btnAdmin.setText("⚠️ CẤP QUYỀN ADMIN DEVICE (Bảo vệ lớp phủ Morse)");
+            btnAdmin.setBackground(getRounded("#D32F2F", 25f));
+            btnAdmin.setTextColor(Color.WHITE);
+            LinearLayout.LayoutParams adminLp = new LinearLayout.LayoutParams(-1, -2);
+            adminLp.setMargins(0, 10, 0, 0);
+            btnAdmin.setLayoutParams(adminLp);
+            btnAdmin.setOnClickListener(v -> {
+                Intent adminIntent = new Intent(
+                    android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
+                adminIntent.putExtra(
+                    android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComp);
+                adminIntent.putExtra(
+                    android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                    "Bảo vệ lớp phủ Morse khỏi bị gỡ và chống gỡ cài đặt nhanh từ Home.");
+                startActivity(adminIntent);
+            });
+            main.addView(btnAdmin);
+        }
+
+        // --- USAGE STATS ---
+        try {
+            android.app.AppOpsManager aom =
+                (android.app.AppOpsManager) getSystemService(APP_OPS_SERVICE);
+            int mode = aom.checkOpNoThrow(
+                android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+                android.os.Process.myUid(), getPackageName());
+            if (mode != android.app.AppOpsManager.MODE_ALLOWED) {
+                Button btnUsage = new Button(this);
+                btnUsage.setText("⚠️ CẤP QUYỀN TRUY CẬP DỮ LIỆU SỬ DỤNG");
+                btnUsage.setBackground(getRounded("#D32F2F", 25f));
+                btnUsage.setTextColor(Color.WHITE);
+                LinearLayout.LayoutParams usageLp = new LinearLayout.LayoutParams(-1, -2);
+                usageLp.setMargins(0, 10, 0, 0);
+                btnUsage.setLayoutParams(usageLp);
+                btnUsage.setOnClickListener(v ->
+                    startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
+                main.addView(btnUsage);
+            }
+        } catch (Exception e) { /* bỏ qua nếu thiết bị không hỗ trợ */ }
+
 
         navMain = new LinearLayout(this); navMain.setOrientation(LinearLayout.HORIZONTAL); navMain.setPadding(0, 0, 0, 40);
         Button btnNavCond = createNavBtn(T("CONDITIONS", "ĐIỀU KIỆN"));
@@ -687,34 +734,83 @@ public class MainActivity extends Activity {
     }
 
     // ==================== CÁC HÀM PHỤ TRỢ CHUNG ====================
-    private void showAppPickerDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle(T("Choose App to Lock", "Chọn ứng dụng cần khóa"));
-        Intent intent = new Intent(Intent.ACTION_MAIN); intent.addCategory(Intent.CATEGORY_LAUNCHER);
-        List<ResolveInfo> apps = getPackageManager().queryIntentActivities(intent, 0);
-        String currentLocklist = prefs.getString("locklist", "");
-        final List<String> selectedApps = new ArrayList<>(Arrays.asList(currentLocklist.split(",")));
-        final List<String> appNames = new ArrayList<>();
-        final List<String> appPackages = new ArrayList<>();
-        for (ResolveInfo app : apps) {
-            appNames.add(app.loadLabel(getPackageManager()).toString());
-            appPackages.add(app.activityInfo.packageName);
+ private void showAppPickerDialog() {
+        android.os.UserManager um =
+            (android.os.UserManager) getSystemService(Context.USER_SERVICE);
+        android.content.pm.LauncherApps la =
+            (android.content.pm.LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
+
+        final List<String> allPkgs = new ArrayList<>();
+        final List<String> allNames = new ArrayList<>();
+
+        try {
+            List<android.os.UserHandle> profiles = um.getUserProfiles();
+            for (android.os.UserHandle profile : profiles) {
+                List<android.content.pm.LauncherActivityInfo> activities =
+                    la.getActivityList(null, profile);
+                for (android.content.pm.LauncherActivityInfo info : activities) {
+                    String pkg = info.getApplicationInfo().packageName;
+                    String name = info.getLabel().toString();
+                    // Gắn tag [Island] nếu không phải profile chính
+                    if (!profile.equals(android.os.Process.myUserHandle())) {
+                        name += " [Island]";
+                    }
+                    if (!allPkgs.contains(pkg)) {
+                        allPkgs.add(pkg);
+                        allNames.add(name);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Fallback: dùng queryIntentActivities nếu LauncherApps lỗi
+            Intent intent = new Intent(Intent.ACTION_MAIN);
+            intent.addCategory(Intent.CATEGORY_LAUNCHER);
+            List<ResolveInfo> apps = getPackageManager().queryIntentActivities(intent, 0);
+            for (ResolveInfo app : apps) {
+                String pkg = app.activityInfo.packageName;
+                if (!allPkgs.contains(pkg)) {
+                    allPkgs.add(pkg);
+                    allNames.add(app.loadLabel(getPackageManager()).toString());
+                }
+            }
         }
-        final boolean[] checked = new boolean[appNames.size()];
-        for (int i = 0; i < appPackages.size(); i++) checked[i] = selectedApps.contains(appPackages.get(i));
-        builder.setMultiChoiceItems(appNames.toArray(new String[0]), checked, (dialog, which, isChecked) -> checked[which] = isChecked);
-        builder.setPositiveButton("LƯU", (d, w) -> {
-            selectedApps.clear();
-            for (int i = 0; i < appPackages.size(); i++) if (checked[i]) selectedApps.add(appPackages.get(i));
-            String newLocklist = TextUtils.join(",", selectedApps);
-            prefs.edit().putString("locklist", newLocklist).apply();
-            ViewGroup rootView = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
-            EditText et = rootView.findViewWithTag("locklist_input");
-            if (et != null) et.setText(newLocklist);
-        });
-        builder.setNegativeButton("HỦY", null);
-        builder.show();
+
+        // Sort theo tên (đồng bộ cả 2 list)
+        List<String[]> combined = new ArrayList<>();
+        for (int i = 0; i < allPkgs.size(); i++)
+            combined.add(new String[]{allNames.get(i), allPkgs.get(i)});
+        combined.sort((a, b) -> a[0].compareToIgnoreCase(b[0]));
+        allNames.clear(); allPkgs.clear();
+        for (String[] pair : combined) { allNames.add(pair[0]); allPkgs.add(pair[1]); }
+
+        String currentLocklist = prefs.getString("locklist", "");
+        final boolean[] checked = new boolean[allPkgs.size()];
+        for (int i = 0; i < allPkgs.size(); i++)
+            checked[i] = currentLocklist.contains(allPkgs.get(i));
+
+        new AlertDialog.Builder(this)
+            .setTitle(T("Choose App to Lock", "Chọn ứng dụng cần khóa"))
+            .setMultiChoiceItems(
+                allNames.toArray(new String[0]), checked,
+                (dialog, which, isChecked) -> checked[which] = isChecked)
+            .setPositiveButton("LƯU", (d, w) -> {
+                List<String> selected = new ArrayList<>();
+                for (int i = 0; i < allPkgs.size(); i++)
+                    if (checked[i]) selected.add(allPkgs.get(i));
+                String newLocklist = TextUtils.join(",", selected);
+                prefs.edit().putString("locklist", newLocklist).apply();
+                // Cập nhật EditText nếu đang hiển thị
+                try {
+                    ViewGroup rootView = (ViewGroup)
+                        ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
+                    EditText et = rootView.findViewWithTag("locklist_input");
+                    if (et != null) et.setText(newLocklist);
+                } catch (Exception ignored) {}
+            })
+            .setNegativeButton("HỦY", null)
+            .show();
     }
+
 
     private void openMorseMapDialog() {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
