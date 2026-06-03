@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-   private final String CURRENT_VERSION = "V19.12.3.4.6.4"; 
+   private final String CURRENT_VERSION = "V19.12.3.4.6.5"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -579,7 +579,7 @@ public class MainActivity extends Activity {
         LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL);
         btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
         btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); 
-        btnEditMorse = new Button(this); btnEditMorse.setText("MORSE"); btnEditMorse.setLayoutParams(mP); 
+        btnEditMorse = new Button(this); btnEditMorse.setText("MORSE OS"); btnEditMorse.setLayoutParams(mP); 
         btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
         designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
         
@@ -616,7 +616,7 @@ public class MainActivity extends Activity {
             String[] bNames = designTabState == 2 ? M_BAR_NAMES : BAR_NAMES;
             if(designTabState == 2) {
                 LinearLayout mRow = new LinearLayout(this); mRow.setOrientation(LinearLayout.HORIZONTAL);
-                Button btnTestM = new Button(this); btnTestM.setText("👁️ THỬ MORSE"); btnTestM.setBackground(getRounded("#FFC107", 20f)); btnTestM.setTextColor(Color.BLACK); LinearLayout.LayoutParams tm = new LinearLayout.LayoutParams(0,-2,1f); tm.setMargins(0,0,10,20); btnTestM.setLayoutParams(tm);
+                Button btnTestM = new Button(this); btnTestM.setText("👁️ THỬ MORSE OS"); btnTestM.setBackground(getRounded("#FFC107", 20f)); btnTestM.setTextColor(Color.BLACK); LinearLayout.LayoutParams tm = new LinearLayout.LayoutParams(0,-2,1f); tm.setMargins(0,0,10,20); btnTestM.setLayoutParams(tm);
                 btnTestM.setOnClickListener(v->{ 
                     boolean cur = prefs.getBoolean("morse_mode_en", false);
                     prefs.edit().putBoolean("morse_mode_en", !cur).apply();
@@ -689,12 +689,59 @@ public class MainActivity extends Activity {
                 sliderDrawerContent.addView(createInput("Text nhập sai lần 5", "morse_insult_5"));
                 sliderDrawerContent.addView(createSlider("Độ dài tối đa mật khẩu", "morse_max_len", 20, 10));
                 sliderDrawerContent.addView(createSlider("Thời gian khóa sau 5 lần sai (phút)", "morse_lock_minutes", 60, 30));
+
+
+LinearLayout relockRow = new LinearLayout(this);
+relockRow.setOrientation(LinearLayout.VERTICAL);
+relockRow.setPadding(0, 10, 0, 10);
+
+int curRelockMs = prefs.getInt("morse_relock_ms", 5000);
+String relockLabel = formatRelockTime(curRelockMs);
+
+TextView tvRelock = new TextView(this);
+tvRelock.setTextColor(Color.WHITE);
+tvRelock.setText("Relock sau khi thoát app: " + relockLabel);
+relockRow.addView(tvRelock);
+
+LinearLayout relockBtnRow = new LinearLayout(this);
+relockBtnRow.setOrientation(LinearLayout.HORIZONTAL);
+relockBtnRow.setGravity(Gravity.CENTER_VERTICAL);
+
+Button btnRelockM = new Button(this); btnRelockM.setText("-");
+btnRelockM.setTextColor(Color.parseColor("#BBBBBB"));
+btnRelockM.setBackgroundColor(Color.TRANSPARENT); btnRelockM.setTextSize(20);
+
+Button btnRelockP = new Button(this); btnRelockP.setText("+");
+btnRelockP.setTextColor(Color.parseColor("#BBBBBB"));
+btnRelockP.setBackgroundColor(Color.TRANSPARENT); btnRelockP.setTextSize(20);
+
+SeekBar sbRelock = new SeekBar(this);
+sbRelock.setMax(1800);
+sbRelock.setProgress(curRelockMs / 1000);
+sbRelock.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+sbRelock.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+    public void onProgressChanged(SeekBar s, int p, boolean b) {
+        int ms = Math.max(1000, p * 1000); // tối thiểu 1 giây
+        prefs.edit().putInt("morse_relock_ms", ms).apply();
+        tvRelock.setText("Relock sau khi thoát app: " + formatRelockTime(ms));
+    }
+    public void onStartTrackingTouch(SeekBar s) {}
+    public void onStopTrackingTouch(SeekBar s) {}
+});
+btnRelockM.setOnClickListener(v -> { if(sbRelock.getProgress()>1) sbRelock.setProgress(sbRelock.getProgress()-1); });
+btnRelockP.setOnClickListener(v -> { if(sbRelock.getProgress()<1800) sbRelock.setProgress(sbRelock.getProgress()+1); });
+
+relockBtnRow.addView(btnRelockM); relockBtnRow.addView(sbRelock); relockBtnRow.addView(btnRelockP);
+relockRow.addView(relockBtnRow);
+designSliderContainer.addView(relockRow);
+
                 sliderDrawerContent.addView(createSlider("Độ mờ màn chắn Morse (Alpha Đen)", "morse_bg_alpha", 255, 180));
                 sliderDrawerContent.addView(createSlider("Thời gian hiện dấu chấm (ms)", "morse_dot_delay", 2000, 500));
                 sliderDrawerContent.addView(createSlider("Thời gian hiện số (ms) trước khi thành dấu chấm", "morse_show_number_ms", 3000, 800));
                 sliderDrawerContent.addView(createSlider("Độ rung khi nhập sai (ms)", "morse_fail_vib", 1500, 500));
                 designSliderContainer.addView(createDrawer("CÀI ĐẶT MORSE NÂNG CAO", sliderDrawerContent));
             }
+            designSliderContainer.addView(createSectionTitle("⚙️ MORSE OS - LỚP PHỦ TUỲ CHỈNH")); 
             designSliderContainer.addView(createSectionTitle("EDGE BARS (" + bKeys.length + " THANH)"));
             for(int i=0; i < bKeys.length; i++) { 
                 LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); 
@@ -930,6 +977,13 @@ public class MainActivity extends Activity {
     private Spinner createSpinner() { Spinner sp = new Spinner(this); sp.setBackground(getRounded("#2C2C2C", 20f)); sp.setPadding(20,20,20,20); return sp; }
     private EditText createInput(String h, String k) { EditText et = new EditText(this); et.setHint(h); et.setHintTextColor(Color.GRAY); et.setTextColor(Color.WHITE); et.setText(prefs.getString(k,"")); et.setBackground(getRounded("#2C2C2C", 20f)); et.setPadding(30,30,30,30); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,10,0,10); et.setLayoutParams(lp); et.addTextChangedListener(new android.text.TextWatcher(){public void afterTextChanged(android.text.Editable s){prefs.edit().putString(k,s.toString()).apply();}public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}}); return et; }
     private LinearLayout wrapCard(View content) { LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 40f)); card.setPadding(40,40,40,40); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,40); card.setLayoutParams(lp); card.addView(content); return card; }
+
+
+    private String formatRelockTime(int ms) {
+    if (ms < 60000) return (ms / 1000) + " giây";
+    else if (ms < 3600000) return (ms / 60000) + " phút " + ((ms % 60000) / 1000) + "s";
+    else return "30 phút";
+}
     private LinearLayout createSlider(String t, String k, int max, int def) { 
         LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); 
         TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv); 

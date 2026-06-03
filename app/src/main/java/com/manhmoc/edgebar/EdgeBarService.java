@@ -48,8 +48,6 @@ public class EdgeBarService extends AccessibilityService {
     private SharedPreferences prefs;
     private Vibrator vibrator;
 
-    private String unlockedPackage = "";
-
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
@@ -62,21 +60,20 @@ public class EdgeBarService extends AccessibilityService {
         }
     };
 
-    private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context c, Intent i) {
-            if ("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) {
-                playAnim();
-            } else if ("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS".equals(i.getAction())) {
-                unlockedPackage = i.getStringExtra("pkg");
-            } else if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
-                unlockedPackage = "";
-                updateVisibility();
-            } else {
-                updateVisibility();
-            }
+   private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
+    @Override
+    public void onReceive(Context c, Intent i) {
+        if ("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) {
+            playAnim();
+        } else if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
+            // [YC1] Tắt màn → xóa unlock session, MorseLock sẽ hỏi lại khi bật màn
+            // KHÔNG xóa unlockedPackage ở đây nữa — HomescreenService giữ state
+        } else {
+            updateVisibility();
         }
-    };
+    }
+};
+
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
@@ -219,35 +216,55 @@ public class EdgeBarService extends AccessibilityService {
         createFloatingBars();
     }
 
-    @Override public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
-            String cName = event.getClassName() != null ? event.getClassName().toString() : "";
-            isKbd = pName.contains("inputmethod") || cName.contains("InputWindow") || cName.contains("keyboard") || cName.contains("Keyboard");
-            String bl = prefs.getString("blacklist", "");
-            isBl = !pName.isEmpty() && bl.contains(pName);
+
+@Override public void onAccessibilityEvent(AccessibilityEvent event) {
+    if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
+        String cName = event.getClassName() != null ? event.getClassName().toString() : "";
+
+        isKbd = pName.contains("inputmethod") || cName.contains("InputWindow")
+                || cName.contains("keyboard") || cName.contains("Keyboard");
+        String bl = prefs.getString("blacklist", "");
+        isBl = !pName.isEmpty() && bl.contains(pName);
+
+        boolean isSystemUI = pName.contains("systemui")
+                || pName.contains("launcher")
+                || pName.contains("nexuslauncher")
+                || pName.equals("com.android.settings")
+                || pName.isEmpty()
+                || isKbd;
+
+        if (!isSystemUI) {
             String locklist = prefs.getString("locklist", "");
             boolean isAppLocked = false;
-            if (!pName.isEmpty() && !locklist.isEmpty()) {
+            if (!locklist.isEmpty()) {
                 for (String pkg : locklist.split(",")) {
                     if (pkg.trim().equals(pName)) { isAppLocked = true; break; }
                 }
             }
+
             if (isAppLocked) {
-                if (!pName.equals(unlockedPackage)) {
-                    Intent i = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
-                    i.putExtra("pkg", pName);
-                    sendBroadcast(i);
-                }
-            } else if (!pName.isEmpty() && !pName.contains("systemui") && !isKbd) {
-                unlockedPackage = "";
+                Intent i = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
+                i.putExtra("pkg", pName);
+                sendBroadcast(i);
             }
-            updateVisibility();
-            Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE");
-            i.putExtra("isKbd", isKbd); i.putExtra("isBl", isBl);
-            sendBroadcast(i);
         }
+
+        updateVisibility();
+if ((pName.contains("packageinstaller") || pName.contains("installer"))
+        && (cName.contains("Uninstall") || cName.contains("uninstall"))) {
+    Intent uninstallGuard = new Intent("com.manhmoc.edgebar.UNINSTALL_DETECTED");
+    sendBroadcast(uninstallGuard);
+}
+
+
+Intent syncIntent = new Intent("com.manhmoc.edgebar.SYNC_STATE");
+syncIntent.putExtra("isKbd", isKbd);
+syncIntent.putExtra("isBl", isBl);
+syncIntent.putExtra("foreground_pkg", pName);
+sendBroadcast(syncIntent);
     }
+}
 
     private void exec(String a) {
         if (a == null || a.equals("NONE")) return;

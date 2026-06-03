@@ -69,7 +69,24 @@ public class HomescreenService extends Service {
     private int morseFailCount = 0;
     private String lockedPkg = "";
     private boolean isPreviewMorse = false;
+    private boolean isCoveringRecents = false;
+    private boolean isUninstallGuardActive = false;
+    private String currentForegroundPkg = "";
+    private boolean isUnlockCooldown = false; 
+    private Handler unlockCooldownHandler = new Handler(); 
+    private int uninstallGuardFailCount = 0;  
     private long lockUntilTime = 0;
+
+
+    private Handler relockHandler = new Handler();
+    private long relockScheduledTime = 0;
+    private Runnable relockRunnable = () -> {
+    lastUnlockedApp = "";
+    lastUnlockedTime = 0;
+    relockScheduledTime = 0;
+};
+
+
     private Handler numberDisplayHandler = new Handler();
     private Runnable hideNumberRunnable;
 
@@ -283,32 +300,59 @@ public class HomescreenService extends Service {
         public void onReceive(Context c, Intent i) {
             String action = i.getAction();
             if (action.equals("com.manhmoc.edgebar.SYNC_STATE")) {
-                isKbd = i.getBooleanExtra("isKbd", false);
-                isBl = i.getBooleanExtra("isBl", false);
-                isPreviewMorse = prefs.getBoolean("preview_morse", false);
-                updateVisibility();
+    isKbd = i.getBooleanExtra("isKbd", false);
+    isBl = i.getBooleanExtra("isBl", false);
+
+    String incomingPkg = i.getStringExtra("foreground_pkg");
+    if (incomingPkg != null && !incomingPkg.isEmpty()) {
+    currentForegroundPkg = incomingPkg;
+}
+
+if (!lastUnlockedApp.isEmpty()
+        && !currentForegroundPkg.isEmpty()
+        && !currentForegroundPkg.equals(lastUnlockedApp)) {
+
+    if (relockScheduledTime == 0) {
+        long relockMs = prefs.getInt("morse_relock_ms", 5000);
+        relockScheduledTime = System.currentTimeMillis() + relockMs;
+        relockHandler.removeCallbacks(relockRunnable);
+        relockHandler.postDelayed(relockRunnable, relockMs);
+    }
+
+} else if (!lastUnlockedApp.isEmpty()
+        && currentForegroundPkg.equals(lastUnlockedApp)) {
+
+    relockHandler.removeCallbacks(relockRunnable);
+    relockScheduledTime = 0;
+}
+    isPreviewMorse = prefs.getBoolean("preview_morse", false);
+    updateVisibility();
             } else if (action.equals("com.manhmoc.edgebar.TEST_ANIM")) {
                 playAnim();
-            } else if (action.equals("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE")) {
-                String pkg = i.getStringExtra("pkg");
-                long now = System.currentTimeMillis();
-                int graceSec = prefs.getInt("morse_grace_seconds", 10);
-                if (pkg != null && pkg.equals(lastUnlockedApp) && (now - lastUnlockedTime) < graceSec * 1000L) {
-                    return;
-                }
-                if (now > lockUntilTime) {
-                    isMorseLockActive = true;
-                    lockedPkg = pkg;
-                    morseFailCount = 0;
-                    currentMorseAttempt = "";
-                    if (tvMorseStatus != null) tvMorseStatus.setText("");
-                    morseContainer.setVisibility(View.VISIBLE);
-                    updateVisibility();
-                } else {
-                    Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-                    kick.putExtra("act", "HOME");
-                    sendBroadcast(kick);
-                }
+
+} else if (action.equals("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE")) {
+    String pkg = i.getStringExtra("pkg");
+    if (pkg == null || pkg.isEmpty()) return;
+    if (isUnlockCooldown) return; 
+
+    long now = System.currentTimeMillis();
+    if (isMorseLockActive && pkg.equals(lockedPkg)) return;
+    if (pkg.equals(lastUnlockedApp)) {
+        return;
+    }
+    if (now < lockUntilTime) {
+        Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+        kick.putExtra("act", "HOME");
+        sendBroadcast(kick);
+        return;
+    }
+    isMorseLockActive = true;
+    lockedPkg = pkg;
+    morseFailCount = 0;
+    currentMorseAttempt = "";
+    if (tvMorseStatus != null) tvMorseStatus.setText("");
+    morseContainer.setVisibility(View.VISIBLE);
+    updateVisibility();
             } else if (action.equals("com.manhmoc.edgebar.MORSE_LOCK_DISMISS")) {
                 isMorseLockActive = false;
                 morseFailCount = 0;
@@ -320,20 +364,33 @@ public class HomescreenService extends Service {
                 boolean isM = prefs.getBoolean("morse_mode_en", false);
                 prefs.edit().putBoolean("morse_mode_en", !isM).apply();
                 updateVisibility();
-            } else if (action.equals(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)) {
-                String reason = i.getStringExtra("reason");
-                if ("recentapps".equals(reason)) {
-                    if (isMorseLockActive && !isPreviewMorse) {
-                        morseContainer.setVisibility(View.GONE);
-                        new Handler().postDelayed(() -> {
-                            if (isMorseLockActive && !isPreviewMorse) {
-                                morseContainer.setVisibility(View.VISIBLE);
-                            }
-                        }, 500);
-                    }
-                }
-            } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
-                lastUnlockedApp = "";
+} else if (action.equals(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)) {
+    String reason = i.getStringExtra("reason");
+    if ("recentapps".equals(reason)) {
+        if (!lastUnlockedApp.isEmpty()) {
+            isCoveringRecents = true;
+            showMorseOSCover();
+        }
+    }
+
+} else if (action.equals("com.manhmoc.edgebar.UNINSTALL_DETECTED")) {
+    if (!isUninstallGuardActive) {
+        isUninstallGuardActive = true;
+        uninstallGuardFailCount = 0;
+        currentMorseAttempt = "";
+        if (tvMorseStatus != null) tvMorseStatus.setText("🔒 XÁC NHẬN GỠ CÀI ĐẶT");
+        morseContainer.setVisibility(View.VISIBLE);
+
+
+        WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
+        p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        wm.updateViewLayout(morseContainer, p);
+        updateVisibility();
+    }
+
+} else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
+    lastUnlockedApp = "";
+    lastUnlockedTime = 0; 
             }
         }
     };
@@ -366,6 +423,7 @@ public class HomescreenService extends Service {
         filter.addAction("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
         filter.addAction("com.manhmoc.edgebar.MORSE_LOCK_DISMISS");
         filter.addAction("com.manhmoc.edgebar.TOGGLE_MORSE");
+        filter.addAction("com.manhmoc.edgebar.UNINSTALL_DETECTED");
         if (Build.VERSION.SDK_INT >= 33)
             registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         else
@@ -463,6 +521,53 @@ public class HomescreenService extends Service {
     }
 
     private void handleMorseTap(String comp, View v, boolean isLongPress) {
+
+
+if (isUninstallGuardActive) {
+    doMorseVibrate();
+    String mappedKey = mapComponentToNumber(comp);
+    String masterPass = prefs.getString("morse_master_pass", "");
+
+    if (mappedKey.equals("X")) {
+        if (!currentMorseAttempt.isEmpty())
+            currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length()-1);
+        tvMorseStatus.setText(currentMorseAttempt.isEmpty() ? "🔒 XÁC NHẬN GỠ CÀI ĐẶT" : currentMorseAttempt);
+        return;
+    }
+    if (mappedKey.equals(">")) {
+        if (currentMorseAttempt.equals(masterPass)) {
+            
+            isUninstallGuardActive = false;
+            morseContainer.setVisibility(View.GONE);
+            currentMorseAttempt = "";
+            
+            Intent expand = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            expand.putExtra("act", "NOTIFICATIONS");
+            sendBroadcast(expand);
+        } else {
+            uninstallGuardFailCount++;
+            if (uninstallGuardFailCount >= 3) {
+                
+                tvMorseStatus.setText("Gỡ cài đặt không thành công, thử lại sau");
+                new Handler().postDelayed(() -> {
+                    isUninstallGuardActive = false;
+                    uninstallGuardFailCount = 0;
+                    currentMorseAttempt = "";
+                    morseContainer.setVisibility(View.GONE);
+                }, 2500);
+            } else {
+                tvMorseStatus.setText("Sai! Còn " + (3 - uninstallGuardFailCount) + " lần");
+                currentMorseAttempt = "";
+            }
+        }
+        return;
+    }
+    if (mappedKey.matches("\\d")) {
+        currentMorseAttempt += mappedKey;
+        tvMorseStatus.setText(currentMorseAttempt);
+    }
+    return;
+}
         doMorseVibrate();
         if (v != null) {
             if (v instanceof CornerView) ((CornerView) v).triggerFlash();
@@ -499,17 +604,25 @@ public class HomescreenService extends Service {
         else if (mappedKey.equals(">")) {
             if (currentMorseAttempt.isEmpty() || masterPass.isEmpty()) return;
             if (currentMorseAttempt.equals(masterPass)) {
-                lastUnlockedApp = lockedPkg;
-                lastUnlockedTime = System.currentTimeMillis();
-                isMorseLockActive = false;
-                morseFailCount = 0;
-                lockUntilTime = 0;
-                morseContainer.setVisibility(View.GONE);
-                Intent success = new Intent("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS");
-                success.putExtra("pkg", lockedPkg);
-                sendBroadcast(success);
-                updateVisibility();
-            } else {
+    isUnlockCooldown = true;
+    unlockCooldownHandler.removeCallbacksAndMessages(null);
+    unlockCooldownHandler.postDelayed(() -> {
+        isUnlockCooldown = false;
+    }, 1000);
+
+    lastUnlockedApp = lockedPkg;
+    lastUnlockedTime = System.currentTimeMillis();
+    isMorseLockActive = false;
+    morseFailCount = 0;
+    lockUntilTime = 0;
+    currentMorseAttempt = "";
+    morseContainer.setVisibility(View.GONE);
+
+    Intent success = new Intent("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS");
+    success.putExtra("pkg", lockedPkg);
+    sendBroadcast(success);
+    updateVisibility();
+} else {
                 morseFailCount++;
                 doMorseVibrate();
                 String insult = prefs.getString("morse_insult_" + Math.min(morseFailCount,5), "Sai rồi!");
@@ -556,8 +669,48 @@ public class HomescreenService extends Service {
         };
         numberDisplayHandler.postDelayed(hideNumberRunnable, showNumberMs);
     }
+private void showMorseOSCover() {
+    if (morseContainer == null) return;
+    morseContainer.setVisibility(View.VISIBLE);
 
+
+    WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
+    p.flags = (p.flags & ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+    wm.updateViewLayout(morseContainer, p);
+
+    morseContainer.setOnTouchListener((v, e) -> {
+        if (e.getAction() == MotionEvent.ACTION_UP) {
+            
+            isCoveringRecents = false;
+            morseContainer.setVisibility(View.GONE);
+            morseContainer.setOnTouchListener(null);
+            
+            Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            kick.putExtra("act", "HOME");
+            sendBroadcast(kick);
+        }
+        return true;
+    });
+}
     private void updateVisibility() {
+if (isMorseLockActive && !isUninstallGuardActive) {
+    boolean foregroundIsLocked = false;
+    String locklist = prefs.getString("locklist", "");
+    if (!currentForegroundPkg.isEmpty() && !locklist.isEmpty()) {
+        for (String pkg : locklist.split(",")) {
+            if (pkg.trim().equals(currentForegroundPkg)) {
+                foregroundIsLocked = true;
+                break;
+            }
+        }
+    }
+
+    if (!foregroundIsLocked) {
+        isMorseLockActive = false;
+        morseContainer.setVisibility(View.GONE);
+        currentMorseAttempt = "";
+    }
+}
         boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hideNormal = (avoidKbd && isKbd) || isBl;

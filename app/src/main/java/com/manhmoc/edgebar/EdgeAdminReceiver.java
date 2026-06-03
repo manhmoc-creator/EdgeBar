@@ -6,7 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 
 public class EdgeAdminReceiver extends DeviceAdminReceiver {
-    // Khi user cố gỡ quyền Admin → hiện dialog yêu cầu Morse password
+    
     @Override
     public CharSequence onDisableRequested(Context context, Intent intent) {
         return "Nhập mật khẩu Morse để huỷ quyền Admin. " +
