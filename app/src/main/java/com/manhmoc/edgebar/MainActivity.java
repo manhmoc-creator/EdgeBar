@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-   private final String CURRENT_VERSION = "V19.12.3.4.6.6"; 
+   private final String CURRENT_VERSION = "V19.12.3.4.6.7"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -689,6 +689,8 @@ public class MainActivity extends Activity {
                 sliderDrawerContent.addView(createInput("Text nhập sai lần 5", "morse_insult_5"));
                 sliderDrawerContent.addView(createSlider("Độ dài tối đa mật khẩu", "morse_max_len", 20, 10));
                 sliderDrawerContent.addView(createSlider("Thời gian khóa sau 5 lần sai (phút)", "morse_lock_minutes", 60, 30));
+                sliderDrawerContent.addView(createSlider("Thời gian khoá sau 3 lần sai (giây)", "morse_lock3_seconds", 1800, 10));
+                sliderDrawerContent.addView(createSlider("Thời gian khoá sau 4 lần sai (giây)", "morse_lock4_seconds", 1800, 30));
 
 
 LinearLayout relockRow = new LinearLayout(this);
@@ -736,6 +738,14 @@ relockRow.addView(relockBtnRow);
 designSliderContainer.addView(relockRow);
 
                 sliderDrawerContent.addView(createSlider("Độ mờ màn chắn Morse (Alpha Đen)", "morse_bg_alpha", 255, 180));
+                sliderDrawerContent.addView(createSlider("Độ nét Neon (Blur) của text/mật khẩu", "morse_text_blur", 60, 20));
+                CheckBox cbNeon = new CheckBox(this);
+                cbNeon.setText("Bật hiệu ứng Neon cho text nhập mật khẩu");
+                cbNeon.setTextColor(Color.WHITE);
+                cbNeon.setChecked(prefs.getBoolean("morse_text_neon", true));
+                cbNeon.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("morse_text_neon", c).apply());
+                sliderDrawerContent.addView(cbNeon);
+
                 sliderDrawerContent.addView(createSlider("Thời gian hiện dấu chấm (ms)", "morse_dot_delay", 2000, 500));
                 sliderDrawerContent.addView(createSlider("Thời gian hiện số (ms) trước khi thành dấu chấm", "morse_show_number_ms", 3000, 800));
                 sliderDrawerContent.addView(createSlider("Độ rung khi nhập sai (ms)", "morse_fail_vib", 1500, 500));

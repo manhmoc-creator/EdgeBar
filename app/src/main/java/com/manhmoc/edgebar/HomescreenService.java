@@ -76,6 +76,10 @@ public class HomescreenService extends Service {
     private Handler unlockCooldownHandler = new Handler(); 
     private int uninstallGuardFailCount = 0;  
     private long lockUntilTime = 0;
+    private boolean isCountingDown = false;
+    private Handler countdownHandler = new Handler();
+    private Runnable countdownRunnable = null;
+    private ValueAnimator warningAnimator = null;
 
 
     private Handler relockHandler = new Handler();
@@ -277,6 +281,30 @@ public class HomescreenService extends Service {
             canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill); canvas.restore();
         }
     }
+    private void applyMorseTextStyle() {
+        if (tvMorseStatus == null) return;
+        String theme = prefs.getString("anim_color", "NEON");
+        int textColor;
+        int glowColor;
+        switch (theme) {
+            case "OCEAN":     textColor = Color.parseColor("#00BFFF"); glowColor = Color.parseColor("#1E90FF"); break;
+            case "AURORA":    textColor = Color.parseColor("#B388FF"); glowColor = Color.parseColor("#00E5FF"); break;
+            case "ABYSS":     textColor = Color.parseColor("#1DE9B6"); glowColor = Color.parseColor("#00E5FF"); break;
+            case "MIDNIGHT":  textColor = Color.parseColor("#03A9F4"); glowColor = Color.parseColor("#7B1FA2"); break;
+            case "CANDY":     textColor = Color.parseColor("#F06292"); glowColor = Color.parseColor("#4DD0E1"); break;
+            default:          textColor = Color.WHITE; glowColor = Color.parseColor("#00E5FF"); break;
+        }
+        int blurRadius = prefs.getInt("morse_text_blur", 20);
+        boolean neonOn = prefs.getBoolean("morse_text_neon", true);
+        tvMorseStatus.setTextColor(textColor);
+        tvMorseStatus.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        if (neonOn) {
+            tvMorseStatus.setShadowLayer(blurRadius, 0, 0, glowColor);
+        } else {
+            tvMorseStatus.setShadowLayer(4, 2, 2, Color.BLACK);
+        }
+    }
+
 
     private void reloadBackground() {
         bgType = prefs.getInt("morse_bg_type", 0);
@@ -351,7 +379,14 @@ if (!lastUnlockedApp.isEmpty()
 } else if (action.equals("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE")) {
     String pkg = i.getStringExtra("pkg");
     if (pkg == null || pkg.isEmpty()) return;
-    if (isUnlockCooldown) return; 
+    if (isUnlockCooldown) return;
+    boolean foregroundIsThisLockedApp = currentForegroundPkg.equals(pkg);
+    boolean isHome = currentForegroundPkg.contains("launcher")
+            || currentForegroundPkg.contains("nexuslauncher")
+            || currentForegroundPkg.isEmpty();
+    if (!foregroundIsThisLockedApp || isHome) {
+        return;
+    }
 
     long now = System.currentTimeMillis();
     if (isMorseLockActive && pkg.equals(lockedPkg)) return;
@@ -448,17 +483,31 @@ if (!lastUnlockedApp.isEmpty()
     relockHandler.removeCallbacks(relockRunnable);
     relockScheduledTime = 0;
     pendingRelockPkg = "";
+    if (isMorseLockActive) {
+        isMorseLockActive = false;
+        lockedPkg = "";
+        currentMorseAttempt = "";
+        morseFailCount = 0;
+        if (morseContainer != null) morseContainer.setVisibility(View.GONE);
+    }
 } else if (action.equals(Intent.ACTION_USER_PRESENT)) {
-    if (!currentForegroundPkg.isEmpty()) {
+    boolean isCurrentlyHome = currentForegroundPkg.isEmpty()
+            || currentForegroundPkg.contains("launcher")
+            || currentForegroundPkg.contains("nexuslauncher");
+    if (!isCurrentlyHome && !currentForegroundPkg.isEmpty()) {
         String locklist = prefs.getString("locklist", "");
         if (!locklist.isEmpty()) {
             for (String pkg : locklist.split(",")) {
                 if (pkg.trim().equals(currentForegroundPkg)) {
                     isMorseLockActive = false;
                     lockedPkg = "";
-                    Intent engage = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
-                    engage.putExtra("pkg", currentForegroundPkg);
-                    sendBroadcast(engage);
+                    morseFailCount = 0;
+                    currentMorseAttempt = "";
+                    new Handler().postDelayed(() -> {
+                        Intent engage = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
+                        engage.putExtra("pkg", currentForegroundPkg);
+                        sendBroadcast(engage);
+                    }, 400);
                     break;
                 }
             }
@@ -539,11 +588,11 @@ if (!lastUnlockedApp.isEmpty()
         morseContainer.setBackgroundColor(Color.TRANSPARENT);
         morseContainer.setVisibility(View.GONE);
 
+        // [FIX-6] Text nổi lên lớp phủ đen — màu neon theo theme bar/corner
         tvMorseStatus = new TextView(this);
-        tvMorseStatus.setTextColor(Color.WHITE);
-        tvMorseStatus.setTextSize(30);
         tvMorseStatus.setGravity(Gravity.CENTER);
-        tvMorseStatus.setShadowLayer(5, 2, 2, Color.BLACK);
+        tvMorseStatus.setTextSize(32);
+        applyMorseTextStyle();
         RelativeLayout.LayoutParams tLp = new RelativeLayout.LayoutParams(-1, -2);
         tLp.addRule(RelativeLayout.CENTER_IN_PARENT);
         morseContainer.addView(tvMorseStatus, tLp);
@@ -578,11 +627,61 @@ if (!lastUnlockedApp.isEmpty()
         if (k != null) {
             if (k.equals("morse_bg_type") || k.equals("morse_bg_image")) reloadBackground();
             if (k.equals("morse_bg_alpha") && bgView != null) bgView.invalidate();
+            if (k.equals("anim_color") || k.equals("morse_text_blur") || k.equals("morse_text_neon"))
+                applyMorseTextStyle();
             updateVisibility();
             if (fV != null) fV.updateStyle();
         }
     };
 
+      private void startFailCountdown(int failCount, Runnable onFinished) {
+        if (isCountingDown) return;
+        boolean isHome = currentForegroundPkg.isEmpty()
+                || currentForegroundPkg.contains("launcher")
+                || currentForegroundPkg.contains("nexuslauncher");
+        if (isHome) { onFinished.run(); return; }
+
+        isCountingDown = true;
+        String prefKey = (failCount == 3) ? "morse_lock3_seconds" : "morse_lock4_seconds";
+        int totalSeconds = prefs.getInt(prefKey, (failCount == 3) ? 10 : 30);
+
+        if (warningAnimator != null) warningAnimator.cancel();
+        warningAnimator = ValueAnimator.ofFloat(0f, 1f, 0f, 1f, 0f);
+        warningAnimator.setDuration(1200);
+        warningAnimator.addUpdateListener(anim -> {
+            float val = (float) anim.getAnimatedValue();
+            int red = (int)(180 * val);
+            if (bgView != null) {
+                bgView.setBackgroundColor(Color.argb((int)(80 * val), 255, 20, 60));
+                bgView.invalidate();
+            }
+        });
+        warningAnimator.start();
+
+        final int[] remaining = {totalSeconds};
+        if (tvMorseStatus != null)
+            tvMorseStatus.setText("⏳ Chờ " + remaining[0] + "s");
+
+        countdownRunnable = new Runnable() {
+            @Override public void run() {
+                remaining[0]--;
+                if (remaining[0] > 0) {
+                    if (tvMorseStatus != null)
+                        tvMorseStatus.setText("⏳ Chờ " + remaining[0] + "s");
+                    countdownHandler.postDelayed(this, 1000);
+                } else {
+                    isCountingDown = false;
+                    if (tvMorseStatus != null) tvMorseStatus.setText("");
+                    if (bgView != null) {
+                        bgView.setBackgroundColor(Color.TRANSPARENT);
+                        bgView.invalidate();
+                    }
+                    onFinished.run();
+                }
+            }
+        };
+        countdownHandler.postDelayed(countdownRunnable, 1000);
+    }
     private void doMorseVibrate() {
         if (prefs.getBoolean("morse_vib_en", true)) {
             int dur = prefs.getInt("morse_vib_dur", 30);
@@ -700,9 +799,19 @@ if (isUninstallGuardActive) {
 } else {
                 morseFailCount++;
                 doMorseVibrate();
-                String insult = prefs.getString("morse_insult_" + Math.min(morseFailCount,5), "Sai rồi!");
-                tvMorseStatus.setText(insult);
-                if (morseFailCount >= 5) {
+                String insult = prefs.getString("morse_insult_" + Math.min(morseFailCount, 5), "Sai rồi!");
+                currentMorseAttempt = "";
+
+                if (morseFailCount == 3 || morseFailCount == 4) {
+                    tvMorseStatus.setText(insult);
+                    startFailCountdown(morseFailCount, () -> {
+                        if (isMorseLockActive) {
+                            tvMorseStatus.setText("");
+                            currentMorseAttempt = "";
+                        }
+                    });
+                } else if (morseFailCount >= 5) {
+                    tvMorseStatus.setText(insult);
                     int lockMinutes = prefs.getInt("morse_lock_minutes", 30);
                     lockUntilTime = System.currentTimeMillis() + lockMinutes * 60 * 1000L;
                     isMorseLockActive = false;
@@ -710,8 +819,9 @@ if (isUninstallGuardActive) {
                     kick.putExtra("act", "HOME");
                     sendBroadcast(kick);
                     new Handler().postDelayed(() -> updateVisibility(), 500);
+                } else {
+                    tvMorseStatus.setText(insult);
                 }
-                currentMorseAttempt = "";
             }
             return;
         }
@@ -751,15 +861,14 @@ private void showMorseOSCover() {
     morseContainer.setVisibility(View.VISIBLE);
 
     WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
-    p.flags = (WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+    p.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
             | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
             | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-            | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+            | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
     wm.updateViewLayout(morseContainer, p);
-
     morseContainer.setOnTouchListener((v, e) -> {
-        if (e.getAction() == MotionEvent.ACTION_UP) {
+        if (e.getAction() == MotionEvent.ACTION_DOWN) {
             isCoveringRecents = false;
             morseContainer.setVisibility(View.GONE);
             morseContainer.setOnTouchListener(null);
@@ -767,30 +876,36 @@ private void showMorseOSCover() {
                 Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
                 kick.putExtra("act", "HOME");
                 sendBroadcast(kick);
-            }, 80);
+            }, 50);
         }
         return true;
     });
 }
     private void updateVisibility() {
-if (isMorseLockActive && !isUninstallGuardActive) {
-    boolean foregroundIsLocked = false;
-    String locklist = prefs.getString("locklist", "");
-    if (!currentForegroundPkg.isEmpty() && !locklist.isEmpty()) {
-        for (String pkg : locklist.split(",")) {
-            if (pkg.trim().equals(currentForegroundPkg)) {
-                foregroundIsLocked = true;
-                break;
+    if (isMorseLockActive && !isUninstallGuardActive) {
+        boolean foregroundIsLocked = false;
+        boolean foregroundIsHome = currentForegroundPkg.isEmpty()
+                || currentForegroundPkg.contains("launcher")
+                || currentForegroundPkg.contains("nexuslauncher");
+        String locklist = prefs.getString("locklist", "");
+        if (!currentForegroundPkg.isEmpty() && !locklist.isEmpty()) {
+            for (String pkg : locklist.split(",")) {
+                if (pkg.trim().equals(currentForegroundPkg)) {
+                    foregroundIsLocked = true;
+                    break;
+                }
             }
         }
-    }
 
-    if (!foregroundIsLocked) {
-        isMorseLockActive = false;
-        morseContainer.setVisibility(View.GONE);
-        currentMorseAttempt = "";
+
+        if (!foregroundIsLocked || foregroundIsHome) {
+            isMorseLockActive = false;
+            morseContainer.setVisibility(View.GONE);
+            morseContainer.setOnTouchListener(null);
+            currentMorseAttempt = "";
+            morseFailCount = 0;
+        }
     }
-}
         boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hideNormal = (avoidKbd && isKbd) || isBl;
