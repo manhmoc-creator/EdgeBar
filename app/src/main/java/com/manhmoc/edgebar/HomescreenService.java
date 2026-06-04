@@ -53,6 +53,7 @@ public class HomescreenService extends Service {
     private View[] corners = new View[4];
     private RelativeLayout morseContainer;
     private TextView tvMorseStatus;
+    private TextView tvLockIcon;
     private MorseBackgroundView bgView;
     private MorseBarView[] mBars = new MorseBarView[8];
     private View[] mCorners = new View[4];
@@ -82,30 +83,29 @@ public class HomescreenService extends Service {
     private ValueAnimator warningAnimator = null;
 
 
-    private Handler relockHandler = new Handler();
+        private Handler relockHandler = new Handler();
     private long relockScheduledTime = 0;
     private String pendingRelockPkg = "";
-
-
-  private Runnable relockRunnable = () -> {
-    String pkgToLock = pendingRelockPkg;
-    lastUnlockedApp = "";
-    lastUnlockedTime = 0;
-    relockScheduledTime = 0;
-    pendingRelockPkg = "";
-    if (!pkgToLock.isEmpty() && pkgToLock.equals(currentForegroundPkg)) {
-        isMorseLockActive = false;
-        lockedPkg = "";
-        Intent engage = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
-        engage.putExtra("pkg", pkgToLock);
-        sendBroadcast(engage);
-    }
-};
-    private Handler numberDisplayHandler = new Handler();
-    private Runnable hideNumberRunnable;
-
-    private String lastUnlockedApp = "";
+    private java.util.Set<String> unlockedApps = new java.util.HashSet<>();
     private long lastUnlockedTime = 0;
+
+    private Runnable relockRunnable = () -> {
+        String pkgToLock = pendingRelockPkg;
+        unlockedApps.remove(pkgToLock);
+        lastUnlockedTime = 0;
+        relockScheduledTime = 0;
+        pendingRelockPkg = "";
+        if (!pkgToLock.isEmpty() && pkgToLock.equals(currentForegroundPkg)) {
+            isMorseLockActive = false;
+            lockedPkg = "";
+            Intent engage = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
+            engage.putExtra("pkg", pkgToLock);
+            sendBroadcast(engage);
+        }
+    };
+
+    private Handler numberDisplayHandler = new Handler();
+    private Runnable hideNumberRunnable; 
 
     private int bgType = 0;
     private String bgImagePath = "";
@@ -305,7 +305,42 @@ public class HomescreenService extends Service {
         }
     }
 
+    // [FIX-(-2)] Style icon ổ khoá — màu neon theo theme, nổi trên lớp phủ đen
+    private void applyLockIconStyle() {
+        if (tvLockIcon == null) return;
+        String theme = prefs.getString("anim_color", "NEON");
+        int glowColor;
+        switch (theme) {
+            case "OCEAN":     glowColor = Color.parseColor("#00BFFF"); break;
+            case "AURORA":    glowColor = Color.parseColor("#B388FF"); break;
+            case "ABYSS":     glowColor = Color.parseColor("#1DE9B6"); break;
+            case "MIDNIGHT":  glowColor = Color.parseColor("#03A9F4"); break;
+            case "CANDY":     glowColor = Color.parseColor("#F06292"); break;
+            default:          glowColor = Color.parseColor("#00E5FF"); break;
+        }
+        int blur = prefs.getInt("morse_text_blur", 20);
+        boolean neonOn = prefs.getBoolean("morse_text_neon", true);
+        if (neonOn) {
+            tvLockIcon.setShadowLayer(blur * 1.5f, 0, 0, glowColor);
+        } else {
+            tvLockIcon.setShadowLayer(6, 2, 2, Color.BLACK);
+        }
+    }
 
+        private void updateLockIconPosition() {
+        if (tvLockIcon == null) return;
+        int yVal = prefs.getInt("morse_lock_icon_y", 600);
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        int screenH = dm.heightPixels;
+        int yPx = (int)((yVal / 3000f) * screenH);
+        RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) tvLockIcon.getLayoutParams();
+        if (lp == null) return;
+        lp.topMargin = yPx;
+        lp.removeRule(RelativeLayout.CENTER_IN_PARENT);
+        lp.addRule(RelativeLayout.CENTER_HORIZONTAL);
+        lp.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+        tvLockIcon.setLayoutParams(lp);
+    }
     private void reloadBackground() {
         bgType = prefs.getInt("morse_bg_type", 0);
         bgImagePath = prefs.getString("morse_bg_image", "");
@@ -353,24 +388,29 @@ public class HomescreenService extends Service {
             currentForegroundPkg = incomingPkg;
         }
     }
-if (!lastUnlockedApp.isEmpty()
-        && !currentForegroundPkg.isEmpty()
-        && !currentForegroundPkg.equals(lastUnlockedApp)
-        && !currentForegroundPkg.contains("systemui")
-        && !currentForegroundPkg.contains("launcher")) {
-    if (relockScheduledTime == 0) {
-        long relockMs = prefs.getInt("morse_relock_ms", 5000);
-        relockScheduledTime = System.currentTimeMillis() + relockMs;
-        pendingRelockPkg = lastUnlockedApp;
+    if (!pendingRelockPkg.isEmpty()
+            && currentForegroundPkg.equals(pendingRelockPkg)) {
         relockHandler.removeCallbacks(relockRunnable);
-        relockHandler.postDelayed(relockRunnable, relockMs);
+        relockScheduledTime = 0;
+        pendingRelockPkg = "";
+    } else if (!unlockedApps.isEmpty()
+            && !currentForegroundPkg.isEmpty()
+            && !currentForegroundPkg.contains("systemui")
+            && !currentForegroundPkg.contains("launcher")
+            && !unlockedApps.contains(currentForegroundPkg)
+            && relockScheduledTime == 0) {
+        String locklist = prefs.getString("locklist", "");
+        for (String unlocked : unlockedApps) {
+            if (locklist.contains(unlocked) && pendingRelockPkg.isEmpty()) {
+                long relockMs = prefs.getInt("morse_relock_ms", 5000);
+                relockScheduledTime = System.currentTimeMillis() + relockMs;
+                pendingRelockPkg = unlocked;
+                relockHandler.removeCallbacks(relockRunnable);
+                relockHandler.postDelayed(relockRunnable, relockMs);
+                break;
+            }
+        }
     }
-} else if (!lastUnlockedApp.isEmpty()
-        && currentForegroundPkg.equals(lastUnlockedApp)) {
-    relockHandler.removeCallbacks(relockRunnable);
-    relockScheduledTime = 0;
-    pendingRelockPkg = "";
-}
     isPreviewMorse = prefs.getBoolean("preview_morse", false);
     updateVisibility();
             } else if (action.equals("com.manhmoc.edgebar.TEST_ANIM")) {
@@ -390,7 +430,7 @@ if (!lastUnlockedApp.isEmpty()
 
     long now = System.currentTimeMillis();
     if (isMorseLockActive && pkg.equals(lockedPkg)) return;
-    if (pkg.equals(lastUnlockedApp)) {
+    if (unlockedApps.contains(pkg)) {
         return;
     }
     if (now < lockUntilTime) {
@@ -425,7 +465,7 @@ if (!lastUnlockedApp.isEmpty()
         boolean hasLockedApp = false;
         if (!locklist.isEmpty()) {
 
-            String checkPkg = !lastUnlockedApp.isEmpty() ? lastUnlockedApp : lockedPkg;
+            String checkPkg = !unlockedApps.isEmpty() ? unlockedApps.iterator().next() : lockedPkg;
             if (!checkPkg.isEmpty()) {
                 for (String pkg : locklist.split(",")) {
                     if (pkg.trim().equals(checkPkg)) { hasLockedApp = true; break; }
@@ -447,21 +487,28 @@ if (!lastUnlockedApp.isEmpty()
             if (pkg.trim().equals(lastPkg)) { shouldCover = true; break; }
         }
     }
-    if (!shouldCover && !lastUnlockedApp.isEmpty() && !locklist.isEmpty()) {
+   if (!shouldCover && !unlockedApps.isEmpty() && !locklist.isEmpty()) {
+    for (String unlockedPkg : unlockedApps) {
         for (String pkg : locklist.split(",")) {
-            if (pkg.trim().equals(lastUnlockedApp)) { shouldCover = true; break; }
+            if (pkg.trim().equals(unlockedPkg)) {
+                shouldCover = true;
+                break;
+            }
         }
+        if (shouldCover) break;
     }
+}
     if (shouldCover && !isMorseLockActive && !isUninstallGuardActive) {
         showMorseOSCover();
     }
 } else if (action.equals("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE")) {
-    if (isCoveringRecents) {
+    if (isCoveringRecents && !isMorseLockActive && !isPreviewMorse && !isUninstallGuardActive) {
         isCoveringRecents = false;
-        if (morseContainer != null && !isMorseLockActive && !isPreviewMorse && !isUninstallGuardActive) {
+        if (morseContainer != null) {
             morseContainer.setVisibility(View.GONE);
             morseContainer.setOnTouchListener(null);
         }
+        if (tvLockIcon != null) tvLockIcon.setOnTouchListener(null);
     }
 } else if (action.equals("com.manhmoc.edgebar.UNINSTALL_DETECTED")) {
     if (!isUninstallGuardActive) {
@@ -478,7 +525,7 @@ if (!lastUnlockedApp.isEmpty()
         updateVisibility();
     }
 } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
-    lastUnlockedApp = "";
+    unlockedApps.clear();
     lastUnlockedTime = 0;
     relockHandler.removeCallbacks(relockRunnable);
     relockScheduledTime = 0;
@@ -491,28 +538,30 @@ if (!lastUnlockedApp.isEmpty()
         if (morseContainer != null) morseContainer.setVisibility(View.GONE);
     }
 } else if (action.equals(Intent.ACTION_USER_PRESENT)) {
-    boolean isCurrentlyHome = currentForegroundPkg.isEmpty()
-            || currentForegroundPkg.contains("launcher")
-            || currentForegroundPkg.contains("nexuslauncher");
-    if (!isCurrentlyHome && !currentForegroundPkg.isEmpty()) {
-        String locklist = prefs.getString("locklist", "");
-        if (!locklist.isEmpty()) {
-            for (String pkg : locklist.split(",")) {
-                if (pkg.trim().equals(currentForegroundPkg)) {
-                    isMorseLockActive = false;
-                    lockedPkg = "";
-                    morseFailCount = 0;
-                    currentMorseAttempt = "";
-                    new Handler().postDelayed(() -> {
+    new Handler().postDelayed(() -> {
+        boolean isHome = currentForegroundPkg.isEmpty()
+                || currentForegroundPkg.contains("launcher")
+                || currentForegroundPkg.contains("nexuslauncher")
+                || currentForegroundPkg.contains("quickstep");
+        if (!isHome && !currentForegroundPkg.isEmpty()
+                && !unlockedApps.contains(currentForegroundPkg)) {
+            String locklist = prefs.getString("locklist", "");
+            if (!locklist.isEmpty()) {
+                for (String pkg : locklist.split(",")) {
+                    if (pkg.trim().equals(currentForegroundPkg)) {
+                        isMorseLockActive = false;
+                        lockedPkg = "";
+                        morseFailCount = 0;
+                        currentMorseAttempt = "";
                         Intent engage = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
                         engage.putExtra("pkg", currentForegroundPkg);
                         sendBroadcast(engage);
-                    }, 400);
-                    break;
+                        break;
+                    }
                 }
             }
         }
-    }
+    }, 600);
         }
     }
 };
@@ -589,13 +638,27 @@ if (!lastUnlockedApp.isEmpty()
         morseContainer.setVisibility(View.GONE);
 
         // [FIX-6] Text nổi lên lớp phủ đen — màu neon theo theme bar/corner
-        tvMorseStatus = new TextView(this);
-        tvMorseStatus.setGravity(Gravity.CENTER);
-        tvMorseStatus.setTextSize(32);
-        applyMorseTextStyle();
-        RelativeLayout.LayoutParams tLp = new RelativeLayout.LayoutParams(-1, -2);
-        tLp.addRule(RelativeLayout.CENTER_IN_PARENT);
-        morseContainer.addView(tvMorseStatus, tLp);
+      tvMorseStatus = new TextView(this);
+      tvMorseStatus.setId(View.generateViewId());
+      tvMorseStatus.setId(android.view.View.generateViewId());
+      int textSizeSp = prefs.getInt("morse_text_size", 30);
+      tvMorseStatus.setTextSize(textSizeSp);
+       tvMorseStatus.setGravity(Gravity.CENTER);
+       RelativeLayout.LayoutParams tLp = new RelativeLayout.LayoutParams(-1, -2);
+       tLp.addRule(RelativeLayout.CENTER_IN_PARENT);
+       morseContainer.addView(tvMorseStatus, tLp);
+        tvLockIcon = new TextView(this);
+        tvLockIcon.setText("🔒");
+        tvLockIcon.setTextSize(48);
+        tvLockIcon.setGravity(Gravity.CENTER);
+        tvLockIcon.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        applyLockIconStyle();
+        RelativeLayout.LayoutParams iconLp = new RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.WRAP_CONTENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT);
+        iconLp.addRule(RelativeLayout.CENTER_HORIZONTAL);
+        morseContainer.addView(tvLockIcon, iconLp);
+
 
         bgView = new MorseBackgroundView(this);
         morseContainer.addView(bgView, new RelativeLayout.LayoutParams(-1, -1));
@@ -627,8 +690,11 @@ if (!lastUnlockedApp.isEmpty()
         if (k != null) {
             if (k.equals("morse_bg_type") || k.equals("morse_bg_image")) reloadBackground();
             if (k.equals("morse_bg_alpha") && bgView != null) bgView.invalidate();
-            if (k.equals("anim_color") || k.equals("morse_text_blur") || k.equals("morse_text_neon"))
+            if (k.equals("anim_color") || k.equals("morse_text_blur") || k.equals("morse_text_neon")) {
                 applyMorseTextStyle();
+                applyLockIconStyle();
+            }
+            if (k.equals("morse_lock_icon_y")) updateLockIconPosition();
             updateVisibility();
             if (fV != null) fV.updateStyle();
         }
@@ -784,7 +850,7 @@ if (isUninstallGuardActive) {
         isUnlockCooldown = false;
     }, 1000);
 
-    lastUnlockedApp = lockedPkg;
+    unlockedApps.add(lockedPkg);
     lastUnlockedTime = System.currentTimeMillis();
     isMorseLockActive = false;
     morseFailCount = 0;
@@ -855,38 +921,54 @@ if (isUninstallGuardActive) {
         numberDisplayHandler.postDelayed(hideNumberRunnable, showNumberMs);
     }
 private void showMorseOSCover() {
-    if (morseContainer == null) return;
-    if (isMorseLockActive || isPreviewMorse || isUninstallGuardActive) return;
-    isCoveringRecents = true;
-    morseContainer.setVisibility(View.VISIBLE);
+        if (morseContainer == null) return;
+        if (isMorseLockActive || isPreviewMorse || isUninstallGuardActive) return;
 
-    WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
-    p.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-            | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
-    wm.updateViewLayout(morseContainer, p);
-    morseContainer.setOnTouchListener((v, e) -> {
-        if (e.getAction() == MotionEvent.ACTION_DOWN) {
-            isCoveringRecents = false;
+        isCoveringRecents = true;
+        morseContainer.setVisibility(View.VISIBLE);
+        updateLockIconPosition();
+        applyLockIconStyle();
+        if (tvLockIcon != null) tvLockIcon.setVisibility(View.VISIBLE);
+
+        WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
+        p.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE; // xuyên thấu hoàn toàn
+        wm.updateViewLayout(morseContainer, p);
+        morseContainer.setOnTouchListener(null);
+
+        if (tvLockIcon != null) {
+            tvLockIcon.setOnTouchListener((v, e) -> {
+                if (e.getAction() == MotionEvent.ACTION_UP) {
+                    dismissMorseOSCover();
+                }
+                return true;
+            });
+        }
+    }
+
+    private void dismissMorseOSCover() {
+        isCoveringRecents = false;
+        if (morseContainer != null) {
             morseContainer.setVisibility(View.GONE);
             morseContainer.setOnTouchListener(null);
-            new Handler().postDelayed(() -> {
-                Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-                kick.putExtra("act", "HOME");
-                sendBroadcast(kick);
-            }, 50);
         }
-        return true;
-    });
-}
+        if (tvLockIcon != null) tvLockIcon.setOnTouchListener(null);
+        new Handler().postDelayed(() -> {
+            Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            kick.putExtra("act", "HOME");
+            sendBroadcast(kick);
+        }, 50);
+    }
     private void updateVisibility() {
     if (isMorseLockActive && !isUninstallGuardActive) {
         boolean foregroundIsLocked = false;
         boolean foregroundIsHome = currentForegroundPkg.isEmpty()
                 || currentForegroundPkg.contains("launcher")
-                || currentForegroundPkg.contains("nexuslauncher");
+                || currentForegroundPkg.contains("nexuslauncher")
+                || currentForegroundPkg.contains("quickstep")
+                || currentForegroundPkg.contains("systemui");
         String locklist = prefs.getString("locklist", "");
         if (!currentForegroundPkg.isEmpty() && !locklist.isEmpty()) {
             for (String pkg : locklist.split(",")) {
@@ -896,14 +978,15 @@ private void showMorseOSCover() {
                 }
             }
         }
-
-
         if (!foregroundIsLocked || foregroundIsHome) {
             isMorseLockActive = false;
             morseContainer.setVisibility(View.GONE);
             morseContainer.setOnTouchListener(null);
             currentMorseAttempt = "";
             morseFailCount = 0;
+            if (countdownRunnable != null) countdownHandler.removeCallbacks(countdownRunnable);
+            if (warningAnimator != null) warningAnimator.cancel();
+            isCountingDown = false;
         }
     }
         boolean isUnlocked = !km.isKeyguardLocked();
@@ -915,6 +998,8 @@ private void showMorseOSCover() {
         if ((isMorseLockActive && !timeLocked) || isPreviewMorse) {
             if (morseContainer.getVisibility() != View.VISIBLE) {
                 morseContainer.setVisibility(View.VISIBLE);
+                updateLockIconPosition();
+                applyLockIconStyle();
             }
             if (isPreviewMorse) {
                 WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();

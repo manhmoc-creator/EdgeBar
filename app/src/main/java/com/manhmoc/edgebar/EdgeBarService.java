@@ -531,7 +531,7 @@ sendBroadcast(syncIntent);
         try{ unregisterReceiver(stateReceiver); }catch(Exception e){}
         try{ unregisterReceiver(ipcReceiver); }catch(Exception e){}
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
-        for (int i=0;i<5;i++) if (bars[i]!=null) wm.removeView(bars[i]);
+            for (int i=0;i<5;i++) if (bars[i]!=null) wm.removeView(bars[i]);
         for (int i=0;i<4;i++) if (corners[i]!=null) wm.removeView(corners[i]);
         if (fV != null) wm.removeView(fV);
     }

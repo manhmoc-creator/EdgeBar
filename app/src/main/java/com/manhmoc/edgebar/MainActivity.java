@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-   private final String CURRENT_VERSION = "V19.12.3.4.6.7"; 
+   private final String CURRENT_VERSION = "V19.12.3.4.6.8"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -738,7 +738,9 @@ relockRow.addView(relockBtnRow);
 designSliderContainer.addView(relockRow);
 
                 sliderDrawerContent.addView(createSlider("Độ mờ màn chắn Morse (Alpha Đen)", "morse_bg_alpha", 255, 180));
+                sliderDrawerContent.addView(createSlider("Vị trí dọc Icon Ổ Khoá (0=Trên, 3000=Dưới)", "morse_lock_icon_y", 3000, 600));
                 sliderDrawerContent.addView(createSlider("Độ nét Neon (Blur) của text/mật khẩu", "morse_text_blur", 60, 20));
+                sliderDrawerContent.addView(createSlider("Cỡ chữ mật khẩu (sp)", "morse_text_size", 60, 30));
                 CheckBox cbNeon = new CheckBox(this);
                 cbNeon.setText("Bật hiệu ứng Neon cho text nhập mật khẩu");
                 cbNeon.setTextColor(Color.WHITE);
