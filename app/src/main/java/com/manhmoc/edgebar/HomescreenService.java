@@ -80,13 +80,23 @@ public class HomescreenService extends Service {
 
     private Handler relockHandler = new Handler();
     private long relockScheduledTime = 0;
-    private Runnable relockRunnable = () -> {
+    private String pendingRelockPkg = "";
+
+
+  private Runnable relockRunnable = () -> {
+    String pkgToLock = pendingRelockPkg;
     lastUnlockedApp = "";
     lastUnlockedTime = 0;
     relockScheduledTime = 0;
+    pendingRelockPkg = "";
+    if (!pkgToLock.isEmpty() && pkgToLock.equals(currentForegroundPkg)) {
+        isMorseLockActive = false;
+        lockedPkg = "";
+        Intent engage = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
+        engage.putExtra("pkg", pkgToLock);
+        sendBroadcast(engage);
+    }
 };
-
-
     private Handler numberDisplayHandler = new Handler();
     private Runnable hideNumberRunnable;
 
@@ -302,28 +312,36 @@ public class HomescreenService extends Service {
             if (action.equals("com.manhmoc.edgebar.SYNC_STATE")) {
     isKbd = i.getBooleanExtra("isKbd", false);
     isBl = i.getBooleanExtra("isBl", false);
-
     String incomingPkg = i.getStringExtra("foreground_pkg");
     if (incomingPkg != null && !incomingPkg.isEmpty()) {
-    currentForegroundPkg = incomingPkg;
-}
-
+        boolean isRealApp = !incomingPkg.contains("systemui")
+            && !incomingPkg.contains("launcher")
+            && !incomingPkg.contains("nexuslauncher")
+            && !incomingPkg.contains("inputmethod")
+            && !incomingPkg.equals("android")
+            && !incomingPkg.equals("com.android.settings")
+            && !incomingPkg.contains("quickstep");
+        if (isRealApp) {
+            currentForegroundPkg = incomingPkg;
+        }
+    }
 if (!lastUnlockedApp.isEmpty()
         && !currentForegroundPkg.isEmpty()
-        && !currentForegroundPkg.equals(lastUnlockedApp)) {
-
+        && !currentForegroundPkg.equals(lastUnlockedApp)
+        && !currentForegroundPkg.contains("systemui")
+        && !currentForegroundPkg.contains("launcher")) {
     if (relockScheduledTime == 0) {
         long relockMs = prefs.getInt("morse_relock_ms", 5000);
         relockScheduledTime = System.currentTimeMillis() + relockMs;
+        pendingRelockPkg = lastUnlockedApp;
         relockHandler.removeCallbacks(relockRunnable);
         relockHandler.postDelayed(relockRunnable, relockMs);
     }
-
 } else if (!lastUnlockedApp.isEmpty()
         && currentForegroundPkg.equals(lastUnlockedApp)) {
-
     relockHandler.removeCallbacks(relockRunnable);
     relockScheduledTime = 0;
+    pendingRelockPkg = "";
 }
     isPreviewMorse = prefs.getBoolean("preview_morse", false);
     updateVisibility();
@@ -367,12 +385,49 @@ if (!lastUnlockedApp.isEmpty()
 } else if (action.equals(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)) {
     String reason = i.getStringExtra("reason");
     if ("recentapps".equals(reason)) {
-        if (!lastUnlockedApp.isEmpty()) {
+
+        String locklist = prefs.getString("locklist", "");
+        boolean hasLockedApp = false;
+        if (!locklist.isEmpty()) {
+
+            String checkPkg = !lastUnlockedApp.isEmpty() ? lastUnlockedApp : lockedPkg;
+            if (!checkPkg.isEmpty()) {
+                for (String pkg : locklist.split(",")) {
+                    if (pkg.trim().equals(checkPkg)) { hasLockedApp = true; break; }
+                }
+            }
+        }
+        if (hasLockedApp) {
             isCoveringRecents = true;
             showMorseOSCover();
         }
     }
-
+} else if (action.equals("com.manhmoc.edgebar.MORSE_OS_RECENTS_SHOW")) {
+    String lastPkg = i.getStringExtra("last_pkg");
+    if (lastPkg == null) lastPkg = "";
+    boolean shouldCover = false;
+    String locklist = prefs.getString("locklist", "");
+    if (!lastPkg.isEmpty() && !locklist.isEmpty()) {
+        for (String pkg : locklist.split(",")) {
+            if (pkg.trim().equals(lastPkg)) { shouldCover = true; break; }
+        }
+    }
+    if (!shouldCover && !lastUnlockedApp.isEmpty() && !locklist.isEmpty()) {
+        for (String pkg : locklist.split(",")) {
+            if (pkg.trim().equals(lastUnlockedApp)) { shouldCover = true; break; }
+        }
+    }
+    if (shouldCover && !isMorseLockActive && !isUninstallGuardActive) {
+        showMorseOSCover();
+    }
+} else if (action.equals("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE")) {
+    if (isCoveringRecents) {
+        isCoveringRecents = false;
+        if (morseContainer != null && !isMorseLockActive && !isPreviewMorse && !isUninstallGuardActive) {
+            morseContainer.setVisibility(View.GONE);
+            morseContainer.setOnTouchListener(null);
+        }
+    }
 } else if (action.equals("com.manhmoc.edgebar.UNINSTALL_DETECTED")) {
     if (!isUninstallGuardActive) {
         isUninstallGuardActive = true;
@@ -387,14 +442,31 @@ if (!lastUnlockedApp.isEmpty()
         wm.updateViewLayout(morseContainer, p);
         updateVisibility();
     }
-
 } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
     lastUnlockedApp = "";
-    lastUnlockedTime = 0; 
+    lastUnlockedTime = 0;
+    relockHandler.removeCallbacks(relockRunnable);
+    relockScheduledTime = 0;
+    pendingRelockPkg = "";
+} else if (action.equals(Intent.ACTION_USER_PRESENT)) {
+    if (!currentForegroundPkg.isEmpty()) {
+        String locklist = prefs.getString("locklist", "");
+        if (!locklist.isEmpty()) {
+            for (String pkg : locklist.split(",")) {
+                if (pkg.trim().equals(currentForegroundPkg)) {
+                    isMorseLockActive = false;
+                    lockedPkg = "";
+                    Intent engage = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
+                    engage.putExtra("pkg", currentForegroundPkg);
+                    sendBroadcast(engage);
+                    break;
+                }
             }
         }
-    };
-
+    }
+        }
+    }
+};
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) { isRunning = true; sendSyncState(); return START_STICKY; }
     private void sendSyncState() { Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
@@ -424,6 +496,9 @@ if (!lastUnlockedApp.isEmpty()
         filter.addAction("com.manhmoc.edgebar.MORSE_LOCK_DISMISS");
         filter.addAction("com.manhmoc.edgebar.TOGGLE_MORSE");
         filter.addAction("com.manhmoc.edgebar.UNINSTALL_DETECTED");
+        filter.addAction("com.manhmoc.edgebar.MORSE_OS_RECENTS_SHOW");
+        filter.addAction("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE");
+
         if (Build.VERSION.SDK_INT >= 33)
             registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         else
@@ -671,23 +746,28 @@ if (isUninstallGuardActive) {
     }
 private void showMorseOSCover() {
     if (morseContainer == null) return;
+    if (isMorseLockActive || isPreviewMorse || isUninstallGuardActive) return;
+    isCoveringRecents = true;
     morseContainer.setVisibility(View.VISIBLE);
 
-
     WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
-    p.flags = (p.flags & ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+    p.flags = (WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
     wm.updateViewLayout(morseContainer, p);
 
     morseContainer.setOnTouchListener((v, e) -> {
         if (e.getAction() == MotionEvent.ACTION_UP) {
-            
             isCoveringRecents = false;
             morseContainer.setVisibility(View.GONE);
             morseContainer.setOnTouchListener(null);
-            
-            Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-            kick.putExtra("act", "HOME");
-            sendBroadcast(kick);
+            new Handler().postDelayed(() -> {
+                Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+                kick.putExtra("act", "HOME");
+                sendBroadcast(kick);
+            }, 80);
         }
         return true;
     });

@@ -44,6 +44,8 @@ public class EdgeBarService extends AccessibilityService {
     private CameraManager cm;
     private String cId;
     private boolean fOn = false, isKbd = false, isBl = false;
+    private boolean isInRecents = false;
+    private String lastForegroundPkg = ""; 
     private KeyguardManager km;
     private SharedPreferences prefs;
     private Vibrator vibrator;
@@ -234,30 +236,57 @@ public class EdgeBarService extends AccessibilityService {
                 || pName.isEmpty()
                 || isKbd;
 
-        if (!isSystemUI) {
-            String locklist = prefs.getString("locklist", "");
-            boolean isAppLocked = false;
-            if (!locklist.isEmpty()) {
-                for (String pkg : locklist.split(",")) {
-                    if (pkg.trim().equals(pName)) { isAppLocked = true; break; }
+if (!isSystemUI) {
+    String locklist = prefs.getString("locklist", "");
+    boolean isAppLocked = false;
+    if (!locklist.isEmpty()) {
+        for (String pkg : locklist.split(",")) {
+            if (pkg.trim().equals(pName)) { isAppLocked = true; break; }
+        }
+    }
+            if (isAppLocked) {
+                boolean isMainWindow = !cName.contains("Dialog")
+                    && !cName.contains("Popup")
+                    && !cName.contains("Toast")
+                    && !cName.contains("Panel")
+                    && !cName.contains("Permission");
+                if (isMainWindow) {
+                    Intent i = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
+                    i.putExtra("pkg", pName);
+                    sendBroadcast(i);
                 }
             }
-
-            if (isAppLocked) {
-                Intent i = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
-                i.putExtra("pkg", pName);
-                sendBroadcast(i);
-            }
-        }
-
-        updateVisibility();
-if ((pName.contains("packageinstaller") || pName.contains("installer"))
-        && (cName.contains("Uninstall") || cName.contains("uninstall"))) {
-    Intent uninstallGuard = new Intent("com.manhmoc.edgebar.UNINSTALL_DETECTED");
-    sendBroadcast(uninstallGuard);
 }
-
-
+        updateVisibility();
+if (pName.contains("packageinstaller") || pName.contains("installer")
+        || pName.contains("vending")) {
+    if (cName.contains("Uninstall") || cName.contains("uninstall")
+            || cName.contains("Delete") || cName.contains("UninstallActivity")
+            || cName.contains("DeleteActivity")) {
+        Intent uninstallGuard = new Intent("com.manhmoc.edgebar.UNINSTALL_DETECTED");
+        sendBroadcast(uninstallGuard);
+    }
+}
+boolean nowInRecents = pName.contains("launcher")
+        || pName.contains("nexuslauncher")
+        || pName.contains("quickstep")
+        || pName.contains("systemui")
+        || cName.contains("RecentsActivity")
+        || cName.contains("RecentTasksActivity")
+        || cName.contains("recents");
+if (nowInRecents && !isInRecents) {
+    isInRecents = true;
+    Intent coverIntent = new Intent("com.manhmoc.edgebar.MORSE_OS_RECENTS_SHOW");
+    coverIntent.putExtra("last_pkg", lastForegroundPkg);
+    sendBroadcast(coverIntent);
+} else if (!nowInRecents && isInRecents) {
+    isInRecents = false;
+    Intent hideIntent = new Intent("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE");
+    sendBroadcast(hideIntent);
+}
+if (!nowInRecents && !pName.isEmpty() && !isKbd) {
+    lastForegroundPkg = pName;
+}
 Intent syncIntent = new Intent("com.manhmoc.edgebar.SYNC_STATE");
 syncIntent.putExtra("isKbd", isKbd);
 syncIntent.putExtra("isBl", isBl);
