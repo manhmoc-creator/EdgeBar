@@ -244,16 +244,27 @@ if (!isSystemUI) {
             if (pkg.trim().equals(pName)) { isAppLocked = true; break; }
         }
     }
-            if (isAppLocked) {
+           if (isAppLocked) {
                 boolean isMainWindow = !cName.contains("Dialog")
                     && !cName.contains("Popup")
                     && !cName.contains("Toast")
                     && !cName.contains("Panel")
                     && !cName.contains("Permission");
                 if (isMainWindow) {
+                    // [FIX-BUG-0] Đón đầu luồng xử lý: Ép dịch vụ HomescreenService dựng màn chắn MorseOS ngay lập tức tại luồng chính để triệt tiêu thời gian trễ chớp màn hình
                     Intent i = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
                     i.putExtra("pkg", pName);
                     sendBroadcast(i);
+                    
+                    // Đồng thời gửi một tín hiệu tối khẩn để HomescreenService hiện diện container không trễ
+                    if (HomescreenService.isRunning) {
+                        try {
+                            // Đồng bộ trực tiếp biến cờ trạng thái nếu chạy chung tiến trình monolithic
+                            Intent fastShow = new Intent("com.manhmoc.edgebar.SYNC_STATE");
+                            fastShow.putExtra("foreground_pkg", pName);
+                            sendBroadcast(fastShow);
+                        } catch (Exception ignored) {}
+                    }
                 }
             }
 }

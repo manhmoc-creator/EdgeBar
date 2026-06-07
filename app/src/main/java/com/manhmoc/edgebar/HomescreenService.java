@@ -69,19 +69,20 @@ public class HomescreenService extends Service {
     private String currentMorseAttempt = "";
     private int morseFailCount = 0;
     private String lockedPkg = "";
+
+
+    private boolean isCountingDown = false;
+    private Handler countdownHandler = new Handler();
+    private Runnable countdownRunnable = null;
+    private ValueAnimator warningAnimator = null;
+    private boolean isUninstallGuardActive = false;
     private boolean isPreviewMorse = false;
     private boolean isCoveringRecents = false;
-    private boolean isUninstallGuardActive = false;
     private String currentForegroundPkg = "";
     private boolean isUnlockCooldown = false; 
     private Handler unlockCooldownHandler = new Handler(); 
     private int uninstallGuardFailCount = 0;  
     private long lockUntilTime = 0;
-    private boolean isCountingDown = false;
-    private Handler countdownHandler = new Handler();
-    private Runnable countdownRunnable = null;
-    private ValueAnimator warningAnimator = null;
-
 
         private Handler relockHandler = new Handler();
     private long relockScheduledTime = 0;
@@ -332,7 +333,12 @@ public class HomescreenService extends Service {
         int yVal = prefs.getInt("morse_lock_icon_y", 600);
         android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
         int screenH = dm.heightPixels;
-        int yPx = (int)((yVal / 3000f) * screenH);
+        
+        float yRatio = (yVal / 3000f);
+        if (yRatio < 0.1f) yRatio = 0.1f;
+        if (yRatio > 0.85f) yRatio = 0.85f;
+        int yPx = (int)(yRatio * screenH);
+        
         RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) tvLockIcon.getLayoutParams();
         if (lp == null) return;
         lp.topMargin = yPx;
@@ -340,6 +346,9 @@ public class HomescreenService extends Service {
         lp.addRule(RelativeLayout.CENTER_HORIZONTAL);
         lp.addRule(RelativeLayout.ALIGN_PARENT_TOP);
         tvLockIcon.setLayoutParams(lp);
+       
+        int iconSizeCustom = prefs.getInt("morse_lock_icon_size", 48);
+        tvLockIcon.setTextSize(iconSizeCustom);
     }
     private void reloadBackground() {
         bgType = prefs.getInt("morse_bg_type", 0);
@@ -525,36 +534,48 @@ public class HomescreenService extends Service {
         updateVisibility();
     }
 } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
-    unlockedApps.clear();
+    unlockedApps.clear(); // Xóa lịch sử unlock (Yêu cầu 9)
     lastUnlockedTime = 0;
     relockHandler.removeCallbacks(relockRunnable);
     relockScheduledTime = 0;
     pendingRelockPkg = "";
-    if (isMorseLockActive) {
-        isMorseLockActive = false;
-        lockedPkg = "";
-        currentMorseAttempt = "";
-        morseFailCount = 0;
-        if (morseContainer != null) morseContainer.setVisibility(View.GONE);
+    
+    // [FIX-8] ÉP TỰ SÁT VÔ ĐIỀU KIỆN KHI TẮT MÀN HÌNH
+    // Đảm bảo khi bật màn hình lại ở HOME, không có "bóng ma" MorseLock nào tồn tại
+    isMorseLockActive = false;
+    lockedPkg = "";
+    currentMorseAttempt = "";
+    morseFailCount = 0;
+    isCountingDown = false;
+    if (countdownRunnable != null) countdownHandler.removeCallbacks(countdownRunnable);
+    if (warningAnimator != null) warningAnimator.cancel();
+    
+    if (morseContainer != null) {
+        morseContainer.setVisibility(View.GONE);
+        if (bgView != null) bgView.setBackgroundColor(Color.TRANSPARENT);
     }
 } else if (action.equals(Intent.ACTION_USER_PRESENT)) {
+    // [FIX-BUG-8] Kiểm tra chủ động: Chỉ cho phép tự động tái khóa lại nếu và chỉ nếu app đó thực sự đang mở trước mắt người dùng (không bị đánh lừa bởi trạng thái trễ package của Launcher)
     new Handler().postDelayed(() -> {
-        boolean isHome = currentForegroundPkg.isEmpty()
-                || currentForegroundPkg.contains("launcher")
-                || currentForegroundPkg.contains("nexuslauncher")
-                || currentForegroundPkg.contains("quickstep");
-        if (!isHome && !currentForegroundPkg.isEmpty()
-                && !unlockedApps.contains(currentForegroundPkg)) {
+        // Lấy package thực tế tại đúng thời điểm sau độ trễ render của hệ thống
+        String activePkg = currentForegroundPkg;
+        boolean isRealHome = activePkg.isEmpty()
+                || activePkg.contains("launcher")
+                || activePkg.contains("nexuslauncher")
+                || activePkg.contains("quickstep")
+                || activePkg.contains("systemui");
+
+        if (!isRealHome && !unlockedApps.contains(activePkg)) {
             String locklist = prefs.getString("locklist", "");
             if (!locklist.isEmpty()) {
                 for (String pkg : locklist.split(",")) {
-                    if (pkg.trim().equals(currentForegroundPkg)) {
+                    if (pkg.trim().equals(activePkg)) {
                         isMorseLockActive = false;
                         lockedPkg = "";
                         morseFailCount = 0;
                         currentMorseAttempt = "";
                         Intent engage = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
-                        engage.putExtra("pkg", currentForegroundPkg);
+                        engage.putExtra("pkg", activePkg);
                         sendBroadcast(engage);
                         break;
                     }
@@ -562,7 +583,7 @@ public class HomescreenService extends Service {
             }
         }
     }, 600);
-        }
+}
     }
 };
     @Override public IBinder onBind(Intent intent) { return null; }
@@ -637,31 +658,25 @@ public class HomescreenService extends Service {
         morseContainer.setBackgroundColor(Color.TRANSPARENT);
         morseContainer.setVisibility(View.GONE);
 
-        // [FIX-6] Text nổi lên lớp phủ đen — màu neon theo theme bar/corner
-      tvMorseStatus = new TextView(this);
-      tvMorseStatus.setId(View.generateViewId());
-      tvMorseStatus.setId(android.view.View.generateViewId());
-      int textSizeSp = prefs.getInt("morse_text_size", 30);
-      tvMorseStatus.setTextSize(textSizeSp);
-       tvMorseStatus.setGravity(Gravity.CENTER);
-       RelativeLayout.LayoutParams tLp = new RelativeLayout.LayoutParams(-1, -2);
-       tLp.addRule(RelativeLayout.CENTER_IN_PARENT);
-       morseContainer.addView(tvMorseStatus, tLp);
-        tvLockIcon = new TextView(this);
-        tvLockIcon.setText("🔒");
-        tvLockIcon.setTextSize(48);
-        tvLockIcon.setGravity(Gravity.CENTER);
-        tvLockIcon.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-        applyLockIconStyle();
-        RelativeLayout.LayoutParams iconLp = new RelativeLayout.LayoutParams(
-                RelativeLayout.LayoutParams.WRAP_CONTENT,
-                RelativeLayout.LayoutParams.WRAP_CONTENT);
-        iconLp.addRule(RelativeLayout.CENTER_HORIZONTAL);
-        morseContainer.addView(tvLockIcon, iconLp);
-
-
         bgView = new MorseBackgroundView(this);
         morseContainer.addView(bgView, new RelativeLayout.LayoutParams(-1, -1));
+        tvMorseStatus = new TextView(this);
+        tvMorseStatus.setId(android.view.View.generateViewId());
+        tvMorseStatus.setGravity(Gravity.CENTER);
+        RelativeLayout.LayoutParams tLp = new RelativeLayout.LayoutParams(-1, -2);
+        tLp.addRule(RelativeLayout.CENTER_IN_PARENT);
+        int textSizeSp = prefs.getInt("morse_text_size", 30);
+        tvMorseStatus.setTextSize(textSizeSp);
+        morseContainer.addView(tvMorseStatus, tLp);
+        tvLockIcon = new TextView(this);
+        tvLockIcon.setText("🔒");
+        tvLockIcon.setGravity(Gravity.CENTER);
+        RelativeLayout.LayoutParams iconLp = new RelativeLayout.LayoutParams(-2, -2);
+        iconLp.addRule(RelativeLayout.CENTER_HORIZONTAL);
+        morseContainer.addView(tvLockIcon, iconLp);
+        int savedIconSize = prefs.getInt("morse_lock_icon_size", 48);
+        tvLockIcon.setTextSize(savedIconSize);
+
 
         WindowManager.LayoutParams bgP = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN |
@@ -728,8 +743,26 @@ public class HomescreenService extends Service {
         if (tvMorseStatus != null)
             tvMorseStatus.setText("⏳ Chờ " + remaining[0] + "s");
 
+        // [FIX-BUG-5] Bổ sung điều kiện kiểm tra vòng lặp: Nếu đã thoát ra HOME, lập tức hủy bộ đếm hoạt cảnh
         countdownRunnable = new Runnable() {
             @Override public void run() {
+                boolean isCurrentHome = currentForegroundPkg.isEmpty() 
+                        || currentForegroundPkg.contains("launcher") 
+                        || currentForegroundPkg.contains("nexuslauncher")
+                        || currentForegroundPkg.contains("quickstep");
+
+                if (isCurrentHome || !isMorseLockActive) {
+                    // Nếu kẻ trộm thoát ra Home, lập tức xóa sạch hoạt cảnh nháy đỏ đếm ngược
+                    isCountingDown = false;
+                    if (tvMorseStatus != null) tvMorseStatus.setText("");
+                    if (bgView != null) {
+                        bgView.setBackgroundColor(Color.TRANSPARENT);
+                        bgView.invalidate();
+                    }
+                    countdownHandler.removeCallbacks(this);
+                    return;
+                }
+
                 remaining[0]--;
                 if (remaining[0] > 0) {
                     if (tvMorseStatus != null)
@@ -868,19 +901,18 @@ if (isUninstallGuardActive) {
                 String insult = prefs.getString("morse_insult_" + Math.min(morseFailCount, 5), "Sai rồi!");
                 currentMorseAttempt = "";
 
+                // [FIX-5] Điều hướng kích hoạt bộ đếm thời gian nháy đỏ tại app bị khóa tùy biến theo số lần sai
                 if (morseFailCount == 3 || morseFailCount == 4) {
                     tvMorseStatus.setText(insult);
                     startFailCountdown(morseFailCount, () -> {
-                        if (isMorseLockActive) {
-                            tvMorseStatus.setText("");
-                            currentMorseAttempt = "";
-                        }
+                        if (isMorseLockActive && tvMorseStatus != null) tvMorseStatus.setText("");
                     });
                 } else if (morseFailCount >= 5) {
                     tvMorseStatus.setText(insult);
                     int lockMinutes = prefs.getInt("morse_lock_minutes", 30);
                     lockUntilTime = System.currentTimeMillis() + lockMinutes * 60 * 1000L;
                     isMorseLockActive = false;
+                    // Đá ngay kẻ trộm về HOME
                     Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
                     kick.putExtra("act", "HOME");
                     sendBroadcast(kick);
@@ -948,13 +980,13 @@ private void showMorseOSCover() {
         }
     }
 
-    private void dismissMorseOSCover() {
+   private void dismissMorseOSCover() {
         isCoveringRecents = false;
         if (morseContainer != null) {
             morseContainer.setVisibility(View.GONE);
             morseContainer.setOnTouchListener(null);
         }
-        if (tvLockIcon != null) tvLockIcon.setOnTouchListener(null);
+        // [FIX-BUG--1] Tuyệt đối không Set touch về Null, mạch lắng nghe chạm 1-Tap của ổ khóa sẽ được quản lý tập trung và an toàn bên trong hàm updateVisibility()
         new Handler().postDelayed(() -> {
             Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             kick.putExtra("act", "HOME");
@@ -962,33 +994,31 @@ private void showMorseOSCover() {
         }, 50);
     }
     private void updateVisibility() {
-    if (isMorseLockActive && !isUninstallGuardActive) {
-        boolean foregroundIsLocked = false;
-        boolean foregroundIsHome = currentForegroundPkg.isEmpty()
-                || currentForegroundPkg.contains("launcher")
-                || currentForegroundPkg.contains("nexuslauncher")
-                || currentForegroundPkg.contains("quickstep")
-                || currentForegroundPkg.contains("systemui");
-        String locklist = prefs.getString("locklist", "");
-        if (!currentForegroundPkg.isEmpty() && !locklist.isEmpty()) {
-            for (String pkg : locklist.split(",")) {
-                if (pkg.trim().equals(currentForegroundPkg)) {
-                    foregroundIsLocked = true;
-                    break;
-                }
+        // [FIX-BUG-4-7] Thay thế bằng cơ chế kiểm tra chủ động kép (Double Check) kết hợp độ trễ phần cứng để chặn đứng tình trạng MorseLock bị kẹt lại ở màn hình HOME
+        if (isMorseLockActive && !isUninstallGuardActive) {
+            checkAndExecuteSuicide();
+        }
+
+        // [FIX--1, 0, 2] Thiết lập phản xạ 1-Tap: Khi chạm vào bất kỳ vùng nào trên lớp phủ đơn giản hoặc Icon Ổ khóa, biến mất hoàn toàn và văng ra HOME
+        if (morseContainer != null && morseContainer.getVisibility() == View.VISIBLE) {
+            // Thiết lập sự kiện tương tác trực tiếp lên Icon Ổ khóa bảo mật
+            if (tvLockIcon != null) {
+                tvLockIcon.setOnTouchListener((v, event) -> {
+                    if (event.getAction() == MotionEvent.ACTION_UP) {
+                        // Tắt giao diện MorseOS
+                        morseContainer.setVisibility(View.GONE);
+                        isMorseLockActive = false;
+                        currentMorseAttempt = "";
+                        // Đá văng thiết bị ra màn hình HOME để ngăn chặn hành vi trộm cắp thông tin đa nhiệm
+                        Intent kickHome = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+                        kickHome.putExtra("act", "HOME");
+                        sendBroadcast(kickHome);
+                        return true;
+                    }
+                    return true;
+                });
             }
         }
-        if (!foregroundIsLocked || foregroundIsHome) {
-            isMorseLockActive = false;
-            morseContainer.setVisibility(View.GONE);
-            morseContainer.setOnTouchListener(null);
-            currentMorseAttempt = "";
-            morseFailCount = 0;
-            if (countdownRunnable != null) countdownHandler.removeCallbacks(countdownRunnable);
-            if (warningAnimator != null) warningAnimator.cancel();
-            isCountingDown = false;
-        }
-    }
         boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hideNormal = (avoidKbd && isKbd) || isBl;
@@ -1392,6 +1422,40 @@ private void showMorseOSCover() {
             return true;
         }
     }
+
+    // [FIX-BUG-7-HÀM BỔ TRỢ] Tạo luồng kiểm tra trễ 250ms đón đầu tốc độ render của hệ điều hành, đảm bảo tự sát triệt để
+    private void checkAndExecuteSuicide() {
+        Handler suicideHandler = new Handler(android.os.Looper.getMainLooper());
+        suicideHandler.postDelayed(() -> {
+            boolean foregroundIsLocked = false;
+            boolean foregroundIsHome = currentForegroundPkg.isEmpty() 
+                    || currentForegroundPkg.contains("launcher") 
+                    || currentForegroundPkg.contains("nexuslauncher")
+                    || currentForegroundPkg.contains("quickstep")
+                    || currentForegroundPkg.contains("systemui");
+            
+            String locklist = prefs.getString("locklist", "");
+            if (!currentForegroundPkg.isEmpty() && !locklist.isEmpty()) {
+                for (String pkg : locklist.split(",")) {
+                    if (pkg.trim().equals(currentForegroundPkg)) { foregroundIsLocked = true; break; }
+                }
+            }
+            if (!foregroundIsLocked || foregroundIsHome) {
+                isMorseLockActive = false;
+                if (morseContainer != null) morseContainer.setVisibility(View.GONE);
+                currentMorseAttempt = "";
+                morseFailCount = 0;
+                isCountingDown = false;
+                if (countdownRunnable != null) countdownHandler.removeCallbacks(countdownRunnable);
+                if (warningAnimator != null) warningAnimator.cancel();
+                if (bgView != null) {
+                    bgView.setBackgroundColor(Color.TRANSPARENT);
+                    bgView.invalidate();
+                }
+            }
+        }, 250); // Trễ 250ms là tỷ lệ vàng để Android cập nhật xong giao diện Home
+    }
+
 
     @Override
     public void onDestroy() {
