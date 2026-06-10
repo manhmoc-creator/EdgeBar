@@ -55,12 +55,16 @@ public class EdgeBarService extends AccessibilityService {
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
 
-    private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
-        if (k != null) {
-            updateVisibility();
-            if (fV != null) fV.updateStyle();
-        }
-    };
+    private final Handler debounceHandler = new Handler(android.os.Looper.getMainLooper());
+private Runnable debounceRunnable = null;
+
+private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
+    if (k == null) return;
+    if (fV != null) fV.updateStyle();
+    if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
+    debounceRunnable = () -> updateVisibility();
+    debounceHandler.postDelayed(debounceRunnable, 300);
+};
 
    private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     @Override
