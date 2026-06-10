@@ -340,6 +340,16 @@ sendBroadcast(syncIntent);
                 case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break;
                 case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break;
                 case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break;
+                case "SCREEN_ON":
+                    // Thuật toán WakeLock giải phóng RAM nhanh
+                    android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+                    if (pm != null && !pm.isInteractive()) {
+                        android.os.PowerManager.WakeLock wl = pm.newWakeLock(
+                            android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP, 
+                            "EdgeBar:ScreenOn");
+                        wl.acquire(3000); // Chỉ giữ CPU trong 3 giây để bật màn, sau đó tự nhả RAM
+                    }
+                    break;
                 case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break;
                 case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break;
                 case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break;

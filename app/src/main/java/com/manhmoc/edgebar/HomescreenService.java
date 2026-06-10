@@ -80,7 +80,18 @@ public class HomescreenService extends Service {
     private boolean isCoveringRecents = false;
     private String currentForegroundPkg = "";
     private boolean isUnlockCooldown = false;
+// HYBRID: cache trạng thái Accessibility, tránh đọc Settings mỗi frame
+    private boolean accCacheValue = false;
+    private long accCheckTimestamp = 0;
+    private WindowManager.LayoutParams currentOverlayParams = null;
+
+    
     private boolean isForceHome = false; // FIX 4: flag tức thì khi nhấn Home
+
+    // HYBRID HOME V2: ContentObserver thay vì polling Settings DB
+    // Chi phí = 0 CPU khi không có thay đổi, chỉ fire khi user thực sự toggle Accessibility
+    private android.database.ContentObserver accObserver = null;
+    private boolean accStateCached = false; // giá trị cache hiện tại
 
 
     private final Handler suicideHandler = new Handler(android.os.Looper.getMainLooper());
@@ -108,10 +119,12 @@ public class HomescreenService extends Service {
         morseFailCount = 0;
         currentMorseAttempt = "";
         if (tvMorseStatus != null) tvMorseStatus.setText("");
-        if (morseContainer != null) morseContainer.setVisibility(View.VISIBLE);
-        updateLockIconPosition();
-        applyLockIconStyle();
-        updateVisibility();
+// FIX-TEXT-1: Apply style đồng bộ trước khi hiện
+applyMorseTextStyle();
+applyLockIconStyle();
+updateLockIconPosition();
+if (morseContainer != null) morseContainer.setVisibility(View.VISIBLE);
+updateVisibility();
     }
 };
 
@@ -434,6 +447,11 @@ protected void onDraw(Canvas canvas) {
         }
     }
     isPreviewMorse = prefs.getBoolean("preview_morse", false);
+    // HYBRID HOME: Reset cache Accessibility nếu được yêu cầu
+    if (i.getBooleanExtra("acc_cache_reset", false)) {
+        accCheckTimestamp = 0;
+    }
+    // ← KẾT THÚC PHẦN THÊM
     updateVisibility();
             } else if (action.equals("com.manhmoc.edgebar.TEST_ANIM")) {
                 playAnim();
@@ -462,12 +480,17 @@ protected void onDraw(Canvas canvas) {
         return;
     }
     isMorseLockActive = true;
-    lockedPkg = pkg;
-    morseFailCount = 0;
-    currentMorseAttempt = "";
-    if (tvMorseStatus != null) tvMorseStatus.setText("");
-    morseContainer.setVisibility(View.VISIBLE);
-    updateVisibility();
+lockedPkg = pkg;
+morseFailCount = 0;
+currentMorseAttempt = "";
+if (tvMorseStatus != null) tvMorseStatus.setText("");
+// FIX-TEXT-1: Apply style TRƯỚC khi hiện overlay, đảm bảo text
+// luôn nằm trên vùng tối bất kể slider đã kéo hay chưa
+applyMorseTextStyle();
+applyLockIconStyle();
+updateLockIconPosition();
+morseContainer.setVisibility(View.VISIBLE);
+updateVisibility();
             } else if (action.equals("com.manhmoc.edgebar.MORSE_LOCK_DISMISS")) {
                 isMorseLockActive = false;
                 morseFailCount = 0;
@@ -658,7 +681,12 @@ filter.addAction("com.manhmoc.edgebar.UNINSTALL_DETECTED");
 
         for (int i = 0; i < 5; i++) {
             bars[i] = new View(this);
-            WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
+            // HYBRID HOME V2: dùng accStateCached đã đọc sẵn ở trên — ZERO I/O thêm
+            int initType = accStateCached
+                ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+                : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+            WindowManager.LayoutParams p = new WindowManager.LayoutParams(
+                1, 1, initType, 0, PixelFormat.TRANSLUCENT);
             try { wm.addView(bars[i], p); } catch (Exception e) {}
             bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], null));
         }
@@ -710,6 +738,28 @@ filter.addAction("com.manhmoc.edgebar.UNINSTALL_DETECTED");
             try { wm.addView(mCorners[i], p); } catch (Exception e) {}
             mCorners[i].setOnTouchListener(new SidebarTouchListener("morse_corner_" + CORNERS[i], mCorners[i]));
         }
+
+        // HYBRID HOME V2: Lắng nghe thay đổi Accessibility bằng ContentObserver
+        // Tiết kiệm pin tối đa: KHÔNG polling, KHÔNG query mỗi frame
+        // Chỉ cập nhật type overlay khi user thực sự bật/tắt Accessibility
+        accStateCached = isAccOn(); // đọc 1 lần lúc khởi động
+        accObserver = new android.database.ContentObserver(
+                new Handler(android.os.Looper.getMainLooper())) {
+            @Override
+            public void onChange(boolean selfChange) {
+                boolean newVal = isAccOn();
+                if (newVal != accStateCached) {
+                    accStateCached = newVal;
+                    // Chỉ gọi khi giá trị THỰC SỰ thay đổi → tiết kiệm CPU
+                    applyHybridTypeToAllBars();
+                    updateVisibility();
+                }
+            }
+        };
+        getContentResolver().registerContentObserver(
+            android.provider.Settings.Secure.getUriFor(
+                android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
+            false, accObserver);
 
         reloadBackground();
         updateVisibility();
@@ -966,15 +1016,22 @@ if (isUninstallGuardActive) {
         }
 
         currentMorseAttempt += mappedKey;
-        tvMorseStatus.setText(currentMorseAttempt);
-        if (hideNumberRunnable != null) numberDisplayHandler.removeCallbacks(hideNumberRunnable);
-        int showNumberMs = prefs.getInt("morse_show_number_ms", 800);
-        hideNumberRunnable = () -> {
-            StringBuilder dots = new StringBuilder();
-            for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
-            tvMorseStatus.setText(dots.toString());
-        };
-        numberDisplayHandler.postDelayed(hideNumberRunnable, showNumberMs);
+// FIX-DOT-2: Hiện dạng "••• 5" — các số cũ đã thành dấu chấm,
+// chỉ số mới nhất hiện rõ, không bao giờ hiện lại số cũ
+if (hideNumberRunnable != null) numberDisplayHandler.removeCallbacks(hideNumberRunnable);
+int showNumberMs = prefs.getInt("morse_show_number_ms", 800);
+// Tạo chuỗi hiển thị: dấu chấm cho các ký tự cũ + số mới nhất
+StringBuilder displayStr = new StringBuilder();
+for (int i = 0; i < currentMorseAttempt.length() - 1; i++) displayStr.append("• ");
+displayStr.append(mappedKey); // chỉ số mới nhất hiện dạng số
+tvMorseStatus.setText(displayStr.toString());
+// Sau showNumberMs: đổi số mới nhất thành dấu chấm
+hideNumberRunnable = () -> {
+    StringBuilder dots = new StringBuilder();
+    for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
+    tvMorseStatus.setText(dots.toString());
+};
+numberDisplayHandler.postDelayed(hideNumberRunnable, showNumberMs);
     }
 private void showMorseOSCover() {
         if (morseContainer == null) return;
@@ -1023,26 +1080,38 @@ private void showMorseOSCover() {
     scheduleSuicideCheck();
 }
 
-        // [FIX--1, 0, 2] Thiết lập phản xạ 1-Tap: Khi chạm vào bất kỳ vùng nào trên lớp phủ đơn giản hoặc Icon Ổ khóa, biến mất hoàn toàn và văng ra HOME
         if (morseContainer != null && morseContainer.getVisibility() == View.VISIBLE) {
-            // Thiết lập sự kiện tương tác trực tiếp lên Icon Ổ khóa bảo mật
-            if (tvLockIcon != null) {
-                tvLockIcon.setOnTouchListener((v, event) -> {
-                    if (event.getAction() == MotionEvent.ACTION_UP) {
-                        // Tắt giao diện MorseOS
-                        morseContainer.setVisibility(View.GONE);
-                        isMorseLockActive = false;
-                        currentMorseAttempt = "";
-                        // Đá văng thiết bị ra màn hình HOME để ngăn chặn hành vi trộm cắp thông tin đa nhiệm
-                        Intent kickHome = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-                        kickHome.putExtra("act", "HOME");
-                        sendBroadcast(kickHome);
-                        return true;
-                    }
-                    return true;
-                });
+    if (tvLockIcon != null) {
+        tvLockIcon.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_UP) {
+                // FIX-HOME-3: Kiểm tra vị trí hiện tại
+                boolean isCurrentlyOnHome =
+                    currentForegroundPkg.isEmpty()
+                    || currentForegroundPkg.contains("launcher")
+                    || currentForegroundPkg.contains("nexuslauncher")
+                    || currentForegroundPkg.contains("quickstep")
+                    || currentForegroundPkg.contains("systemui")
+                    || isForceHome;
+
+                if (isCurrentlyOnHome) {
+                    // Đang ở Home → cho phép ẩn MorseLock vĩnh viễn
+                    // (không relock vì đây là hành động chủ động của chủ máy)
+                    morseContainer.setVisibility(View.GONE);
+                    isMorseLockActive = false;
+                    isForceHome = false;
+                    currentMorseAttempt = "";
+                    morseFailCount = 0;
+                    // Thêm pkg vào unlockedApps tạm thời để tránh relock ngay
+                    // khi người dùng mở lại app (họ đã chủ động tắt từ Home)
+                    if (!lockedPkg.isEmpty()) unlockedApps.add(lockedPkg);
+                }
+                // Đang trong app bị khóa → icon 🔒 bị khóa cứng,
+                // chạm không làm gì — hành vi đúng của AppLock
             }
-        }
+            return true;
+        });
+    }
+}
         boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hideNormal = (avoidKbd && isKbd) || isBl;
@@ -1051,10 +1120,12 @@ private void showMorseOSCover() {
 
         if ((isMorseLockActive && !timeLocked) || isPreviewMorse) {
             if (morseContainer.getVisibility() != View.VISIBLE) {
-                morseContainer.setVisibility(View.VISIBLE);
-                updateLockIconPosition();
-                applyLockIconStyle();
-            }
+    // FIX-TEXT-1: Luôn apply style khi container vừa được hiện
+    applyMorseTextStyle();
+    applyLockIconStyle();
+    updateLockIconPosition();
+    morseContainer.setVisibility(View.VISIBLE);
+}
             if (isPreviewMorse) {
                 WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
                 p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -1162,6 +1233,7 @@ private void showMorseOSCover() {
                     else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
                     WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams();
                     p.flags = baseFlags;
+                    // Đã xóa toàn bộ logic Hybrid Type check - Tiết kiệm RAM và chu kỳ CPU
                     p.width = w;
                     p.height = h;
                     p.x = x;
@@ -1489,6 +1561,7 @@ private void showMorseOSCover() {
         isRunning = false;
         try { unregisterReceiver(syncReceiver); } catch (Exception e) {}
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
+        if (accObserver != null) getContentResolver().unregisterContentObserver(accObserver); // ← THÊM DÒNG NÀY
         for (int i = 0; i < 5; i++) if (bars[i] != null) wm.removeView(bars[i]);
         for (int i = 0; i < 8; i++) if (mBars[i] != null) wm.removeView(mBars[i]);
         for (int i = 0; i < 4; i++) {
@@ -1499,4 +1572,42 @@ private void showMorseOSCover() {
         if (fV != null) wm.removeView(fV);
         if (bgBitmap != null && !bgBitmap.isRecycled()) bgBitmap.recycle();
     }
-}
+// HYBRID HOME V2: Kiểm tra Accessibility — đọc trực tiếp, chỉ gọi từ ContentObserver
+    // Không cần cache vì ContentObserver đã đảm bảo chỉ gọi khi có thay đổi thật
+    private boolean isAccOn() {
+        try {
+            String s = android.provider.Settings.Secure.getString(
+                getContentResolver(),
+                android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            return s != null && s.contains(
+                getPackageName() + "/" + EdgeBarService.class.getName());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // HYBRID HOME V2: Áp dụng type đúng cho TẤT CẢ bars/corners một lần
+    // Không removeView/addView — chỉ updateViewLayout để ZERO overhead RAM
+    private void applyHybridTypeToAllBars() {
+        int newType = accStateCached
+            ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+            : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+        for (int i = 0; i < 5; i++) {
+            if (bars[i] == null) continue;
+            WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams();
+            if (p.type != newType) {
+                p.type = newType;
+                try { wm.updateViewLayout(bars[i], p); } catch (Exception ignored) {}
+            }
+        }
+        for (int i = 0; i < 4; i++) {
+            if (corners[i] == null) continue;
+            WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams();
+            if (p.type != newType) {
+                p.type = newType;
+                try { wm.updateViewLayout(corners[i], p); } catch (Exception ignored) {}
+            }
+        }
+    }
+
+}  // ← đây là dấu } cuối cùng đóng class HomescreenService, KHÔNG XÓA

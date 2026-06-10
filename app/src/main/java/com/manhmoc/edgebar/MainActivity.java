@@ -31,22 +31,24 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs; private boolean isVi;
     private String T(String en, String vi) { return isVi ? vi : en; }
     
-    private String[] ACT_KEYS = new String[36]; private String[] ACT_LABS = new String[36];
+    private String[] ACT_KEYS = new String[38]; private String[] ACT_LABS = new String[38];
     private String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; private String[] BAR_NAMES; 
     private String[] CORNERS = {"br", "bl", "tr", "tl"}; private String[] CORNER_NAMES;
     private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; private String[] COLOR_NAMES;
 
-    private String[] ALL_COMP_KEYS = {"r", "l", "t_r", "t_l", "t_c", "corner_br", "corner_bl", "corner_tr", "corner_tl"}; 
-    private String[] ALL_COMP_NAMES;
-    private String[] M_BARS = {"r", "l", "t_r", "t_l", "t_c", "m_b_c", "m_mid_t", "m_mid_b"};
-    private String[] M_BAR_NAMES;
-    private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold"}; 
+    // Đã chèn thêm: fingerprint, vol_on, vol_off, launch_app
+private String[] ALL_COMP_KEYS = {"r", "l", "t_r", "t_l", "t_c", "corner_br", "corner_bl", "corner_tr", "corner_tl", "fingerprint", "vol_on", "vol_off", "launch_app"};
+private String[] ALL_COMP_NAMES;
+private String[] M_BARS = {"r", "l", "t_r", "t_l", "t_c", "m_b_c", "m_mid_t", "m_mid_b"};
+private String[] M_BAR_NAMES;
+// Đã chèn thêm: vol_up, vol_down
+private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold", "vol_up", "vol_down"};
     private String[] C_GESTURE_NAMES;
 
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.5"; 
+    private final String CURRENT_VERSION = "V19.12.3.5.1"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -65,19 +67,23 @@ public class MainActivity extends Activity {
     @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
 
     private void reloadActionLabels() {
-        String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD"}; 
-        String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"), T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm ẩn")};
-        for(int i=0; i<16; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; } 
-        for(int i=1; i<=15; i++) { ACT_KEYS[15+i]="INTENT_"+i; ACT_LABS[15+i] = prefs.getString("intent_"+i+"_name", "Intent " + i); }
-        for(int i=1; i<=5; i++) { ACT_KEYS[30+i]="MACRO_"+i; ACT_LABS[30+i] = prefs.getString("macro_"+i+"_name", "Macro " + i); }
-        
-        ALL_COMP_NAMES = new String[]{T("Bottom Right", "Thanh Đáy Phải"), T("Bottom Left", "Thanh Đáy Trái"), T("Top Right", "Thanh Cạnh Phải"), T("Top Left", "Thanh Cạnh Trái"), T("Top Center", "Thanh Đỉnh Giữa"), T("Corner BR", "Góc Viền Đáy Phải"), T("Corner BL", "Góc Viền Đáy Trái"), T("Corner TR", "Góc Viền Đỉnh Phải"), T("Corner TL", "Góc Viền Đỉnh Trái")};
-        M_BAR_NAMES = new String[]{T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"), T("Top Right", "Cạnh Phải"), T("Top Left", "Cạnh Trái"), T("Top Center", "Đỉnh giữa"), T("Bottom Center", "Đáy Giữa"), T("Top Half Center", "Trung Tâm Trên"), T("Bottom Half Center", "Trung Tâm Dưới")};
-        C_GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ"), T("Diagonal", "Vuốt Chéo"), T("Diagonal + Hold", "Vuốt Chéo + Giữ")};
-        BAR_NAMES = new String[]{T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"), T("Top Right", "Cạnh Phải"), T("Top Left", "Cạnh Trái"), T("Top Center", "Đỉnh giữa")}; 
-        CORNER_NAMES = new String[]{T("Bottom Right Corner", "Góc đáy phải"), T("Bottom Left Corner", "Góc đáy trái"), T("Top Right Corner", "Góc đỉnh phải"), T("Top Left Corner", "Góc đỉnh trái")}; 
-        COLOR_NAMES = new String[]{T("White", "Trắng"), "Neon", "Cyberpunk", "Lava", "Ocean", "Matrix", "Sunset", "Google", "Aurora", "Abyss", "Forest", "Flame", "Midnight", "Tropical", "Candy"};
-    }
+// Thêm 2 action: SCREEN_ON và LAUNCH_APP (Tổng 18)
+String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD", "SCREEN_ON", "LAUNCH_APP"};
+String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"), T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm ẩn"), T("Screen On", "Bật màn hình"), T("Launch App", "Mở Ứng dụng")};
+// Cập nhật vòng lặp từ 16 lên 18
+for(int i=0; i<18; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
+for(int i=1; i<=15; i++) { ACT_KEYS[17+i]="INTENT_"+i; ACT_LABS[17+i] = prefs.getString("intent_"+i+"_name", "Intent " + i); }
+for(int i=1; i<=5; i++) { ACT_KEYS[32+i]="MACRO_"+i; ACT_LABS[32+i] = prefs.getString("macro_"+i+"_name", "Macro " + i); }
+
+// Thêm Component: Fingerprint, Volume On, Volume Off, Launch App
+ALL_COMP_NAMES = new String[]{T("Bottom Right", "Thanh Đáy Phải"), T("Bottom Left", "Thanh Đáy Trái"), T("Top Right", "Thanh Cạnh Phải"), T("Top Left", "Thanh Cạnh Trái"), T("Top Center", "Thanh Đỉnh Giữa"), T("Corner BR", "Góc Viền Đáy Phải"), T("Corner BL", "Góc Viền Đáy Trái"), T("Corner TR", "Góc Viền Đỉnh Phải"), T("Corner TL", "Góc Viền Đỉnh Trái"), T("Fingerprint", "Vân Tay"), T("Volume ScreenOn", "Phím Âm Lượng (Mở màn)"), T("Volume ScreenOff", "Phím Âm Lượng (Tắt màn)"), T("Launch App", "Lắng nghe Mở Ứng dụng")};
+M_BAR_NAMES = new String[]{T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"), T("Top Right", "Cạnh Phải"), T("Top Left", "Cạnh Trái"), T("Top Center", "Đỉnh giữa"), T("Bottom Center", "Đáy Giữa"), T("Top Half Center", "Trung Tâm Trên"), T("Bottom Half Center", "Trung Tâm Dưới")};
+// Thêm Triggers: Volume Up, Volume Down
+C_GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ"), T("Diagonal", "Vuốt Chéo"), T("Diagonal + Hold", "Vuốt Chéo + Giữ"), T("Volume Up", "Tăng âm lượng"), T("Volume Down", "Giảm âm lượng")};
+BAR_NAMES = new String[]{T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"), T("Top Right", "Cạnh Phải"), T("Top Left", "Cạnh Trái"), T("Top Center", "Đỉnh giữa")};
+CORNER_NAMES = new String[]{T("Bottom Right Corner", "Góc đáy phải"), T("Bottom Left Corner", "Góc đáy trái"), T("Top Right Corner", "Góc đỉnh phải"), T("Top Left Corner", "Góc đỉnh trái")};
+COLOR_NAMES = new String[]{T("White", "Trắng"), "Neon", "Cyberpunk", "Lava", "Ocean", "Matrix", "Sunset", "Google", "Aurora", "Abyss", "Forest", "Flame", "Midnight", "Tropical", "Candy"};
+}
 
     @Override public void onActivityResult(int req, int res, Intent data) { 
         super.onActivityResult(req, res, data); 
@@ -132,9 +138,23 @@ public class MainActivity extends Activity {
         
         if (!Settings.canDrawOverlays(this)) { Button btnReq = new Button(this); btnReq.setText(T("⚠️ GRANT OVERLAY", "⚠️ CẤP QUYỀN LỚP PHỦ")); btnReq.setBackground(getRounded("#D32F2F", 25f)); btnReq.setTextColor(Color.WHITE); btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))); main.addView(btnReq); }
 
+// --- DO NOT DISTURB (DND) --- Xin quyền ghi đè âm lượng (Volume Mapper)
+android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+if (android.os.Build.VERSION.SDK_INT >= 23 && !nm.isNotificationPolicyAccessGranted()) {
+    Button btnDnd = new Button(this);
+    btnDnd.setText("⚠️ CẤP QUYỀN KHÔNG LÀM PHIỀN (DND)\nĐể gọi Screen Off/On bằng phím Âm lượng");
+    btnDnd.setBackground(getRounded("#FF9800", 25f));
+    btnDnd.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams dndLp = new LinearLayout.LayoutParams(-1, -2);
+    dndLp.setMargins(0, 10, 0, 0);
+    btnDnd.setLayoutParams(dndLp);
+    btnDnd.setOnClickListener(v -> startActivity(new Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)));
+    main.addView(btnDnd);
+}
+
 // --- DEVICE ADMIN ---
-        android.app.admin.DevicePolicyManager dpm =
-            (android.app.admin.DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
+android.app.admin.DevicePolicyManager dpm =
+(android.app.admin.DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
         ComponentName adminComp = new ComponentName(this, EdgeAdminReceiver.class);
         if (!dpm.isAdminActive(adminComp)) {
             Button btnAdmin = new Button(this);
@@ -226,7 +246,7 @@ public class MainActivity extends Activity {
     // ==================== KHÔNG GIAN ĐIỀU KIỆN ====================
     private void buildConditionsSpace() {
         LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 0, 0, 20); 
-        btnLock = createTabBtn("LOCKSCREEN"); btnHome = createTabBtn("HOMESCREEN"); 
+        btnLock = createTabBtn("LOCK"); btnHome = createTabBtn("HOME"); 
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f); p.setMargins(0,0,15,0); 
         btnLock.setLayoutParams(p); btnHome.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         tabContainer.addView(btnLock); tabContainer.addView(btnHome); pageConditions.addView(tabContainer);
@@ -311,15 +331,39 @@ public class MainActivity extends Activity {
         TextView tvA = new TextView(this); tvA.setText(T("CHOOSE ACTIONS (Multi-select)", "CHỌN HÀNH ĐỘNG THỰC THI (Được chọn nhiều)")); tvA.setTextColor(Color.parseColor("#00E5FF")); tvA.setPadding(0,0,0,20); vAct.addView(tvA);
         
         String savedActs = editKey != null ? prefs.getString(editKey, "") : copyActs;
-        String[] savedArray = savedActs.split(",");
-        for (int i=1; i<ACT_LABS.length; i++) { 
-            CheckBox cbAct = new CheckBox(this); cbAct.setText(ACT_LABS[i]); cbAct.setTextColor(Color.WHITE); cbAct.setPadding(0,20,0,20); 
-            boolean isChecked = false;
-            for(String sa : savedArray) { if(sa.trim().equals(ACT_KEYS[i])) { isChecked = true; break; } }
-            cbAct.setChecked(isChecked); actionBoxes.add(cbAct); vAct.addView(cbAct); 
-        }
+String[] savedArray = savedActs.split(",");
 
-        LinearLayout vOpt = new LinearLayout(this); vOpt.setOrientation(LinearLayout.VERTICAL); vOpt.setVisibility(View.GONE);
+// Giao diện chọn App ẩn (chỉ hiện khi chọn LAUNCH_APP)
+LinearLayout rowLaunchApp = new LinearLayout(this);
+rowLaunchApp.setOrientation(LinearLayout.HORIZONTAL);
+rowLaunchApp.setVisibility(View.GONE); 
+EditText etLaunchApp = createEcoInput("Package (com.zalo...)", editKey != null ? prefs.getString(editKey+"_launch_pkg", "") : "");
+etLaunchApp.setTag("locklist_input"); // Tận dụng tag cũ để picker bắn data về
+etLaunchApp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+Button btnPickLaunchApp = new Button(this);
+btnPickLaunchApp.setText("📱 PICK APP");
+btnPickLaunchApp.setBackground(getRounded("#00E5FF", 20f));
+btnPickLaunchApp.setTextColor(Color.BLACK);
+btnPickLaunchApp.setOnClickListener(v -> showAppPickerDialog());
+rowLaunchApp.addView(etLaunchApp);
+rowLaunchApp.addView(btnPickLaunchApp);
+
+for (int i=1; i<ACT_LABS.length; i++) {
+CheckBox cbAct = new CheckBox(this); cbAct.setText(ACT_LABS[i]); cbAct.setTextColor(Color.WHITE); cbAct.setPadding(0,20,0,20);
+boolean isChecked = false;
+for(String sa : savedArray) { if(sa.trim().equals(ACT_KEYS[i])) { isChecked = true; break; } }
+cbAct.setChecked(isChecked); actionBoxes.add(cbAct); vAct.addView(cbAct);
+
+// Logic lắng nghe LAUNCH_APP
+final int index = i;
+if(ACT_KEYS[i].equals("LAUNCH_APP")) {
+    if(isChecked) rowLaunchApp.setVisibility(View.VISIBLE);
+    cbAct.setOnCheckedChangeListener((btn, chk) -> rowLaunchApp.setVisibility(chk ? View.VISIBLE : View.GONE));
+}
+}
+vAct.addView(rowLaunchApp); // Chèn layout chọn app vào cuối danh sách
+
+LinearLayout vOpt = new LinearLayout(this); vOpt.setOrientation(LinearLayout.VERTICAL); vOpt.setVisibility(View.GONE);
         cbVib.setText(T("Haptic Feedback", "Bật Rung (Haptic Feedback)")); cbVib.setTextColor(Color.WHITE); cbVib.setChecked(editKey == null || prefs.getBoolean(editKey+"_vib", true)); vOpt.addView(cbVib);
         cbAnim.setText(T("Show Animation", "Bật Hiệu ứng Ánh sáng (Animation)")); cbAnim.setTextColor(Color.WHITE); cbAnim.setChecked(editKey == null || prefs.getBoolean(editKey+"_anim", true)); vOpt.addView(cbAnim);
 
@@ -341,10 +385,15 @@ public class MainActivity extends Activity {
             String compKey = ALL_COMP_KEYS[selectedComp[0]]; boolean hasChecked = false;
             if(editKey != null && preGes != -1) prefs.edit().putString(editKey, "NONE").apply(); 
             for(int i=0; i<gestureBoxes.size(); i++) {
-                if(gestureBoxes.get(i).isChecked()) {
-                    hasChecked = true; String finalKey = prefix + compKey + "_" + C_GESTURES[i];
-                    prefs.edit().putString(finalKey, joinedActions).putBoolean(finalKey+"_vib", cbVib.isChecked()).putBoolean(finalKey+"_anim", cbAnim.isChecked()).apply();
-                }
+               if(gestureBoxes.get(i).isChecked()) {
+hasChecked = true; String finalKey = prefix + compKey + "_" + C_GESTURES[i];
+prefs.edit()
+     .putString(finalKey, joinedActions)
+     .putBoolean(finalKey+"_vib", cbVib.isChecked())
+     .putBoolean(finalKey+"_anim", cbAnim.isChecked())
+     .putString(finalKey+"_launch_pkg", etLaunchApp.getText().toString()) // Lưu thêm App Package để backend sử dụng
+     .apply();
+}
             }
             if(!hasChecked) { Toast.makeText(this, T("Select at least 1 Trigger!", "Hãy chọn ít nhất 1 Cử chỉ!"), Toast.LENGTH_SHORT).show(); return; }
             renderRulesList(); dialog.dismiss();
