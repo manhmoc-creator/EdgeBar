@@ -34,9 +34,19 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+// ĐẰNG TRƯỚC (Có thể là các dòng import cuối cùng)
 import android.view.accessibility.AccessibilityEvent;
 
 public class EdgeBarService extends AccessibilityService {
+
+    // === CHÈN CODE BIẾN TOÀN CỤC CỦA BẠN VÀO ĐÂY ===
+    // Động cơ Twin-Engine Trợ năng
+    private android.view.View[] accHomeBars = new android.view.View[5];
+    private android.view.View[] accHomeCorners = new android.view.View[4];
+    private android.content.BroadcastReceiver accHomeReceiver;
+    // ===============================================
+
+    // ĐẰNG SAU (Các biến cũ của EdgeBarService)
     private WindowManager wm;
     private View[] bars = new View[5];
     private View[] corners = new View[4];
@@ -63,7 +73,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     if (fV != null) fV.updateStyle();
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> updateVisibility();
-    debounceHandler.postDelayed(debounceRunnable, 300);
+    debounceHandler.postDelayed(debounceRunnable, 500);
 };
 
    private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
@@ -135,18 +145,20 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     }
 
     private class CornerView extends View {
-        private Paint pFill, pStroke; private int type;
+        private Paint pFill, pStroke; private int type; private String prefix = "lock_";
         private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
         private boolean isInv = false;
 
-        public CornerView(Context c, int type) { super(c); this.type = type; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
+        public CornerView(Context c, int type) { this(c, type, "lock_"); }
+        public CornerView(Context c, int type, String prefix) { super(c); this.type = type; this.prefix = prefix; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
+
 
         public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) { pStroke.setStrokeWidth(thick); this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv; if(!autoHide) { pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); pStroke.setAlpha(strokeAlpha); } else triggerFlash(); if(inv) { pFill.setAlpha(0); pStroke.setAlpha(0); } invalidate(); }
         public void triggerFlash() { if(!isAutoHiding || isInv) return; autoHideHandler.removeCallbacksAndMessages(null); pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha+50), 96,125,139)); pStroke.setAlpha(Math.min(255, baseStrokeAlpha+50)); invalidate(); autoHideHandler.postDelayed(() -> { ValueAnimator a = ValueAnimator.ofFloat(1f,0f); a.setDuration(1500); a.addUpdateListener(anim -> { float val = (float)anim.getAnimatedValue(); pFill.setColor(Color.argb((int)(baseMoonAlpha*val), 96,125,139)); pStroke.setAlpha((int)(baseStrokeAlpha*val)); invalidate(); }); a.start(); }, hideDelay); }
 
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas);
             float tw = getWidth(), th = getHeight(), thick = pStroke.getStrokeWidth(), pad = thick/2;
-            String ck = "lock_corner_" + CORNERS[type] + "_";
+            String ck = prefix + "corner_" + CORNERS[type] + "_";
             int shapeMode = prefs.getInt(ck+"shape", 0);
             float sRad = prefs.getInt(ck+"rad", 80) / 1000f; float mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
             float sw = prefs.getInt(ck+"w", 100), sh = prefs.getInt(ck+"h", 100);
@@ -219,11 +231,27 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         getSystemService(NotificationManager.class).createNotificationChannel(c);
         Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build();
         startForeground(1, n);
+        accHomeReceiver = new android.content.BroadcastReceiver() {
+            @Override
+            public void onReceive(android.content.Context context, Intent intent) {
+                String act = intent.getAction();
+                if ("com.manhmoc.edgebar.ACC_HOME_DRAW".equals(act)) {
+                    drawAccessibleHome();
+                } else if ("com.manhmoc.edgebar.ACC_HOME_REMOVE".equals(act)) {
+                    removeAccessibleHome();
+                }
+            }
+        };
+        android.content.IntentFilter accFilter = new android.content.IntentFilter();
+        accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_DRAW");
+        accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_REMOVE");
+        registerReceiver(accHomeReceiver, accFilter);
+
+        if (AccessibleHomeService.isRunning) drawAccessibleHome();
+
         createFloatingBars();
-    }
-
-
-@Override public void onAccessibilityEvent(AccessibilityEvent event) {
+    } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
+    @Override public void onAccessibilityEvent(AccessibilityEvent event) {
     if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
         String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
         String cName = event.getClassName() != null ? event.getClassName().toString() : "";
@@ -347,7 +375,7 @@ sendBroadcast(syncIntent);
                         android.os.PowerManager.WakeLock wl = pm.newWakeLock(
                             android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP, 
                             "EdgeBar:ScreenOn");
-                        wl.acquire(3000); // Chỉ giữ CPU trong 3 giây để bật màn, sau đó tự nhả RAM
+                        wl.acquire(2000); // Chỉ giữ CPU trong 3 giây để bật màn, sau đó tự nhả RAM
                     }
                     break;
                 case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break;
@@ -555,9 +583,101 @@ sendBroadcast(syncIntent);
         super.onDestroy();
         try{ unregisterReceiver(stateReceiver); }catch(Exception e){}
         try{ unregisterReceiver(ipcReceiver); }catch(Exception e){}
+        if (accHomeReceiver != null) try{ unregisterReceiver(accHomeReceiver); }catch(Exception e){}
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
-            for (int i=0;i<5;i++) if (bars[i]!=null) wm.removeView(bars[i]);
+        for (int i=0;i<5;i++) if (bars[i]!=null) wm.removeView(bars[i]);
         for (int i=0;i<4;i++) if (corners[i]!=null) wm.removeView(corners[i]);
         if (fV != null) wm.removeView(fV);
+        removeAccessibleHome(); 
     }
-}
+    private void drawAccessibleHome() {
+        removeAccessibleHome();
+        android.content.SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+        android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+        int type = android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
+        int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE 
+                  | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL 
+                  | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN 
+                  | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+
+        for (int i = 0; i < 5; i++) {
+            boolean en = prefs.getBoolean("home_" + BARS[i] + "_en", false);
+            if (!en) continue;
+            accHomeBars[i] = new View(this);
+            int alpha = prefs.getInt("home_" + BARS[i] + "_alpha", 50);
+            int w = prefs.getInt("home_" + BARS[i] + "_w", 300);
+            int h = prefs.getInt("home_" + BARS[i] + "_h", 60);
+            int x = prefs.getInt("home_" + BARS[i] + "_x", 0);
+            int y = prefs.getInt("home_" + BARS[i] + "_y", 0);
+            int priMode = prefs.getInt("home_" + BARS[i] + "_pri_mode", 0);
+            
+            android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+            gd.setColor(android.graphics.Color.argb(alpha, 96, 125, 139));
+            gd.setCornerRadius(24f);
+            accHomeBars[i].setBackground(gd);
+            
+            int f = flags;
+            if (priMode == 1) f |= android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+            else f |= (android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                     | android.view.WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+
+            android.view.WindowManager.LayoutParams p = new android.view.WindowManager.LayoutParams(w, h, type, f, android.graphics.PixelFormat.TRANSLUCENT);
+            p.x = x; p.y = y; p.gravity = GRAV[i];
+            wm.addView(accHomeBars[i], p);
+            // Chặn hoàn toàn OS gesture (back swipe, edge swipe) tại vùng bar
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q && priMode == 0) {
+                accHomeBars[i].setSystemGestureExclusionRects(
+                    java.util.Collections.singletonList(new android.graphics.Rect(0, 0, w, h)));
+            }
+            accHomeBars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], null));
+        }
+
+        for (int i = 0; i < 4; i++) {
+            boolean en = prefs.getBoolean("home_corner_" + CORNERS[i] + "_en", false);
+            if (!en) continue;
+            accHomeCorners[i] = new CornerView(this, i, "home_");
+            int moonAlpha = prefs.getInt("home_corner_moon_alpha", 100);
+            int strokeAlpha = prefs.getInt("home_corner_stroke_alpha", 200);
+            int hideDelay = prefs.getInt("home_corner_hide_dur", 2500);
+            int visMode = prefs.getInt("home_corner_" + CORNERS[i] + "_vis_mode", 0);
+            int priMode = prefs.getInt("home_corner_" + CORNERS[i] + "_pri_mode", 0);
+            
+            ((CornerView) accHomeCorners[i]).updateProps(prefs.getInt("home_corner_thick", 8), moonAlpha, strokeAlpha, visMode == 1, hideDelay, visMode == 2);
+            
+            int f = flags;
+            if (priMode == 1) f |= android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+            else f |= (android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                     | android.view.WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+
+            android.view.WindowManager.LayoutParams p = new android.view.WindowManager.LayoutParams(100, 100, type, f, android.graphics.PixelFormat.TRANSLUCENT);
+            int wPref = prefs.getInt("home_corner_" + CORNERS[i] + "_w", 100);
+            int hPref = prefs.getInt("home_corner_" + CORNERS[i] + "_h", 100);
+            int mwPref = prefs.getInt("home_corner_" + CORNERS[i] + "_moon_w", 100);
+            int mhPref = prefs.getInt("home_corner_" + CORNERS[i] + "_moon_h", 100);
+            int mxOffset = Math.abs(prefs.getInt("home_corner_" + CORNERS[i] + "_moon_x", 1250) - 1250);
+            int myOffset = Math.abs(prefs.getInt("home_corner_" + CORNERS[i] + "_moon_y", 1250) - 1250);
+            p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset);
+            p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
+            p.x = prefs.getInt("home_corner_" + CORNERS[i] + "_x", 0);
+            p.y = prefs.getInt("home_corner_" + CORNERS[i] + "_y", 0);
+            p.gravity = C_GRAV[i];
+            
+            wm.addView(accHomeCorners[i], p);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q && priMode == 0) {
+                accHomeCorners[i].setSystemGestureExclusionRects(
+                    java.util.Collections.singletonList(
+                        new android.graphics.Rect(0, 0, p.width, p.height)));
+            }
+            accHomeCorners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], accHomeCorners[i]));
+        }
+    }
+    private void removeAccessibleHome() {
+        android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+        for (int i = 0; i < 5; i++) {
+            if (accHomeBars[i] != null) { wm.removeView(accHomeBars[i]); accHomeBars[i] = null; }
+        }
+        for (int i = 0; i < 4; i++) {
+            if (accHomeCorners[i] != null) { wm.removeView(accHomeCorners[i]); accHomeCorners[i] = null; }
+        }
+      }
+    } // <-- Dấu ngoặc nhọn kết thúc toàn bộ class EdgeBarService

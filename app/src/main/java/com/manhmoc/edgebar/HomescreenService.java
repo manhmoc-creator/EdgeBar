@@ -46,8 +46,16 @@ import android.widget.TextView;
 import java.io.InputStream;
 import java.util.Collections;
 
+// ĐẰNG TRƯỚC
 public class HomescreenService extends Service {
+    // ĐẰNG SAU (Biến cũ của HomescreenService)
     public static boolean isRunning = false;
+    private boolean isHomeOverlayShortcutOn() {
+    return prefs.getBoolean("shortcut_home_on", false);
+}
+private boolean isAccessibleHomeShortcutOn() {
+    return prefs.getBoolean("shortcut_acc_home_on", false);
+}
     private WindowManager wm;
     private View[] bars = new View[5];
     private View[] corners = new View[4];
@@ -199,8 +207,18 @@ updateVisibility();
             super(context);
             setWillNotDraw(false);
         }
+
+        // === CHÈN THUẬT TOÁN 6: TỐI ƯU HÓA GPU PASS ===
         @Override
-protected void onDraw(Canvas canvas) {
+        public void setVisibility(int visibility) {
+            super.setVisibility(visibility);
+            setWillNotDraw(visibility != View.VISIBLE); 
+        }
+        // =============================================
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            // Đọc từ RAM (cachedBgAlpha), không đọc disk mỗi frame
     // Đọc từ RAM (cachedBgAlpha), không đọc disk mỗi frame
     if (bgType == 1 && bgBitmap != null && !bgBitmap.isRecycled()) {
         paint.setAlpha(cachedBgAlpha);
@@ -786,7 +804,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     // Debounce updateVisibility(): gộp nhiều thay đổi liên tiếp thành 1 lần gọi sau 300ms
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> updateVisibility();
-    debounceHandler.postDelayed(debounceRunnable, 300);
+    debounceHandler.postDelayed(debounceRunnable, 500);
 };
 
       private void startFailCountdown(int failCount, Runnable onFinished) {
@@ -1083,34 +1101,73 @@ private void showMorseOSCover() {
         if (morseContainer != null && morseContainer.getVisibility() == View.VISIBLE) {
     if (tvLockIcon != null) {
         tvLockIcon.setOnTouchListener((v, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_UP) {
-                // FIX-HOME-3: Kiểm tra vị trí hiện tại
-                boolean isCurrentlyOnHome =
-                    currentForegroundPkg.isEmpty()
-                    || currentForegroundPkg.contains("launcher")
-                    || currentForegroundPkg.contains("nexuslauncher")
-                    || currentForegroundPkg.contains("quickstep")
-                    || currentForegroundPkg.contains("systemui")
-                    || isForceHome;
+    if (event.getAction() == MotionEvent.ACTION_UP) {
+        // Yêu cầu 10: 1 chạm vào ổ khóa → crash app bị khóa + về HOME
+        // Dùng UsageStats để xác định package đang foreground một cách chính xác
+        String pkgToKill = lockedPkg.isEmpty() ? currentForegroundPkg : lockedPkg;
+        boolean isCurrentlyOnHome =
+            currentForegroundPkg.isEmpty()
+            || currentForegroundPkg.contains("launcher")
+            || currentForegroundPkg.contains("nexuslauncher")
+            || currentForegroundPkg.contains("quickstep")
+            || currentForegroundPkg.contains("systemui")
+            || isForceHome;
 
-                if (isCurrentlyOnHome) {
-                    // Đang ở Home → cho phép ẩn MorseLock vĩnh viễn
-                    // (không relock vì đây là hành động chủ động của chủ máy)
-                    morseContainer.setVisibility(View.GONE);
-                    isMorseLockActive = false;
-                    isForceHome = false;
-                    currentMorseAttempt = "";
-                    morseFailCount = 0;
-                    // Thêm pkg vào unlockedApps tạm thời để tránh relock ngay
-                    // khi người dùng mở lại app (họ đã chủ động tắt từ Home)
-                    if (!lockedPkg.isEmpty()) unlockedApps.add(lockedPkg);
+        if (!isCurrentlyOnHome && !pkgToKill.isEmpty()) {
+            // Bước 1: Về HOME ngay lập tức
+            Intent homeIntent = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            homeIntent.putExtra("act", "HOME");
+            sendBroadcast(homeIntent);
+
+            // Bước 2: Force-stop app sau khi đã về HOME (delay nhỏ tránh ANR)
+            new Handler().postDelayed(() -> {
+                try {
+                    android.app.ActivityManager am =
+                        (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+                    am.killBackgroundProcesses(pkgToKill);
+                    // Dùng usage stats để xác nhận app đã thực sự bị kill
+                    android.app.usage.UsageStatsManager usm =
+                        (android.app.usage.UsageStatsManager)
+                        getSystemService(Context.USAGE_STATS_SERVICE);
+                    long now = System.currentTimeMillis();
+                    // Xóa trạng thái unlock để MorseLock không tái hiện ngay
+                    unlockedApps.remove(pkgToKill);
+                } catch (Exception ignored) {}
+            }, 150);
+
+            // Bước 3: Reset MorseLock state — ổn định sau crash (Yêu cầu 10)
+            // Delay 500ms để chắc chắn HOME đã render xong trước khi reset
+            new Handler().postDelayed(() -> {
+                isMorseLockActive = false;
+                isForceHome = false;
+                morseFailCount = 0;
+                currentMorseAttempt = "";
+                lockedPkg = "";
+                // QUAN TRỌNG: KHÔNG thêm pkg vào unlockedApps
+                // → Khi user mở lại app, MorseLock sẽ hiện đúng
+                morseContainer.setVisibility(View.GONE);
+                updateVisibility();
+            }, 500);
+
+        } else if (isCurrentlyOnHome) {
+            // Đang ở Home → chủ máy chủ động tắt overlay
+            morseContainer.setVisibility(View.GONE);
+            isMorseLockActive = false;
+            isForceHome = false;
+            currentMorseAttempt = "";
+            morseFailCount = 0;
+            if (!lockedPkg.isEmpty()) unlockedApps.add(lockedPkg);
                 }
-                // Đang trong app bị khóa → icon 🔒 bị khóa cứng,
-                // chạm không làm gì — hành vi đúng của AppLock
             }
             return true;
         });
     }
+} // Khối lệnh trên kết thúc an toàn, hàm updateVisibility() tiếp tục chạy bên dưới
+       boolean accHomeRunning = AccessibleHomeService.isRunning;
+if (accHomeRunning) {
+    for (int i = 0; i < 5; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
+    for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
+    return;
 }
         boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
@@ -1570,8 +1627,11 @@ private void showMorseOSCover() {
         }
         if (morseContainer != null) wm.removeView(morseContainer);
         if (fV != null) wm.removeView(fV);
-        if (bgBitmap != null && !bgBitmap.isRecycled()) bgBitmap.recycle();
-    }
+        if (bgBitmap != null && !bgBitmap.isRecycled()) { 
+            bgBitmap.recycle(); 
+            bgBitmap = null; // ← quan trọng: null để GC thu hồi ngay 
+         }
+      } 
 // HYBRID HOME V2: Kiểm tra Accessibility — đọc trực tiếp, chỉ gọi từ ContentObserver
     // Không cần cache vì ContentObserver đã đảm bảo chỉ gọi khi có thay đổi thật
     private boolean isAccOn() {

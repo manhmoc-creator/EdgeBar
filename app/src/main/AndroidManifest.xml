@@ -36,6 +36,9 @@
                 <action android:name="com.manhmoc.edgebar.TOGGLE_LOCK" />
                 <action android:name="com.manhmoc.edgebar.TOGGLE_HOME" />
                 <action android:name="com.manhmoc.edgebar.TOGGLE_MACRO" />
+                <action android:name="com.manhmoc.edgebar.TOGGLE_DUAL_HOME" />
+              <action android:name="com.manhmoc.edgebar.TOGGLE_ACC_HOME_ON" />
+            <action android:name="com.manhmoc.edgebar.TOGGLE_ACC_HOME_OFF" />
                 <action android:name="com.manhmoc.edgebar.TOGGLE_APP" />
             </intent-filter>
         </receiver>
@@ -52,7 +55,12 @@
         </service>
 
         <service android:name=".HomescreenService" android:exported="false" />
-
+<service android:name=".AccessibleHomeService" android:exported="false" android:foregroundServiceType="specialUse" />
+<service android:name=".QsAccHomeTile" android:label="EB Acc Home" android:icon="@android:drawable/ic_lock_silent_mode" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
+    <intent-filter>
+        <action android:name="android.service.quicksettings.action.QS_TILE" />
+    </intent-filter>
+</service>
         <service
             android:name=".QsLockTile"
             android:label="EB Trợ Năng"
