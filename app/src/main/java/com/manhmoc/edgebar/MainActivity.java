@@ -48,7 +48,7 @@ private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "rig
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain; 
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
     private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.5.6"; 
+    private final String CURRENT_VERSION = "V19.12.3.5.6.1"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;

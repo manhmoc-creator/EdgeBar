@@ -25,18 +25,26 @@ public class ToggleReceiver extends BroadcastReceiver {
                 try { Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, cur); Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, "1"); } catch (Exception e) {}
             }
         } else if ("com.manhmoc.edgebar.TOGGLE_DUAL_HOME".equals(action)) {
-    boolean accOn = isAccEnabled(c);
-    if (accOn && AccessibleHomeService.isRunning) {
-        c.stopService(new Intent(c, AccessibleHomeService.class));
-        Intent h = new Intent(c, HomescreenService.class);
-        if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(h);
-        else c.startService(h);
-    } else if (accOn) {
-        c.stopService(new Intent(c, HomescreenService.class));
-        Intent a = new Intent(c, AccessibleHomeService.class);
-        if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(a);
-        else c.startService(a);
-    }
+            android.content.SharedPreferences p = c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
+            boolean oldHomeOn = p.getBoolean("shortcut_home_on", false);
+            
+            if (oldHomeOn) {
+                // Luân phiên: Tắt hiển thị cũ, kích hoạt hiển thị Trợ năng mới
+                p.edit().putBoolean("shortcut_home_on", false)
+                        .putBoolean("shortcut_acc_home_on", true).apply();
+                if (isAccEnabled(c)) {
+                    Intent intentAcc = new Intent(c, AccessibleHomeService.class);
+                    if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(intentAcc);
+                    else c.startService(intentAcc);
+                }
+            } else {
+                // Luân phiên: Kích hoạt hiển thị cũ, tắt hiển thị Trợ năng mới
+                p.edit().putBoolean("shortcut_home_on", true)
+                        .putBoolean("shortcut_acc_home_on", false).apply();
+                c.stopService(new Intent(c, AccessibleHomeService.class));
+            }
+            // Kích hoạt đồng bộ trạng thái giao diện tức thì không độ trễ
+            c.sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
 } else if ("com.manhmoc.edgebar.TOGGLE_ACC_HOME_ON".equals(action)) {
     c.stopService(new Intent(c, HomescreenService.class));
     Intent a = new Intent(c, AccessibleHomeService.class);

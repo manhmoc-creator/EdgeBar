@@ -1163,15 +1163,14 @@ private void showMorseOSCover() {
         });
     }
 } // Khối lệnh trên kết thúc an toàn, hàm updateVisibility() tiếp tục chạy bên dưới
-       boolean accHomeRunning = AccessibleHomeService.isRunning;
-if (accHomeRunning) {
-    for (int i = 0; i < 5; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
-    for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
-    return;
-}
-        boolean isUnlocked = !km.isKeyguardLocked();
+       boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hideNormal = (avoidKbd && isKbd) || isBl;
+        
+        boolean accHomeRunning = AccessibleHomeService.isRunning || prefs.getBoolean("shortcut_acc_home_on", false);
+        boolean oldHomeEnabled = prefs.getBoolean("shortcut_home_on", false);
+        // Biến cờ quyết định xem bộ viền cũ (display + adb) có được phép vẽ hay không
+        boolean shouldRenderOldHome = isUnlocked && !hideNormal && !accHomeRunning && oldHomeEnabled;
         isPreviewMorse = prefs.getBoolean("preview_morse", false);
         boolean timeLocked = (System.currentTimeMillis() < lockUntilTime);
 
@@ -1270,11 +1269,11 @@ if (accHomeRunning) {
             for (int i = 0; i < 4; i++) if (mCorners[i] != null) mCorners[i].setVisibility(View.GONE);
 
             boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
-            for (int i = 0; i < 5; i++) {
-                if (bars[i] == null) continue;
-                boolean en = prefs.getBoolean("home_" + BARS[i] + "_en", false);
-                bars[i].setVisibility((en && isUnlocked && !hideNormal) ? View.VISIBLE : View.GONE);
-                if (en && isUnlocked) {
+            for (int i = 0; i < 5; i++) { 
+                   if (bars[i] == null) continue; 
+                   boolean en = prefs.getBoolean("home_" + BARS[i] + "_en", false);
+                   bars[i].setVisibility((en && shouldRenderOldHome) ? View.VISIBLE : View.GONE); 
+                    if (en && shouldRenderOldHome) { 
                     int alpha = isPreviewLock ? 0 : prefs.getInt("home_" + BARS[i] + "_alpha", 50);
                     int w = prefs.getInt("home_" + BARS[i] + "_w", 300);
                     int h = prefs.getInt("home_" + BARS[i] + "_h", 60);
@@ -1302,11 +1301,11 @@ if (accHomeRunning) {
                     }
                 }
             }
-            for (int i = 0; i < 4; i++) {
-                if (corners[i] == null) continue;
-                boolean cornEn = prefs.getBoolean("home_corner_" + CORNERS[i] + "_en", false);
-                corners[i].setVisibility((cornEn && isUnlocked && !hideNormal) ? View.VISIBLE : View.GONE);
-                if (cornEn && isUnlocked) {
+            for (int i = 0; i < 4; i++) { 
+                    if (corners[i] == null) continue; 
+                    boolean cornEn = prefs.getBoolean("home_corner_" + CORNERS[i] + "_en", false);
+                    corners[i].setVisibility((cornEn && shouldRenderOldHome) ? View.VISIBLE : View.GONE); 
+                    if (cornEn && shouldRenderOldHome) { 
                     String ck = "home_corner_" + CORNERS[i] + "_";
                     int moonAlpha = isPreviewLock ? 0 : prefs.getInt("home_corner_moon_alpha", 100);
                     int strokeAlpha = isPreviewLock ? 0 : prefs.getInt("home_corner_stroke_alpha", 200);

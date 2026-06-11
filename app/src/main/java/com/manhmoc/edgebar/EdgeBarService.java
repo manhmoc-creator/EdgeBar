@@ -253,6 +253,13 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
     if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        // Phục hồi và giữ trạng thái lớp phủ Trợ Năng luôn hiển thị đè lên mọi ứng dụng/cử chỉ hệ thống
+        if (AccessibleHomeService.isRunning) {
+            drawAccessibleHome();
+        } else {
+            removeAccessibleHome();
+        }
+
         String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
         String cName = event.getClassName() != null ? event.getClassName().toString() : "";
 
