@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
 
 public class AccessibleHomeService extends Service {
@@ -27,14 +28,18 @@ public class AccessibleHomeService extends Service {
             startForeground(88, n);
         }
     }
-
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        isRunning = true;
-        // Bắn tín hiệu sang EdgeBarService để vẽ Overlay Trợ năng
+@Override
+public int onStartCommand(Intent intent, int flags, int startId) {
+    isRunning = true;
+    // FIX BUG 0: Delay 300ms đảm bảo EdgeBarService.onServiceConnected()
+    // đã chạy xong và accHomeReceiver đã được registerReceiver() trước khi
+    // nhận broadcast ACC_HOME_DRAW.
+    // Pixel 2XL opt: dùng MainLooper handler — zero thread overhead
+    new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
         sendBroadcast(new Intent("com.manhmoc.edgebar.ACC_HOME_DRAW"));
-        return START_STICKY;
-    }
+    }, 300);
+    return START_STICKY;
+}
 
     @Override
     public void onDestroy() {

@@ -56,7 +56,7 @@
 
         <service android:name=".HomescreenService" android:exported="false" />
 <service android:name=".AccessibleHomeService" android:exported="false" android:foregroundServiceType="specialUse" />
-<service android:name=".QsAccHomeTile" android:label="EB Homacc" android:icon="@android:drawable/ic_dialog_map" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
+<service android:name=".QsAccHomeTile" android:label="EB Homacc" android:icon="@android:drawable/ic_menu_manage" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
     <intent-filter>
         <action android:name="android.service.quicksettings.action.QS_TILE" />
     </intent-filter>

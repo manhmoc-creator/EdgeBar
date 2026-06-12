@@ -11,6 +11,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.Settings;
@@ -49,7 +50,7 @@ private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "rig
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.5.9"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.0"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -644,18 +645,25 @@ toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addVie
         btnEditHome.performClick();
     }
 
-    private void updateVisTabs() {
+private void updateVisTabs() {
     btnEditLock.setBackground(getRounded(designTabState==0 ? "#00E5FF" : "#222222", 20f));
     btnEditLock.setTextColor(designTabState==0 ? Color.BLACK : Color.WHITE);
+
     btnEditHome.setBackground(getRounded(designTabState==1 ? "#00E5FF" : "#222222", 20f));
     btnEditHome.setTextColor(designTabState==1 ? Color.BLACK : Color.WHITE);
+
+    // FIX BUG 1: setTextColor(Color.WHITE) tường minh — không dùng theme default
+    // vì dark theme Android có thể render text màu xám/nhạt
     btnEditHomacc.setBackground(getRounded(designTabState==4 ? "#7C4DFF" : "#333333", 20f));
     btnEditHomacc.setTextColor(Color.WHITE);
+
     btnEditMorse.setBackground(getRounded(designTabState==2 ? "#00E5FF" : "#222222", 20f));
     btnEditMorse.setTextColor(designTabState==2 ? Color.BLACK : Color.WHITE);
+
     btnEditAnim.setBackground(getRounded(designTabState==3 ? "#00E5FF" : "#222222", 20f));
     btnEditAnim.setTextColor(designTabState==3 ? Color.BLACK : Color.WHITE);
 }
+
 
     private void renderSliders() { 
     designSliderContainer.removeAllViews();
@@ -665,21 +673,75 @@ toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addVie
         String prefix = "homacc_";
         designSliderContainer.addView(createSectionTitle("🟣 HOMACC - OVERLAY TRỢ NĂNG HOME"));
 
-        // Nút thử preview AccHome overlay
-        Button btnTestAcc = new Button(this);
-        btnTestAcc.setText("THỬ HOMACC OVERLAY");
-        btnTestAcc.setBackground(getRounded("#7C4DFF", 20f));
-        btnTestAcc.setTextColor(Color.WHITE);
-        btnTestAcc.setPadding(0,30,0,30);
-        LinearLayout.LayoutParams testLp2 = new LinearLayout.LayoutParams(-1,-2);
-        testLp2.setMargins(0,0,0,20);
-        btnTestAcc.setLayoutParams(testLp2);
-        btnTestAcc.setOnClickListener(v -> {
-            Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE");
-            sendBroadcast(i);
-            Toast.makeText(this, "Đồng bộ Homacc...", Toast.LENGTH_SHORT).show();
-        });
-        designSliderContainer.addView(btnTestAcc);
+        // [THÊM] thay bằng nút kết nối QsAccHomeTile thật sự:
+LinearLayout homaccCtrlRow = new LinearLayout(this);
+homaccCtrlRow.setOrientation(LinearLayout.HORIZONTAL);
+LinearLayout.LayoutParams hcLp = new LinearLayout.LayoutParams(-1,-2);
+hcLp.setMargins(0,0,0,20);
+homaccCtrlRow.setLayoutParams(hcLp);
+
+Button btnToggleHomacc = new Button(this);
+// Hiển thị trạng thái thực tế của AccHome
+boolean accHomeOn = AccessibleHomeService.isRunning;
+btnToggleHomacc.setText(accHomeOn ? "🟣 TẮT HOMACC" : "🟣 BẬT HOMACC");
+btnToggleHomacc.setBackground(getRounded(accHomeOn ? "#7C4DFF" : "#333333", 20f));
+btnToggleHomacc.setTextColor(Color.WHITE);
+btnToggleHomacc.setPadding(0,30,0,30);
+btnToggleHomacc.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+
+btnToggleHomacc.setOnClickListener(v -> {
+    // Kết nối trực tiếp với logic QsAccHomeTile — KHÔNG qua SYNC_STATE
+    if (!AccessibleHomeService.isRunning) {
+        // Kiểm tra Accessibility đã bật chưa
+        String accSvcs = android.provider.Settings.Secure.getString(
+            getContentResolver(),
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        boolean accOn = accSvcs != null && accSvcs.contains(
+            getPackageName() + "/" + EdgeBarService.class.getName());
+        if (!accOn) {
+            Toast.makeText(this,
+                "Cần bật Trợ Năng trước!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        prefs.edit()
+            .putBoolean("shortcut_acc_home_on", true)
+            .putBoolean("shortcut_home_on", false)
+            .apply();
+        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+        Intent accIntent = new Intent(this, AccessibleHomeService.class);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(accIntent);
+        else startService(accIntent);
+        btnToggleHomacc.setText("🟣 TẮT HOMACC");
+        btnToggleHomacc.setBackground(getRounded("#7C4DFF", 20f));
+    } else {
+        prefs.edit()
+            .putBoolean("shortcut_acc_home_on", false)
+            .apply();
+        sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_OFF"));
+        stopService(new Intent(this, AccessibleHomeService.class));
+        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+        btnToggleHomacc.setText("🟣 BẬT HOMACC");
+        btnToggleHomacc.setBackground(getRounded("#333333", 20f));
+    }
+});
+
+Button btnRefreshHomacc = new Button(this);
+btnRefreshHomacc.setText("🔄 REFRESH");
+btnRefreshHomacc.setBackground(getRounded("#455A64", 20f));
+btnRefreshHomacc.setTextColor(Color.WHITE);
+btnRefreshHomacc.setPadding(0,30,0,30);
+LinearLayout.LayoutParams rfLp = new LinearLayout.LayoutParams(0,-2,0.6f);
+rfLp.setMargins(10,0,0,0);
+btnRefreshHomacc.setLayoutParams(rfLp);
+btnRefreshHomacc.setOnClickListener(v -> {
+    // Vẽ lại Homacc overlay nếu Accessibility đang bật
+    sendBroadcast(new Intent("com.manhmoc.edgebar.ACC_HOME_DRAW"));
+    Toast.makeText(this, "Đã vẽ lại Homacc overlay!", Toast.LENGTH_SHORT).show();
+});
+
+homaccCtrlRow.addView(btnToggleHomacc);
+homaccCtrlRow.addView(btnRefreshHomacc);
+designSliderContainer.addView(homaccCtrlRow);
 
         // EDGE BARS - copy y chang tab HOME nhưng dùng prefix "homacc_"
         designSliderContainer.addView(createSectionTitle("EDGE BARS HOMACC (5 THANH)"));
@@ -760,14 +822,40 @@ toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addVie
             String[] bNames = designTabState == 2 ? M_BAR_NAMES : BAR_NAMES;
             if(designTabState == 2) {
                 LinearLayout mRow = new LinearLayout(this); mRow.setOrientation(LinearLayout.HORIZONTAL);
-                Button btnTestM = new Button(this); btnTestM.setText("TEST MORSE OS"); btnTestM.setBackground(getRounded("#FFC107", 20f)); btnTestM.setTextColor(Color.BLACK); LinearLayout.LayoutParams tm = new LinearLayout.LayoutParams(0,-2,1f); tm.setMargins(0,0,10,20); btnTestM.setLayoutParams(tm);
-                btnTestM.setOnClickListener(v->{ 
-                    boolean cur = prefs.getBoolean("morse_mode_en", false);
-                    prefs.edit().putBoolean("morse_mode_en", !cur).apply();
-                    Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE");
-                    sendBroadcast(i);
-                    Toast.makeText(this, !cur ? "Bật lớp phủ Morse" : "Tắt lớp phủ Morse", Toast.LENGTH_SHORT).show();
-                });
+                // [THÊM] nút kết nối QsMorseTile logic:
+boolean morseCurrentOn = prefs.getBoolean("morse_mode_en", false);
+Button btnTestM = new Button(this);
+btnTestM.setText(morseCurrentOn ? "🔐 TẮT MORSE OS" : "🔐 BẬT MORSE OS");
+btnTestM.setBackground(getRounded(morseCurrentOn ? "#E91E63" : "#FFC107", 20f));
+btnTestM.setTextColor(morseCurrentOn ? Color.WHITE : Color.BLACK);
+LinearLayout.LayoutParams tm = new LinearLayout.LayoutParams(0,-2,1f);
+tm.setMargins(0,0,10,20);
+btnTestM.setLayoutParams(tm);
+btnTestM.setOnClickListener(v -> {
+    // Kiểm tra Accessibility — đồng bộ điều kiện với QsMorseTile
+    String accSvcs = android.provider.Settings.Secure.getString(
+        getContentResolver(),
+        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+    boolean accOn = accSvcs != null && accSvcs.contains(
+        getPackageName() + "/" + EdgeBarService.class.getName());
+    if (!accOn) {
+        Toast.makeText(this,
+            "MorseLock cần Trợ Năng đang bật!", Toast.LENGTH_SHORT).show();
+        return;
+    }
+    // Toggle — cùng logic với QsMorseTile.onClick()
+    boolean newState = !prefs.getBoolean("morse_mode_en", false);
+    prefs.edit().putBoolean("morse_mode_en", newState).apply();
+    sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"));
+    btnTestM.setText(newState ? "🔐 TẮT MORSE OS" : "🔐 BẬT MORSE OS");
+    btnTestM.setBackground(getRounded(newState ? "#E91E63" : "#FFC107", 20f));
+    btnTestM.setTextColor(newState ? Color.WHITE : Color.BLACK);
+    Toast.makeText(this,
+        newState ? "Đã bật MorseLock OS" : "Đã tắt MorseLock OS",
+        Toast.LENGTH_SHORT).show();
+});
+
+
                 Button btnMap = new Button(this); btnMap.setText("🔢 MAP KEYS"); btnMap.setBackground(getRounded("#E91E63", 20f)); btnMap.setTextColor(Color.WHITE); LinearLayout.LayoutParams mk = new LinearLayout.LayoutParams(0,-2,1f); mk.setMargins(10,0,0,20); btnMap.setLayoutParams(mk);
                 btnMap.setOnClickListener(v -> openMorseMapDialog());
                 mRow.addView(btnTestM); mRow.addView(btnMap); designSliderContainer.addView(mRow);

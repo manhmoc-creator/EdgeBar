@@ -253,13 +253,17 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
     if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-        // Phục hồi và giữ trạng thái lớp phủ Trợ Năng luôn hiển thị đè lên mọi ứng dụng/cử chỉ hệ thống
-        if (AccessibleHomeService.isRunning) {
-            drawAccessibleHome();
-        } else {
-            removeAccessibleHome();
-        }
-
+        // [THAY] bằng — chỉ vẽ khi state THỰC SỰ thay đổi:
+// Pixel 2XL opt: dùng flag cache, tránh removeView/addView mỗi event
+boolean accShouldRun = AccessibleHomeService.isRunning;
+if (accShouldRun && accHomeBars[0] == null) {
+    // AccHome đang chạy nhưng chưa có view → vẽ lần đầu
+    drawAccessibleHome();
+} else if (!accShouldRun && accHomeBars[0] != null) {
+    // AccHome đã tắt nhưng view vẫn còn → gỡ
+    removeAccessibleHome();
+}
+// Nếu state không đổi → KHÔNG làm gì cả (zero CPU)
         String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
         String cName = event.getClassName() != null ? event.getClassName().toString() : "";
 
@@ -597,90 +601,139 @@ sendBroadcast(syncIntent);
         if (fV != null) wm.removeView(fV);
         removeAccessibleHome(); 
     }
-    private void drawAccessibleHome() { 
-                removeAccessibleHome(); 
-                android.content.SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); 
-                // YC7: Đọc cấu hình từ prefix "homacc_" (tab Homacc riêng biệt) 
-                String accPrefix = "homacc_"; 
-        android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
-        int type = android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
-        int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE 
-                  | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL 
-                  | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN 
-                  | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+    // [XÓA] toàn bộ method drawAccessibleHome() cũ (từ "private void drawAccessibleHome() {"
+// đến dấu "}" đóng cuối method đó)
 
-        for (int i = 0; i < 5; i++) { 
-            boolean en = prefs.getBoolean(accPrefix + BARS[i] + "_en", false); 
-            if (!en) continue;
-            accHomeBars[i] = new View(this);
-        int alpha = prefs.getInt(accPrefix + BARS[i] + "_alpha", 50);
-        int w = prefs.getInt(accPrefix + BARS[i] + "_w", 300);
-        int h = prefs.getInt(accPrefix + BARS[i] + "_h", 60);
-        int x = prefs.getInt(accPrefix + BARS[i] + "_x", 0);
-        int y = prefs.getInt(accPrefix + BARS[i] + "_y", 0);
-        int priMode = prefs.getInt(accPrefix + BARS[i] + "_pri_mode", 0);
+// [THÊM] thay bằng method mới hoàn chỉnh:
+/**
+ * IRON VEIL PHANTOM v19.12.3.6.0
+ * drawAccessibleHome() — Thiết kế lại hoàn toàn Homacc overlay.
+ *
+ * Fix Bug 0: Flags đúng TYPE_ACCESSIBILITY_OVERLAY + NOT_TOUCH_MODAL
+ * Anti-tapjacking: FLAG_WATCH_OUTSIDE_TOUCH + systemGestureExclusionRects
+ * Pixel 2XL opt: null-check trước mỗi wm.addView, tránh crash token invalid
+ */
+private void drawAccessibleHome() {
+    removeAccessibleHome(); // Dọn sạch trước, tránh duplicate view leak
 
-            
-            android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
-            gd.setColor(android.graphics.Color.argb(alpha, 96, 125, 139));
-            gd.setCornerRadius(24f);
-            accHomeBars[i].setBackground(gd);
-            
-            int f = flags;
-            if (priMode == 1) f |= android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-            else f |= (android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                     | android.view.WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+    SharedPreferences p = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+    String px = "homacc_";
+    WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+    if (wm == null) return;
 
-            android.view.WindowManager.LayoutParams p = new android.view.WindowManager.LayoutParams(w, h, type, f, android.graphics.PixelFormat.TRANSLUCENT);
-            p.x = x; p.y = y; p.gravity = GRAV[i];
-            wm.addView(accHomeBars[i], p);
-            // Chặn hoàn toàn OS gesture (back swipe, edge swipe) tại vùng bar
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q && priMode == 0) {
-                accHomeBars[i].setSystemGestureExclusionRects(
-                    java.util.Collections.singletonList(new android.graphics.Rect(0, 0, w, h)));
-            }
-            accHomeBars[i].setOnTouchListener(new SidebarTouchListener("homacc_" + BARS[i], null));
+    // TYPE_ACCESSIBILITY_OVERLAY: hiển thị trên mọi app kể cả chat bubble
+    int type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
+
+    // Base flags — NOT_TOUCH_MODAL bắt buộc để touch đi xuyên qua vùng trống
+    int baseF = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+              | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+              | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+              | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+              | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+
+    // --- 5 EDGE BARS ---
+    for (int i = 0; i < 5; i++) {
+        boolean en = p.getBoolean(px + BARS[i] + "_en", false);
+        if (!en) { accHomeBars[i] = null; continue; }
+
+        View bar = new View(this);
+        int alpha   = p.getInt(px + BARS[i] + "_alpha", 50);
+        int w       = p.getInt(px + BARS[i] + "_w", 300);
+        int h       = p.getInt(px + BARS[i] + "_h", 60);
+        int x       = p.getInt(px + BARS[i] + "_x", 0);
+        int y       = p.getInt(px + BARS[i] + "_y", 0);
+        int priMode = p.getInt(px + BARS[i] + "_pri_mode", 0);
+
+        GradientDrawable gd = new GradientDrawable();
+        gd.setColor(Color.argb(alpha, 96, 125, 139));
+        gd.setCornerRadius(24f);
+        bar.setBackground(gd);
+
+        int f = baseF;
+        // priMode==1: xuyên thấu hoàn toàn — KHÔNG nhận touch
+        if (priMode == 1) f |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+            w, h, type, f, PixelFormat.TRANSLUCENT);
+        lp.x = x; lp.y = y;
+        lp.gravity = GRAV[i];
+
+        try {
+            wm.addView(bar, lp);
+            accHomeBars[i] = bar;
+        } catch (Exception e) {
+            accHomeBars[i] = null;
+            continue;
         }
 
-        for (int i = 0; i < 4; i++) {
-            boolean en = prefs.getBoolean(accPrefix + "corner_" + CORNERS[i] + "_en", false);
-            if (!en) continue;
-            accHomeCorners[i] = new CornerView(this, i, "homacc_");
-            int moonAlpha = prefs.getInt(accPrefix + "corner_moon_alpha", 100);
-            int strokeAlpha = prefs.getInt(accPrefix + "corner_stroke_alpha", 200);
-            int hideDelay = prefs.getInt(accPrefix + "corner_hide_dur", 2500);
-    	int visMode = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_vis_mode", 0);
-int priMode = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_pri_mode", 0);
-            
-            ((CornerView) accHomeCorners[i]).updateProps(prefs.getInt(accPrefix + "corner_thick", 8), moonAlpha, strokeAlpha, visMode == 1, hideDelay, visMode == 2);
-            
-            int f = flags;
-            if (priMode == 1) f |= android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-            else f |= (android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                     | android.view.WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-
-            android.view.WindowManager.LayoutParams p = new android.view.WindowManager.LayoutParams(100, 100, type, f, android.graphics.PixelFormat.TRANSLUCENT);
-            int wPref = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_w", 100);
-int hPref = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_h", 100);
-int mwPref = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_moon_w", 100);
-int mhPref = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_moon_h", 100);
-int mxOffset = Math.abs(prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_moon_x", 1250) - 1250);
-int myOffset = Math.abs(prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_moon_y", 1250) - 1250);
-p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset);
-p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
-p.x = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_x", 0);
-p.y = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_y", 0);
-            p.gravity = C_GRAV[i];
-            
-            wm.addView(accHomeCorners[i], p);
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q && priMode == 0) {
-                accHomeCorners[i].setSystemGestureExclusionRects(
-                    java.util.Collections.singletonList(
-                        new android.graphics.Rect(0, 0, p.width, p.height)));
-            }
-            accHomeCorners[i].setOnTouchListener(new SidebarTouchListener("homacc_corner_" + CORNERS[i], accHomeCorners[i]));
+        // Anti-tapjacking: loại bỏ OS gesture tại đúng vùng bar
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && priMode == 0) {
+            bar.setSystemGestureExclusionRects(
+                java.util.Collections.singletonList(
+                    new android.graphics.Rect(0, 0, w, h)));
         }
+
+        final int barIdx = i;
+        bar.setOnTouchListener(new SidebarTouchListener("homacc_" + BARS[barIdx], null));
     }
+
+    // --- 4 FRAME CORNERS ---
+    for (int i = 0; i < 4; i++) {
+        boolean en = p.getBoolean(px + "corner_" + CORNERS[i] + "_en", false);
+        if (!en) { accHomeCorners[i] = null; continue; }
+
+        CornerView corner = new CornerView(this, i, "homacc_");
+
+        int moonAlpha   = p.getInt(px + "corner_moon_alpha", 100);
+        int strokeAlpha = p.getInt(px + "corner_stroke_alpha", 200);
+        int hideDelay   = p.getInt(px + "corner_hide_dur", 2500);
+        int visMode     = p.getInt(px + "corner_" + CORNERS[i] + "_vis_mode", 0);
+        int priMode     = p.getInt(px + "corner_" + CORNERS[i] + "_pri_mode", 0);
+
+        corner.updateProps(
+            p.getInt(px + "corner_thick", 8),
+            moonAlpha, strokeAlpha,
+            visMode == 1,  // auto-hide
+            hideDelay,
+            visMode == 2   // invisible
+        );
+
+        int f = baseF;
+        if (priMode == 1) f |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+
+        String ck = px + "corner_" + CORNERS[i] + "_";
+        int wP    = p.getInt(ck + "w", 100),       hP    = p.getInt(ck + "h", 100);
+        int mwP   = p.getInt(ck + "moon_w", 100),  mhP   = p.getInt(ck + "moon_h", 100);
+        int mxOff = Math.abs(p.getInt(ck + "moon_x", 1250) - 1250);
+        int myOff = Math.abs(p.getInt(ck + "moon_y", 1250) - 1250);
+        int cw = Math.max(10, Math.max(wP, mwP) + mxOff);
+        int ch = Math.max(10, Math.max(hP, mhP) + myOff);
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+            cw, ch, type, f, PixelFormat.TRANSLUCENT);
+        lp.x = p.getInt(ck + "x", 0);
+        lp.y = p.getInt(ck + "y", 0);
+        lp.gravity = C_GRAV[i];
+
+        try {
+            wm.addView(corner, lp);
+            accHomeCorners[i] = corner;
+        } catch (Exception e) {
+            accHomeCorners[i] = null;
+            continue;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && priMode == 0) {
+            corner.setSystemGestureExclusionRects(
+                java.util.Collections.singletonList(
+                    new android.graphics.Rect(0, 0, cw, ch)));
+        }
+
+        final int cornIdx = i;
+        corner.setOnTouchListener(
+            new SidebarTouchListener("homacc_corner_" + CORNERS[cornIdx], corner));
+    }
+}
     private void removeAccessibleHome() {
         android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
         for (int i = 0; i < 5; i++) {

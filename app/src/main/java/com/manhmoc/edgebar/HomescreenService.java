@@ -473,19 +473,30 @@ updateVisibility();
     updateVisibility();
             } else if (action.equals("com.manhmoc.edgebar.TEST_ANIM")) {
                 playAnim();
-
 } else if (action.equals("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE")) {
     String pkg = i.getStringExtra("pkg");
     if (pkg == null || pkg.isEmpty()) return;
     if (isUnlockCooldown) return;
-    boolean foregroundIsThisLockedApp = currentForegroundPkg.equals(pkg);
-    boolean isHome = currentForegroundPkg.contains("launcher")
-            || currentForegroundPkg.contains("nexuslauncher")
-            || currentForegroundPkg.isEmpty();
-    if (!foregroundIsThisLockedApp || isHome) {
-        return;
-    }
 
+    // FIX BUG 9: Whitelist đầy đủ các launcher/system packages
+    // Tránh MorseLock xuất hiện khi đang ở màn hình chính
+    boolean pkgIsSystemHome = pkg.contains("launcher")
+            || pkg.contains("nexuslauncher")
+            || pkg.contains("quickstep")
+            || pkg.contains("systemui")
+            || pkg.equals("android")
+            || pkg.contains("recents")
+            || pkg.contains("inputmethod");
+    if (pkgIsSystemHome) return; // Từ chối tuyệt đối nếu pkg là system/launcher
+
+    // Double-check: currentForegroundPkg phải khớp pkg VÀ không phải Home
+    boolean foregroundMatch = currentForegroundPkg.equals(pkg);
+    boolean currentIsHome = currentForegroundPkg.isEmpty()
+            || currentForegroundPkg.contains("launcher")
+            || currentForegroundPkg.contains("nexuslauncher")
+            || currentForegroundPkg.contains("quickstep")
+            || currentForegroundPkg.contains("systemui");
+    if (!foregroundMatch || currentIsHome) return;
     long now = System.currentTimeMillis();
     if (isMorseLockActive && pkg.equals(lockedPkg)) return;
     if (unlockedApps.contains(pkg)) {
@@ -516,6 +527,24 @@ updateVisibility();
                 lockedPkg = "";
                 morseContainer.setVisibility(View.GONE);
                 updateVisibility();
+            // [THÊM] thay bằng — đổi tên biến loop từ i sang j để tránh trùng tham số Intent i:
+} else if ("com.manhmoc.edgebar.PAUSE_WM_OPS".equals(action)) {
+    // Fix Bug 6: Ẩn tất cả bars — KHÔNG removeView, giữ token WM hợp lệ
+    // Pixel 2XL opt: setVisibility GONE = zero GPU cost trên Adreno 540
+    // QUAN TRỌNG: dùng biến j thay vì i để tránh trùng tên tham số Intent i
+    for (int j = 0; j < 5; j++) if (bars[j] != null) bars[j].setVisibility(View.GONE);
+    for (int j = 0; j < 4; j++) if (corners[j] != null) corners[j].setVisibility(View.GONE);
+    for (int j = 0; j < 8; j++) if (mBars[j] != null) mBars[j].setVisibility(View.GONE);
+    for (int j = 0; j < 4; j++) if (mCorners[j] != null) mCorners[j].setVisibility(View.GONE);
+    if (!isMorseLockActive && morseContainer != null)
+        morseContainer.setVisibility(View.GONE);
+            } else if ("com.manhmoc.edgebar.RESUME_WM_OPS".equals(action)) {
+    // Resume: vẽ lại tất cả theo state hiện tại
+    if (i.getBooleanExtra("acc_cache_reset", false)) {
+        accCheckTimestamp = 0; // Reset cache nếu cần
+    }
+    updateVisibility();
+
             } else if (action.equals("com.manhmoc.edgebar.TOGGLE_MORSE")) {
                 boolean isM = prefs.getBoolean("morse_mode_en", false);
                 prefs.edit().putBoolean("morse_mode_en", !isM).apply();
@@ -666,8 +695,13 @@ filter.addAction(Intent.ACTION_SCREEN_OFF);
 // ACTION_SCREEN_ON đã được xử lý qua ACTION_USER_PRESENT, bỏ ACTION_SCREEN_ON
 filter.addAction(Intent.ACTION_USER_PRESENT);
 filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS); // giữ để bắt homekey/recentapps
+// [TÌM] đoạn setup IntentFilter trong onCreate():
 filter.addAction("com.manhmoc.edgebar.SYNC_STATE");
 filter.addAction("com.manhmoc.edgebar.TEST_ANIM");
+
+// [THÊM] 2 dòng ngay sau:
+filter.addAction("com.manhmoc.edgebar.PAUSE_WM_OPS");
+filter.addAction("com.manhmoc.edgebar.RESUME_WM_OPS");
 // IPC_ACTION xử lý trong EdgeBarService, không cần ở HomescreenService
 filter.addAction("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
 filter.addAction("com.manhmoc.edgebar.MORSE_LOCK_DISMISS");
@@ -1148,16 +1182,25 @@ private void showMorseOSCover() {
                 morseContainer.setVisibility(View.GONE);
                 updateVisibility();
             }, 500);
-
-        } else if (isCurrentlyOnHome) {
-            // Đang ở Home → chủ máy chủ động tắt overlay
-            morseContainer.setVisibility(View.GONE);
-            isMorseLockActive = false;
-            isForceHome = false;
-            currentMorseAttempt = "";
-            morseFailCount = 0;
-            if (!lockedPkg.isEmpty()) unlockedApps.add(lockedPkg);
-                }
+} else if (isCurrentlyOnHome) {
+    // FIX BUG 9: Đang ở Home → TẮT MorseLock NGAY, không ép nhập mật khẩu
+    // Không có app nào cần crash. Không add vào unlockedApps để
+    // lần sau mở app vẫn cần nhập mật khẩu bình thường.
+    isMorseLockActive = false;
+    isForceHome = false;
+    lockedPkg = "";
+    currentMorseAttempt = "";
+    morseFailCount = 0;
+    isCountingDown = false;
+    if (countdownRunnable != null) countdownHandler.removeCallbacks(countdownRunnable);
+    if (warningAnimator != null) warningAnimator.cancel();
+    if (bgView != null) {
+        bgView.setBackgroundColor(Color.TRANSPARENT);
+        bgView.invalidate();
+    }
+    morseContainer.setVisibility(View.GONE);
+    updateVisibility();
+}
             }
             return true;
         });

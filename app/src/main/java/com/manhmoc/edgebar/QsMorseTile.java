@@ -12,35 +12,87 @@ import android.service.quicksettings.TileService;
 // Yêu cầu: Accessibility BẬT + UsageStats + Display + Admin
 public class QsMorseTile extends TileService {
 
-    private boolean isAccEnabled() {
+    // [THAY] bằng — thêm kiểm tra WRITE_SECURE_SETTINGS:
+/**
+ * IRON VEIL PHANTOM v19.12.3.6.0
+ * Kiểm tra đồng thời 2 điều kiện bắt buộc của MorseLock:
+ * 1. Accessibility Service đang bật
+ * 2. Có quyền WRITE_SECURE_SETTINGS (cấp bằng ADB 1 lần trọn đời)
+ *
+ * Pixel 2XL opt: thử ghi/xóa key test thay vì checkSelfPermission
+ * vì WRITE_SECURE_SETTINGS không thể kiểm tra bằng PackageManager
+ * sau khi cấp qua ADB — phải thử thực tế mới biết.
+ */
+private boolean isAccEnabled() {
+    try {
         String s = Settings.Secure.getString(getContentResolver(),
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         return s != null && s.contains(
             getPackageName() + "/" + EdgeBarService.class.getName());
-    }
+    } catch (Exception e) { return false; }
+}
 
+private boolean hasWriteSecureSettings() {
+    try {
+        // Thử ghi test key — nếu không có quyền sẽ throw SecurityException
+        Settings.Secure.putString(getContentResolver(),
+            "eb_morse_perm_test", "1");
+        Settings.Secure.putString(getContentResolver(),
+            "eb_morse_perm_test", null);
+        return true;
+    } catch (SecurityException e) {
+        return false;
+    } catch (Exception e) {
+        return false;
+    }
+}
     private boolean isMorseOn() {
         return getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
             .getBoolean("morse_mode_en", false);
     }
+@Override public void onStartListening() {
+    Tile t = getQsTile();
+    if (t == null) return;
 
-    @Override public void onStartListening() {
+    if (!isAccEnabled()) {
+        // Cấp độ 1: Chưa bật Accessibility
+        t.setState(Tile.STATE_UNAVAILABLE);
+        t.setLabel("MorseLock (cần Acc)");
+    } else if (!hasWriteSecureSettings()) {
+        // Cấp độ 2: Chưa cấp ADB
+        // STATE_UNAVAILABLE để user biết cần chạy lệnh ADB
+        t.setState(Tile.STATE_UNAVAILABLE);
+        t.setLabel("MorseLock (cần ADB)");
+    } else {
+        // Cấp độ 3: Đủ quyền → hiển thị trạng thái thực
+        boolean morseOn = isMorseOn();
+        t.setState(morseOn ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
+        t.setLabel(morseOn ? "MorseLock ON" : "MorseLock OFF");
+        updateMorseNotification(morseOn);
+    }
+    t.updateTile();
+}
+@Override public void onClick() {
+    // Điều kiện 1: Accessibility phải bật
+    if (!isAccEnabled()) {
+        // Mở trang Accessibility để user bật
+        Intent i = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivityAndCollapse(i);
+        return;
+    }
+    // Điều kiện 2: ADB WRITE_SECURE_SETTINGS phải được cấp
+    if (!hasWriteSecureSettings()) {
+        // Không có quyền ADB → tile không làm gì, chỉ update label
         Tile t = getQsTile();
-        if (!isAccEnabled()) {
+        if (t != null) {
             t.setState(Tile.STATE_UNAVAILABLE);
-            t.setLabel("MorseLock (cần Acc)");
-        } else {
-            t.setState(isMorseOn() ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
-            t.setLabel(isMorseOn() ? "MorseLock ON" : "MorseLock OFF");
+            t.setLabel("MorseLock (cần ADB)");
+            t.updateTile();
         }
-        t.updateTile();
-        // Notification icon liên tục trên status bar
-        updateMorseNotification(isMorseOn());
+        return;
     }
 
-    @Override public void onClick() {
-        // Yêu cầu: Accessibility phải BẬT mới hoạt động
-        if (!isAccEnabled()) return;
 
         // Toggle MorseLock — KHÔNG đụng HomescreenService hay AccHome
         sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"));
