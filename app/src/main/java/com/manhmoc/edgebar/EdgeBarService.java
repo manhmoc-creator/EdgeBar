@@ -645,7 +645,7 @@ sendBroadcast(syncIntent);
         for (int i = 0; i < 4; i++) {
             boolean en = prefs.getBoolean(accPrefix + "corner_" + CORNERS[i] + "_en", false);
             if (!en) continue;
-            accHomeCorners[i] = new CornerView(this, i, "home_");
+            accHomeCorners[i] = new CornerView(this, i, "homacc_");
             int moonAlpha = prefs.getInt(accPrefix + "corner_moon_alpha", 100);
             int strokeAlpha = prefs.getInt(accPrefix + "corner_stroke_alpha", 200);
             int hideDelay = prefs.getInt(accPrefix + "corner_hide_dur", 2500);

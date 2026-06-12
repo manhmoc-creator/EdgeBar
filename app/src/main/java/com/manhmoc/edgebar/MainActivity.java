@@ -49,7 +49,7 @@ private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "rig
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.5.8"; 
+    private final String CURRENT_VERSION = "V19.12.3.5.9"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -649,8 +649,8 @@ toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addVie
     btnEditLock.setTextColor(designTabState==0 ? Color.BLACK : Color.WHITE);
     btnEditHome.setBackground(getRounded(designTabState==1 ? "#00E5FF" : "#222222", 20f));
     btnEditHome.setTextColor(designTabState==1 ? Color.BLACK : Color.WHITE);
-    btnEditHomacc.setBackground(getRounded(designTabState==4 ? "#7C4DFF" : "#1A1040", 20f));
-btnEditHomacc.setTextColor(designTabState==4 ? Color.WHITE : Color.parseColor("#B39DDB"));
+    btnEditHomacc.setBackground(getRounded(designTabState==4 ? "#7C4DFF" : "#333333", 20f));
+    btnEditHomacc.setTextColor(Color.WHITE);
     btnEditMorse.setBackground(getRounded(designTabState==2 ? "#00E5FF" : "#222222", 20f));
     btnEditMorse.setTextColor(designTabState==2 ? Color.BLACK : Color.WHITE);
     btnEditAnim.setBackground(getRounded(designTabState==3 ? "#00E5FF" : "#222222", 20f));

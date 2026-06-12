@@ -11,41 +11,35 @@ public class QsHomeTile extends TileService {
         t.updateTile();
     }
     @Override public void onClick() {
-    // YC4: Tile HOME chỉ bật/tắt bars cũ (display+adb)
-    // KHÔNG đụng MorseLock (EdgeBarService) và KHÔNG đụng AccHome
+    // CHỈ toggle Home cũ — KHÔNG đụng MorseLock, KHÔNG đụng AccHome state
     if (HomescreenService.isRunning) {
-    // YC5: Tắt Home cũ → deep sleep → TỰ ĐỘNG wake AccHome nếu Acc bật
-    stopService(new Intent(this, HomescreenService.class));
-    getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
-        .edit()
-        .putBoolean("shortcut_home_on", false)
-        .putBoolean("shortcut_acc_home_on", true)
-        .apply();
-    showSleepNotification(true);
-    // Wake AccHome nếu Accessibility đang bật
-    String accSvcs = android.provider.Settings.Secure.getString(
-        getContentResolver(),
-        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-    boolean accOn = accSvcs != null && accSvcs.contains(
-        getPackageName() + "/" + EdgeBarService.class.getName());
-    if (accOn && !AccessibleHomeService.isRunning) {
-        sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_ON"));
+        stopService(new Intent(this, HomescreenService.class));
+        getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
+            .edit().putBoolean("shortcut_home_on", false).apply();
+        // Tắt Home cũ → tự động wake AccHome nếu Acc bật
+        String accSvcs = android.provider.Settings.Secure.getString(
+            getContentResolver(),
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        boolean accOn = accSvcs != null && accSvcs.contains(
+            getPackageName() + "/" + EdgeBarService.class.getName());
+        if (accOn && !AccessibleHomeService.isRunning) {
+            sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_ON"));
+            getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
+                .edit().putBoolean("shortcut_acc_home_on", true).apply();
+        }
+    } else {
+        // Bật Home cũ → AccHome vào deep sleep (không xóa, chỉ ẩn)
+        if (AccessibleHomeService.isRunning) {
+            sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_OFF"));
+            getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
+                .edit().putBoolean("shortcut_acc_home_on", false).apply();
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 26)
+            startForegroundService(new Intent(this, HomescreenService.class));
+        else startService(new Intent(this, HomescreenService.class));
+        getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
+            .edit().putBoolean("shortcut_home_on", true).apply();
     }
-} else {
-    // YC4: Bật Home cũ → ép tắt AccHome deep sleep
-    if (AccessibleHomeService.isRunning) {
-        sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_OFF"));
-    }
-    if (android.os.Build.VERSION.SDK_INT >= 26)
-        startForegroundService(new Intent(this, HomescreenService.class));
-    else startService(new Intent(this, HomescreenService.class));
-    getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
-        .edit()
-        .putBoolean("shortcut_home_on", true)
-        .putBoolean("shortcut_acc_home_on", false)
-        .apply();
-    showSleepNotification(false);
-}
     Tile t = getQsTile();
     t.setState(HomescreenService.isRunning ? Tile.STATE_INACTIVE : Tile.STATE_ACTIVE);
     t.updateTile();

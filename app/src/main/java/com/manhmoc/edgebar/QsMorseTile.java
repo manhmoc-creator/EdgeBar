@@ -60,8 +60,8 @@ public class QsMorseTile extends TileService {
         getSystemService(NotificationManager.class).createNotificationChannel(nc);
         if (morseOn) {
             Notification n = new Notification.Builder(this, cid)
-                .setContentTitle("MorseLock đang BẬT")
-                .setSmallIcon(android.R.drawable.ic_lock_lock)
+                .setContentTitle("MorseLock is On")
+                .setSmallIcon(android.R.drawable.ic_menu_compass)
                 .setOngoing(true)
                 .build();
             getSystemService(NotificationManager.class).notify(79, n);

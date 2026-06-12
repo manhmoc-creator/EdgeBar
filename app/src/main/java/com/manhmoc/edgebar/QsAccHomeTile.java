@@ -27,7 +27,7 @@ public class QsAccHomeTile extends TileService {
         }
         t.updateTile();
         // Yêu cầu 7: Hiện icon "x" trên status bar khi tắt
-        updateStatusBarNotification(!AccessibleHomeService.isRunning);
+        updateStatusBarNotification(AccessibleHomeService.isRunning);
     }
 
     @Override public void onClick() {
@@ -62,7 +62,7 @@ public class QsAccHomeTile extends TileService {
             startForegroundService(homeIntent);
         else startService(homeIntent);
     }
-    updateStatusBarNotification(true);
+    updateStatusBarNotification(false);
 }
     Tile t = getQsTile();
     t.setState(AccessibleHomeService.isRunning ? Tile.STATE_INACTIVE : Tile.STATE_ACTIVE);
@@ -77,7 +77,7 @@ public class QsAccHomeTile extends TileService {
         if (showX) {
             // Yêu cầu 7: Hiện icon "x" khi Homacc On
             Notification n = new Notification.Builder(this, cid)
-                .setContentTitle("Homacc On")
+                .setContentTitle("Homacc is On")
                 .setSmallIcon(android.R.drawable.ic_delete) // icon "x"
                 .setOngoing(true)
                 .build();

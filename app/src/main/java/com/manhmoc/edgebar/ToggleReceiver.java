@@ -66,27 +66,28 @@ public class ToggleReceiver extends BroadcastReceiver {
         String cur = Settings.Secure.getString(
             c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         if (cur == null) cur = "";
-        
-        // Tách danh sách bằng ":" để tránh xóa nhầm service có tên tương tự
-        java.util.List<String> list = new java.util.ArrayList<>(
-            java.util.Arrays.asList(cur.split(":")));
-        list.removeIf(s -> s.trim().isEmpty());
-        
-        boolean en = false;
-        for (String s : list) { if (s.trim().equals(mySvc)) { en = true; break; } }
-        
-        if (en) {
-            list.removeIf(s -> s.trim().equals(mySvc));
-        } else {
-            list.add(mySvc);
-        }
-        
-        String newVal = android.text.TextUtils.join(":", list);
+
+        // Tách an toàn bằng ":" — tránh xóa nhầm service tên tương tự
+        String[] parts = cur.split(":");
+        java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
+        for (String p : parts) { if (!p.trim().isEmpty()) set.add(p.trim()); }
+
+        boolean wasEnabled = set.contains(mySvc);
+        if (wasEnabled) set.remove(mySvc);
+        else set.add(mySvc);
+
+        // Ghi nguyên tử — 1 lần duy nhất tránh HomescreenService đọc giữa chừng
+        String newVal = android.text.TextUtils.join(":", set);
         Settings.Secure.putString(c.getContentResolver(),
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
-        // GIỮ ACCESSIBILITY_ENABLED = 1 LUÔN LUÔN, không bao giờ đặt = 0
         Settings.Secure.putString(c.getContentResolver(),
             Settings.Secure.ACCESSIBILITY_ENABLED, "1");
+
+        // Broadcast sync sau 200ms để các service cập nhật trạng thái
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            c.sendBroadcast(new android.content.Intent("com.manhmoc.edgebar.SYNC_STATE")
+                .putExtra("acc_cache_reset", true));
+        }, 200);
     } catch (Exception e) {}
   }
 }
