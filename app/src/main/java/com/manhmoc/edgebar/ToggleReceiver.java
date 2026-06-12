@@ -62,14 +62,31 @@ public class ToggleReceiver extends BroadcastReceiver {
     return s != null && s.contains(c.getPackageName() + "/" + EdgeBarService.class.getName());
 }
     private void toggleAcc(Context c, String mySvc) {
-        try {
-            String cur = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            if (cur == null) cur = "";
-            boolean en = cur.contains(mySvc);
-            if (en) cur = cur.replace(":" + mySvc, "").replace(mySvc + ":", "").replace(mySvc, "");
-            else cur = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
-            Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, cur);
-            Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, "1");
-        } catch (Exception e) {}
-    }
+    try {
+        String cur = Settings.Secure.getString(
+            c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        if (cur == null) cur = "";
+        
+        // Tách danh sách bằng ":" để tránh xóa nhầm service có tên tương tự
+        java.util.List<String> list = new java.util.ArrayList<>(
+            java.util.Arrays.asList(cur.split(":")));
+        list.removeIf(s -> s.trim().isEmpty());
+        
+        boolean en = false;
+        for (String s : list) { if (s.trim().equals(mySvc)) { en = true; break; } }
+        
+        if (en) {
+            list.removeIf(s -> s.trim().equals(mySvc));
+        } else {
+            list.add(mySvc);
+        }
+        
+        String newVal = android.text.TextUtils.join(":", list);
+        Settings.Secure.putString(c.getContentResolver(),
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
+        // GIỮ ACCESSIBILITY_ENABLED = 1 LUÔN LUÔN, không bao giờ đặt = 0
+        Settings.Secure.putString(c.getContentResolver(),
+            Settings.Secure.ACCESSIBILITY_ENABLED, "1");
+    } catch (Exception e) {}
+  }
 }

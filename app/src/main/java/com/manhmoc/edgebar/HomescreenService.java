@@ -680,11 +680,11 @@ filter.addAction("com.manhmoc.edgebar.UNINSTALL_DETECTED");
             registerReceiver(syncReceiver, filter);
 
         String cid = "eb_19_home";
-        NotificationChannel c = new NotificationChannel(cid, "Edge Bar Màn Chính", NotificationManager.IMPORTANCE_LOW);
+        NotificationChannel c = new NotificationChannel(cid, "Homeb", NotificationManager.IMPORTANCE_LOW);
         getSystemService(NotificationManager.class).createNotificationChannel(c);
         Notification n = new Notification.Builder(this, cid)
-                .setContentTitle("Edge Bar Màn Chính")
-                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle("Homeb")
+                .setSmallIcon(android.R.drawable.ic_menu_crop)
                 .setOngoing(true).build();
         startForeground(2, n);
 

@@ -56,7 +56,7 @@
 
         <service android:name=".HomescreenService" android:exported="false" />
 <service android:name=".AccessibleHomeService" android:exported="false" android:foregroundServiceType="specialUse" />
-<service android:name=".QsAccHomeTile" android:label="EB Homacc" android:icon="@android:drawable/ic_menu_day" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
+<service android:name=".QsAccHomeTile" android:label="EB Homacc" android:icon="@android:drawable/ic_dialog_map" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
     <intent-filter>
         <action android:name="android.service.quicksettings.action.QS_TILE" />
     </intent-filter>
@@ -72,16 +72,25 @@
             </intent-filter>
         </service>
 
-        <service
-            android:name=".QsHomeTile"
-            android:label="EB Home"
-            android:icon="@android:drawable/ic_dialog_alert"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.service.quicksettings.action.QS_TILE" />
-            </intent-filter>
-        </service>
+        <service android:name=".QsHomeTile"
+    android:label="EB Home"
+    android:icon="@android:drawable/ic_menu_crop"
+    android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.service.quicksettings.action.QS_TILE" />
+    </intent-filter>
+</service>
+
+<service android:name=".QsMorseTile"
+    android:label="EB MorseLock"
+    android:icon="@android:drawable/ic_lock_lock"
+    android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.service.quicksettings.action.QS_TILE" />
+    </intent-filter>
+</service>
         <service android:name=".Tile1" android:label="Tile 1" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
         <service android:name=".Tile2" android:label="Tile 2" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
         <service android:name=".Tile3" android:label="Tile 3" android:icon="@drawable/ic_launcher_fg" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>

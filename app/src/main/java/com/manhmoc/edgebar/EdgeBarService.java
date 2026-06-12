@@ -639,7 +639,7 @@ sendBroadcast(syncIntent);
                 accHomeBars[i].setSystemGestureExclusionRects(
                     java.util.Collections.singletonList(new android.graphics.Rect(0, 0, w, h)));
             }
-            accHomeBars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], null));
+            accHomeBars[i].setOnTouchListener(new SidebarTouchListener("homacc_" + BARS[i], null));
         }
 
         for (int i = 0; i < 4; i++) {
@@ -652,7 +652,7 @@ sendBroadcast(syncIntent);
     	int visMode = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_vis_mode", 0);
 int priMode = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_pri_mode", 0);
             
-            ((CornerView) accHomeCorners[i]).updateProps(prefs.getInt("home_corner_thick", 8), moonAlpha, strokeAlpha, visMode == 1, hideDelay, visMode == 2);
+            ((CornerView) accHomeCorners[i]).updateProps(prefs.getInt(accPrefix + "corner_thick", 8), moonAlpha, strokeAlpha, visMode == 1, hideDelay, visMode == 2);
             
             int f = flags;
             if (priMode == 1) f |= android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -660,16 +660,16 @@ int priMode = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_pri_mode", 0);
                      | android.view.WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
 
             android.view.WindowManager.LayoutParams p = new android.view.WindowManager.LayoutParams(100, 100, type, f, android.graphics.PixelFormat.TRANSLUCENT);
-            int wPref = prefs.getInt("home_corner_" + CORNERS[i] + "_w", 100);
-            int hPref = prefs.getInt("home_corner_" + CORNERS[i] + "_h", 100);
-            int mwPref = prefs.getInt("home_corner_" + CORNERS[i] + "_moon_w", 100);
-            int mhPref = prefs.getInt("home_corner_" + CORNERS[i] + "_moon_h", 100);
-            int mxOffset = Math.abs(prefs.getInt("home_corner_" + CORNERS[i] + "_moon_x", 1250) - 1250);
-            int myOffset = Math.abs(prefs.getInt("home_corner_" + CORNERS[i] + "_moon_y", 1250) - 1250);
-            p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset);
-            p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
-            p.x = prefs.getInt("home_corner_" + CORNERS[i] + "_x", 0);
-            p.y = prefs.getInt("home_corner_" + CORNERS[i] + "_y", 0);
+            int wPref = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_w", 100);
+int hPref = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_h", 100);
+int mwPref = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_moon_w", 100);
+int mhPref = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_moon_h", 100);
+int mxOffset = Math.abs(prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_moon_x", 1250) - 1250);
+int myOffset = Math.abs(prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_moon_y", 1250) - 1250);
+p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset);
+p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
+p.x = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_x", 0);
+p.y = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_y", 0);
             p.gravity = C_GRAV[i];
             
             wm.addView(accHomeCorners[i], p);
@@ -678,7 +678,7 @@ int priMode = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_pri_mode", 0);
                     java.util.Collections.singletonList(
                         new android.graphics.Rect(0, 0, p.width, p.height)));
             }
-            accHomeCorners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], accHomeCorners[i]));
+            accHomeCorners[i].setOnTouchListener(new SidebarTouchListener("homacc_corner_" + CORNERS[i], accHomeCorners[i]));
         }
     }
     private void removeAccessibleHome() {

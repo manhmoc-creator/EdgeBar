@@ -49,7 +49,7 @@ private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "rig
     private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.5.7"; 
+    private final String CURRENT_VERSION = "V19.12.3.5.8"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -630,7 +630,7 @@ prefs.edit()
         btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
 btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); 
 btnEditHomacc = new Button(this); btnEditHomacc.setText("HOMACC"); btnEditHomacc.setLayoutParams(mP);
-btnEditMorse = new Button(this); btnEditMorse.setText("MORSE OS"); btnEditMorse.setLayoutParams(mP); 
+btnEditMorse = new Button(this); btnEditMorse.setText("MORSOS"); btnEditMorse.setLayoutParams(mP); 
 btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
         designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
         
@@ -649,8 +649,8 @@ toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addVie
     btnEditLock.setTextColor(designTabState==0 ? Color.BLACK : Color.WHITE);
     btnEditHome.setBackground(getRounded(designTabState==1 ? "#00E5FF" : "#222222", 20f));
     btnEditHome.setTextColor(designTabState==1 ? Color.BLACK : Color.WHITE);
-    btnEditHomacc.setBackground(getRounded(designTabState==4 ? "#7C4DFF" : "#222222", 20f));
-    btnEditHomacc.setTextColor(designTabState==4 ? Color.WHITE : Color.GRAY);
+    btnEditHomacc.setBackground(getRounded(designTabState==4 ? "#7C4DFF" : "#1A1040", 20f));
+btnEditHomacc.setTextColor(designTabState==4 ? Color.WHITE : Color.parseColor("#B39DDB"));
     btnEditMorse.setBackground(getRounded(designTabState==2 ? "#00E5FF" : "#222222", 20f));
     btnEditMorse.setTextColor(designTabState==2 ? Color.BLACK : Color.WHITE);
     btnEditAnim.setBackground(getRounded(designTabState==3 ? "#00E5FF" : "#222222", 20f));
@@ -667,7 +667,7 @@ toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addVie
 
         // Nút thử preview AccHome overlay
         Button btnTestAcc = new Button(this);
-        btnTestAcc.setText("👁️ THỬ HOMACC OVERLAY");
+        btnTestAcc.setText("THỬ HOMACC OVERLAY");
         btnTestAcc.setBackground(getRounded("#7C4DFF", 20f));
         btnTestAcc.setTextColor(Color.WHITE);
         btnTestAcc.setPadding(0,30,0,30);
@@ -744,7 +744,7 @@ toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addVie
         globalDrawerAcc.addView(createSlider("Độ mờ vùng TRĂNG NON", prefix+"corner_moon_alpha", 255, 100));
         globalDrawerAcc.addView(createSlider("Độ mờ VIỀN GÓC", prefix+"corner_stroke_alpha", 255, 200));
         globalDrawerAcc.addView(createSlider("Độ đậm viền", prefix+"corner_thick", 50, 8));
-        designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN HOMACC", globalDrawerAcc));
+        designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", globalDrawerAcc));
         return; // Thoát sớm, không chạy code tab khác
     }
     // ===== KẾT THÚC TAB HOMACC =====
@@ -760,7 +760,7 @@ toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addVie
             String[] bNames = designTabState == 2 ? M_BAR_NAMES : BAR_NAMES;
             if(designTabState == 2) {
                 LinearLayout mRow = new LinearLayout(this); mRow.setOrientation(LinearLayout.HORIZONTAL);
-                Button btnTestM = new Button(this); btnTestM.setText("👁️ THỬ MORSE OS"); btnTestM.setBackground(getRounded("#FFC107", 20f)); btnTestM.setTextColor(Color.BLACK); LinearLayout.LayoutParams tm = new LinearLayout.LayoutParams(0,-2,1f); tm.setMargins(0,0,10,20); btnTestM.setLayoutParams(tm);
+                Button btnTestM = new Button(this); btnTestM.setText("TEST MORSE OS"); btnTestM.setBackground(getRounded("#FFC107", 20f)); btnTestM.setTextColor(Color.BLACK); LinearLayout.LayoutParams tm = new LinearLayout.LayoutParams(0,-2,1f); tm.setMargins(0,0,10,20); btnTestM.setLayoutParams(tm);
                 btnTestM.setOnClickListener(v->{ 
                     boolean cur = prefs.getBoolean("morse_mode_en", false);
                     prefs.edit().putBoolean("morse_mode_en", !cur).apply();
@@ -1105,8 +1105,8 @@ designSliderContainer.addView(relockRow);
     }
 
     private void showPremiumDialog() { 
-        String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 TĂNG TỐC BẰNG ADB (chạy 1 lần):\nadb shell settings put global window_animation_scale 0\nadb shell settings put global transition_animation_scale 0\nadb shell settings put global animator_duration_scale 0", 
-        "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 TĂNG TỐC BẰNG ADB (chạy 1 lần):\nadb shell settings put global window_animation_scale 0\nadb shell settings put global transition_animation_scale 0\nadb shell settings put global animator_duration_scale 0"); 
+        String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow", 
+        "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần trọn đời):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 TĂNG TỐC BẰNG ADB (chạy 1 lần):\nadb shell settings put global window_animation_scale 0\nadb shell settings put global transition_animation_scale 0\nadb shell settings put global animator_duration_scale 0"); 
         ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); 
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); 
     }

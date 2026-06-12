@@ -48,16 +48,22 @@ public class QsAccHomeTile extends TileService {
         // Bước 3: Kích hoạt lại MorseLock theo AccHome
         sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
     } else {
-        // Tắt AccHome → sleep mode
-        sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_OFF"));
-        getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
-            .edit()
-            .putBoolean("shortcut_acc_home_on", false)
-            .apply();
-        // YC5: Hiện icon trạng thái
-        updateStatusBarNotification(true);
+    // Tắt AccHome → sleep mode → TỰ ĐỘNG bật lại Home cũ (YC5)
+    sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_OFF"));
+    getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
+        .edit()
+        .putBoolean("shortcut_acc_home_on", false)
+        .putBoolean("shortcut_home_on", true) // Wake Home cũ
+        .apply();
+    // Khởi động lại HomescreenService nếu chưa chạy
+    if (!HomescreenService.isRunning) {
+        Intent homeIntent = new Intent(this, HomescreenService.class);
+        if (android.os.Build.VERSION.SDK_INT >= 26)
+            startForegroundService(homeIntent);
+        else startService(homeIntent);
     }
-
+    updateStatusBarNotification(true);
+}
     Tile t = getQsTile();
     t.setState(AccessibleHomeService.isRunning ? Tile.STATE_INACTIVE : Tile.STATE_ACTIVE);
     t.updateTile();
@@ -69,9 +75,9 @@ public class QsAccHomeTile extends TileService {
             cid, "Trạng thái Acc Home", NotificationManager.IMPORTANCE_LOW);
         getSystemService(NotificationManager.class).createNotificationChannel(nc);
         if (showX) {
-            // Yêu cầu 7: Hiện icon "x" khi Acc Home đang tắt
+            // Yêu cầu 7: Hiện icon "x" khi Homacc On
             Notification n = new Notification.Builder(this, cid)
-                .setContentTitle("Acc Home đang TẮT")
+                .setContentTitle("Homacc On")
                 .setSmallIcon(android.R.drawable.ic_delete) // icon "x"
                 .setOngoing(true)
                 .build();
