@@ -46,9 +46,10 @@ private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "rig
     private String[] C_GESTURE_NAMES;
 
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain; 
-    private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditMorse, btnEditAnim;
-    private int designTabState = 0; private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.5.6.1"; 
+    private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim;
+    private int designTabState = 0;
+    private int currentMainTab = 1; private int currentGesTab = 0; 
+    private final String CURRENT_VERSION = "V19.12.3.5.7"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -627,34 +628,128 @@ prefs.edit()
         pageDesign.addView(createSectionTitle(T("CORE DESIGN (COLOR/SIZE)", "THIẾT KẾ CỐT LÕI (MÀU/KÍCH THƯỚC)")));
         LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL);
         btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
-        btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); 
-        btnEditMorse = new Button(this); btnEditMorse.setText("MORSE OS"); btnEditMorse.setLayoutParams(mP); 
-        btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); 
+btnEditHomacc = new Button(this); btnEditHomacc.setText("HOMACC"); btnEditHomacc.setLayoutParams(mP);
+btnEditMorse = new Button(this); btnEditMorse.setText("MORSE OS"); btnEditMorse.setLayoutParams(mP); 
+btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
         designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
         
         btnEditLock.setOnClickListener(v -> { designTabState=0; refreshPreview(); updateVisTabs(); renderSliders(); }); 
-        btnEditHome.setOnClickListener(v -> { designTabState=1; refreshPreview(); updateVisTabs(); renderSliders(); }); 
-        btnEditMorse.setOnClickListener(v -> { designTabState=2; refreshPreview(); updateVisTabs(); renderSliders(); }); 
-        btnEditAnim.setOnClickListener(v -> { designTabState=3; refreshPreview(); updateVisTabs(); renderSliders(); });
-        toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addView(btnEditMorse); toggleRow.addView(btnEditAnim);
+btnEditHome.setOnClickListener(v -> { designTabState=1; refreshPreview(); updateVisTabs(); renderSliders(); }); 
+btnEditHomacc.setOnClickListener(v -> { designTabState=4; refreshPreview(); updateVisTabs(); renderSliders(); });
+btnEditMorse.setOnClickListener(v -> { designTabState=2; refreshPreview(); updateVisTabs(); renderSliders(); }); 
+btnEditAnim.setOnClickListener(v -> { designTabState=3; refreshPreview(); updateVisTabs(); renderSliders(); });
+toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addView(btnEditHomacc); toggleRow.addView(btnEditMorse); toggleRow.addView(btnEditAnim);
         pageDesign.addView(toggleRow); pageDesign.addView(designSliderContainer);
         btnEditHome.performClick();
     }
 
     private void updateVisTabs() {
-        btnEditLock.setBackground(getRounded(designTabState==0 ? "#00E5FF" : "#222222", 20f));
-        btnEditLock.setTextColor(designTabState==0 ? Color.BLACK : Color.WHITE);
-        btnEditHome.setBackground(getRounded(designTabState==1 ? "#00E5FF" : "#222222", 20f));
-        btnEditHome.setTextColor(designTabState==1 ? Color.BLACK : Color.WHITE);
-        btnEditMorse.setBackground(getRounded(designTabState==2 ? "#00E5FF" : "#222222", 20f));
-        btnEditMorse.setTextColor(designTabState==2 ? Color.BLACK : Color.WHITE);
-        btnEditAnim.setBackground(getRounded(designTabState==3 ? "#00E5FF" : "#222222", 20f));
-        btnEditAnim.setTextColor(designTabState==3 ? Color.BLACK : Color.WHITE);
-    }
+    btnEditLock.setBackground(getRounded(designTabState==0 ? "#00E5FF" : "#222222", 20f));
+    btnEditLock.setTextColor(designTabState==0 ? Color.BLACK : Color.WHITE);
+    btnEditHome.setBackground(getRounded(designTabState==1 ? "#00E5FF" : "#222222", 20f));
+    btnEditHome.setTextColor(designTabState==1 ? Color.BLACK : Color.WHITE);
+    btnEditHomacc.setBackground(getRounded(designTabState==4 ? "#7C4DFF" : "#222222", 20f));
+    btnEditHomacc.setTextColor(designTabState==4 ? Color.WHITE : Color.GRAY);
+    btnEditMorse.setBackground(getRounded(designTabState==2 ? "#00E5FF" : "#222222", 20f));
+    btnEditMorse.setTextColor(designTabState==2 ? Color.BLACK : Color.WHITE);
+    btnEditAnim.setBackground(getRounded(designTabState==3 ? "#00E5FF" : "#222222", 20f));
+    btnEditAnim.setTextColor(designTabState==3 ? Color.BLACK : Color.WHITE);
+}
 
     private void renderSliders() { 
-        designSliderContainer.removeAllViews(); 
-        if(designTabState == 3) { 
+    designSliderContainer.removeAllViews();
+
+    // ===== TAB HOMACC (designTabState == 4) =====
+    if (designTabState == 4) {
+        String prefix = "homacc_";
+        designSliderContainer.addView(createSectionTitle("🟣 HOMACC - OVERLAY TRỢ NĂNG HOME"));
+
+        // Nút thử preview AccHome overlay
+        Button btnTestAcc = new Button(this);
+        btnTestAcc.setText("👁️ THỬ HOMACC OVERLAY");
+        btnTestAcc.setBackground(getRounded("#7C4DFF", 20f));
+        btnTestAcc.setTextColor(Color.WHITE);
+        btnTestAcc.setPadding(0,30,0,30);
+        LinearLayout.LayoutParams testLp2 = new LinearLayout.LayoutParams(-1,-2);
+        testLp2.setMargins(0,0,0,20);
+        btnTestAcc.setLayoutParams(testLp2);
+        btnTestAcc.setOnClickListener(v -> {
+            Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE");
+            sendBroadcast(i);
+            Toast.makeText(this, "Đồng bộ Homacc...", Toast.LENGTH_SHORT).show();
+        });
+        designSliderContainer.addView(btnTestAcc);
+
+        // EDGE BARS - copy y chang tab HOME nhưng dùng prefix "homacc_"
+        designSliderContainer.addView(createSectionTitle("EDGE BARS HOMACC (5 THANH)"));
+        String[] bKeys = {"r", "l", "t_r", "t_l", "t_c"};
+        String[] bNames = {"Đáy phải", "Đáy trái", "Cạnh Phải", "Cạnh Trái", "Đỉnh giữa"};
+        for (int i = 0; i < bKeys.length; i++) {
+            LinearLayout drawerContent = new LinearLayout(this);
+            drawerContent.setOrientation(LinearLayout.VERTICAL);
+            drawerContent.setPadding(30,10,30,30);
+            CheckBox cb = new CheckBox(this);
+            cb.setText("BẬT: " + bNames[i]);
+            cb.setTextColor(Color.parseColor("#7C4DFF"));
+            cb.setChecked(prefs.getBoolean(prefix+bKeys[i]+"_en", false));
+            final int idx = i;
+            final String[] bKeysF = bKeys;
+            cb.setOnCheckedChangeListener((vv,c) -> prefs.edit().putBoolean(prefix+bKeysF[idx]+"_en", c).apply());
+            drawerContent.addView(cb);
+            drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+bKeys[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+            drawerContent.addView(createSlider("Độ trong suốt", prefix+bKeys[i]+"_alpha", 255, 50));
+            drawerContent.addView(createSlider("Chiều ngang", prefix+bKeys[i]+"_w", 3000, 300));
+            drawerContent.addView(createSlider("Chiều dọc", prefix+bKeys[i]+"_h", 3000, 60));
+            drawerContent.addView(createSlider("Toạ độ X", prefix+bKeys[i]+"_x", 1000, 0));
+            drawerContent.addView(createSlider("Toạ độ Y", prefix+bKeys[i]+"_y", 2500, 0));
+            designSliderContainer.addView(createDrawer(bNames[i], drawerContent));
+        }
+
+        // 4 CORNERS - copy y chang tab HOME nhưng dùng prefix "homacc_"
+        designSliderContainer.addView(createSectionTitle("4 FRAME CORNERS HOMACC"));
+        String[] cKeys = {"br", "bl", "tr", "tl"};
+        String[] cNames = {"Góc đáy phải", "Góc đáy trái", "Góc đỉnh phải", "Góc đỉnh trái"};
+        for (int i = 0; i < cKeys.length; i++) {
+            LinearLayout drawerContent = new LinearLayout(this);
+            drawerContent.setOrientation(LinearLayout.VERTICAL);
+            drawerContent.setPadding(30,10,30,30);
+            CheckBox cbEn = new CheckBox(this);
+            cbEn.setText("BẬT: " + cNames[i]);
+            cbEn.setTextColor(Color.parseColor("#7C4DFF"));
+            cbEn.setChecked(prefs.getBoolean(prefix+"corner_"+cKeys[i]+"_en", false));
+            final int idx = i;
+            final String[] cKeysF = cKeys;
+            cbEn.setOnCheckedChangeListener((vv,c) -> prefs.edit().putBoolean(prefix+"corner_"+cKeysF[idx]+"_en", c).apply());
+            drawerContent.addView(cbEn);
+            drawerContent.addView(createComboDropdown("Hiển thị", prefix+"corner_"+cKeys[i]+"_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình (Nháy sáng)", "Ẩn hoàn toàn (Vô hình)"}, 0));
+            drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+"corner_"+cKeys[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+            drawerContent.addView(createComboDropdown("Hình dáng Góc", prefix+"corner_"+cKeys[i]+"_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0));
+            drawerContent.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix+"corner_"+cKeys[i]+"_w", 2500, 100));
+            drawerContent.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix+"corner_"+cKeys[i]+"_h", 2500, 100));
+            drawerContent.addView(createSlider("Di chuyển Ngang (X)", prefix+"corner_"+cKeys[i]+"_x", 2500, 0));
+            drawerContent.addView(createSlider("Di chuyển Dọc (Y)", prefix+"corner_"+cKeys[i]+"_y", 2500, 0));
+            drawerContent.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix+"corner_"+cKeys[i]+"_moon_w", 2500, 100));
+            drawerContent.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix+"corner_"+cKeys[i]+"_moon_h", 2500, 100));
+            drawerContent.addView(createSlider("Di chuyển Trăng Non Ngang (X) (1250=Giữa)", prefix+"corner_"+cKeys[i]+"_moon_x", 2500, 1250));
+            drawerContent.addView(createSlider("Di chuyển Trăng Non Dọc (Y) (1250=Giữa)", prefix+"corner_"+cKeys[i]+"_moon_y", 2500, 1250));
+            drawerContent.addView(createSlider("Độ cong BO VIỀN (Vỏ) (1000=Thẳng)", prefix+"corner_"+cKeys[i]+"_rad", 1000, 80));
+            drawerContent.addView(createSlider("Độ cong TRĂNG NON (Lõi) (1000=Thẳng)", prefix+"corner_"+cKeys[i]+"_moon_rad", 1000, 80));
+            designSliderContainer.addView(createDrawer(cNames[i], drawerContent));
+        }
+        LinearLayout globalDrawerAcc = new LinearLayout(this);
+        globalDrawerAcc.setOrientation(LinearLayout.VERTICAL);
+        globalDrawerAcc.setPadding(30,10,30,30);
+        globalDrawerAcc.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500));
+        globalDrawerAcc.addView(createSlider("Độ mờ vùng TRĂNG NON", prefix+"corner_moon_alpha", 255, 100));
+        globalDrawerAcc.addView(createSlider("Độ mờ VIỀN GÓC", prefix+"corner_stroke_alpha", 255, 200));
+        globalDrawerAcc.addView(createSlider("Độ đậm viền", prefix+"corner_thick", 50, 8));
+        designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN HOMACC", globalDrawerAcc));
+        return; // Thoát sớm, không chạy code tab khác
+    }
+    // ===== KẾT THÚC TAB HOMACC =====
+
+    if(designTabState == 3) {
             Button btnTest = new Button(this); btnTest.setText("▶ THỬ NGAY HIỆU ỨNG"); btnTest.setBackground(getRounded("#FFC107", 20f)); btnTest.setTextColor(Color.BLACK); btnTest.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(-1,-2); testLp.setMargins(0,0,0,20); btnTest.setLayoutParams(testLp); btnTest.setOnClickListener(v -> { Intent i = new Intent("com.manhmoc.edgebar.TEST_ANIM"); i.setPackage(getPackageName()); sendBroadcast(i); Toast.makeText(this, "Playing Animation...", Toast.LENGTH_SHORT).show(); }); designSliderContainer.addView(btnTest);
             LinearLayout lC = new LinearLayout(this); lC.setOrientation(LinearLayout.HORIZONTAL); lC.setPadding(0,10,0,10); TextView tC = new TextView(this); tC.setText("Chủ đề:"); tC.setTextColor(Color.WHITE); tC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sC = createSpinner(); sC.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, COLOR_NAMES)); String curC = prefs.getString("anim_color", "WHITE"); for(int i=0;i<COLOR_KEYS.length;i++) if(COLOR_KEYS[i].equals(curC)) sC.setSelection(i); sC.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putString("anim_color",COLOR_KEYS[pos]).apply();}public void onNothingSelected(AdapterView<?> p){}}); sC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lC.addView(tC); lC.addView(sC); designSliderContainer.addView(lC); 
             LinearLayout lS = new LinearLayout(this); lS.setOrientation(LinearLayout.HORIZONTAL); lS.setPadding(0,10,0,10); TextView tS = new TextView(this); tS.setText("Kiểu chạy:"); tS.setTextColor(Color.WHITE); tS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sS = createSpinner(); sS.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Nhấp Nháy", "1 Tia sáng nối đuôi", "2 Tia sáng đối xứng", "3 Tia sáng đều nhau"})); sS.setSelection(prefs.getInt("anim_style", 0)); sS.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt("anim_style", pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lS.addView(tS); lS.addView(sS); designSliderContainer.addView(lS); 

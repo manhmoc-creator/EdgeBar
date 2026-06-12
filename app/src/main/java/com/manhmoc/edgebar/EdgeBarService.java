@@ -229,7 +229,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         String cid = "eb_19_acc";
         NotificationChannel c = new NotificationChannel(cid, "Edge Bar đang chạy nền", NotificationManager.IMPORTANCE_LOW);
         getSystemService(NotificationManager.class).createNotificationChannel(c);
-        Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar").setSmallIcon(android.R.drawable.ic_lock_lock).setOngoing(true).build();
+        Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar").setSmallIcon(android.R.drawable.ic_lock_idle_lock).setOngoing(true).build();
         startForeground(1, n);
         accHomeReceiver = new android.content.BroadcastReceiver() {
             @Override
@@ -597,9 +597,11 @@ sendBroadcast(syncIntent);
         if (fV != null) wm.removeView(fV);
         removeAccessibleHome(); 
     }
-    private void drawAccessibleHome() {
-        removeAccessibleHome();
-        android.content.SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+    private void drawAccessibleHome() { 
+                removeAccessibleHome(); 
+                android.content.SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE); 
+                // YC7: Đọc cấu hình từ prefix "homacc_" (tab Homacc riêng biệt) 
+                String accPrefix = "homacc_"; 
         android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
         int type = android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
         int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE 
@@ -607,16 +609,17 @@ sendBroadcast(syncIntent);
                   | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN 
                   | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
 
-        for (int i = 0; i < 5; i++) {
-            boolean en = prefs.getBoolean("home_" + BARS[i] + "_en", false);
+        for (int i = 0; i < 5; i++) { 
+            boolean en = prefs.getBoolean(accPrefix + BARS[i] + "_en", false); 
             if (!en) continue;
             accHomeBars[i] = new View(this);
-            int alpha = prefs.getInt("home_" + BARS[i] + "_alpha", 50);
-            int w = prefs.getInt("home_" + BARS[i] + "_w", 300);
-            int h = prefs.getInt("home_" + BARS[i] + "_h", 60);
-            int x = prefs.getInt("home_" + BARS[i] + "_x", 0);
-            int y = prefs.getInt("home_" + BARS[i] + "_y", 0);
-            int priMode = prefs.getInt("home_" + BARS[i] + "_pri_mode", 0);
+        int alpha = prefs.getInt(accPrefix + BARS[i] + "_alpha", 50);
+        int w = prefs.getInt(accPrefix + BARS[i] + "_w", 300);
+        int h = prefs.getInt(accPrefix + BARS[i] + "_h", 60);
+        int x = prefs.getInt(accPrefix + BARS[i] + "_x", 0);
+        int y = prefs.getInt(accPrefix + BARS[i] + "_y", 0);
+        int priMode = prefs.getInt(accPrefix + BARS[i] + "_pri_mode", 0);
+
             
             android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
             gd.setColor(android.graphics.Color.argb(alpha, 96, 125, 139));
@@ -640,14 +643,14 @@ sendBroadcast(syncIntent);
         }
 
         for (int i = 0; i < 4; i++) {
-            boolean en = prefs.getBoolean("home_corner_" + CORNERS[i] + "_en", false);
+            boolean en = prefs.getBoolean(accPrefix + "corner_" + CORNERS[i] + "_en", false);
             if (!en) continue;
             accHomeCorners[i] = new CornerView(this, i, "home_");
-            int moonAlpha = prefs.getInt("home_corner_moon_alpha", 100);
-            int strokeAlpha = prefs.getInt("home_corner_stroke_alpha", 200);
-            int hideDelay = prefs.getInt("home_corner_hide_dur", 2500);
-            int visMode = prefs.getInt("home_corner_" + CORNERS[i] + "_vis_mode", 0);
-            int priMode = prefs.getInt("home_corner_" + CORNERS[i] + "_pri_mode", 0);
+            int moonAlpha = prefs.getInt(accPrefix + "corner_moon_alpha", 100);
+            int strokeAlpha = prefs.getInt(accPrefix + "corner_stroke_alpha", 200);
+            int hideDelay = prefs.getInt(accPrefix + "corner_hide_dur", 2500);
+    	int visMode = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_vis_mode", 0);
+int priMode = prefs.getInt(accPrefix + "corner_" + CORNERS[i] + "_pri_mode", 0);
             
             ((CornerView) accHomeCorners[i]).updateProps(prefs.getInt("home_corner_thick", 8), moonAlpha, strokeAlpha, visMode == 1, hideDelay, visMode == 2);
             

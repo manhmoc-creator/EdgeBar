@@ -31,21 +31,37 @@ public class QsAccHomeTile extends TileService {
     }
 
     @Override public void onClick() {
-        if (!isAccEnabled()) return; // Yêu cầu 4: Không làm gì nếu Acc tắt
+    // YC6: Tile này quản lý CẢ MorseLock state VÀ AccHome
+    if (!isAccEnabled()) return;
 
-        // Yêu cầu 8: Khi bật Acc Home → tắt Home overlay cũ
-        if (!AccessibleHomeService.isRunning) {
-            stopService(new Intent(this, HomescreenService.class));
-            sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_ON"));
-        } else {
-            sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_OFF"));
-        }
-
-        Tile t = getQsTile();
-        t.setState(AccessibleHomeService.isRunning
-            ? Tile.STATE_INACTIVE : Tile.STATE_ACTIVE);
-        t.updateTile();
+    if (!AccessibleHomeService.isRunning) {
+        // YC3: Dùng ADB permission (WRITE_SECURE_SETTINGS) để chuyển mode
+        // Bước 1: Tắt hoàn toàn Home overlay cũ (sleep mode → giải phóng RAM)
+        stopService(new Intent(this, HomescreenService.class));
+        getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
+            .edit()
+            .putBoolean("shortcut_home_on", false)
+            .putBoolean("shortcut_acc_home_on", true)
+            .apply();
+        // Bước 2: Bật AccHome
+        sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_ON"));
+        // Bước 3: Kích hoạt lại MorseLock theo AccHome
+        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+    } else {
+        // Tắt AccHome → sleep mode
+        sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_OFF"));
+        getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
+            .edit()
+            .putBoolean("shortcut_acc_home_on", false)
+            .apply();
+        // YC5: Hiện icon trạng thái
+        updateStatusBarNotification(true);
     }
+
+    Tile t = getQsTile();
+    t.setState(AccessibleHomeService.isRunning ? Tile.STATE_INACTIVE : Tile.STATE_ACTIVE);
+    t.updateTile();
+}
 
     private void updateStatusBarNotification(boolean showX) {
         String cid = "eb_acc_home_status";

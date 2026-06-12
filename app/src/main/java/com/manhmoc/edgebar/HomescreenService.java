@@ -684,7 +684,7 @@ filter.addAction("com.manhmoc.edgebar.UNINSTALL_DETECTED");
         getSystemService(NotificationManager.class).createNotificationChannel(c);
         Notification n = new Notification.Builder(this, cid)
                 .setContentTitle("Edge Bar Màn Chính")
-                .setSmallIcon(android.R.drawable.ic_menu_edit)
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
                 .setOngoing(true).build();
         startForeground(2, n);
 
@@ -1167,10 +1167,17 @@ private void showMorseOSCover() {
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hideNormal = (avoidKbd && isKbd) || isBl;
         
-        boolean accHomeRunning = AccessibleHomeService.isRunning || prefs.getBoolean("shortcut_acc_home_on", false);
-        boolean oldHomeEnabled = prefs.getBoolean("shortcut_home_on", false);
-        // Biến cờ quyết định xem bộ viền cũ (display + adb) có được phép vẽ hay không
-        boolean shouldRenderOldHome = isUnlocked && !hideNormal && !accHomeRunning && oldHomeEnabled;
+        // DUAL-SOUL: Chỉ 1 trong 2 động cơ được phép vẽ tại 1 thời điểm
+// → tiết kiệm tuyệt đối RAM/GPU Adreno 540 trên Pixel 2XL
+boolean accHomeRunning = AccessibleHomeService.isRunning;
+boolean oldHomeEnabled = HomescreenService.isRunning && prefs.getBoolean("shortcut_home_on", false);
+// Nếu AccHome đang chạy → ép tắt toàn bộ bars cũ khỏi vùng nhớ GPU
+boolean shouldRenderOldHome = isUnlocked && !hideNormal && !accHomeRunning && oldHomeEnabled;
+// Pixel 2XL: giải phóng SurfaceFlinger layer khi overlay tắt
+if (accHomeRunning) {
+    for (int i = 0; i < 5; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
+    for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
+}
         isPreviewMorse = prefs.getBoolean("preview_morse", false);
         boolean timeLocked = (System.currentTimeMillis() < lockUntilTime);
 
