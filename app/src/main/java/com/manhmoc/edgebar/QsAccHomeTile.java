@@ -44,7 +44,8 @@ public class QsAccHomeTile extends TileService {
             Tile t = getQsTile();
             if (t == null) return;
             if (!isAccEnabled()) {
-                t.setState(Tile.STATE_UNAVAILABLE);
+                // [MỤC 8] STATE_INACTIVE thay UNAVAILABLE — tránh hệ thống ẩn tile
+                t.setState(Tile.STATE_INACTIVE);
                 t.setLabel("Homacc (cần Acc)");
             } else {
                 boolean running = AccessibleHomeService.isRunning;

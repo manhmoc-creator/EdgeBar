@@ -77,7 +77,7 @@ private boolean isAccessibleHomeShortcutOn() {
     private String currentMorseAttempt = "";
     private int morseFailCount = 0;
     private String lockedPkg = "";
-
+    private String dismissedPkg = "";  // ← THÊM DÒNG NÀY
 
     private boolean isCountingDown = false;
     private Handler countdownHandler = new Handler();
@@ -281,7 +281,16 @@ updateVisibility();
 
         public CornerView(Context c, int type, String prefix) { super(c); this.type = type; this.prefix = prefix; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
 
-        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) { pStroke.setStrokeWidth(thick); this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv; if(!autoHide) { pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); pStroke.setAlpha(strokeAlpha); } else triggerFlash(); if(inv) { pFill.setAlpha(0); pStroke.setAlpha(0); } invalidate(); }
+        private boolean prevAutoHide = false; // [THÊM] chặn flash lặp liên tục
+        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) {
+            pStroke.setStrokeWidth(thick); this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha;
+            this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
+            if(!autoHide) { pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); pStroke.setAlpha(strokeAlpha); }
+            else if(!prevAutoHide) triggerFlash();
+            if(inv) { pFill.setAlpha(0); pStroke.setAlpha(0); }
+            prevAutoHide = autoHide;
+            invalidate();
+        }
 
         public void triggerFlash() { if(!isAutoHiding || isInv) return; autoHideHandler.removeCallbacksAndMessages(null); pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha + 50), 96, 125, 139)); pStroke.setAlpha(Math.min(255, baseStrokeAlpha + 50)); invalidate(); autoHideHandler.postDelayed(() -> { ValueAnimator a = ValueAnimator.ofFloat(1f, 0f); a.setDuration(1500); a.addUpdateListener(anim -> { float val = (float)anim.getAnimatedValue(); pFill.setColor(Color.argb((int)(baseMoonAlpha * val), 96, 125, 139)); pStroke.setAlpha((int)(baseStrokeAlpha * val)); invalidate(); }); a.start(); }, hideDelay); }
 
@@ -557,28 +566,26 @@ updateVisibility();
                 boolean isM = prefs.getBoolean("morse_mode_en", false);
                 prefs.edit().putBoolean("morse_mode_en", !isM).apply();
                 updateVisibility();
+                if (isM) checkSelfStop(); // vừa TẮT morse → kiểm tra có cần dừng service
 } else if (action.equals(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)) {
     String reason = i.getStringExtra("reason");
     if ("homekey".equals(reason)) {
-        // Nhấn Home → set flag tức thì, không chờ broadcast pkg
         isForceHome = true;
-        if (isMorseLockActive) {
-            scheduleSuicideCheck(); // tự sát ngay với isForceHome = true
-        }
+        if (isMorseLockActive) scheduleSuicideCheck();
     } else if ("recentapps".equals(reason)) {
+        // [YÊU CẦU #7] MorseLock cover Recents screen
         String locklist = prefs.getString("locklist", "");
         boolean hasLockedApp = false;
-        if (!locklist.isEmpty()) {
-            String checkPkg = !unlockedApps.isEmpty() ? unlockedApps.iterator().next() : lockedPkg;
-            if (!checkPkg.isEmpty()) {
-                for (String pkg : locklist.split(",")) {
-                    if (pkg.trim().equals(checkPkg)) { hasLockedApp = true; break; }
+        if (!lockedPkg.isEmpty() && !locklist.isEmpty()) {
+            for (String pkg : locklist.split(",")) {
+                if (pkg.trim().equals(lockedPkg)) {
+                    hasLockedApp = true;
+                    break;
                 }
             }
         }
-        if (hasLockedApp) {
-            isCoveringRecents = true;
-            showMorseOSCover();
+        if (hasLockedApp && !isMorseLockActive) {
+            showMorseOSCover();  // ← COVER Recents
         }
     }
 } else if (action.equals("com.manhmoc.edgebar.MORSE_OS_RECENTS_SHOW")) {
@@ -682,7 +689,24 @@ updateVisibility();
     }
 };
     @Override public IBinder onBind(Intent intent) { return null; }
-    @Override public int onStartCommand(Intent intent, int flags, int startId) { isRunning = true; sendSyncState(); return START_STICKY; }
+    @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        isRunning = true;
+        sendSyncState();
+        return START_STICKY;
+    }
+
+    /**
+     * [MỤC 1/3/7] Kiểm tra điều kiện sống còn của service.
+     * Service chỉ cần chạy khi: old Home overlay ON, HOẶC MorseLock ON.
+     * Nếu cả hai đều OFF → tự dừng để giải phóng RAM (Pixel 2XL opt).
+     */
+    private void checkSelfStop() {
+        boolean morseOn = prefs.getBoolean("morse_mode_en", false);
+        boolean oldHomeOn = prefs.getBoolean("shortcut_home_on", false);
+        if (!morseOn && !oldHomeOn && !isMorseLockActive) {
+            stopSelf();
+        }
+    }
     private void sendSyncState() { Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
 
     @Override
@@ -1196,10 +1220,14 @@ private void showMorseOSCover() {
                 updateVisibility();
             }, 500);
 } else if (isCurrentlyOnHome) {
-    // V19.12.3.6.2: Đang ở Home → đóng MorseLock 1 lần, KHÔNG tái hiện
-    // Thêm lockedPkg vào dismissedSet với TTL 3 giây để chặn
-    // AccessibilityEvent bắn MORSE_LOCK_ENGAGE ngay sau khi đóng
-    final String dismissedPkg = lockedPkg.isEmpty() ? currentForegroundPkg : lockedPkg;
+    // [MỤC 9] Tap icon trên Home → tắt MorseLock VĨNH VIỄN cho phiên này
+    // Add vào unlockedApps để app này không bị đòi mật khẩu lại
+    if (!lockedPkg.isEmpty()) {
+        unlockedApps.add(lockedPkg);
+        relockHandler.removeCallbacks(relockRunnable);
+        relockScheduledTime = 0;
+        pendingRelockPkg = "";
+    }
     isMorseLockActive = false;
     isForceHome = false;
     lockedPkg = "";

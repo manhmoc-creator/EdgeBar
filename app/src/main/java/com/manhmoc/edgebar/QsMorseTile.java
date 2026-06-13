@@ -57,14 +57,13 @@ private boolean hasWriteSecureSettings() {
     if (t == null) return;
 
     if (!isAccEnabled()) {
-        // Cấp độ 1: Chưa bật Accessibility
-        t.setState(Tile.STATE_UNAVAILABLE);
-        t.setLabel("MorseLock (cần Acc)");
+        // [MỤC 8] Dùng STATE_INACTIVE thay UNAVAILABLE để tile KHÔNG bị
+        // hệ thống tự ẩn khỏi status bar / DND.
+        t.setState(Tile.STATE_INACTIVE);
+        t.setLabel("MorseLock (Acc)");
     } else if (!hasWriteSecureSettings()) {
-        // Cấp độ 2: Chưa cấp ADB
-        // STATE_UNAVAILABLE để user biết cần chạy lệnh ADB
-        t.setState(Tile.STATE_UNAVAILABLE);
-        t.setLabel("MorseLock (cần ADB)");
+        t.setState(Tile.STATE_INACTIVE);
+        t.setLabel("MorseLock (ADB)");
     } else {
         // Cấp độ 3: Đủ quyền → hiển thị trạng thái thực
         boolean morseOn = isMorseOn();
@@ -85,21 +84,28 @@ private boolean hasWriteSecureSettings() {
     }
     // Điều kiện 2: ADB WRITE_SECURE_SETTINGS phải được cấp
     if (!hasWriteSecureSettings()) {
-        // Không có quyền ADB → tile không làm gì, chỉ update label
         Tile t = getQsTile();
         if (t != null) {
-            t.setState(Tile.STATE_UNAVAILABLE);
+            t.setState(Tile.STATE_INACTIVE);
             t.setLabel("MorseLock (cần ADB)");
             t.updateTile();
         }
         return;
     }
 
-
         // Toggle MorseLock — KHÔNG đụng HomescreenService hay AccHome
+        boolean newState = !isMorseOn();
+
+        // [MỤC 1/3/7] MorseLock cần HomescreenService sống để vẽ morseContainer
+        // Bật trước khi đổi pref, để service kịp khởi tạo overlay
+        if (newState && !HomescreenService.isRunning) {
+            Intent homeIntent = new Intent(this, HomescreenService.class);
+            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(homeIntent);
+            else startService(homeIntent);
+        }
+
         sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"));
 
-        boolean newState = !isMorseOn();
         Tile t = getQsTile();
         t.setState(newState ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
         t.setLabel(newState ? "MorseLock ON" : "MorseLock OFF");

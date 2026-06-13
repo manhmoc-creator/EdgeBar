@@ -70,8 +70,8 @@ private Runnable debounceRunnable = null;
 
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     if (k == null) return;
-    // Live-update Homacc khi kéo slider — không rebuild view, zero GC
-    if (k.startsWith("homacc_") && isHomaccDrawn) {
+    // Kéo slider Homacc -> update trực tiếp qua updateViewLayout, KHÔNG removeView/addView
+    if (k.startsWith("homacc_") && AccessibleHomeService.isRunning) {
         updateHomaccLive();
         return;
     }
@@ -257,33 +257,35 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar").setSmallIcon(android.R.drawable.ic_lock_idle_lock).setOngoing(true).build();
         startForeground(1, n);
         accHomeReceiver = new android.content.BroadcastReceiver() {
-    @Override
-    public void onReceive(android.content.Context context, Intent intent) {
-        String act = intent.getAction();
-        if ("com.manhmoc.edgebar.ACC_HOME_DRAW".equals(act)) {
-            drawAccessibleHome();
-        } else if ("com.manhmoc.edgebar.ACC_HOME_REMOVE".equals(act)) {
-            removeAccessibleHome();
-        } else if ("com.manhmoc.edgebar.ACC_HOME_SLEEP".equals(act)) {
-            // Deep sleep: KHÔNG removeView — giữ WM token, chỉ ẩn view
-            // Zero GPU cost trên Adreno 540 khi GONE
-            for (int i = 0; i < 5; i++)
-                if (accHomeBars[i] != null) accHomeBars[i].setVisibility(View.GONE);
-            for (int i = 0; i < 4; i++)
-                if (accHomeCorners[i] != null) accHomeCorners[i].setVisibility(View.GONE);
-        } else if ("com.manhmoc.edgebar.ACC_HOME_WAKE".equals(act)) {
-            // Wake up: nếu đã có view thì live-update, nếu chưa thì vẽ mới
-            if (isHomaccDrawn) updateHomaccLive();
-            else if (AccessibleHomeService.isRunning) drawAccessibleHome();
-        }
-    }
-};
-android.content.IntentFilter accFilter = new android.content.IntentFilter();
-accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_DRAW");
-accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_REMOVE");
-accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_SLEEP");
-accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_WAKE");
-registerReceiver(accHomeReceiver, accFilter);
+            @Override
+            public void onReceive(android.content.Context context, Intent intent) {
+                String act = intent.getAction();
+                if ("com.manhmoc.edgebar.ACC_HOME_DRAW".equals(act)) {
+                    drawAccessibleHome();
+                } else if ("com.manhmoc.edgebar.ACC_HOME_REMOVE".equals(act)) {
+                    removeAccessibleHome();
+                } else if ("com.manhmoc.edgebar.ACC_HOME_SLEEP".equals(act)) {
+                    // [MỤC 5] Deep sleep: chỉ ẩn view, GIỮ service sống — đỡ tốn pin re-init
+                    for (int i=0;i<5;i++) if (accHomeBars[i]!=null) accHomeBars[i].setVisibility(View.GONE);
+                    for (int i=0;i<4;i++) if (accHomeCorners[i]!=null) accHomeCorners[i].setVisibility(View.GONE);
+                } else if ("com.manhmoc.edgebar.ACC_HOME_WAKE".equals(act)) {
+                    // [MỤC 5] Thức dậy: vẽ lại nếu view chưa tồn tại, hoặc hiện lại view cũ
+                    if (accHomeBars[0] == null && accHomeCorners[0] == null) drawAccessibleHome();
+                    else {
+                        SharedPreferences p = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+                        for (int i=0;i<5;i++) if (accHomeBars[i]!=null && p.getBoolean("homacc_"+BARS[i]+"_en", false)) accHomeBars[i].setVisibility(View.VISIBLE);
+                        for (int i=0;i<4;i++) if (accHomeCorners[i]!=null && p.getBoolean("homacc_corner_"+CORNERS[i]+"_en", false)) accHomeCorners[i].setVisibility(View.VISIBLE);
+                        updateHomaccLive();
+                    }
+                }
+            }
+        };
+        android.content.IntentFilter accFilter = new android.content.IntentFilter();
+        accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_DRAW");
+        accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_REMOVE");
+        accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_SLEEP");
+        accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_WAKE");
+        registerReceiver(accHomeReceiver, accFilter);
         if (AccessibleHomeService.isRunning) drawAccessibleHome();
 
         createFloatingBars();
@@ -769,6 +771,7 @@ private void drawAccessibleHome() {
     }
     isHomaccDrawn = true; // Đánh dấu đã vẽ xong
 }
+
     private void removeAccessibleHome() {
     android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
     for (int i = 0; i < 5; i++) {

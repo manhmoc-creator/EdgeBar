@@ -14,44 +14,48 @@ import android.os.Build;
 public class QsHomeTile extends TileService {
 
     @Override
-    public void onStartListening() {
-        Tile t = getQsTile();
-        if (t == null) return;
-        t.setState(HomescreenService.isRunning
-            ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
+    public void onStartListening(){
+        Tile t= getQsTile();
+        if(t== null) return;
+        boolean oldHomeOn = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE).getBoolean("shortcut_home_on", false);
+        t.setState(oldHomeOn ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
         t.updateTile();
     }
 
     @Override
-public void onClick() {
-    android.content.SharedPreferences prefs =
-        getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+    public void onClick(){
+        android.content.SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+        boolean oldHomeOn = prefs.getBoolean("shortcut_home_on", false);
 
-    if (HomescreenService.isRunning) {
-        // TẮT old Home
-        stopService(new Intent(this, HomescreenService.class));
-        prefs.edit().putBoolean("shortcut_home_on", false).apply();
-        // Wake Homacc nếu đang được bật trong pref
-        if (prefs.getBoolean("shortcut_acc_home_on", false)
-                && AccessibleHomeService.isRunning) {
-            sendBroadcast(new Intent("com.manhmoc.edgebar.ACC_HOME_WAKE"));
+        if (oldHomeOn) {
+            // === TẮT old Home ===
+            // [MỤC 0] CHỈ tắt cờ old Home, KHÔNG đụng MorseLock.
+            prefs.edit().putBoolean("shortcut_home_on", false).apply();
+            boolean morseOn = prefs.getBoolean("morse_mode_en", false);
+            boolean accHomeOn = prefs.getBoolean("shortcut_acc_home_on", false);
+            if (!morseOn) {
+                // Không service nào khác cần HomescreenService → dừng để tiết kiệm RAM
+                stopService(new Intent(this, HomescreenService.class));
+            } else {
+                sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+            }
+            // [MỤC 5] Homacc thức dậy nếu đã từng bật
+            if (accHomeOn) sendBroadcast(new Intent("com.manhmoc.edgebar.ACC_HOME_WAKE"));
+        } else {
+            // === BẬT old Home ===
+            boolean accHomeWasOn = prefs.getBoolean("shortcut_acc_home_on", false);
+            prefs.edit().putBoolean("shortcut_home_on", true).apply();
+            // [MỤC 5] Homacc vào deep-sleep (ẩn view, GIỮ service sống)
+            if (accHomeWasOn) sendBroadcast(new Intent("com.manhmoc.edgebar.ACC_HOME_SLEEP"));
+            Intent homeIntent = new Intent(this, HomescreenService.class);
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(homeIntent);
+            else startService(homeIntent);
         }
-    } else {
-        // BẬT old Home → Homacc vào deep sleep (service vẫn sống, view ẩn)
-        prefs.edit().putBoolean("shortcut_home_on", true).apply();
-        if (AccessibleHomeService.isRunning) {
-            sendBroadcast(new Intent("com.manhmoc.edgebar.ACC_HOME_SLEEP"));
-        }
-        Intent homeIntent = new Intent(this, HomescreenService.class);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(homeIntent);
-        else startService(homeIntent);
+
+        Tile t = getQsTile();
+        if (t == null) return;
+        boolean newState = !oldHomeOn;
+        t.setState(newState ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
+        t.updateTile();
     }
-
-    // Cập nhật tile — KHÔNG đụng MorseLock, KHÔNG đụng morse_mode_en
-    Tile t = getQsTile();
-    if (t == null) return;
-    t.setState(HomescreenService.isRunning
-        ? Tile.STATE_INACTIVE : Tile.STATE_ACTIVE);
-    t.updateTile();
- }
 }
