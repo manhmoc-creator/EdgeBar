@@ -478,6 +478,14 @@ updateVisibility();
     if (pkg == null || pkg.isEmpty()) return;
     if (isUnlockCooldown) return;
 
+    // V19.12.3.6.2: Chặn tuyệt đối khi đang ở Home — không bao giờ hiện MorseLock ở Home
+    boolean isCurrentlyOnHome = currentForegroundPkg.isEmpty()
+        || currentForegroundPkg.contains("launcher")
+        || currentForegroundPkg.contains("nexuslauncher")
+        || currentForegroundPkg.contains("quickstep")
+        || currentForegroundPkg.contains("systemui");
+    if (isCurrentlyOnHome) return;
+
     // FIX BUG 9: Whitelist đầy đủ các launcher/system packages
     // Tránh MorseLock xuất hiện khi đang ở màn hình chính
     boolean pkgIsSystemHome = pkg.contains("launcher")
@@ -707,7 +715,8 @@ filter.addAction("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
 filter.addAction("com.manhmoc.edgebar.MORSE_LOCK_DISMISS");
 filter.addAction("com.manhmoc.edgebar.TOGGLE_MORSE");
 filter.addAction("com.manhmoc.edgebar.UNINSTALL_DETECTED");
-// RECENTS_SHOW/HIDE gộp vào xử lý ACTION_CLOSE_SYSTEM_DIALOGS, bỏ 2 action này
+filter.addAction("com.manhmoc.edgebar.MORSE_OS_RECENTS_SHOW");
+filter.addAction("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE");
         if (Build.VERSION.SDK_INT >= 33)
             registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         else
@@ -773,10 +782,14 @@ filter.addAction("com.manhmoc.edgebar.UNINSTALL_DETECTED");
         tvLockIcon.setTextSize(savedIconSize);
 
 
-        WindowManager.LayoutParams bgP = new WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN |
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
-        try { wm.addView(morseContainer, bgP); } catch (Exception e) {}
+        WindowManager.LayoutParams bgP = new WindowManager.LayoutParams(-1, -1,
+    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+    | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+    | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,  // vượt màn khóa
+    PixelFormat.TRANSLUCENT);
+try { wm.addView(morseContainer, bgP); } catch (Exception e) {}
 
         for (int i = 0; i < 8; i++) {
             mBars[i] = new MorseBarView(this);
@@ -1183,9 +1196,10 @@ private void showMorseOSCover() {
                 updateVisibility();
             }, 500);
 } else if (isCurrentlyOnHome) {
-    // FIX BUG 9: Đang ở Home → TẮT MorseLock NGAY, không ép nhập mật khẩu
-    // Không có app nào cần crash. Không add vào unlockedApps để
-    // lần sau mở app vẫn cần nhập mật khẩu bình thường.
+    // V19.12.3.6.2: Đang ở Home → đóng MorseLock 1 lần, KHÔNG tái hiện
+    // Thêm lockedPkg vào dismissedSet với TTL 3 giây để chặn
+    // AccessibilityEvent bắn MORSE_LOCK_ENGAGE ngay sau khi đóng
+    final String dismissedPkg = lockedPkg.isEmpty() ? currentForegroundPkg : lockedPkg;
     isMorseLockActive = false;
     isForceHome = false;
     lockedPkg = "";
@@ -1199,7 +1213,15 @@ private void showMorseOSCover() {
         bgView.invalidate();
     }
     morseContainer.setVisibility(View.GONE);
-    updateVisibility();
+    // Thêm vào dismissed set 3 giây — chặn MORSE_LOCK_ENGAGE tái kích hoạt
+    // KHÔNG dùng unlockedApps vì lần sau mở app vẫn cần mật khẩu
+    if (!dismissedPkg.isEmpty()) {
+        unlockedApps.add(dismissedPkg);
+        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            unlockedApps.remove(dismissedPkg);
+        }, 3000);
+    }
+    // KHÔNG gọi updateVisibility() — tránh vòng lặp tái hiện overlay
 }
             }
             return true;

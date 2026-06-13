@@ -47,10 +47,10 @@ private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "rig
     private String[] C_GESTURE_NAMES;
 
     private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain; 
-    private Button btnLock, btnHome, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim;
+    private Button btnLock, btnHomacc, btnHome, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.0"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.2"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -247,21 +247,60 @@ android.app.admin.DevicePolicyManager dpm =
 
     // ==================== KHÔNG GIAN ĐIỀU KIỆN ====================
     private void buildConditionsSpace() {
-        LinearLayout tabContainer = new LinearLayout(this); tabContainer.setOrientation(LinearLayout.HORIZONTAL); tabContainer.setPadding(0, 0, 0, 20); 
-        btnLock = createTabBtn("LOCK"); btnHome = createTabBtn("HOME"); 
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f); p.setMargins(0,0,15,0); 
-        btnLock.setLayoutParams(p); btnHome.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        tabContainer.addView(btnLock); tabContainer.addView(btnHome); pageConditions.addView(tabContainer);
-        listRules = new LinearLayout(this); listRules.setOrientation(LinearLayout.VERTICAL); pageConditions.addView(listRules);
-        
-        btnLock.setOnClickListener(v -> { currentGesTab=0; refreshPreview(); btnLock.setBackground(getRounded("#00E5FF", 20f)); btnLock.setTextColor(Color.BLACK); btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE); renderRulesList(); }); 
-        btnHome.setOnClickListener(v -> { currentGesTab=1; refreshPreview(); btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE); btnHome.setBackground(getRounded("#00E5FF", 20f)); btnHome.setTextColor(Color.BLACK); renderRulesList(); }); 
-        btnHome.performClick();
-    }
+    LinearLayout tabContainer = new LinearLayout(this);
+    tabContainer.setOrientation(LinearLayout.HORIZONTAL);
+    tabContainer.setPadding(0, 0, 0, 20);
+
+    btnLock = createTabBtn("LOCK");
+    btnHomacc = createTabBtn("HOMACC");
+    btnHome = createTabBtn("HOME");
+
+    LinearLayout.LayoutParams pLock = new LinearLayout.LayoutParams(0, -2, 1f);
+    pLock.setMargins(0, 0, 10, 0);
+    btnLock.setLayoutParams(pLock);
+
+    LinearLayout.LayoutParams pHomacc = new LinearLayout.LayoutParams(0, -2, 1f);
+    pHomacc.setMargins(0, 0, 10, 0);
+    btnHomacc.setLayoutParams(pHomacc);
+
+    btnHome.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    tabContainer.addView(btnLock);
+    tabContainer.addView(btnHomacc);
+    tabContainer.addView(btnHome);
+    pageConditions.addView(tabContainer);
+
+    listRules = new LinearLayout(this);
+    listRules.setOrientation(LinearLayout.VERTICAL);
+    pageConditions.addView(listRules);
+
+    btnLock.setOnClickListener(v -> {
+        currentGesTab = 0; refreshPreview();
+        btnLock.setBackground(getRounded("#00E5FF", 20f)); btnLock.setTextColor(Color.BLACK);
+        btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
+        btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE);
+        renderRulesList();
+    });
+    btnHomacc.setOnClickListener(v -> {
+        currentGesTab = 1; refreshPreview();
+        btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE);
+        btnHomacc.setBackground(getRounded("#7C4DFF", 20f)); btnHomacc.setTextColor(Color.BLACK);
+        btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE);
+        renderRulesList();
+    });
+    btnHome.setOnClickListener(v -> {
+        currentGesTab = 2; refreshPreview();
+        btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE);
+        btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
+        btnHome.setBackground(getRounded("#00E5FF", 20f)); btnHome.setTextColor(Color.BLACK);
+        renderRulesList();
+    });
+    btnHome.performClick();
+}
 
     private void renderRulesList() {
         listRules.removeAllViews(); 
-        String prefix = currentGesTab == 0 ? "lock_" : "home_";
+        String prefix = currentGesTab == 0 ? "lock_" : (currentGesTab == 1 ? "homacc_" : "home_");
         LinearLayout currentRow = null; int count = 0;
         for (int c = 0; c < ALL_COMP_KEYS.length; c++) {
             for (int g = 0; g < C_GESTURES.length; g++) {
@@ -383,8 +422,8 @@ LinearLayout vOpt = new LinearLayout(this); vOpt.setOrientation(LinearLayout.VER
             ArrayList<String> acts = new ArrayList<>(); for(int i=0; i<actionBoxes.size(); i++) { if(actionBoxes.get(i).isChecked()) acts.add(ACT_KEYS[i+1]); }
             if(acts.isEmpty()) { Toast.makeText(this, T("Select at least 1 Action!", "Hãy chọn ít nhất 1 Hành động!"), Toast.LENGTH_SHORT).show(); return; }
             String joinedActions = TextUtils.join(",", acts); 
-            String prefix = currentGesTab == 0 ? "lock_" : "home_"; 
-            String compKey = ALL_COMP_KEYS[selectedComp[0]]; boolean hasChecked = false;
+            String prefix = currentGesTab == 0 ? "lock_" : (currentGesTab == 1 ? "homacc_" : "home_");
+String compKey = ALL_COMP_KEYS[selectedComp[0]]; boolean hasChecked = false;
             if(editKey != null && preGes != -1) prefs.edit().putString(editKey, "NONE").apply(); 
             for(int i=0; i<gestureBoxes.size(); i++) {
                if(gestureBoxes.get(i).isChecked()) {
@@ -759,8 +798,11 @@ designSliderContainer.addView(homaccCtrlRow);
             final String[] bKeysF = bKeys;
             cb.setOnCheckedChangeListener((vv,c) -> prefs.edit().putBoolean(prefix+bKeysF[idx]+"_en", c).apply());
             drawerContent.addView(cb);
-            drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+bKeys[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0));
-            drawerContent.addView(createSlider("Độ trong suốt", prefix+bKeys[i]+"_alpha", 255, 50));
+            drawerContent.addView(createComboDropdown("Hiển thị", prefix+bKeys[i]+"_vis_mode",
+    new String[]{"Hiện hoàn toàn", "Tàng hình (Nháy sáng)", "Ẩn hoàn toàn (Vô hình)"}, 0));
+drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+bKeys[i]+"_pri_mode",
+    new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+drawerContent.addView(createSlider("Độ trong suốt", prefix+bKeys[i]+"_alpha", 255, 50));
             drawerContent.addView(createSlider("Chiều ngang", prefix+bKeys[i]+"_w", 3000, 300));
             drawerContent.addView(createSlider("Chiều dọc", prefix+bKeys[i]+"_h", 3000, 60));
             drawerContent.addView(createSlider("Toạ độ X", prefix+bKeys[i]+"_x", 1000, 0));

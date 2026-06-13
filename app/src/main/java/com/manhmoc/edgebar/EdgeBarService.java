@@ -41,10 +41,10 @@ public class EdgeBarService extends AccessibilityService {
 
     // === CHÈN CODE BIẾN TOÀN CỤC CỦA BẠN VÀO ĐÂY ===
     // Động cơ Twin-Engine Trợ năng
-    private android.view.View[] accHomeBars = new android.view.View[5];
-    private android.view.View[] accHomeCorners = new android.view.View[4];
-    private android.content.BroadcastReceiver accHomeReceiver;
-    // ===============================================
+private android.view.View[] accHomeBars = new android.view.View[5];
+private android.view.View[] accHomeCorners = new android.view.View[4];
+private android.content.BroadcastReceiver accHomeReceiver;
+private boolean isHomaccDrawn = false; // Guard chặn vẽ lại khi đã có view
 
     // ĐẰNG SAU (Các biến cũ của EdgeBarService)
     private WindowManager wm;
@@ -70,10 +70,15 @@ private Runnable debounceRunnable = null;
 
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     if (k == null) return;
+    // Live-update Homacc khi kéo slider — không rebuild view, zero GC
+    if (k.startsWith("homacc_") && isHomaccDrawn) {
+        updateHomaccLive();
+        return;
+    }
     if (fV != null) fV.updateStyle();
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> updateVisibility();
-    debounceHandler.postDelayed(debounceRunnable, 500);
+    debounceHandler.postDelayed(debounceRunnable, 300);
 };
 
    private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
@@ -153,7 +158,27 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         public CornerView(Context c, int type, String prefix) { super(c); this.type = type; this.prefix = prefix; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
 
 
-        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) { pStroke.setStrokeWidth(thick); this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv; if(!autoHide) { pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); pStroke.setAlpha(strokeAlpha); } else triggerFlash(); if(inv) { pFill.setAlpha(0); pStroke.setAlpha(0); } invalidate(); }
+        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) {
+    pStroke.setStrokeWidth(thick);
+    this.baseMoonAlpha = moonAlpha;
+    this.baseStrokeAlpha = strokeAlpha;
+    this.isAutoHiding = autoHide;
+    this.hideDelay = delay;
+    this.isInv = inv;
+    if (inv) {
+        pFill.setAlpha(0);
+        pStroke.setAlpha(0);
+    } else if (!autoHide) {
+        pFill.setColor(Color.argb(moonAlpha, 96, 125, 139));
+        pStroke.setAlpha(strokeAlpha);
+    } else {
+        // auto-hide: bắt đầu ẩn hoàn toàn, KHÔNG triggerFlash() khi khởi tạo
+        // chỉ flash khi user thực sự chạm (gọi từ SidebarTouchListener)
+        pFill.setColor(Color.argb(0, 96, 125, 139));
+        pStroke.setAlpha(0);
+    }
+    invalidate();
+}
         public void triggerFlash() { if(!isAutoHiding || isInv) return; autoHideHandler.removeCallbacksAndMessages(null); pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha+50), 96,125,139)); pStroke.setAlpha(Math.min(255, baseStrokeAlpha+50)); invalidate(); autoHideHandler.postDelayed(() -> { ValueAnimator a = ValueAnimator.ofFloat(1f,0f); a.setDuration(1500); a.addUpdateListener(anim -> { float val = (float)anim.getAnimatedValue(); pFill.setColor(Color.argb((int)(baseMoonAlpha*val), 96,125,139)); pStroke.setAlpha((int)(baseStrokeAlpha*val)); invalidate(); }); a.start(); }, hideDelay); }
 
         @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas);
@@ -232,21 +257,33 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar").setSmallIcon(android.R.drawable.ic_lock_idle_lock).setOngoing(true).build();
         startForeground(1, n);
         accHomeReceiver = new android.content.BroadcastReceiver() {
-            @Override
-            public void onReceive(android.content.Context context, Intent intent) {
-                String act = intent.getAction();
-                if ("com.manhmoc.edgebar.ACC_HOME_DRAW".equals(act)) {
-                    drawAccessibleHome();
-                } else if ("com.manhmoc.edgebar.ACC_HOME_REMOVE".equals(act)) {
-                    removeAccessibleHome();
-                }
-            }
-        };
-        android.content.IntentFilter accFilter = new android.content.IntentFilter();
-        accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_DRAW");
-        accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_REMOVE");
-        registerReceiver(accHomeReceiver, accFilter);
-
+    @Override
+    public void onReceive(android.content.Context context, Intent intent) {
+        String act = intent.getAction();
+        if ("com.manhmoc.edgebar.ACC_HOME_DRAW".equals(act)) {
+            drawAccessibleHome();
+        } else if ("com.manhmoc.edgebar.ACC_HOME_REMOVE".equals(act)) {
+            removeAccessibleHome();
+        } else if ("com.manhmoc.edgebar.ACC_HOME_SLEEP".equals(act)) {
+            // Deep sleep: KHÔNG removeView — giữ WM token, chỉ ẩn view
+            // Zero GPU cost trên Adreno 540 khi GONE
+            for (int i = 0; i < 5; i++)
+                if (accHomeBars[i] != null) accHomeBars[i].setVisibility(View.GONE);
+            for (int i = 0; i < 4; i++)
+                if (accHomeCorners[i] != null) accHomeCorners[i].setVisibility(View.GONE);
+        } else if ("com.manhmoc.edgebar.ACC_HOME_WAKE".equals(act)) {
+            // Wake up: nếu đã có view thì live-update, nếu chưa thì vẽ mới
+            if (isHomaccDrawn) updateHomaccLive();
+            else if (AccessibleHomeService.isRunning) drawAccessibleHome();
+        }
+    }
+};
+android.content.IntentFilter accFilter = new android.content.IntentFilter();
+accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_DRAW");
+accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_REMOVE");
+accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_SLEEP");
+accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_WAKE");
+registerReceiver(accHomeReceiver, accFilter);
         if (AccessibleHomeService.isRunning) drawAccessibleHome();
 
         createFloatingBars();
@@ -615,21 +652,18 @@ sendBroadcast(syncIntent);
  */
 private void drawAccessibleHome() {
     removeAccessibleHome(); // Dọn sạch trước, tránh duplicate view leak
-
     SharedPreferences p = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
     String px = "homacc_";
     WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
     if (wm == null) return;
-
-    // TYPE_ACCESSIBILITY_OVERLAY: hiển thị trên mọi app kể cả chat bubble
     int type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
-
-    // Base flags — NOT_TOUCH_MODAL bắt buộc để touch đi xuyên qua vùng trống
+    // FLAG_SHOW_WHEN_LOCKED: Homacc vượt qua màn khóa, QS panel, chat bubble
     int baseF = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
               | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
               | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
               | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-              | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+              | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+              | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
 
     // --- 5 EDGE BARS ---
     for (int i = 0; i < 5; i++) {
@@ -733,14 +767,92 @@ private void drawAccessibleHome() {
         corner.setOnTouchListener(
             new SidebarTouchListener("homacc_corner_" + CORNERS[cornIdx], corner));
     }
+    isHomaccDrawn = true; // Đánh dấu đã vẽ xong
 }
     private void removeAccessibleHome() {
-        android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
-        for (int i = 0; i < 5; i++) {
-            if (accHomeBars[i] != null) { wm.removeView(accHomeBars[i]); accHomeBars[i] = null; }
-        }
-        for (int i = 0; i < 4; i++) {
-            if (accHomeCorners[i] != null) { wm.removeView(accHomeCorners[i]); accHomeCorners[i] = null; }
-        }
-      }
-    } // <-- Dấu ngoặc nhọn kết thúc toàn bộ class EdgeBarService
+    android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+    for (int i = 0; i < 5; i++) {
+        if (accHomeBars[i] != null) { wm.removeView(accHomeBars[i]); accHomeBars[i] = null; }
+    }
+    for (int i = 0; i < 4; i++) {
+        if (accHomeCorners[i] != null) { wm.removeView(accHomeCorners[i]); accHomeCorners[i] = null; }
+    }
+    isHomaccDrawn = false; // Reset guard để lần sau có thể vẽ lại
+  }
+/**
+ * V19.12.3.6.2 Obsidian Veil Phantom
+ * updateHomaccLive(): Cập nhật Homacc overlay khi kéo slider trong Design.
+ * KHÔNG removeView/addView — chỉ updateViewLayout + invalidate.
+ * Zero object allocation → Adreno 540 không bị GC pause.
+ */
+private void updateHomaccLive() {
+    if (!isHomaccDrawn) return;
+    SharedPreferences p = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+    String px = "homacc_";
+    for (int i = 0; i < 5; i++) {
+        if (accHomeBars[i] == null) continue;
+        boolean en = p.getBoolean(px + BARS[i] + "_en", false);
+        accHomeBars[i].setVisibility(en ? View.VISIBLE : View.GONE);
+        if (!en) continue;
+        int alpha   = p.getInt(px + BARS[i] + "_alpha", 50);
+        int w       = p.getInt(px + BARS[i] + "_w", 300);
+        int h       = p.getInt(px + BARS[i] + "_h", 60);
+        int x       = p.getInt(px + BARS[i] + "_x", 0);
+        int y       = p.getInt(px + BARS[i] + "_y", 0);
+        int priMode = p.getInt(px + BARS[i] + "_pri_mode", 0);
+        int visMode = p.getInt(px + BARS[i] + "_vis_mode", 0);
+        GradientDrawable gd = new GradientDrawable();
+        gd.setColor(Color.argb(alpha, 96, 125, 139));
+        gd.setCornerRadius(24f);
+        accHomeBars[i].setBackground(gd);
+        // vis_mode: 0=hiện, 1=auto-hide (ẩn đến khi chạm), 2=vô hình
+        accHomeBars[i].setAlpha(visMode == 0 ? 1f : 0f);
+        int f = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+              | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+              | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+              | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+              | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+              | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
+        if (priMode == 1) f |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        WindowManager.LayoutParams lp = (WindowManager.LayoutParams) accHomeBars[i].getLayoutParams();
+        lp.flags = f; lp.width = w; lp.height = h; lp.x = x; lp.y = y;
+        lp.gravity = GRAV[i];
+        try { wm.updateViewLayout(accHomeBars[i], lp); } catch (Exception ignored) {}
+    }
+    for (int i = 0; i < 4; i++) {
+        if (accHomeCorners[i] == null) continue;
+        boolean en = p.getBoolean(px + "corner_" + CORNERS[i] + "_en", false);
+        accHomeCorners[i].setVisibility(en ? View.VISIBLE : View.GONE);
+        if (!en) continue;
+        String ck = px + "corner_" + CORNERS[i] + "_";
+        int moonAlpha   = p.getInt(px + "corner_moon_alpha", 100);
+        int strokeAlpha = p.getInt(px + "corner_stroke_alpha", 200);
+        int hideDelay   = p.getInt(px + "corner_hide_dur", 2500);
+        int visMode     = p.getInt(ck + "vis_mode", 0);
+        int priMode     = p.getInt(ck + "pri_mode", 0);
+        ((CornerView) accHomeCorners[i]).updateProps(
+            p.getInt(px + "corner_thick", 8),
+            moonAlpha, strokeAlpha,
+            visMode == 1, hideDelay, visMode == 2);
+        int f = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+              | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+              | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+              | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+              | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+              | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
+        if (priMode == 1) f |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        int wP  = p.getInt(ck + "w", 100),      hP  = p.getInt(ck + "h", 100);
+        int mwP = p.getInt(ck + "moon_w", 100), mhP = p.getInt(ck + "moon_h", 100);
+        int mxO = Math.abs(p.getInt(ck + "moon_x", 1250) - 1250);
+        int myO = Math.abs(p.getInt(ck + "moon_y", 1250) - 1250);
+        int cw = Math.max(10, Math.max(wP, mwP) + mxO);
+        int ch = Math.max(10, Math.max(hP, mhP) + myO);
+        WindowManager.LayoutParams lp = (WindowManager.LayoutParams) accHomeCorners[i].getLayoutParams();
+        lp.flags = f; lp.width = cw; lp.height = ch;
+        lp.x = p.getInt(ck + "x", 0); lp.y = p.getInt(ck + "y", 0);
+        lp.gravity = C_GRAV[i];
+        try { wm.updateViewLayout(accHomeCorners[i], lp); } catch (Exception ignored) {}
+        accHomeCorners[i].invalidate();
+    }
+  }
+} // <-- Dấu ngoặc nhọn kết thúc toàn bộ class EdgeBarService

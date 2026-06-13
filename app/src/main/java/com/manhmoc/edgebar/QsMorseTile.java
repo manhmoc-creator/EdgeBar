@@ -1,9 +1,11 @@
       // File: app/src/main/java/com/manhmoc/edgebar/QsMorseTile.java
+// [THAY] thêm import Build vào:
 package com.manhmoc.edgebar;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Intent;
+import android.os.Build;
 import android.provider.Settings;
 import android.service.quicksettings.Tile;
 import android.service.quicksettings.TileService;
@@ -106,19 +108,31 @@ private boolean hasWriteSecureSettings() {
     }
 
     private void updateMorseNotification(boolean morseOn) {
-        String cid = "eb_morse_status";
-        NotificationChannel nc = new NotificationChannel(
-            cid, "Trạng thái MorseLock", NotificationManager.IMPORTANCE_LOW);
-        getSystemService(NotificationManager.class).createNotificationChannel(nc);
-        if (morseOn) {
-            Notification n = new Notification.Builder(this, cid)
-                .setContentTitle("MorseLock is On")
-                .setSmallIcon(android.R.drawable.ic_menu_compass)
-                .setOngoing(true)
-                .build();
-            getSystemService(NotificationManager.class).notify(79, n);
-        } else {
-            getSystemService(NotificationManager.class).cancel(79);
+    NotificationManager nm = getSystemService(NotificationManager.class);
+    if (nm == null) return;
+    String cid = "eb_morse_status";
+    if (Build.VERSION.SDK_INT >= 26) {
+        if (nm.getNotificationChannel(cid) == null) {
+            NotificationChannel nc = new NotificationChannel(
+                cid, "Trạng thái MorseLock", NotificationManager.IMPORTANCE_HIGH);
+            nc.setSound(null, null);         // không phát âm dù HIGH
+            nc.enableLights(false);
+            nc.enableVibration(false);
+            nc.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            nm.createNotificationChannel(nc);
         }
     }
+    if (morseOn) {
+        Notification n = new Notification.Builder(this, cid)
+            .setContentTitle("MorseLock đang bảo vệ")
+            .setSmallIcon(android.R.drawable.ic_menu_compass)
+            .setOngoing(true)
+            .setPriority(Notification.PRIORITY_MAX)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .build();
+        nm.notify(79, n);
+    } else {
+        nm.cancel(79);
+    }
+  }
 }

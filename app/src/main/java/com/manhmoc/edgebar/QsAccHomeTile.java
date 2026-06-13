@@ -101,17 +101,20 @@ public class QsAccHomeTile extends TileService {
             sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_OFF"));
             stopService(new Intent(this, AccessibleHomeService.class));
 
-            // Nếu old Home đã từng bật → wake up lại
-            boolean oldHomeWasOn = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
-                .getBoolean("shortcut_home_on", false);
-            if (oldHomeWasOn && !HomescreenService.isRunning) {
-                Intent homeIntent = new Intent(this, HomescreenService.class);
-                if (Build.VERSION.SDK_INT >= 26) startForegroundService(homeIntent);
-                else startService(homeIntent);
-                sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-            }
+            // Nếu old Home pref đang bật → khởi động lại nếu chưa chạy
+boolean oldHomeWasOn = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
+    .getBoolean("shortcut_home_on", false);
+if (oldHomeWasOn) {
+    if (!HomescreenService.isRunning) {
+        Intent homeIntent = new Intent(this, HomescreenService.class);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(homeIntent);
+        else startService(homeIntent);
+    }
+    // Wake old Home bars (đã ở deep sleep do Homacc chiếm)
+    sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+}
 
-            updateTileState(false);
+updateTileState(false);
         }
     }
 
@@ -125,16 +128,18 @@ public class QsAccHomeTile extends TileService {
 
     // FIX BUG 8: Tách riêng show/cancel/sync — không bao giờ show trong onStartListening
     private void showNotification() {
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        if (nm == null) return;
-        ensureChannel(nm);
-        Notification n = new Notification.Builder(this, NOTIF_CHANNEL)
-            .setContentTitle("Homacc đang chạy")
-            .setSmallIcon(android.R.drawable.ic_dialog_map)
-            .setOngoing(true)
-            .build();
-        nm.notify(NOTIF_ID, n);
-    }
+    NotificationManager nm = getSystemService(NotificationManager.class);
+    if (nm == null) return;
+    ensureChannel(nm);
+    Notification n = new Notification.Builder(this, NOTIF_CHANNEL)
+        .setContentTitle("Homacc đang chạy")
+        .setSmallIcon(android.R.drawable.ic_menu_manage)
+        .setOngoing(true)
+        .setPriority(Notification.PRIORITY_MAX)
+        .setVisibility(Notification.VISIBILITY_PUBLIC)
+        .build();
+    nm.notify(NOTIF_ID, n);
+}
 
     private void cancelNotification() {
         NotificationManager nm = getSystemService(NotificationManager.class);
@@ -148,14 +153,17 @@ public class QsAccHomeTile extends TileService {
     }
 
     private void ensureChannel(NotificationManager nm) {
-        if (Build.VERSION.SDK_INT >= 26) {
-            // Lazy init: chỉ tạo channel 1 lần
-            if (nm.getNotificationChannel(NOTIF_CHANNEL) == null) {
-                NotificationChannel nc = new NotificationChannel(
-                    NOTIF_CHANNEL, "Trạng thái Homacc",
-                    NotificationManager.IMPORTANCE_LOW);
-                nm.createNotificationChannel(nc);
-            }
+    if (Build.VERSION.SDK_INT >= 26) {
+        if (nm.getNotificationChannel(NOTIF_CHANNEL) == null) {
+            NotificationChannel nc = new NotificationChannel(
+                NOTIF_CHANNEL, "Trạng thái Homacc",
+                NotificationManager.IMPORTANCE_HIGH);
+            nc.setSound(null, null);
+            nc.enableLights(false);
+            nc.enableVibration(false);
+            nc.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            nm.createNotificationChannel(nc);
         }
-    }
+     }
+  }
 }
