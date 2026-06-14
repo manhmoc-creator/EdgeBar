@@ -67,30 +67,66 @@ private boolean isHomaccDrawn = false; // Guard chặn vẽ lại khi đã có v
 
 private final Handler homaccDebounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable homaccDebounceRunnable = null;
+
 private final Handler debounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable debounceRunnable = null;
+
 private boolean lastAccHomeRunningState = false;
 private long lastHomaccUpdateMs = 0;
 private static final long HOMACC_DEBOUNCE_MS = 500;
-private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
-    if (k == null) return;
-    if (k.startsWith("homacc_") && AccessibleHomeService.isRunning) {
-long now = System.currentTimeMillis();
-if (now - lastHomaccUpdateMs < HOMACC_DEBOUNCE_MS) return;
-if (homaccDebounceRunnable != null)
-homaccDebounceHandler.removeCallbacks(homaccDebounceRunnable);
-homaccDebounceRunnable = () -> {
-lastHomaccUpdateMs = System.currentTimeMillis();
-updateHomaccLive();
-};
-homaccDebounceHandler.postDelayed(homaccDebounceRunnable, 300);
-return;
+
+// V19.12.3.6.6 THE FINAL JUDGMENT — throttle biến event
+private long lastEventMs = 0;
+private static final long EVENT_THROTTLE_MS = 200;
+private String lastEventPkg = "";
+private boolean lastIsKbd_cache = false;
+private boolean lastIsBl_cache = false;
+
+// V19.12.3.6.6 — Whitelist key của EdgeBar, chặn key lạ của Zalo/Messenger
+private static final java.util.Set<String> EB_KEY_PREFIXES =
+    new java.util.HashSet<>(java.util.Arrays.asList(
+        "lock_","home_","morse_","homacc_","anim_","vib_","hold_",
+        "blacklist","locklist","avoid_kbd","shortcut_","preview_",
+        "lang_","ytdl_","intent_","tile_","macro_",
+        "i1_","i2_","i3_","i4_","i5_","i6_","i7_","i8_",
+        "i9_","i10_","i11_","i12_","i13_","i14_","i15_"
+    ));
+
+private boolean isOurKey(String k) {
+    if (k == null) return false;
+    for (String prefix : EB_KEY_PREFIXES)
+        if (k.startsWith(prefix) || k.equals(prefix)) return true;
+    return false;
 }
 
-    if (fV != null) fV.updateStyle();
+private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
+    // V19.12.3.6.6: Whitelist — bỏ qua key lạ của Zalo/Messenger/app khác
+    if (!isOurKey(k)) return;
+
+    // anim_ cần update ngay, không debounce
+    if (k != null && k.startsWith("anim_")) {
+        if (fV != null) fV.updateStyle();
+        return;
+    }
+
+    // homacc_ debounce riêng, không lẫn với lock bars
+    if (k != null && k.startsWith("homacc_") && AccessibleHomeService.isRunning) {
+        long now = System.currentTimeMillis();
+        if (now - lastHomaccUpdateMs < HOMACC_DEBOUNCE_MS) return;
+        if (homaccDebounceRunnable != null)
+            homaccDebounceHandler.removeCallbacks(homaccDebounceRunnable);
+        homaccDebounceRunnable = () -> {
+            lastHomaccUpdateMs = System.currentTimeMillis();
+            updateHomaccLive();
+        };
+        homaccDebounceHandler.postDelayed(homaccDebounceRunnable, 300);
+        return;
+    }
+
+    // lock bars: debounce 400ms
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> updateVisibility();
-    debounceHandler.postDelayed(debounceRunnable, 300);
+    debounceHandler.postDelayed(debounceRunnable, 400);
 };
 
    private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
@@ -301,101 +337,101 @@ if (inv) {
         createFloatingBars();
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
-    if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-boolean accShouldRun = AccessibleHomeService.isRunning;
-if (accShouldRun != lastAccHomeRunningState) {
-lastAccHomeRunningState = accShouldRun;
-if (accShouldRun && accHomeBars[0] == null) {
-drawAccessibleHome();
-} else if (!accShouldRun && accHomeBars[0] != null) {
-removeAccessibleHome();
-  }
-}
-// KHÔNG gọi updateHomaccLive() ở đây — chỉ gọi từ prefListener
-// Nếu state không đổi → KHÔNG làm gì cả (zero CPU)
-        String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
-        String cName = event.getClassName() != null ? event.getClassName().toString() : "";
+    if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
 
-        isKbd = pName.contains("inputmethod") || cName.contains("InputWindow")
-                || cName.contains("keyboard") || cName.contains("Keyboard");
-        String bl = prefs.getString("blacklist", "");
-        isBl = !pName.isEmpty() && bl.contains(pName);
+    // V19.12.3.6.6 THE FINAL JUDGMENT — Throttle 200ms, chặn bão event từ Zalo/Messenger
+    long nowMs = System.currentTimeMillis();
+    if (nowMs - lastEventMs < EVENT_THROTTLE_MS) return;
+    lastEventMs = nowMs;
 
-        boolean isSystemUI = pName.contains("systemui")
-                || pName.contains("launcher")
-                || pName.contains("nexuslauncher")
-                || pName.equals("com.android.settings")
-                || pName.isEmpty()
-                || isKbd;
+    // Sync Homacc state (KHÔNG gọi updateHomaccLive tại đây)
+    boolean accShouldRun = AccessibleHomeService.isRunning;
+    if (accShouldRun != lastAccHomeRunningState) {
+        lastAccHomeRunningState = accShouldRun;
+        if (accShouldRun && accHomeBars[0] == null) drawAccessibleHome();
+        else if (!accShouldRun && accHomeBars[0] != null) removeAccessibleHome();
+    }
 
-if (!isSystemUI) {
-    String locklist = prefs.getString("locklist", "");
-    boolean isAppLocked = false;
-    if (!locklist.isEmpty()) {
-        for (String pkg : locklist.split(",")) {
-            if (pkg.trim().equals(pName)) { isAppLocked = true; break; }
+    String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
+    String cName = event.getClassName() != null ? event.getClassName().toString() : "";
+
+    boolean newIsKbd = pName.contains("inputmethod") || cName.contains("InputWindow")
+            || cName.contains("keyboard") || cName.contains("Keyboard");
+    String bl = prefs.getString("blacklist", "");
+    boolean newIsBl = !pName.isEmpty() && bl.contains(pName);
+
+    // Chỉ xử lý thêm khi state THỰC SỰ thay đổi so với lần trước
+    boolean stateChanged = newIsKbd != lastIsKbd_cache
+                        || newIsBl != lastIsBl_cache
+                        || !pName.equals(lastEventPkg);
+
+    isKbd = newIsKbd;
+    isBl = newIsBl;
+
+    // Uninstall guard (luôn kiểm tra, không throttle)
+    if (pName.contains("packageinstaller") || pName.contains("installer")
+            || pName.contains("vending")) {
+        if (cName.contains("Uninstall") || cName.contains("uninstall")
+                || cName.contains("Delete") || cName.contains("UninstallActivity")
+                || cName.contains("DeleteActivity")) {
+            sendBroadcast(new Intent("com.manhmoc.edgebar.UNINSTALL_DETECTED"));
         }
     }
-           if (isAppLocked) {
-                boolean isMainWindow = !cName.contains("Dialog")
-                    && !cName.contains("Popup")
-                    && !cName.contains("Toast")
-                    && !cName.contains("Panel")
-                    && !cName.contains("Permission");
-                if (isMainWindow) {
-                    // [FIX-BUG-0] Đón đầu luồng xử lý: Ép dịch vụ HomescreenService dựng màn chắn MorseOS ngay lập tức tại luồng chính để triệt tiêu thời gian trễ chớp màn hình
-                    Intent i = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
-                    i.putExtra("pkg", pName);
-                    sendBroadcast(i);
-                    
-                    // Đồng thời gửi một tín hiệu tối khẩn để HomescreenService hiện diện container không trễ
-                    if (HomescreenService.isRunning) {
-                        try {
-                            // Đồng bộ trực tiếp biến cờ trạng thái nếu chạy chung tiến trình monolithic
-                            Intent fastShow = new Intent("com.manhmoc.edgebar.SYNC_STATE");
-                            fastShow.putExtra("foreground_pkg", pName);
-                            sendBroadcast(fastShow);
-                        } catch (Exception ignored) {}
+
+    if (!stateChanged) return; // Không có gì thay đổi → dừng, tiết kiệm CPU
+
+    // Cập nhật cache
+    lastEventPkg = pName;
+    lastIsKbd_cache = newIsKbd;
+    lastIsBl_cache = newIsBl;
+
+    boolean isSystemUI = pName.contains("systemui") || pName.contains("launcher")
+            || pName.contains("nexuslauncher") || pName.equals("com.android.settings")
+            || pName.isEmpty() || isKbd;
+
+    if (!isSystemUI) {
+        String locklist = prefs.getString("locklist", "");
+        if (!locklist.isEmpty()) {
+            for (String pkg : locklist.split(",")) {
+                if (pkg.trim().equals(pName)) {
+                    boolean isMainWindow = !cName.contains("Dialog")
+                        && !cName.contains("Popup") && !cName.contains("Toast")
+                        && !cName.contains("Panel") && !cName.contains("Permission");
+                    if (isMainWindow) {
+                        Intent lockIntent = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
+                        lockIntent.putExtra("pkg", pName);
+                        sendBroadcast(lockIntent);
                     }
+                    break;
                 }
             }
-}
-        updateVisibility();
-if (pName.contains("packageinstaller") || pName.contains("installer")
-        || pName.contains("vending")) {
-    if (cName.contains("Uninstall") || cName.contains("uninstall")
-            || cName.contains("Delete") || cName.contains("UninstallActivity")
-            || cName.contains("DeleteActivity")) {
-        Intent uninstallGuard = new Intent("com.manhmoc.edgebar.UNINSTALL_DETECTED");
-        sendBroadcast(uninstallGuard);
+        }
     }
-}
-boolean nowInRecents = pName.contains("launcher")
-        || pName.contains("nexuslauncher")
-        || pName.contains("quickstep")
-        || pName.contains("systemui")
-        || cName.contains("RecentsActivity")
-        || cName.contains("RecentTasksActivity")
-        || cName.contains("recents");
-if (nowInRecents && !isInRecents) {
-    isInRecents = true;
-    Intent coverIntent = new Intent("com.manhmoc.edgebar.MORSE_OS_RECENTS_SHOW");
-    coverIntent.putExtra("last_pkg", lastForegroundPkg);
-    sendBroadcast(coverIntent);
-} else if (!nowInRecents && isInRecents) {
-    isInRecents = false;
-    Intent hideIntent = new Intent("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE");
-    sendBroadcast(hideIntent);
-}
-if (!nowInRecents && !pName.isEmpty() && !isKbd) {
-    lastForegroundPkg = pName;
-}
-Intent syncIntent = new Intent("com.manhmoc.edgebar.SYNC_STATE");
-syncIntent.putExtra("isKbd", isKbd);
-syncIntent.putExtra("isBl", isBl);
-syncIntent.putExtra("foreground_pkg", pName);
-sendBroadcast(syncIntent);
+
+    updateVisibility();
+
+    // Recents tracking
+    boolean nowInRecents = pName.contains("launcher") || pName.contains("nexuslauncher")
+            || pName.contains("quickstep") || pName.contains("systemui")
+            || cName.contains("RecentsActivity") || cName.contains("RecentTasksActivity")
+            || cName.contains("recents");
+    if (nowInRecents && !isInRecents) {
+        isInRecents = true;
+        Intent coverIntent = new Intent("com.manhmoc.edgebar.MORSE_OS_RECENTS_SHOW");
+        coverIntent.putExtra("last_pkg", lastForegroundPkg);
+        sendBroadcast(coverIntent);
+    } else if (!nowInRecents && isInRecents) {
+        isInRecents = false;
+        sendBroadcast(new Intent("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE"));
     }
+    if (!nowInRecents && !pName.isEmpty() && !isKbd) lastForegroundPkg = pName;
+
+    // SYNC_STATE: chỉ gửi khi state thay đổi (đã được guard bởi stateChanged ở trên)
+    Intent syncIntent = new Intent("com.manhmoc.edgebar.SYNC_STATE");
+    syncIntent.putExtra("isKbd", isKbd);
+    syncIntent.putExtra("isBl", isBl);
+    syncIntent.putExtra("foreground_pkg", pName);
+    sendBroadcast(syncIntent);
 }
 
     private void exec(String a) {
@@ -669,13 +705,14 @@ private void drawAccessibleHome() {
     WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
     if (wm == null) return;
     int type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
-    // FLAG_SHOW_WHEN_LOCKED: Homacc vượt qua màn khóa, QS panel, chat bubble
+    // V19.12.3.6.6: Pref toggle cho phép user chọn Homacc có hiện trên màn khóa không
+    boolean homaccOnLock = prefs.getBoolean("homacc_show_on_lock", true);
     int baseF = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
               | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
               | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
               | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-              | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-              | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
+              | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+    if (homaccOnLock) baseF |= WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
 
     // --- 5 EDGE BARS ---
     for (int i = 0; i < 5; i++) {

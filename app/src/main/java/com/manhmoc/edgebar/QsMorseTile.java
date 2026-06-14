@@ -96,15 +96,35 @@ private boolean hasWriteSecureSettings() {
         // Toggle MorseLock — KHÔNG đụng HomescreenService hay AccHome
         boolean newState = !isMorseOn();
 
-        // [MỤC 1/3/7] MorseLock cần HomescreenService sống để vẽ morseContainer
-        // Bật trước khi đổi pref, để service kịp khởi tạo overlay
+        // V19.12.3.6.6 FIX: Ghi pref TRỰC TIẾP tại đây thay vì dùng broadcast TOGGLE_MORSE
+        // Lý do: nếu HomescreenService chưa start, broadcast TOGGLE_MORSE sẽ BỊ MẤT
+        // vì syncReceiver chưa được registerReceiver() kịp thời
+        getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
+            .edit()
+            .putBoolean("morse_mode_en", newState)
+            .apply();
+
         if (newState && !HomescreenService.isRunning) {
+            // Bật HomescreenService TRƯỚC — pref đã ghi sẵn,
+            // khi HomescreenService.onCreate() chạy xong sẽ tự đọc pref và hiện MorseLock
             Intent homeIntent = new Intent(this, HomescreenService.class);
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(homeIntent);
             else startService(homeIntent);
+            // KHÔNG gửi TOGGLE_MORSE nữa — HomescreenService sẽ tự đọc pref khi start
+        } else if (HomescreenService.isRunning) {
+            // Service đã chạy → gửi broadcast để cập nhật UI ngay lập tức
+            sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"));
         }
 
-        sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"));
+        // Nếu TẮT MorseLock và không cần HomescreenService nữa → dừng service
+        if (!newState && HomescreenService.isRunning) {
+            android.content.SharedPreferences prefs =
+                getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+            boolean oldHomeOn = prefs.getBoolean("shortcut_home_on", false);
+            if (!oldHomeOn) {
+                stopService(new Intent(this, HomescreenService.class));
+            }
+        }
 
         Tile t = getQsTile();
         t.setState(newState ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
@@ -132,7 +152,7 @@ nm.createNotificationChannel(nc);
 }
 if (morseOn) {
 Notification.Builder builder = new Notification.Builder(this, cid)
-.setContentTitle("MorseLock đang bảo vệ")
+.setContentTitle("Morock")
 .setSmallIcon(android.R.drawable.ic_menu_compass)
 .setOngoing(true)
 .setPriority(Notification.PRIORITY_MAX)

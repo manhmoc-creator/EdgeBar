@@ -50,7 +50,7 @@ private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "rig
     private Button btnLock, btnHomacc, btnHome, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.5"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.6 - Final Judgment"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -781,6 +781,21 @@ btnRefreshHomacc.setOnClickListener(v -> {
 homaccCtrlRow.addView(btnToggleHomacc);
 homaccCtrlRow.addView(btnRefreshHomacc);
 designSliderContainer.addView(homaccCtrlRow);
+
+// V19.12.3.6.6: Toggle Homacc trên màn khóa
+CheckBox cbHomaccOnLock = new CheckBox(this);
+cbHomaccOnLock.setText("🔒 Hiện Homacc trên màn khóa (Lock Screen)");
+cbHomaccOnLock.setTextColor(Color.parseColor("#7C4DFF"));
+LinearLayout.LayoutParams lockCbLp = new LinearLayout.LayoutParams(-1, -2);
+lockCbLp.setMargins(0, 0, 0, 20);
+cbHomaccOnLock.setLayoutParams(lockCbLp);
+cbHomaccOnLock.setChecked(prefs.getBoolean("homacc_show_on_lock", true));
+cbHomaccOnLock.setOnCheckedChangeListener((v, c) -> {
+    prefs.edit().putBoolean("homacc_show_on_lock", c).apply();
+    // Vẽ lại Homacc với flag mới (có hoặc không FLAG_SHOW_WHEN_LOCKED)
+    sendBroadcast(new Intent("com.manhmoc.edgebar.ACC_HOME_DRAW"));
+});
+designSliderContainer.addView(cbHomaccOnLock);
 
         // EDGE BARS - copy y chang tab HOME nhưng dùng prefix "homacc_"
         designSliderContainer.addView(createSectionTitle("EDGE BARS HOMACC (5 THANH)"));

@@ -88,7 +88,10 @@ private boolean isAccessibleHomeShortcutOn() {
     private boolean isCoveringRecents = false;
     private String currentForegroundPkg = "";
     private boolean isUnlockCooldown = false;
-// HYBRID: cache trạng thái Accessibility, tránh đọc Settings mỗi frame
+    // V19.12.3.6.6: Throttle SYNC_STATE — chặn broadcast storm từ Zalo/Messenger
+    private long lastSyncMs = 0;
+    private static final long SYNC_THROTTLE_MS = 150;
+    // HYBRID: cache trạng thái Accessibility, tránh đọc Settings mỗi frame
     private boolean accCacheValue = false;
     private long accCheckTimestamp = 0;
     private WindowManager.LayoutParams currentOverlayParams = null;
@@ -103,7 +106,9 @@ private boolean isAccessibleHomeShortcutOn() {
 
 
     private final Handler suicideHandler = new Handler(android.os.Looper.getMainLooper());
-    private Runnable suicideRunnable = null; 
+    private Runnable suicideRunnable = null;
+    // V19.12.3.6.6: Guard chặn loop — scheduleSuicideCheck chỉ được có 1 pending tại 1 thời điểm
+    private boolean suicideCheckPending = false;
     private Handler unlockCooldownHandler = new Handler(); 
     private int uninstallGuardFailCount = 0;  
     // Mỗi app bị khóa riêng — sai 5 lần ở Zalo không ảnh hưởng Messenger
@@ -203,32 +208,52 @@ updateVisibility();
     }
 
     private class MorseBackgroundView extends View {
-        private Paint paint = new Paint();
+        private Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        // V19.12.3.6.6: Cache dirty flag — Adreno 540 không redraw nếu content không đổi
+        private int lastDrawnAlpha = -1;
+        private int lastDrawnBgType = -1;
+
         public MorseBackgroundView(Context context) {
             super(context);
             setWillNotDraw(false);
+            // Hardware layer: GPU của Adreno 540 cache frame vào texture
+            // Nếu content không đổi → GPU đọc texture cache, CPU = 0
+            setLayerType(LAYER_TYPE_HARDWARE, null);
         }
 
-        // === CHÈN THUẬT TOÁN 6: TỐI ƯU HÓA GPU PASS ===
         @Override
-        public void setVisibility(int visibility) {
-            super.setVisibility(visibility);
-            setWillNotDraw(visibility != View.VISIBLE); 
-        }
-        // =============================================
+public void setVisibility(int visibility) {
+    super.setVisibility(visibility);
+    if (visibility == View.GONE) {
+        setLayerType(LAYER_TYPE_NONE, null);
+        lastDrawnAlpha = -1;
+        lastDrawnBgType = -1;
+    } else {
+        setLayerType(LAYER_TYPE_HARDWARE, null);
+        // FIX: reset cache để buộc vẽ lại ngay khi chuyển VISIBLE,
+        // đồng thời post invalidate sau khi layer hardware đã attach
+        // (tránh race condition composite trên Adreno 540)
+        lastDrawnAlpha = -1;
+        lastDrawnBgType = -1;
+        post(this::invalidate);
+    }
+}
 
         @Override
         protected void onDraw(Canvas canvas) {
-            // Đọc từ RAM (cachedBgAlpha), không đọc disk mỗi frame
-    // Đọc từ RAM (cachedBgAlpha), không đọc disk mỗi frame
-    if (bgType == 1 && bgBitmap != null && !bgBitmap.isRecycled()) {
-        paint.setAlpha(cachedBgAlpha);
-        canvas.drawBitmap(bgBitmap, null, new Rect(0, 0, getWidth(), getHeight()), paint);
-    } else {
-        canvas.drawColor(Color.argb(cachedBgAlpha, 0, 0, 0));
+            // V19.12.3.6.6: Skip redraw nếu alpha và bgType không đổi
+            if (cachedBgAlpha == lastDrawnAlpha && bgType == lastDrawnBgType) return;
+            lastDrawnAlpha = cachedBgAlpha;
+            lastDrawnBgType = bgType;
+
+            if (bgType == 1 && bgBitmap != null && !bgBitmap.isRecycled()) {
+                paint.setAlpha(cachedBgAlpha);
+                canvas.drawBitmap(bgBitmap, null, new Rect(0, 0, getWidth(), getHeight()), paint);
+            } else {
+                canvas.drawColor(Color.argb(cachedBgAlpha, 0, 0, 0));
+            }
+        }
     }
-  }
-}
 
     private class FlashView extends View {
         private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phaseFraction = 0f;
@@ -445,6 +470,12 @@ invalidate();
         public void onReceive(Context c, Intent i) {
             String action = i.getAction();
             if (action.equals("com.manhmoc.edgebar.SYNC_STATE")) {
+    // V19.12.3.6.6: Throttle — tối đa 1 lần xử lý SYNC_STATE mỗi 150ms
+    // Chặn vòng lặp vô tận: Zalo event → EdgeBar → SYNC_STATE → HomescreenService → loop
+    long nowSync = System.currentTimeMillis();
+    if (nowSync - lastSyncMs < SYNC_THROTTLE_MS) return;
+    lastSyncMs = nowSync;
+
     isKbd = i.getBooleanExtra("isKbd", false);
     isBl = i.getBooleanExtra("isBl", false);
     String incomingPkg = i.getStringExtra("foreground_pkg");
@@ -875,21 +906,40 @@ private Runnable debounceRunnable = null;
 
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     if (k == null) return;
-    // Xử lý ngay các thay đổi cần phản hồi tức thì (không debounce)
-    if (k.equals("morse_bg_type") || k.equals("morse_bg_image")) reloadBackground();
+
+    // V19.12.3.6.6: Whitelist — bỏ qua key lạ của Zalo/Messenger/app bên thứ ba
+    boolean isOurKey = false;
+    String[] ourPrefixes = {"lock_","home_","morse_","homacc_","anim_","vib_","hold_",
+        "blacklist","locklist","avoid_kbd","shortcut_","preview_","lang_","ytdl_",
+        "intent_","tile_","macro_","i1_","i2_","i3_","i4_","i5_","i6_","i7_",
+        "i8_","i9_","i10_","i11_","i12_","i13_","i14_","i15_"};
+    for (String prefix : ourPrefixes)
+        if (k.startsWith(prefix) || k.equals(prefix)) { isOurKey = true; break; }
+    if (!isOurKey) return; // Bỏ qua hoàn toàn, không tốn thêm CPU
+
+    // V19.12.3.6.6 FIX: morse_mode_en thay đổi → updateVisibility NGAY, không debounce
+    // Đảm bảo MorseLock hiện/ẩn tức thì khi QS Tile bật/tắt
+    if (k.equals("morse_mode_en")) { updateVisibility(); return; }
+
+    // Xử lý ngay các key cần phản hồi tức thì (không debounce)
+    if (k.equals("morse_bg_type") || k.equals("morse_bg_image")) { reloadBackground(); return; }
     if (k.equals("morse_bg_alpha") && bgView != null) {
-        cachedBgAlpha = p.getInt("morse_bg_alpha", 180); // FIX 5
+        cachedBgAlpha = p.getInt("morse_bg_alpha", 180);
         bgView.invalidate();
+        return;
     }
     if (k.equals("anim_color") || k.equals("morse_text_blur") || k.equals("morse_text_neon")) {
-        applyMorseTextStyle();
-        applyLockIconStyle();
+        applyMorseTextStyle(); applyLockIconStyle(); return;
     }
-    if (k.equals("morse_lock_icon_y")) updateLockIconPosition();
-    if (fV != null) fV.updateStyle();
-    // Debounce updateVisibility(): gộp nhiều thay đổi liên tiếp thành 1 lần gọi sau 300ms
+    if (k.equals("morse_lock_icon_y")) { updateLockIconPosition(); return; }
+    if (k.startsWith("anim_") && fV != null) { fV.updateStyle(); return; }
+
+    // Debounce 500ms cho updateVisibility — debounceRunnable tự xóa sau khi fire
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
-    debounceRunnable = () -> updateVisibility();
+    debounceRunnable = () -> {
+        debounceRunnable = null;
+        updateVisibility();
+    };
     debounceHandler.postDelayed(debounceRunnable, 500);
 };
 
@@ -1700,11 +1750,18 @@ if ((isMorseLockActive && !timeLocked) || isPreviewMorse) {
     }
 
     private void scheduleSuicideCheck() {
-    // Hủy check cũ nếu có, tránh tích lũy callbacks
+    // V19.12.3.6.6 THE FINAL JUDGMENT: Guard flag — nếu đã có check pending, KHÔNG đặt thêm
+    // Trước đây: updateVisibility() gọi scheduleSuicideCheck() → mỗi SYNC_STATE tạo thêm 1 runnable
+    // → hàng chục runnable chồng nhau → CPU wakelock không ngủ được khi dùng Zalo
+    if (suicideCheckPending) return;
+    suicideCheckPending = true;
+
     if (suicideRunnable != null) suicideHandler.removeCallbacks(suicideRunnable);
     suicideRunnable = () -> {
+        suicideCheckPending = false; // reset guard để lần sau có thể schedule lại
+
         boolean foregroundIsLocked = false;
-        boolean foregroundIsHome = isForceHome // FIX 4
+        boolean foregroundIsHome = isForceHome
                 || currentForegroundPkg.isEmpty()
                 || currentForegroundPkg.contains("launcher")
                 || currentForegroundPkg.contains("nexuslauncher")
@@ -1717,7 +1774,7 @@ if ((isMorseLockActive && !timeLocked) || isPreviewMorse) {
             }
         }
         if (!foregroundIsLocked || foregroundIsHome) {
-            isForceHome = false; // reset sau khi tự sát
+            isForceHome = false;
             isMorseLockActive = false;
             if (morseContainer != null) morseContainer.setVisibility(View.GONE);
             currentMorseAttempt = "";
@@ -1731,7 +1788,8 @@ if ((isMorseLockActive && !timeLocked) || isPreviewMorse) {
             }
         }
     };
-    suicideHandler.postDelayed(suicideRunnable, 250);
+    // Tăng delay 250ms → 400ms: ổn định hơn, ít false-positive, CPU ngủ sâu hơn
+    suicideHandler.postDelayed(suicideRunnable, 400);
 }
 
 
