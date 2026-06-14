@@ -208,53 +208,46 @@ updateVisibility();
     }
 
     private class MorseBackgroundView extends View {
-        private Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        // V19.12.3.6.6: Cache dirty flag — Adreno 540 không redraw nếu content không đổi
-        private int lastDrawnAlpha = -1;
-        private int lastDrawnBgType = -1;
+    private Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        public MorseBackgroundView(Context context) {
-            super(context);
+    public MorseBackgroundView(Context context) {
+        super(context);
+        setWillNotDraw(false);
+        // V19.12.3.6.7: KHÔNG dùng LAYER_TYPE_HARDWARE
+        // Lý do: Hardware layer chỉ tiết kiệm GPU khi content TĨNH.
+        // MorseBg thay đổi alpha liên tục → hardware layer gây
+        // texture re-upload overhead trên Adreno 540, ngược lại tốn pin hơn.
+        setLayerType(LAYER_TYPE_SOFTWARE, null);
+    }
+
+    @Override
+    public void setVisibility(int visibility) {
+        super.setVisibility(visibility);
+        if (visibility == View.VISIBLE) {
+            // V19.12.3.6.7 BUG FIX: Buộc redraw ngay khi hiện
+            // Không dùng dirty-flag cache vì Adreno 540 có thể
+            // skip frame đầu tiên nếu layer chưa được composite
             setWillNotDraw(false);
-            // Hardware layer: GPU của Adreno 540 cache frame vào texture
-            // Nếu content không đổi → GPU đọc texture cache, CPU = 0
-            setLayerType(LAYER_TYPE_HARDWARE, null);
+            post(this::invalidate);
+        } else {
+            setWillNotDraw(true);
         }
+    }
 
-        @Override
-public void setVisibility(int visibility) {
-    super.setVisibility(visibility);
-    if (visibility == View.GONE) {
-        setLayerType(LAYER_TYPE_NONE, null);
-        lastDrawnAlpha = -1;
-        lastDrawnBgType = -1;
-    } else {
-        setLayerType(LAYER_TYPE_HARDWARE, null);
-        // FIX: reset cache để buộc vẽ lại ngay khi chuyển VISIBLE,
-        // đồng thời post invalidate sau khi layer hardware đã attach
-        // (tránh race condition composite trên Adreno 540)
-        lastDrawnAlpha = -1;
-        lastDrawnBgType = -1;
-        post(this::invalidate);
+    @Override
+    protected void onDraw(Canvas canvas) {
+        // V19.12.3.6.7: Đọc trực tiếp từ biến RAM cachedBgAlpha
+        // KHÔNG dùng dirty-flag cache → tránh bug mất nền đen
+        if (bgType == 1 && bgBitmap != null && !bgBitmap.isRecycled()) {
+            paint.setAlpha(cachedBgAlpha);
+            canvas.drawBitmap(bgBitmap, null,
+                new Rect(0, 0, getWidth(), getHeight()), paint);
+        } else {
+            // BUG FIX: Luôn vẽ nền đen, không skip ngay cả khi alpha không đổi
+            canvas.drawColor(Color.argb(cachedBgAlpha, 0, 0, 0));
+        }
     }
 }
-
-        @Override
-        protected void onDraw(Canvas canvas) {
-            // V19.12.3.6.6: Skip redraw nếu alpha và bgType không đổi
-            if (cachedBgAlpha == lastDrawnAlpha && bgType == lastDrawnBgType) return;
-            lastDrawnAlpha = cachedBgAlpha;
-            lastDrawnBgType = bgType;
-
-            if (bgType == 1 && bgBitmap != null && !bgBitmap.isRecycled()) {
-                paint.setAlpha(cachedBgAlpha);
-                canvas.drawBitmap(bgBitmap, null, new Rect(0, 0, getWidth(), getHeight()), paint);
-            } else {
-                canvas.drawColor(Color.argb(cachedBgAlpha, 0, 0, 0));
-            }
-        }
-    }
-
     private class FlashView extends View {
         private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phaseFraction = 0f;
         public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); }
@@ -896,6 +889,12 @@ updateVisibility();
                 android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
             false, accObserver);
 
+        // V19.12.3.6.7 BUG FIX: Sync biến RAM trước khi reloadBackground()
+        // Nếu không sync, cachedBgAlpha = 180 mặc định dù user đã chỉnh khác
+        // → onDraw() vẽ sai alpha, ảnh nền không hiển thị đúng
+        cachedBgAlpha = prefs.getInt("morse_bg_alpha", 180);
+        bgType = prefs.getInt("morse_bg_type", 0);
+        bgImagePath = prefs.getString("morse_bg_image", "");
         reloadBackground();
         updateVisibility();
         sendSyncState();

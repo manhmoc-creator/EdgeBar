@@ -73,7 +73,6 @@ private Runnable debounceRunnable = null;
 
 private boolean lastAccHomeRunningState = false;
 private long lastHomaccUpdateMs = 0;
-private static final long HOMACC_DEBOUNCE_MS = 500;
 
 // V19.12.3.6.6 THE FINAL JUDGMENT — throttle biến event
 private long lastEventMs = 0;
@@ -99,36 +98,45 @@ private boolean isOurKey(String k) {
     return false;
 }
 
+// V19.12.3.6.7 THE FINAL VERDICT
+// Tăng debounce Homacc từ 300ms → 1000ms
+// Lý do: updateHomaccLive() gọi wm.updateViewLayout() là IPC call đến system_server
+// Mỗi IPC call = wakelock ngắn trên Adreno 540 → pin hao nhanh
+// 1000ms debounce = user kéo slider thoải mái, chỉ apply sau khi dừng tay
+private static final long HOMACC_DEBOUNCE_MS = 1000;
+private static final long LOCK_DEBOUNCE_MS = 400;
+
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
-    // V19.12.3.6.6: Whitelist — bỏ qua key lạ của Zalo/Messenger/app khác
+    // TẦNG 1: Whitelist tuyệt đối — bỏ qua mọi key không thuộc EdgeBar
     if (!isOurKey(k)) return;
 
-    // anim_ cần update ngay, không debounce
+    // TẦNG 2: anim_ → update ngay, user đang xem preview live
     if (k != null && k.startsWith("anim_")) {
         if (fV != null) fV.updateStyle();
         return;
     }
 
-    // homacc_ debounce riêng, không lẫn với lock bars
-    if (k != null && k.startsWith("homacc_") && AccessibleHomeService.isRunning) {
-        long now = System.currentTimeMillis();
-        if (now - lastHomaccUpdateMs < HOMACC_DEBOUNCE_MS) return;
+    // TẦNG 3: homacc_ → debounce DÀI 1000ms, chỉ gọi updateHomaccLive() sau khi dừng
+    // Guard kép: isRunning + isHomaccDrawn tránh IPC vô nghĩa
+    if (k != null && k.startsWith("homacc_")) {
+        if (!AccessibleHomeService.isRunning || !isHomaccDrawn) return;
         if (homaccDebounceRunnable != null)
             homaccDebounceHandler.removeCallbacks(homaccDebounceRunnable);
         homaccDebounceRunnable = () -> {
+            // Double-check trước khi gọi IPC: service vẫn còn chạy không?
+            if (!AccessibleHomeService.isRunning || !isHomaccDrawn) return;
             lastHomaccUpdateMs = System.currentTimeMillis();
             updateHomaccLive();
         };
-        homaccDebounceHandler.postDelayed(homaccDebounceRunnable, 300);
+        homaccDebounceHandler.postDelayed(homaccDebounceRunnable, HOMACC_DEBOUNCE_MS);
         return;
     }
 
-    // lock bars: debounce 400ms
+    // TẦNG 4: lock bars → debounce 400ms như cũ
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> updateVisibility();
-    debounceHandler.postDelayed(debounceRunnable, 400);
+    debounceHandler.postDelayed(debounceRunnable, LOCK_DEBOUNCE_MS);
 };
-
    private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     @Override
     public void onReceive(Context c, Intent i) {
