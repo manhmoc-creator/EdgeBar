@@ -65,16 +65,28 @@ private boolean isHomaccDrawn = false; // Guard chặn vẽ lại khi đã có v
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
 
-    private final Handler debounceHandler = new Handler(android.os.Looper.getMainLooper());
+private final Handler homaccDebounceHandler = new Handler(android.os.Looper.getMainLooper());
+private Runnable homaccDebounceRunnable = null;
+private final Handler debounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable debounceRunnable = null;
-
+private boolean lastAccHomeRunningState = false;
+private long lastHomaccUpdateMs = 0;
+private static final long HOMACC_DEBOUNCE_MS = 500;
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     if (k == null) return;
-    // Kéo slider Homacc -> update trực tiếp qua updateViewLayout, KHÔNG removeView/addView
     if (k.startsWith("homacc_") && AccessibleHomeService.isRunning) {
-        updateHomaccLive();
-        return;
-    }
+long now = System.currentTimeMillis();
+if (now - lastHomaccUpdateMs < HOMACC_DEBOUNCE_MS) return;
+if (homaccDebounceRunnable != null)
+homaccDebounceHandler.removeCallbacks(homaccDebounceRunnable);
+homaccDebounceRunnable = () -> {
+lastHomaccUpdateMs = System.currentTimeMillis();
+updateHomaccLive();
+};
+homaccDebounceHandler.postDelayed(homaccDebounceRunnable, 300);
+return;
+}
+
     if (fV != null) fV.updateStyle();
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> updateVisibility();
@@ -155,29 +167,27 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         private boolean isInv = false;
 
         public CornerView(Context c, int type) { this(c, type, "lock_"); }
-        public CornerView(Context c, int type, String prefix) { super(c); this.type = type; this.prefix = prefix; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
+    public CornerView(Context c, int type, String prefix) { super(c); this.type = type; this.prefix = prefix; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
 
-
-        public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) {
-    pStroke.setStrokeWidth(thick);
-    this.baseMoonAlpha = moonAlpha;
-    this.baseStrokeAlpha = strokeAlpha;
-    this.isAutoHiding = autoHide;
-    this.hideDelay = delay;
-    this.isInv = inv;
-    if (inv) {
-        pFill.setAlpha(0);
-        pStroke.setAlpha(0);
-    } else if (!autoHide) {
-        pFill.setColor(Color.argb(moonAlpha, 96, 125, 139));
-        pStroke.setAlpha(strokeAlpha);
-    } else {
-        // auto-hide: bắt đầu ẩn hoàn toàn, KHÔNG triggerFlash() khi khởi tạo
-        // chỉ flash khi user thực sự chạm (gọi từ SidebarTouchListener)
-        pFill.setColor(Color.argb(0, 96, 125, 139));
-        pStroke.setAlpha(0);
-    }
-    invalidate();
+    public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) {
+        pStroke.setStrokeWidth(thick);
+        this.baseMoonAlpha = moonAlpha;
+        this.baseStrokeAlpha = strokeAlpha;
+        this.isAutoHiding = autoHide;
+        this.hideDelay = delay;
+        this.isInv = inv;
+        // KHÔNG gọi triggerFlash() ở đây — chỉ gọi khi user thực sự CHẠM
+if (inv) {
+    pFill.setAlpha(0);
+    pStroke.setAlpha(0);
+} else if (!autoHide) {
+    pFill.setColor(Color.argb(moonAlpha, 96, 125, 139));
+    pStroke.setAlpha(strokeAlpha);
+} else {
+    pFill.setColor(Color.argb(0, 96, 125, 139));
+    pStroke.setAlpha(0);
+  }
+  invalidate();
 }
         public void triggerFlash() { if(!isAutoHiding || isInv) return; autoHideHandler.removeCallbacksAndMessages(null); pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha+50), 96,125,139)); pStroke.setAlpha(Math.min(255, baseStrokeAlpha+50)); invalidate(); autoHideHandler.postDelayed(() -> { ValueAnimator a = ValueAnimator.ofFloat(1f,0f); a.setDuration(1500); a.addUpdateListener(anim -> { float val = (float)anim.getAnimatedValue(); pFill.setColor(Color.argb((int)(baseMoonAlpha*val), 96,125,139)); pStroke.setAlpha((int)(baseStrokeAlpha*val)); invalidate(); }); a.start(); }, hideDelay); }
 
@@ -292,16 +302,16 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
     if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-        // [THAY] bằng — chỉ vẽ khi state THỰC SỰ thay đổi:
-// Pixel 2XL opt: dùng flag cache, tránh removeView/addView mỗi event
 boolean accShouldRun = AccessibleHomeService.isRunning;
+if (accShouldRun != lastAccHomeRunningState) {
+lastAccHomeRunningState = accShouldRun;
 if (accShouldRun && accHomeBars[0] == null) {
-    // AccHome đang chạy nhưng chưa có view → vẽ lần đầu
-    drawAccessibleHome();
+drawAccessibleHome();
 } else if (!accShouldRun && accHomeBars[0] != null) {
-    // AccHome đã tắt nhưng view vẫn còn → gỡ
-    removeAccessibleHome();
+removeAccessibleHome();
+  }
 }
+// KHÔNG gọi updateHomaccLive() ở đây — chỉ gọi từ prefListener
 // Nếu state không đổi → KHÔNG làm gì cả (zero CPU)
         String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
         String cName = event.getClassName() != null ? event.getClassName().toString() : "";
@@ -804,13 +814,23 @@ private void updateHomaccLive() {
         int y       = p.getInt(px + BARS[i] + "_y", 0);
         int priMode = p.getInt(px + BARS[i] + "_pri_mode", 0);
         int visMode = p.getInt(px + BARS[i] + "_vis_mode", 0);
-        GradientDrawable gd = new GradientDrawable();
-        gd.setColor(Color.argb(alpha, 96, 125, 139));
-        gd.setCornerRadius(24f);
-        accHomeBars[i].setBackground(gd);
-        // vis_mode: 0=hiện, 1=auto-hide (ẩn đến khi chạm), 2=vô hình
-        accHomeBars[i].setAlpha(visMode == 0 ? 1f : 0f);
-        int f = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        // MỚI - chỉ update nếu color thay đổi
+// MỚI - chỉ update nếu color thay đổi
+GradientDrawable oldBg = (GradientDrawable) accHomeBars[i].getBackground();
+int targetColor = Color.argb(alpha, 96, 125, 139);
+int oldColor = 0;
+if (oldBg != null && oldBg.getColor() != null) {
+    oldColor = oldBg.getColor().getDefaultColor();
+}
+if (oldBg == null || oldColor != targetColor) {
+    GradientDrawable gd = new GradientDrawable();
+    gd.setColor(targetColor);
+    gd.setCornerRadius(24f);
+    accHomeBars[i].setBackground(gd);
+}
+// KHÔNG có thêm gì ở đây — tiếp theo là vis_mode
+accHomeBars[i].setAlpha(visMode == 0 ? 1f : 0f);
+int f = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
               | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
               | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
               | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN

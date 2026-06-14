@@ -124,19 +124,23 @@ private boolean hasWriteSecureSettings() {
             nc.setSound(null, null);         // không phát âm dù HIGH
             nc.enableLights(false);
             nc.enableVibration(false);
-            nc.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-            nm.createNotificationChannel(nc);
-        }
-    }
-    if (morseOn) {
-        Notification n = new Notification.Builder(this, cid)
-            .setContentTitle("MorseLock đang bảo vệ")
-            .setSmallIcon(android.R.drawable.ic_menu_compass)
-            .setOngoing(true)
-            .setPriority(Notification.PRIORITY_MAX)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .build();
-        nm.notify(79, n);
+nc.setShowBadge(false);
+nc.setBypassDnd(true);
+nc.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+nm.createNotificationChannel(nc);
+}
+}
+if (morseOn) {
+Notification.Builder builder = new Notification.Builder(this, cid)
+.setContentTitle("MorseLock đang bảo vệ")
+.setSmallIcon(android.R.drawable.ic_menu_compass)
+.setOngoing(true)
+.setPriority(Notification.PRIORITY_MAX)
+.setVisibility(Notification.VISIBILITY_PUBLIC);
+if (Build.VERSION.SDK_INT >= 31) {
+builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
+}
+nm.notify(79, builder.build());
     } else {
         nm.cancel(79);
     }

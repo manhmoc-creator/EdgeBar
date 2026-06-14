@@ -106,14 +106,15 @@ private boolean isAccessibleHomeShortcutOn() {
     private Runnable suicideRunnable = null; 
     private Handler unlockCooldownHandler = new Handler(); 
     private int uninstallGuardFailCount = 0;  
-    private long lockUntilTime = 0;
+    // Mỗi app bị khóa riêng — sai 5 lần ở Zalo không ảnh hưởng Messenger
+private java.util.Map<String, Long> perPkgLockUntil = new java.util.HashMap<>();
 
-        private Handler relockHandler = new Handler();
+    private Handler relockHandler = new Handler();
     private long relockScheduledTime = 0;
     private String pendingRelockPkg = "";
     private java.util.Set<String> unlockedApps = new java.util.HashSet<>();
     private long lastUnlockedTime = 0;
-
+    
     private Runnable relockRunnable = () -> {
     String pkgToLock = pendingRelockPkg;
     unlockedApps.remove(pkgToLock);
@@ -281,16 +282,25 @@ updateVisibility();
 
         public CornerView(Context c, int type, String prefix) { super(c); this.type = type; this.prefix = prefix; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
 
-        private boolean prevAutoHide = false; // [THÊM] chặn flash lặp liên tục
         public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) {
-            pStroke.setStrokeWidth(thick); this.baseMoonAlpha = moonAlpha; this.baseStrokeAlpha = strokeAlpha;
-            this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
-            if(!autoHide) { pFill.setColor(Color.argb(moonAlpha, 96, 125, 139)); pStroke.setAlpha(strokeAlpha); }
-            else if(!prevAutoHide) triggerFlash();
-            if(inv) { pFill.setAlpha(0); pStroke.setAlpha(0); }
-            prevAutoHide = autoHide;
-            invalidate();
-        }
+pStroke.setStrokeWidth(thick);
+this.baseMoonAlpha = moonAlpha;
+this.baseStrokeAlpha = strokeAlpha;
+this.isAutoHiding = autoHide;
+this.hideDelay = delay;
+this.isInv = inv;
+if (inv) {
+pFill.setAlpha(0);
+pStroke.setAlpha(0);
+} else if (!autoHide) {
+pFill.setColor(Color.argb(moonAlpha, 96, 125, 139));
+pStroke.setAlpha(strokeAlpha);
+} else {
+pFill.setColor(Color.argb(0, 96, 125, 139));
+pStroke.setAlpha(0);
+}
+invalidate();
+}
 
         public void triggerFlash() { if(!isAutoHiding || isInv) return; autoHideHandler.removeCallbacksAndMessages(null); pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha + 50), 96, 125, 139)); pStroke.setAlpha(Math.min(255, baseStrokeAlpha + 50)); invalidate(); autoHideHandler.postDelayed(() -> { ValueAnimator a = ValueAnimator.ofFloat(1f, 0f); a.setDuration(1500); a.addUpdateListener(anim -> { float val = (float)anim.getAnimatedValue(); pFill.setColor(Color.argb((int)(baseMoonAlpha * val), 96, 125, 139)); pStroke.setAlpha((int)(baseStrokeAlpha * val)); invalidate(); }); a.start(); }, hideDelay); }
 
@@ -517,14 +527,19 @@ updateVisibility();
     long now = System.currentTimeMillis();
     if (isMorseLockActive && pkg.equals(lockedPkg)) return;
     if (unlockedApps.contains(pkg)) {
-        return;
-    }
-    if (now < lockUntilTime) {
-        Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-        kick.putExtra("act", "HOME");
-        sendBroadcast(kick);
-        return;
-    }
+return;
+}
+if (pkg.equals(dismissedPkg)) return;
+// Kiểm tra xem APP NÀY CỤ THỂ có đang trong thời gian phạt không
+long thisPkgLockUntil = perPkgLockUntil.containsKey(pkg)
+    ? perPkgLockUntil.get(pkg) : 0L;
+if (now < thisPkgLockUntil) {
+    // Chỉ đá về HOME nếu chính app này đang bị phạt
+    Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+    kick.putExtra("act", "HOME");
+    sendBroadcast(kick);
+    return;
+}
     isMorseLockActive = true;
 lockedPkg = pkg;
 morseFailCount = 0;
@@ -593,23 +608,22 @@ updateVisibility();
     if (lastPkg == null) lastPkg = "";
     boolean shouldCover = false;
     String locklist = prefs.getString("locklist", "");
+    
     if (!lastPkg.isEmpty() && !locklist.isEmpty()) {
         for (String pkg : locklist.split(",")) {
-            if (pkg.trim().equals(lastPkg)) { shouldCover = true; break; }
-        }
-    }
-   if (!shouldCover && !unlockedApps.isEmpty() && !locklist.isEmpty()) {
-    for (String unlockedPkg : unlockedApps) {
-        for (String pkg : locklist.split(",")) {
-            if (pkg.trim().equals(unlockedPkg)) {
-                shouldCover = true;
-                break;
+            if (pkg.trim().equals(lastPkg)) { 
+                shouldCover = true; 
+                break; 
             }
         }
-        if (shouldCover) break;
     }
-}
-    if (shouldCover && !isMorseLockActive && !isUninstallGuardActive) {
+    
+    // [FIX-LOGIC] NẾU lastPkg đã được user dismiss/unlock, TUYỆT ĐỐI KHÔNG cover Recents nữa.
+    if (shouldCover && unlockedApps.contains(lastPkg)) {
+        shouldCover = false;
+    }
+
+    if (shouldCover && !isMorseLockActive && !isUninstallGuardActive && !isCoveringRecents) {
         showMorseOSCover();
     }
 } else if (action.equals("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE")) {
@@ -636,8 +650,9 @@ updateVisibility();
         updateVisibility();
     }
 } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
-    unlockedApps.clear(); // Xóa lịch sử unlock (Yêu cầu 9)
-    lastUnlockedTime = 0;
+unlockedApps.clear(); // Xóa lịch sử unlock (Yêu cầu 9)
+dismissedPkg = "";
+lastUnlockedTime = 0;
     relockHandler.removeCallbacks(relockRunnable);
     relockScheduledTime = 0;
     pendingRelockPkg = "";
@@ -657,7 +672,7 @@ updateVisibility();
         if (bgView != null) bgView.setBackgroundColor(Color.TRANSPARENT);
     }
 } else if (action.equals(Intent.ACTION_USER_PRESENT)) {
-    // [FIX-BUG-8] Kiểm tra chủ động: Chỉ cho phép tự động tái khóa lại nếu và chỉ nếu app đó thực sự đang mở trước mắt người dùng (không bị đánh lừa bởi trạng thái trễ package của Launcher)
+    dismissedPkg = "";
     new Handler().postDelayed(() -> {
         // Lấy package thực tế tại đúng thời điểm sau độ trễ render của hệ thống
         String activePkg = currentForegroundPkg;
@@ -805,14 +820,14 @@ filter.addAction("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE");
         int savedIconSize = prefs.getInt("morse_lock_icon_size", 48);
         tvLockIcon.setTextSize(savedIconSize);
 
-
-        WindowManager.LayoutParams bgP = new WindowManager.LayoutParams(-1, -1,
+WindowManager.LayoutParams bgP = new WindowManager.LayoutParams(-1, -1,
     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
     | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
     | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-    | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,  // vượt màn khóa
+    | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
     PixelFormat.TRANSLUCENT);
+
 try { wm.addView(morseContainer, bgP); } catch (Exception e) {}
 
         for (int i = 0; i < 8; i++) {
@@ -835,15 +850,15 @@ try { wm.addView(morseContainer, bgP); } catch (Exception e) {}
         accObserver = new android.database.ContentObserver(
                 new Handler(android.os.Looper.getMainLooper())) {
             @Override
-            public void onChange(boolean selfChange) {
-                boolean newVal = isAccOn();
-                if (newVal != accStateCached) {
-                    accStateCached = newVal;
-                    // Chỉ gọi khi giá trị THỰC SỰ thay đổi → tiết kiệm CPU
-                    applyHybridTypeToAllBars();
-                    updateVisibility();
-                }
+public void onChange(boolean selfChange) {
+boolean newVal = isAccOn();
+if (newVal != accStateCached) {
+accStateCached = newVal;
+// Chỉ gọi khi giá trị THỰC SỰ thay đổi → tiết kiệm CPU
+applyHybridTypeToAllBars();
+updateVisibility();
             }
+          }
         };
         getContentResolver().registerContentObserver(
             android.provider.Settings.Secure.getUriFor(
@@ -972,11 +987,10 @@ if (isUninstallGuardActive) {
     }
     if (mappedKey.equals(">")) {
         if (currentMorseAttempt.equals(masterPass)) {
-            
+            perPkgLockUntil.remove(lockedPkg);
             isUninstallGuardActive = false;
             morseContainer.setVisibility(View.GONE);
             currentMorseAttempt = "";
-            
             Intent expand = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             expand.putExtra("act", "NOTIFICATIONS");
             sendBroadcast(expand);
@@ -1050,7 +1064,7 @@ if (isUninstallGuardActive) {
     lastUnlockedTime = System.currentTimeMillis();
     isMorseLockActive = false;
     morseFailCount = 0;
-    lockUntilTime = 0;
+    perPkgLockUntil.remove(lockedPkg); // Unlock xong → xóa phạt của app đó
     currentMorseAttempt = "";
     morseContainer.setVisibility(View.GONE);
 
@@ -1070,17 +1084,23 @@ if (isUninstallGuardActive) {
                     startFailCountdown(morseFailCount, () -> {
                         if (isMorseLockActive && tvMorseStatus != null) tvMorseStatus.setText("");
                     });
-                } else if (morseFailCount >= 5) {
-                    tvMorseStatus.setText(insult);
-                    int lockMinutes = prefs.getInt("morse_lock_minutes", 30);
-                    lockUntilTime = System.currentTimeMillis() + lockMinutes * 60 * 1000L;
-                    isMorseLockActive = false;
-                    // Đá ngay kẻ trộm về HOME
-                    Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-                    kick.putExtra("act", "HOME");
-                    sendBroadcast(kick);
-                    new Handler().postDelayed(() -> updateVisibility(), 500);
-                } else {
+               } else if (morseFailCount >= 5) {
+    tvMorseStatus.setText(insult);
+    int lockMinutes = prefs.getInt("morse_lock_minutes", 30);
+    // Chỉ phạt ĐÚNG app vừa nhập sai — Zalo phạt thì Messenger vẫn hỏi mật khẩu bình thường
+String punishedPkg = lockedPkg;
+long lockUntil = System.currentTimeMillis() + lockMinutes * 60 * 1000L;
+perPkgLockUntil.put(punishedPkg, lockUntil);
+
+isMorseLockActive = false;
+lockedPkg = "";
+morseFailCount = 0;
+currentMorseAttempt = "";
+Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+kick.putExtra("act", "HOME");
+sendBroadcast(kick);
+new Handler().postDelayed(() -> updateVisibility(), 500);
+} else {
                     tvMorseStatus.setText(insult);
                 }
             }
@@ -1094,13 +1114,18 @@ if (isUninstallGuardActive) {
             tvMorseStatus.setText(insult);
             currentMorseAttempt = "";
             if (morseFailCount >= 5) {
-                int lockMinutes = prefs.getInt("morse_lock_minutes", 30);
-                lockUntilTime = System.currentTimeMillis() + lockMinutes * 60 * 1000L;
-                isMorseLockActive = false;
-                Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-                kick.putExtra("act", "HOME");
-                sendBroadcast(kick);
-            }
+    int lockMinutes = prefs.getInt("morse_lock_minutes", 30);
+    String punishedPkg = lockedPkg;
+long lockUntil = System.currentTimeMillis() + lockMinutes * 60 * 1000L;
+perPkgLockUntil.put(punishedPkg, lockUntil);
+    isMorseLockActive = false;
+    lockedPkg = "";
+    morseFailCount = 0;
+    currentMorseAttempt = "";
+    Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+    kick.putExtra("act", "HOME");
+    sendBroadcast(kick);
+}
             return;
         }
 
@@ -1220,36 +1245,32 @@ private void showMorseOSCover() {
                 updateVisibility();
             }, 500);
 } else if (isCurrentlyOnHome) {
-    // [MỤC 9] Tap icon trên Home → tắt MorseLock VĨNH VIỄN cho phiên này
-    // Add vào unlockedApps để app này không bị đòi mật khẩu lại
-    if (!lockedPkg.isEmpty()) {
-        unlockedApps.add(lockedPkg);
-        relockHandler.removeCallbacks(relockRunnable);
-        relockScheduledTime = 0;
-        pendingRelockPkg = "";
-    }
-    isMorseLockActive = false;
-    isForceHome = false;
-    lockedPkg = "";
-    currentMorseAttempt = "";
-    morseFailCount = 0;
-    isCountingDown = false;
-    if (countdownRunnable != null) countdownHandler.removeCallbacks(countdownRunnable);
-    if (warningAnimator != null) warningAnimator.cancel();
-    if (bgView != null) {
-        bgView.setBackgroundColor(Color.TRANSPARENT);
-        bgView.invalidate();
-    }
-    morseContainer.setVisibility(View.GONE);
-    // Thêm vào dismissed set 3 giây — chặn MORSE_LOCK_ENGAGE tái kích hoạt
-    // KHÔNG dùng unlockedApps vì lần sau mở app vẫn cần mật khẩu
-    if (!dismissedPkg.isEmpty()) {
-        unlockedApps.add(dismissedPkg);
-        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-            unlockedApps.remove(dismissedPkg);
-        }, 3000);
-    }
-    // KHÔNG gọi updateVisibility() — tránh vòng lặp tái hiện overlay
+// [FIX-BUG-9] Tap icon trên Home → DISMISS hoàn toàn, không bao giờ hiện lại
+String pkgToDismiss = lockedPkg.isEmpty() ? currentForegroundPkg : lockedPkg;
+if (!pkgToDismiss.isEmpty()
+&& !pkgToDismiss.contains("launcher")
+&& !pkgToDismiss.contains("systemui")
+&& !pkgToDismiss.contains("quickstep")) {
+unlockedApps.add(pkgToDismiss);
+dismissedPkg = pkgToDismiss;
+}
+isCoveringRecents = false;
+isMorseLockActive = false;
+isForceHome = false;
+lockedPkg = "";
+currentMorseAttempt = "";
+morseFailCount = 0;
+isCountingDown = false;
+isUnlockCooldown = false;
+unlockCooldownHandler.removeCallbacksAndMessages(null);
+if (countdownRunnable != null) countdownHandler.removeCallbacks(countdownRunnable);
+if (warningAnimator != null) warningAnimator.cancel();
+if (bgView != null) {
+bgView.setBackgroundColor(Color.TRANSPARENT);
+bgView.invalidate();
+}
+morseContainer.setVisibility(View.GONE);
+sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
 }
             }
             return true;
@@ -1272,9 +1293,12 @@ if (accHomeRunning) {
     for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
 }
         isPreviewMorse = prefs.getBoolean("preview_morse", false);
-        boolean timeLocked = (System.currentTimeMillis() < lockUntilTime);
-
-        if ((isMorseLockActive && !timeLocked) || isPreviewMorse) {
+        // Kiểm tra xem ứng dụng hiện tại có bị khóa không
+        // Kiểm tra phạt theo đúng pkg đang bị khóa — không ảnh hưởng app khác
+long thisLockUntil = perPkgLockUntil.containsKey(lockedPkg)
+    ? perPkgLockUntil.get(lockedPkg) : 0L;
+boolean timeLocked = (System.currentTimeMillis() < thisLockUntil);
+if ((isMorseLockActive && !timeLocked) || isPreviewMorse) {
             if (morseContainer.getVisibility() != View.VISIBLE) {
     // FIX-TEXT-1: Luôn apply style khi container vừa được hiện
     applyMorseTextStyle();
@@ -1745,9 +1769,9 @@ if (accHomeRunning) {
         }
     }
 
-    // HYBRID HOME V2: Áp dụng type đúng cho TẤT CẢ bars/corners một lần
-    // Không removeView/addView — chỉ updateViewLayout để ZERO overhead RAM
-    private void applyHybridTypeToAllBars() {
+// HYBRID HOME V2: Áp dụng type đúng cho TẤT CẢ bars/corners một lần
+// Không removeView/addView — chỉ updateViewLayout để ZERO overhead RAM
+private void applyHybridTypeToAllBars() {
         int newType = accStateCached
             ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
             : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
@@ -1768,5 +1792,4 @@ if (accHomeRunning) {
             }
         }
     }
-
 }  // ← đây là dấu } cuối cùng đóng class HomescreenService, KHÔNG XÓA

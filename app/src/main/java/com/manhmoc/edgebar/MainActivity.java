@@ -50,7 +50,7 @@ private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "rig
     private Button btnLock, btnHomacc, btnHome, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.3"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.5"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;

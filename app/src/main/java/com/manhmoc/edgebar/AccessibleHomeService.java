@@ -22,8 +22,8 @@ public class AccessibleHomeService extends Service {
                     cid, "Động cơ Trợ năng", NotificationManager.IMPORTANCE_MIN);
             getSystemService(NotificationManager.class).createNotificationChannel(nc);
             Notification n = new Notification.Builder(this, cid)
-                    .setContentTitle("Động cơ Trợ năng đang chạy")
-                    .setSmallIcon(android.R.drawable.ic_menu_compass)
+                    .setContentTitle("Động cơ Trợ năng")
+                    .setSmallIcon(android.R.drawable.ic_menu_search)
                     .build();
             startForeground(88, n);
         }

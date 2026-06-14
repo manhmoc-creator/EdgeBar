@@ -132,14 +132,22 @@ updateTileState(false);
     NotificationManager nm = getSystemService(NotificationManager.class);
     if (nm == null) return;
     ensureChannel(nm);
-    Notification n = new Notification.Builder(this, NOTIF_CHANNEL)
-        .setContentTitle("Homacc đang chạy")
-        .setSmallIcon(android.R.drawable.ic_menu_manage)
-        .setOngoing(true)
-        .setPriority(Notification.PRIORITY_MAX)
-        .setVisibility(Notification.VISIBILITY_PUBLIC)
-        .build();
-    nm.notify(NOTIF_ID, n);
+    Notification.Builder builder = new Notification.Builder(this, NOTIF_CHANNEL)
+.setContentTitle("Homacc")
+.setSmallIcon(android.R.drawable.ic_menu_search)
+.setOngoing(true)
+.setPriority(Notification.PRIORITY_MAX)
+.setVisibility(Notification.VISIBILITY_PUBLIC);
+NotificationChannel nc = new NotificationChannel(
+    NOTIF_CHANNEL, "Trạng thái Homacc",
+    NotificationManager.IMPORTANCE_HIGH);
+nc.setSound(null, null);
+nc.enableLights(false);
+nc.enableVibration(false);
+nc.setShowBadge(false);
+nc.setBypassDnd(false); // ← ĐỔI false, không conflict với DND policy
+nc.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+nm.notify(NOTIF_ID, builder.build());
 }
 
     private void cancelNotification() {
@@ -156,13 +164,17 @@ updateTileState(false);
     private void ensureChannel(NotificationManager nm) {
     if (Build.VERSION.SDK_INT >= 26) {
         if (nm.getNotificationChannel(NOTIF_CHANNEL) == null) {
-            NotificationChannel nc = new NotificationChannel(
-                NOTIF_CHANNEL, "Trạng thái Homacc",
-                NotificationManager.IMPORTANCE_HIGH);
-            nc.setSound(null, null);
-            nc.enableLights(false);
-            nc.enableVibration(false);
-            nc.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+
+NotificationChannel nc = new NotificationChannel(
+    NOTIF_CHANNEL, "Trạng thái Homacc",
+    NotificationManager.IMPORTANCE_HIGH);
+nc.setSound(null, null);
+nc.enableLights(false);
+nc.enableVibration(false);
+nc.setShowBadge(false);
+nc.setBypassDnd(true); // THÊM: vượt DND
+nc.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+
             nm.createNotificationChannel(nc);
         }
      }
