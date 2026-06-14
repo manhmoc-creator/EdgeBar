@@ -50,7 +50,7 @@ private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "rig
     private Button btnLock, btnHomacc, btnHome, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.7 - First Verdict"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.8 - Eternal Ego"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -577,38 +577,175 @@ prefs.edit()
         d.setContentView(root); d.show();
     }
 
-    private void openTileEditor(int idx) {
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
-        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,120,40,40);
-        ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
-        LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); scroll.addView(content); root.addView(scroll);
-        final int finalIdx = idx;
-        Spinner sp = createSpinner();
-        sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, ACT_LABS));
-        if(idx>0) {
-            String cur = prefs.getString("tile_"+idx+"_act","NONE");
-            for(int i=0;i<ACT_KEYS.length;i++) if(ACT_KEYS[i].equals(cur)) sp.setSelection(i);
-        }
-        content.addView(sp);
-        LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
-        Button bCancel = new Button(this); bCancel.setText("HỦY"); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-        Button bSave = new Button(this); bSave.setText("LƯU"); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); bSave.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-        footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
-        bCancel.setOnClickListener(v -> d.dismiss());
-        bSave.setOnClickListener(v -> {
-            if(finalIdx==0) {
-                int newIdx = -1;
-                for(int i=1;i<=15;i++) if(prefs.getString("tile_"+i+"_act","NONE").equals("NONE")) { newIdx=i; break; }
-                if(newIdx==-1) { Toast.makeText(this,"Đã đủ 15 QS Tile!",Toast.LENGTH_SHORT).show(); return; }
-                prefs.edit().putString("tile_"+newIdx+"_act", ACT_KEYS[sp.getSelectedItemPosition()]).apply();
-            } else {
-                prefs.edit().putString("tile_"+finalIdx+"_act", ACT_KEYS[sp.getSelectedItemPosition()]).apply();
-            }
-            renderEcosystem(); d.dismiss();
-        });
-        d.setContentView(root); d.show();
-    }
+    // V19.12.3.6.8 THE ETERNAL EGO
+// Auto-icon map: mỗi ACT_KEY → icon index phù hợp nhất trong TILE_ICON_POOL
+// Pixel 2XL opt: static array, zero allocation khi tra cứu
+private static final int[] ACT_AUTO_ICON = {
+    // NONE→0, BACK→4, HOME→4, RECENTS→5, SCREEN_OFF→2, FLASH→18,
+    // POWER_DIALOG→10, VOLUME→7, SCREENSHOT→17, CAMERA→3,
+    // NOTIFICATIONS→9, TOGGLE_ACC→2, TOGGLE_OVERLAY→16, TOGGLE_MORSE→2,
+    // YTDL_DOWNLOAD→8, VOICE_RECORD→6, SCREEN_ON→18, LAUNCH_APP→19
+    0, 4, 4, 5, 2, 18, 10, 7, 17, 3, 9, 2, 16, 2, 8, 6, 18, 19,
+    // INTENT_1..15 → icon gửi (11)
+    11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,
+    // MACRO_1..5 → icon manage (10)
+    10,10,10,10,10
+};
 
+// Pool 20 icon: index phải khớp với ICON_POOL trong Tile1..15.java
+private static final String[] TILE_ICON_NAMES = {
+    "La Bàn 🧭", "Kính Lúp 🔍", "Ổ Khóa 🔒", "Camera 📷", "Home 🏠",
+    "Play ▶", "Micro 🎤", "Âm Lượng 🔊", "Chia Sẻ 📤", "Thông Tin ℹ️",
+    "Cài Đặt ⚙️", "Gửi 📨", "Chỉnh Sửa ✏️", "Xóa 🗑️", "Thêm ➕",
+    "Đóng ✖️", "Upload ⬆️", "Xem 👁️", "Yêu Thích ⭐", "Vị Trí 📍"
+};
+
+private void openTileEditor(int idx) {
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212"));
+    root.setPadding(40, 120, 40, 40);
+
+    ScrollView scroll = new ScrollView(this);
+    scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    LinearLayout content = new LinearLayout(this);
+    content.setOrientation(LinearLayout.VERTICAL);
+    scroll.addView(content);
+    root.addView(scroll);
+    final int finalIdx = idx;
+
+    // --- TÊN TILE ---
+    TextView tvLabelHint = new TextView(this);
+    tvLabelHint.setText("Tên hiển thị trên QS Tile:");
+    tvLabelHint.setTextColor(Color.parseColor("#00E5FF"));
+    tvLabelHint.setPadding(0, 0, 0, 10);
+    content.addView(tvLabelHint);
+
+    EditText etLabel = createEcoInput(
+        "VD: Đèn Pin, Chụp màn...",
+        idx > 0 ? prefs.getString("tile_" + idx + "_label", "Tile " + idx) : ""
+    );
+    content.addView(etLabel);
+
+    // --- ACTION ---
+    TextView tvActionHint = new TextView(this);
+    tvActionHint.setText("\nHành động:");
+    tvActionHint.setTextColor(Color.parseColor("#00E5FF"));
+    content.addView(tvActionHint);
+
+    Spinner sp = createSpinner();
+    sp.setAdapter(new ArrayAdapter<>(this,
+        android.R.layout.simple_spinner_dropdown_item, ACT_LABS));
+    if (idx > 0) {
+        String cur = prefs.getString("tile_" + idx + "_act", "NONE");
+        for (int i = 0; i < ACT_KEYS.length; i++)
+            if (ACT_KEYS[i].equals(cur)) { sp.setSelection(i); break; }
+    }
+    content.addView(sp);
+
+    // --- ICON ---
+    TextView tvIconHint = new TextView(this);
+    tvIconHint.setText("\nIcon:");
+    tvIconHint.setTextColor(Color.parseColor("#00E5FF"));
+    content.addView(tvIconHint);
+
+    // Checkbox auto-icon
+    CheckBox cbAutoIcon = new CheckBox(this);
+    cbAutoIcon.setText("🤖 Tự chọn icon theo hành động");
+    cbAutoIcon.setTextColor(Color.WHITE);
+    cbAutoIcon.setChecked(idx <= 0 || prefs.getBoolean("tile_" + idx + "_auto_icon", true));
+    content.addView(cbAutoIcon);
+
+    Spinner spIcon = createSpinner();
+    spIcon.setAdapter(new ArrayAdapter<>(this,
+        android.R.layout.simple_spinner_dropdown_item, TILE_ICON_NAMES));
+    int savedIconIdx = idx > 0 ? prefs.getInt("tile_" + idx + "_icon_idx", 0) : 0;
+    spIcon.setSelection(savedIconIdx);
+    // Spinner icon ẩn khi auto
+    spIcon.setVisibility(cbAutoIcon.isChecked() ? View.GONE : View.VISIBLE);
+    cbAutoIcon.setOnCheckedChangeListener((v, chk) ->
+        spIcon.setVisibility(chk ? View.GONE : View.VISIBLE));
+
+    // Auto-update icon spinner khi đổi action
+    sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
+            if (cbAutoIcon.isChecked()) {
+                int autoIdx = (pos < ACT_AUTO_ICON.length) ? ACT_AUTO_ICON[pos] : 0;
+                spIcon.setSelection(autoIdx);
+                // Gợi ý tên tile từ action nếu ô label đang trống
+                if (etLabel.getText().toString().trim().isEmpty() && pos < ACT_LABS.length) {
+                    etLabel.setHint("Gợi ý: " + ACT_LABS[pos]);
+                }
+            }
+        }
+        public void onNothingSelected(AdapterView<?> p) {}
+    });
+    content.addView(spIcon);
+
+    LinearLayout footer = new LinearLayout(this);
+    footer.setOrientation(LinearLayout.HORIZONTAL);
+    footer.setPadding(0, 40, 0, 0);
+    Button bCancel = new Button(this);
+    bCancel.setText("HỦY");
+    bCancel.setBackground(getRounded("#333333", 20f));
+    bCancel.setTextColor(Color.WHITE);
+    bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Button bSave = new Button(this);
+    bSave.setText("LƯU");
+    bSave.setBackground(getRounded("#4CAF50", 20f));
+    bSave.setTextColor(Color.WHITE);
+    bSave.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    footer.addView(bCancel);
+    footer.addView(bSave);
+    root.addView(footer);
+
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave.setOnClickListener(v -> {
+        String labelText = etLabel.getText().toString().trim();
+        boolean autoIcon = cbAutoIcon.isChecked();
+        int actionPos = sp.getSelectedItemPosition();
+        int iconIdx = autoIcon
+            ? ((actionPos < ACT_AUTO_ICON.length) ? ACT_AUTO_ICON[actionPos] : 0)
+            : spIcon.getSelectedItemPosition();
+        // Tên mặc định = tên action nếu để trống
+        if (labelText.isEmpty() && actionPos < ACT_LABS.length) {
+            labelText = ACT_LABS[actionPos];
+        }
+        final String finalLabel = labelText;
+        final int finalIconIdx = iconIdx;
+
+        if (finalIdx == 0) {
+            int newIdx = -1;
+            for (int i = 1; i <= 15; i++)
+                if (prefs.getString("tile_" + i + "_act", "NONE").equals("NONE")) {
+                    newIdx = i; break;
+                }
+            if (newIdx == -1) {
+                Toast.makeText(this, "Đã đủ 15 QS Tile!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            prefs.edit()
+                .putString("tile_" + newIdx + "_act", ACT_KEYS[actionPos])
+                .putString("tile_" + newIdx + "_label", finalLabel)
+                .putInt("tile_" + newIdx + "_icon_idx", finalIconIdx)
+                .putBoolean("tile_" + newIdx + "_auto_icon", autoIcon)
+                .apply();
+        } else {
+            prefs.edit()
+                .putString("tile_" + finalIdx + "_act", ACT_KEYS[actionPos])
+                .putString("tile_" + finalIdx + "_label", finalLabel)
+                .putInt("tile_" + finalIdx + "_icon_idx", finalIconIdx)
+                .putBoolean("tile_" + finalIdx + "_auto_icon", autoIcon)
+                .apply();
+        }
+        sendBroadcast(new Intent("com.manhmoc.edgebar.TILE_CONFIG_CHANGED"));
+        renderEcosystem();
+        d.dismiss();
+    });
+    d.setContentView(root);
+    d.show();
+}
     private void openMacroEditor(int idx) {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,120,40,40);

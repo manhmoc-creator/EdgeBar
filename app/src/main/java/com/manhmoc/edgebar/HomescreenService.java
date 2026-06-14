@@ -77,7 +77,8 @@ private boolean isAccessibleHomeShortcutOn() {
     private String currentMorseAttempt = "";
     private int morseFailCount = 0;
     private String lockedPkg = "";
-    private String dismissedPkg = "";  // ← THÊM DÒNG NÀY
+    private String dismissedPkg = "";
+    private long dismissedTime = 0; // V19.12.3.6.8: dismissedPkg có thời hạn 3 giây
 
     private boolean isCountingDown = false;
     private Handler countdownHandler = new Handler();
@@ -521,61 +522,60 @@ invalidate();
     if (pkg == null || pkg.isEmpty()) return;
     if (isUnlockCooldown) return;
 
-    // V19.12.3.6.2: Chặn tuyệt đối khi đang ở Home — không bao giờ hiện MorseLock ở Home
-    boolean isCurrentlyOnHome = currentForegroundPkg.isEmpty()
-        || currentForegroundPkg.contains("launcher")
-        || currentForegroundPkg.contains("nexuslauncher")
-        || currentForegroundPkg.contains("quickstep")
-        || currentForegroundPkg.contains("systemui");
-    if (isCurrentlyOnHome) return;
+    // V19.12.3.6.8 THE ETERNAL EGO: Whitelist tuyệt đối — safety net cuối cùng
+    boolean pkgIsSystem = pkg.contains("launcher") || pkg.contains("nexuslauncher")
+            || pkg.contains("quickstep") || pkg.contains("systemui")
+            || pkg.equals("android") || pkg.contains("recents")
+            || pkg.contains("inputmethod") || pkg.contains("packageinstaller");
+    if (pkgIsSystem) return;
 
-    // FIX BUG 9: Whitelist đầy đủ các launcher/system packages
-    // Tránh MorseLock xuất hiện khi đang ở màn hình chính
-    boolean pkgIsSystemHome = pkg.contains("launcher")
-            || pkg.contains("nexuslauncher")
-            || pkg.contains("quickstep")
-            || pkg.contains("systemui")
-            || pkg.equals("android")
-            || pkg.contains("recents")
-            || pkg.contains("inputmethod");
-    if (pkgIsSystemHome) return; // Từ chối tuyệt đối nếu pkg là system/launcher
+    // from_windows_api = true: EdgeBarService đã xác nhận pkg qua getWindows()
+    // → KHÔNG cần foregroundMatch double-check (gây race condition)
+    // from_windows_api = false: fallback path → vẫn check currentForegroundPkg
+    boolean fromWindowsApi = i.getBooleanExtra("from_windows_api", false);
+    if (!fromWindowsApi) {
+        // Fallback: backward compat cho các broadcast cũ không có flag
+        boolean currentIsHome = currentForegroundPkg.isEmpty()
+                || currentForegroundPkg.contains("launcher")
+                || currentForegroundPkg.contains("nexuslauncher")
+                || currentForegroundPkg.contains("quickstep")
+                || currentForegroundPkg.contains("systemui");
+        if (currentIsHome) return;
+        if (!currentForegroundPkg.equals(pkg)) return;
+    }
 
-    // Double-check: currentForegroundPkg phải khớp pkg VÀ không phải Home
-    boolean foregroundMatch = currentForegroundPkg.equals(pkg);
-    boolean currentIsHome = currentForegroundPkg.isEmpty()
-            || currentForegroundPkg.contains("launcher")
-            || currentForegroundPkg.contains("nexuslauncher")
-            || currentForegroundPkg.contains("quickstep")
-            || currentForegroundPkg.contains("systemui");
-    if (!foregroundMatch || currentIsHome) return;
     long now = System.currentTimeMillis();
     if (isMorseLockActive && pkg.equals(lockedPkg)) return;
-    if (unlockedApps.contains(pkg)) {
-return;
-}
-if (pkg.equals(dismissedPkg)) return;
-// Kiểm tra xem APP NÀY CỤ THỂ có đang trong thời gian phạt không
-long thisPkgLockUntil = perPkgLockUntil.containsKey(pkg)
-    ? perPkgLockUntil.get(pkg) : 0L;
-if (now < thisPkgLockUntil) {
-    // Chỉ đá về HOME nếu chính app này đang bị phạt
-    Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-    kick.putExtra("act", "HOME");
-    sendBroadcast(kick);
-    return;
-}
+    if (unlockedApps.contains(pkg)) return;
+
+    // V19.12.3.6.8: dismissedPkg có thời hạn 3 giây — tránh permanent dismiss
+    if (pkg.equals(dismissedPkg)) {
+        long dismissedAge = now - dismissedTime;
+        if (dismissedAge < 3000) return; // Còn trong grace period
+        else { dismissedPkg = ""; dismissedTime = 0; } // Hết hạn → reset
+    }
+
+    long thisPkgLockUntil = perPkgLockUntil.containsKey(pkg)
+        ? perPkgLockUntil.get(pkg) : 0L;
+    if (now < thisPkgLockUntil) {
+        Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+        kick.putExtra("act", "HOME");
+        sendBroadcast(kick);
+        return;
+    }
+
     isMorseLockActive = true;
-lockedPkg = pkg;
-morseFailCount = 0;
-currentMorseAttempt = "";
-if (tvMorseStatus != null) tvMorseStatus.setText("");
-// FIX-TEXT-1: Apply style TRƯỚC khi hiện overlay, đảm bảo text
-// luôn nằm trên vùng tối bất kể slider đã kéo hay chưa
-applyMorseTextStyle();
-applyLockIconStyle();
-updateLockIconPosition();
-morseContainer.setVisibility(View.VISIBLE);
-updateVisibility();
+    lockedPkg = pkg;
+    morseFailCount = 0;
+    currentMorseAttempt = "";
+    // V19.12.3.6.8: Đồng bộ currentForegroundPkg nếu đến từ windows API
+    if (fromWindowsApi) currentForegroundPkg = pkg;
+    if (tvMorseStatus != null) tvMorseStatus.setText("");
+    applyMorseTextStyle();
+    applyLockIconStyle();
+    updateLockIconPosition();
+    morseContainer.setVisibility(View.VISIBLE);
+    updateVisibility();
             } else if (action.equals("com.manhmoc.edgebar.MORSE_LOCK_DISMISS")) {
                 isMorseLockActive = false;
                 morseFailCount = 0;
@@ -674,8 +674,9 @@ updateVisibility();
         updateVisibility();
     }
 } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
-unlockedApps.clear(); // Xóa lịch sử unlock (Yêu cầu 9)
+unlockedApps.clear();
 dismissedPkg = "";
+dismissedTime = 0; // V19.12.3.6.8
 lastUnlockedTime = 0;
     relockHandler.removeCallbacks(relockRunnable);
     relockScheduledTime = 0;
@@ -1078,28 +1079,44 @@ if (isUninstallGuardActive) {
         int realMaxLen = masterPass.length();
 
         if (mappedKey.equals("X")) {
-            if (isLongPress) {
-                currentMorseAttempt = "";
+    if (isLongPress) {
+        // Long press X = xóa toàn bộ
+        // V19.12.3.6.8: Cancel runnable TRƯỚC khi reset tránh race condition
+        if (hideNumberRunnable != null) {
+            numberDisplayHandler.removeCallbacks(hideNumberRunnable);
+            hideNumberRunnable = null;
+        }
+        currentMorseAttempt = "";
+        tvMorseStatus.setText("");
+    } else {
+        if (currentMorseAttempt.length() > 0) {
+            // V19.12.3.6.8 THE ETERNAL EGO — Fix Bug 3: xóa ký tự không hiện lại số
+            // Cancel runnable CŨ trước khi cắt attempt
+            // Tránh race: runnable cũ chạy SAU khi đã cắt → setText sai nội dung
+            if (hideNumberRunnable != null) {
+                numberDisplayHandler.removeCallbacks(hideNumberRunnable);
+                hideNumberRunnable = null;
+            }
+            currentMorseAttempt = currentMorseAttempt.substring(
+                0, currentMorseAttempt.length() - 1);
+            if (currentMorseAttempt.isEmpty()) {
                 tvMorseStatus.setText("");
             } else {
-                if (currentMorseAttempt.length() > 0) {
-                    currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length() - 1);
-                    if (currentMorseAttempt.isEmpty()) tvMorseStatus.setText("");
-                    else {
-                        int showNumberMs = prefs.getInt("morse_show_number_ms", 800);
-                        tvMorseStatus.setText(currentMorseAttempt);
-                        if (hideNumberRunnable != null) numberDisplayHandler.removeCallbacks(hideNumberRunnable);
-                        hideNumberRunnable = () -> {
-                            StringBuilder dots = new StringBuilder();
-                            for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
-                            tvMorseStatus.setText(dots.toString());
-                        };
-                        numberDisplayHandler.postDelayed(hideNumberRunnable, showNumberMs);
-                    }
+                // SAU KHI XÓA: rebuild dot-string hoàn toàn
+                // TẤT CẢ ký tự còn lại = dấu chấm, KHÔNG có số nào
+                // Lý do: ký tự "mới nhất" sau khi xóa đã từng bị hide thành chấm
+                // → hiện lại dưới dạng số là SAI về mặt UX
+                // KHÔNG schedule hideNumberRunnable mới — không có số nào để hide
+                StringBuilder dots = new StringBuilder();
+                for (int di = 0; di < currentMorseAttempt.length(); di++) {
+                    dots.append("• ");
                 }
+                tvMorseStatus.setText(dots.toString().trim());
             }
-            return;
         }
+    }
+    return;
+}
         else if (mappedKey.equals(">")) {
             if (currentMorseAttempt.isEmpty() || masterPass.isEmpty()) return;
             if (currentMorseAttempt.equals(masterPass)) {
@@ -1302,6 +1319,7 @@ if (!pkgToDismiss.isEmpty()
 && !pkgToDismiss.contains("quickstep")) {
 unlockedApps.add(pkgToDismiss);
 dismissedPkg = pkgToDismiss;
+dismissedTime = System.currentTimeMillis(); // V19.12.3.6.8
 }
 isCoveringRecents = false;
 isMorseLockActive = false;

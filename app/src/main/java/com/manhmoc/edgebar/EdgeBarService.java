@@ -74,12 +74,15 @@ private Runnable debounceRunnable = null;
 private boolean lastAccHomeRunningState = false;
 private long lastHomaccUpdateMs = 0;
 
-// V19.12.3.6.6 THE FINAL JUDGMENT — throttle biến event
+// V19.12.3.6.8 THE ETERNAL EGO — throttle biến event
 private long lastEventMs = 0;
 private static final long EVENT_THROTTLE_MS = 200;
 private String lastEventPkg = "";
 private boolean lastIsKbd_cache = false;
 private boolean lastIsBl_cache = false;
+// V19.12.3.6.8: Pipeline A riêng cho MorseLock — throttle nhanh hơn SYNC_STATE
+private long lastMorseLockCheckMs = 0;
+private static final long MORSE_LOCK_CHECK_THROTTLE = 100;
 
 // V19.12.3.6.6 — Whitelist key của EdgeBar, chặn key lạ của Zalo/Messenger
 private static final java.util.Set<String> EB_KEY_PREFIXES =
@@ -345,14 +348,27 @@ if (inv) {
         createFloatingBars();
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
-    if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+    int eventType = event.getEventType();
+    if (eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            && eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return;
 
-    // V19.12.3.6.6 THE FINAL JUDGMENT — Throttle 200ms, chặn bão event từ Zalo/Messenger
+    // ===== PIPELINE A: MORSELOCK CHECK — KHÔNG throttle, KHÔNG stateChanged guard =====
+    // V19.12.3.6.8 THE ETERNAL EGO: dùng getWindows() thay event.getPackageName()
+    // getWindows() = nguồn sự thật duy nhất từ system, không bị miss hay delay
+    String locklist = prefs.getString("locklist", "");
+    if (!locklist.isEmpty()) {
+        String foregroundFromWindows = getForegroundPackageFromWindows();
+        if (foregroundFromWindows != null && !foregroundFromWindows.isEmpty()) {
+            checkAndEngageMorseLock(foregroundFromWindows, locklist);
+        }
+    }
+
+    // ===== PIPELINE B: SYNC_STATE / UI UPDATE — throttle 200ms như cũ =====
     long nowMs = System.currentTimeMillis();
     if (nowMs - lastEventMs < EVENT_THROTTLE_MS) return;
     lastEventMs = nowMs;
 
-    // Sync Homacc state (KHÔNG gọi updateHomaccLive tại đây)
+    // Sync Homacc state
     boolean accShouldRun = AccessibleHomeService.isRunning;
     if (accShouldRun != lastAccHomeRunningState) {
         lastAccHomeRunningState = accShouldRun;
@@ -368,7 +384,6 @@ if (inv) {
     String bl = prefs.getString("blacklist", "");
     boolean newIsBl = !pName.isEmpty() && bl.contains(pName);
 
-    // Chỉ xử lý thêm khi state THỰC SỰ thay đổi so với lần trước
     boolean stateChanged = newIsKbd != lastIsKbd_cache
                         || newIsBl != lastIsBl_cache
                         || !pName.equals(lastEventPkg);
@@ -376,7 +391,7 @@ if (inv) {
     isKbd = newIsKbd;
     isBl = newIsBl;
 
-    // Uninstall guard (luôn kiểm tra, không throttle)
+    // Uninstall guard — luôn kiểm tra, không throttle
     if (pName.contains("packageinstaller") || pName.contains("installer")
             || pName.contains("vending")) {
         if (cName.contains("Uninstall") || cName.contains("uninstall")
@@ -386,39 +401,14 @@ if (inv) {
         }
     }
 
-    if (!stateChanged) return; // Không có gì thay đổi → dừng, tiết kiệm CPU
+    if (!stateChanged) return;
 
-    // Cập nhật cache
     lastEventPkg = pName;
     lastIsKbd_cache = newIsKbd;
     lastIsBl_cache = newIsBl;
 
-    boolean isSystemUI = pName.contains("systemui") || pName.contains("launcher")
-            || pName.contains("nexuslauncher") || pName.equals("com.android.settings")
-            || pName.isEmpty() || isKbd;
-
-    if (!isSystemUI) {
-        String locklist = prefs.getString("locklist", "");
-        if (!locklist.isEmpty()) {
-            for (String pkg : locklist.split(",")) {
-                if (pkg.trim().equals(pName)) {
-                    boolean isMainWindow = !cName.contains("Dialog")
-                        && !cName.contains("Popup") && !cName.contains("Toast")
-                        && !cName.contains("Panel") && !cName.contains("Permission");
-                    if (isMainWindow) {
-                        Intent lockIntent = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
-                        lockIntent.putExtra("pkg", pName);
-                        sendBroadcast(lockIntent);
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
     updateVisibility();
 
-    // Recents tracking
     boolean nowInRecents = pName.contains("launcher") || pName.contains("nexuslauncher")
             || pName.contains("quickstep") || pName.contains("systemui")
             || cName.contains("RecentsActivity") || cName.contains("RecentTasksActivity")
@@ -434,14 +424,65 @@ if (inv) {
     }
     if (!nowInRecents && !pName.isEmpty() && !isKbd) lastForegroundPkg = pName;
 
-    // SYNC_STATE: chỉ gửi khi state thay đổi (đã được guard bởi stateChanged ở trên)
     Intent syncIntent = new Intent("com.manhmoc.edgebar.SYNC_STATE");
     syncIntent.putExtra("isKbd", isKbd);
     syncIntent.putExtra("isBl", isBl);
     syncIntent.putExtra("foreground_pkg", pName);
     sendBroadcast(syncIntent);
 }
+    // V19.12.3.6.8 THE ETERNAL EGO
+// getForegroundPackageFromWindows(): lấy package foreground từ getWindows() API
+// Pixel 2XL opt: recycle NodeInfo ngay sau khi đọc, tránh leak native memory
+// flagRetrieveInteractiveWindows trong config.xml mới cho phép method này hoạt động
+private String getForegroundPackageFromWindows() {
+    try {
+        java.util.List<android.view.accessibility.AccessibilityWindowInfo> windows = getWindows();
+        if (windows == null || windows.isEmpty()) return null;
+        for (android.view.accessibility.AccessibilityWindowInfo w : windows) {
+            // Chỉ lấy TYPE_APPLICATION — bỏ qua keyboard overlay, system panel
+            if (w.getType() == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION) {
+                android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
+                if (root != null) {
+                    String pkg = root.getPackageName() != null
+                        ? root.getPackageName().toString() : "";
+                    root.recycle(); // BẮT BUỘC recycle — tránh native memory leak Pixel 2XL
+                    if (!pkg.isEmpty()) return pkg;
+                }
+            }
+        }
+    } catch (Exception e) {}
+    return null;
+}
 
+// checkAndEngageMorseLock(): Pipeline A — MorseLock check tách biệt hoàn toàn
+// Throttle riêng 100ms (nhanh hơn SYNC_STATE 200ms) để bắt đúng khoảnh khắc mở app
+// Pixel 2XL opt: string split một lần, early return ngay khi tìm thấy match
+private void checkAndEngageMorseLock(String pkg, String locklist) {
+    long now = System.currentTimeMillis();
+    if (now - lastMorseLockCheckMs < MORSE_LOCK_CHECK_THROTTLE) return;
+    lastMorseLockCheckMs = now;
+
+    // Whitelist tuyệt đối — không bao giờ lock các package hệ thống
+    if (pkg.contains("launcher") || pkg.contains("nexuslauncher")
+            || pkg.contains("quickstep") || pkg.contains("systemui")
+            || pkg.equals("android") || pkg.contains("inputmethod")
+            || pkg.contains("recents") || pkg.contains("packageinstaller")) {
+        return;
+    }
+
+    // Kiểm tra locklist
+    for (String locked : locklist.split(",")) {
+        if (locked.trim().equals(pkg)) {
+            // Gửi MORSE_LOCK_ENGAGE với flag from_windows_api = true
+            // HomescreenService dùng flag này để bỏ qua foregroundMatch check
+            Intent lockIntent = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
+            lockIntent.putExtra("pkg", pkg);
+            lockIntent.putExtra("from_windows_api", true);
+            sendBroadcast(lockIntent);
+            return; // early return — tìm thấy rồi, không cần loop tiếp
+        }
+    }
+}
     private void exec(String a) {
         if (a == null || a.equals("NONE")) return;
         try {
