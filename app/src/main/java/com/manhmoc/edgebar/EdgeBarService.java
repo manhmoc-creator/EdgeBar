@@ -82,7 +82,7 @@ private boolean lastIsKbd_cache = false;
 private boolean lastIsBl_cache = false;
 // V19.12.3.6.8: Pipeline A riêng cho MorseLock — throttle nhanh hơn SYNC_STATE
 private long lastMorseLockCheckMs = 0;
-private static final long MORSE_LOCK_CHECK_THROTTLE = 100;
+private static final long MORSE_LOCK_CHECK_THROTTLE = 250;
 
 // V19.12.3.6.6 — Whitelist key của EdgeBar, chặn key lạ của Zalo/Messenger
 private static final java.util.Set<String> EB_KEY_PREFIXES =
@@ -140,20 +140,29 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     debounceRunnable = () -> updateVisibility();
     debounceHandler.postDelayed(debounceRunnable, LOCK_DEBOUNCE_MS);
 };
-   private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
+   // SAU:
+private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     @Override
     public void onReceive(Context c, Intent i) {
-        if ("com.manhmoc.edgebar.TEST_ANIM".equals(i.getAction())) {
+        String act = i.getAction();
+        if ("com.manhmoc.edgebar.TEST_ANIM".equals(act)) {
             playAnim();
-        } else if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
-            // [YC1] Tắt màn → xóa unlock session, MorseLock sẽ hỏi lại khi bật màn
-            // KHÔNG xóa unlockedPackage ở đây nữa — HomescreenService giữ state
+        } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
+            // [YC1] Tắt màn → xóa unlock session...
+
+            // V19.12.3.6.9: gỡ HẲN Homacc (removeView, không chỉ ẩn) khi tắt
+            // màn hình — giải phóng SurfaceFlinger layer thật sự, giống hệt
+            // cách Homeb dừng khi khoá máy. Đây là phần chính giảm hao pin idle.
+            if (isHomaccDrawn) removeAccessibleHome();
+        } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
+            // Vừa mở khoá thành công → vẽ lại Homacc nếu đang bật
+            if (AccessibleHomeService.isRunning) drawAccessibleHome();
+            updateVisibility();
         } else {
             updateVisibility();
         }
     }
 };
-
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
@@ -351,18 +360,18 @@ if (inv) {
     int eventType = event.getEventType();
     if (eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             && eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return;
-
-    // ===== PIPELINE A: MORSELOCK CHECK — KHÔNG throttle, KHÔNG stateChanged guard =====
-    // V19.12.3.6.8 THE ETERNAL EGO: dùng getWindows() thay event.getPackageName()
-    // getWindows() = nguồn sự thật duy nhất từ system, không bị miss hay delay
-    String locklist = prefs.getString("locklist", "");
-    if (!locklist.isEmpty()) {
+// SAU (throttle đặt TRƯỚC getWindows() — đúng vị trí để tiết kiệm IPC):
+String locklist = prefs.getString("locklist", "");
+if (!locklist.isEmpty()) {
+    long nowA = System.currentTimeMillis();
+    if (nowA - lastMorseLockCheckMs >= MORSE_LOCK_CHECK_THROTTLE) {
+        lastMorseLockCheckMs = nowA;
         String foregroundFromWindows = getForegroundPackageFromWindows();
         if (foregroundFromWindows != null && !foregroundFromWindows.isEmpty()) {
             checkAndEngageMorseLock(foregroundFromWindows, locklist);
         }
     }
-
+}
     // ===== PIPELINE B: SYNC_STATE / UI UPDATE — throttle 200ms như cũ =====
     long nowMs = System.currentTimeMillis();
     if (nowMs - lastEventMs < EVENT_THROTTLE_MS) return;
@@ -453,33 +462,23 @@ private String getForegroundPackageFromWindows() {
     } catch (Exception e) {}
     return null;
 }
-
-// checkAndEngageMorseLock(): Pipeline A — MorseLock check tách biệt hoàn toàn
-// Throttle riêng 100ms (nhanh hơn SYNC_STATE 200ms) để bắt đúng khoảnh khắc mở app
-// Pixel 2XL opt: string split một lần, early return ngay khi tìm thấy match
+// SAU:
 private void checkAndEngageMorseLock(String pkg, String locklist) {
-    long now = System.currentTimeMillis();
-    if (now - lastMorseLockCheckMs < MORSE_LOCK_CHECK_THROTTLE) return;
-    lastMorseLockCheckMs = now;
-
-    // Whitelist tuyệt đối — không bao giờ lock các package hệ thống
+    // Throttle đã xử lý tại nơi gọi (trước getWindows()), hàm này chỉ còn
+    // logic đối chiếu package.
     if (pkg.contains("launcher") || pkg.contains("nexuslauncher")
             || pkg.contains("quickstep") || pkg.contains("systemui")
             || pkg.equals("android") || pkg.contains("inputmethod")
             || pkg.contains("recents") || pkg.contains("packageinstaller")) {
         return;
     }
-
-    // Kiểm tra locklist
     for (String locked : locklist.split(",")) {
         if (locked.trim().equals(pkg)) {
-            // Gửi MORSE_LOCK_ENGAGE với flag from_windows_api = true
-            // HomescreenService dùng flag này để bỏ qua foregroundMatch check
             Intent lockIntent = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
             lockIntent.putExtra("pkg", pkg);
             lockIntent.putExtra("from_windows_api", true);
             sendBroadcast(lockIntent);
-            return; // early return — tìm thấy rồi, không cần loop tiếp
+            return;
         }
     }
 }
@@ -735,34 +734,27 @@ private void checkAndEngageMorseLock(String pkg, String locklist) {
         if (fV != null) wm.removeView(fV);
         removeAccessibleHome(); 
     }
-    // [XÓA] toàn bộ method drawAccessibleHome() cũ (từ "private void drawAccessibleHome() {"
-// đến dấu "}" đóng cuối method đó)
-
-// [THÊM] thay bằng method mới hoàn chỉnh:
-/**
- * IRON VEIL PHANTOM v19.12.3.6.0
- * drawAccessibleHome() — Thiết kế lại hoàn toàn Homacc overlay.
- *
- * Fix Bug 0: Flags đúng TYPE_ACCESSIBILITY_OVERLAY + NOT_TOUCH_MODAL
- * Anti-tapjacking: FLAG_WATCH_OUTSIDE_TOUCH + systemGestureExclusionRects
- * Pixel 2XL opt: null-check trước mỗi wm.addView, tránh crash token invalid
- */
+    // SAU (code thay thế):
 private void drawAccessibleHome() {
-    removeAccessibleHome(); // Dọn sạch trước, tránh duplicate view leak
+    // V19.12.3.6.9 TWIN-ENGINE PHANTOM — Fix Bug A:
+    // FLAG_SHOW_WHEN_LOCKED KHÔNG có tác dụng với TYPE_ACCESSIBILITY_OVERLAY
+    // (chỉ có tác dụng với Activity) — đây là lý do checkbox cũ vô hiệu.
+    // Guard cứng tại gốc: locked thì không vẽ, y hệt Homeb.
+    if (km != null && km.isKeyguardLocked()) return;
+
+    removeAccessibleHome();
     SharedPreferences p = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
     String px = "homacc_";
     WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
     if (wm == null) return;
     int type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
-    // V19.12.3.6.6: Pref toggle cho phép user chọn Homacc có hiện trên màn khóa không
-    boolean homaccOnLock = prefs.getBoolean("homacc_show_on_lock", true);
+    // Đã xoá pref "homacc_show_on_lock" và FLAG_SHOW_WHEN_LOCKED — hành vi
+    // giờ cố định, không còn là tuỳ chọn.
     int baseF = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
               | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
               | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
               | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
               | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-    if (homaccOnLock) baseF |= WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
-
     // --- 5 EDGE BARS ---
     for (int i = 0; i < 5; i++) {
         boolean en = p.getBoolean(px + BARS[i] + "_en", false);

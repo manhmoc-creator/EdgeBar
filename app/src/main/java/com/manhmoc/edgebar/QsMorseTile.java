@@ -33,21 +33,6 @@ private boolean isAccEnabled() {
             getPackageName() + "/" + EdgeBarService.class.getName());
     } catch (Exception e) { return false; }
 }
-
-private boolean hasWriteSecureSettings() {
-    try {
-        // Thử ghi test key — nếu không có quyền sẽ throw SecurityException
-        Settings.Secure.putString(getContentResolver(),
-            "eb_morse_perm_test", "1");
-        Settings.Secure.putString(getContentResolver(),
-            "eb_morse_perm_test", null);
-        return true;
-    } catch (SecurityException e) {
-        return false;
-    } catch (Exception e) {
-        return false;
-    }
-}
     private boolean isMorseOn() {
         return getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE)
             .getBoolean("morse_mode_en", false);
@@ -55,22 +40,16 @@ private boolean hasWriteSecureSettings() {
 @Override public void onStartListening() {
     Tile t = getQsTile();
     if (t == null) return;
-
-    if (!isAccEnabled()) {
-        // [MỤC 8] Dùng STATE_INACTIVE thay UNAVAILABLE để tile KHÔNG bị
-        // hệ thống tự ẩn khỏi status bar / DND.
-        t.setState(Tile.STATE_INACTIVE);
-        t.setLabel("MorseLock (Acc)");
-    } else if (!hasWriteSecureSettings()) {
-        t.setState(Tile.STATE_INACTIVE);
-        t.setLabel("MorseLock (ADB)");
-    } else {
-        // Cấp độ 3: Đủ quyền → hiển thị trạng thái thực
-        boolean morseOn = isMorseOn();
-        t.setState(morseOn ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
-        t.setLabel(morseOn ? "MorseLock ON" : "MorseLock OFF");
-        updateMorseNotification(morseOn);
-    }
+    // SAU:
+if (!isAccEnabled()) {
+    t.setState(Tile.STATE_INACTIVE);
+    t.setLabel("MorseLock (cần Trợ năng)");
+} else {
+    boolean morseOn = isMorseOn();
+    t.setState(morseOn ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
+    t.setLabel(morseOn ? "MorseLock ON" : "MorseLock OFF");
+    updateMorseNotification(morseOn);
+}
     t.updateTile();
 }
 @Override public void onClick() {
@@ -82,18 +61,7 @@ private boolean hasWriteSecureSettings() {
         startActivityAndCollapse(i);
         return;
     }
-    // Điều kiện 2: ADB WRITE_SECURE_SETTINGS phải được cấp
-    if (!hasWriteSecureSettings()) {
-        Tile t = getQsTile();
-        if (t != null) {
-            t.setState(Tile.STATE_INACTIVE);
-            t.setLabel("MorseLock (cần ADB)");
-            t.updateTile();
-        }
-        return;
-    }
-
-        // Toggle MorseLock — KHÔNG đụng HomescreenService hay AccHome
+           // Toggle MorseLock — KHÔNG đụng HomescreenService hay AccHome
         boolean newState = !isMorseOn();
 
         // V19.12.3.6.6 FIX: Ghi pref TRỰC TIẾP tại đây thay vì dùng broadcast TOGGLE_MORSE

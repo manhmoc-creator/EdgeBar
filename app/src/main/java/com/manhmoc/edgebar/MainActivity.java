@@ -50,7 +50,7 @@ private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "rig
     private Button btnLock, btnHomacc, btnHome, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.8 - Eternal Ego"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.9 - Eternal Ego"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -71,7 +71,7 @@ private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "rig
     private void reloadActionLabels() {
 // Thêm 2 action: SCREEN_ON và LAUNCH_APP (Tổng 18)
 String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD", "SCREEN_ON", "LAUNCH_APP"};
-String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"), T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm ẩn"), T("Screen On", "Bật màn hình"), T("Launch App", "Mở Ứng dụng")};
+String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"), T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm"), T("Screen On", "Bật màn hình"), T("Launch App", "Mở Ứng dụng")};
 // Cập nhật vòng lặp từ 16 lên 18
 for(int i=0; i<18; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 for(int i=1; i<=15; i++) { ACT_KEYS[17+i]="INTENT_"+i; ACT_LABS[17+i] = prefs.getString("intent_"+i+"_name", "Intent " + i); }
@@ -919,21 +919,13 @@ homaccCtrlRow.addView(btnToggleHomacc);
 homaccCtrlRow.addView(btnRefreshHomacc);
 designSliderContainer.addView(homaccCtrlRow);
 
-// V19.12.3.6.6: Toggle Homacc trên màn khóa
-CheckBox cbHomaccOnLock = new CheckBox(this);
-cbHomaccOnLock.setText("🔒 Hiện Homacc trên màn khóa (Lock Screen)");
-cbHomaccOnLock.setTextColor(Color.parseColor("#7C4DFF"));
-LinearLayout.LayoutParams lockCbLp = new LinearLayout.LayoutParams(-1, -2);
-lockCbLp.setMargins(0, 0, 0, 20);
-cbHomaccOnLock.setLayoutParams(lockCbLp);
-cbHomaccOnLock.setChecked(prefs.getBoolean("homacc_show_on_lock", true));
-cbHomaccOnLock.setOnCheckedChangeListener((v, c) -> {
-    prefs.edit().putBoolean("homacc_show_on_lock", c).apply();
-    // Vẽ lại Homacc với flag mới (có hoặc không FLAG_SHOW_WHEN_LOCKED)
-    sendBroadcast(new Intent("com.manhmoc.edgebar.ACC_HOME_DRAW"));
-});
-designSliderContainer.addView(cbHomaccOnLock);
-
+// SAU:
+TextView tvHomaccLockNote = new TextView(this);
+tvHomaccLockNote.setText("🔒 Homacc tự động tắt hoàn toàn khi khoá máy (cố định, không thể tuỳ chỉnh)");
+tvHomaccLockNote.setTextColor(Color.parseColor("#777777"));
+tvHomaccLockNote.setTextSize(12);
+tvHomaccLockNote.setPadding(0, 0, 0, 20);
+designSliderContainer.addView(tvHomaccLockNote);
         // EDGE BARS - copy y chang tab HOME nhưng dùng prefix "homacc_"
         designSliderContainer.addView(createSectionTitle("EDGE BARS HOMACC (5 THANH)"));
         String[] bKeys = {"r", "l", "t_r", "t_l", "t_c"};
