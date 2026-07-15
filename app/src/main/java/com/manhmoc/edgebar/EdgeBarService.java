@@ -83,6 +83,9 @@ private boolean lastIsBl_cache = false;
 // V19.12.3.6.8: Pipeline A riêng cho MorseLock — throttle nhanh hơn SYNC_STATE
 private long lastMorseLockCheckMs = 0;
 private static final long MORSE_LOCK_CHECK_THROTTLE = 250;
+private long lastUninstallCheckMs = 0;
+private static final long UNINSTALL_CHECK_THROTTLE = 400;
+
 
 // V19.12.3.6.6 — Whitelist key của EdgeBar, chặn key lạ của Zalo/Messenger
 private static final java.util.Set<String> EB_KEY_PREFIXES =
@@ -399,22 +402,20 @@ if (!locklist.isEmpty()) {
 
     isKbd = newIsKbd;
     isBl = newIsBl;
+// SAU (V19.12.3.6.11 — minh bạch, chỉ chặn khi gỡ CHÍNH EdgeBar):
+// SAU (V19.12.3.6.12 — bắt đúng hộp thoại CHẶN của Device Admin, bỏ lọc className
+// vì hộp thoại đó không có tên class cố định qua các phiên bản Android):
 if (pName.contains("packageinstaller") || pName.contains("installer")
-        || pName.contains("vending")) {
-    if (cName.contains("Uninstall") || cName.contains("uninstall")
-            || cName.contains("Delete") || cName.contains("UninstallActivity")
-            || cName.contains("DeleteActivity")) {
-        // Thu hồi Admin ngay lập tức, im lặng — không overlay, không chặn.
-        try {
-            android.app.admin.DevicePolicyManager dpm =
-                (android.app.admin.DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
-            android.content.ComponentName adminComp =
-                new android.content.ComponentName(this, EdgeAdminReceiver.class);
-            if (dpm.isAdminActive(adminComp)) dpm.removeActiveAdmin(adminComp);
-        } catch (Exception ignored) {}
+        || pName.contains("vending") || pName.contains("com.android.settings")
+        || pName.contains("systemui")) {
+    long nowU = System.currentTimeMillis();
+    if (nowU - lastUninstallCheckMs >= UNINSTALL_CHECK_THROTTLE) {
+        lastUninstallCheckMs = nowU;
+        if (uninstallTargetsSelf()) {
+            sendBroadcast(new Intent("com.manhmoc.edgebar.UNINSTALL_DETECTED"));
+        }
     }
 }
-
     if (!stateChanged) return;
 
     lastEventPkg = pName;
@@ -467,7 +468,40 @@ private String getForegroundPackageFromWindows() {
     } catch (Exception e) {}
     return null;
 }
-// SAU:
+private String cachedOwnAppLabel = null;
+private String getOwnAppLabel() {
+    if (cachedOwnAppLabel == null) {
+        try {
+            cachedOwnAppLabel = getPackageManager()
+                .getApplicationLabel(getApplicationInfo()).toString();
+        } catch (Exception e) { cachedOwnAppLabel = "Edge Bar"; }
+    }
+    return cachedOwnAppLabel;
+}
+
+private boolean uninstallTargetsSelf() {
+    android.view.accessibility.AccessibilityNodeInfo root = getRootInActiveWindow();
+    if (root == null) return false;
+    boolean found = containsText(root, getOwnAppLabel());
+    root.recycle();
+    return found;
+}
+
+private boolean containsText(android.view.accessibility.AccessibilityNodeInfo node, String needle) {
+    if (node == null) return false;
+    CharSequence t = node.getText();
+    if (t != null && t.toString().contains(needle)) return true;
+    int childCount = node.getChildCount();
+    for (int i = 0; i < childCount; i++) {
+        android.view.accessibility.AccessibilityNodeInfo child = node.getChild(i);
+        if (child != null) {
+            boolean r = containsText(child, needle);
+            child.recycle();
+            if (r) return true;
+        }
+    }
+    return false;
+}
 private void checkAndEngageMorseLock(String pkg, String locklist) {
     // Throttle đã xử lý tại nơi gọi (trước getWindows()), hàm này chỉ còn
     // logic đối chiếu package.

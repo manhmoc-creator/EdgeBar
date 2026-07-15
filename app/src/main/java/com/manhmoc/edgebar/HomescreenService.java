@@ -42,6 +42,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
+import android.widget.Toast; // ← THÊM DÒNG NÀY
 
 import java.io.InputStream;
 import java.util.Collections;
@@ -88,7 +89,8 @@ private boolean isAccessibleHomeShortcutOn() {
     private boolean isCoveringRecents = false;
     private String currentForegroundPkg = "";
     private boolean isUnlockCooldown = false;
-    private boolean isUninstallGuardActive = false;   // ← THÊM DÒNG NÀY
+    private boolean isUninstallGuardActive = false;
+    private int uninstallGuardFailCount = 0;
     // V19.12.3.6.6: Throttle SYNC_STATE — chặn broadcast storm từ Zalo/Messenger
     private long lastSyncMs = 0;
     private static final long SYNC_THROTTLE_MS = 150;
@@ -583,6 +585,22 @@ invalidate();
                 morseContainer.setVisibility(View.GONE);
                 updateVisibility();
             // [THÊM] thay bằng — đổi tên biến loop từ i sang j để tránh trùng tham số Intent i:
+} else if (action.equals("com.manhmoc.edgebar.UNINSTALL_DETECTED")) {
+    if (!isUninstallGuardActive && !isMorseLockActive) {
+        isUninstallGuardActive = true;
+        uninstallGuardFailCount = 0;
+        currentMorseAttempt = "";
+        applyMorseTextStyle();
+        applyLockIconStyle();
+        updateLockIconPosition();
+        if (tvMorseStatus != null) tvMorseStatus.setText("🔒 XÁC NHẬN GỠ CÀI ĐẶT");
+        morseContainer.setVisibility(View.VISIBLE);
+
+        WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
+        p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        wm.updateViewLayout(morseContainer, p);
+        updateVisibility();
+    }
 } else if ("com.manhmoc.edgebar.PAUSE_WM_OPS".equals(action)) {
     // Fix Bug 6: Ẩn tất cả bars — KHÔNG removeView, giữ token WM hợp lệ
     // Pixel 2XL opt: setVisibility GONE = zero GPU cost trên Adreno 540
@@ -1006,12 +1024,68 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         }
     }
 private void handleMorseTap(String comp, View v, boolean isLongPress) {
+    if (isUninstallGuardActive) {
         doMorseVibrate();
         if (v != null) {
             if (v instanceof CornerView) ((CornerView) v).triggerFlash();
             else if (v instanceof MorseBarView) ((MorseBarView) v).triggerFlash();
         }
+        String mappedKey = mapComponentToNumber(comp);
+        String masterPass = prefs.getString("morse_master_pass", "");
 
+        if (mappedKey.equals("X")) {
+            if (!currentMorseAttempt.isEmpty())
+                currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length() - 1);
+            tvMorseStatus.setText(currentMorseAttempt.isEmpty() ? "🔒 XÁC NHẬN GỠ CÀI ĐẶT" : currentMorseAttempt);
+            return;
+        }
+        if (mappedKey.equals(">")) {
+            if (!masterPass.isEmpty() && currentMorseAttempt.equals(masterPass)) {
+                // Đúng mật khẩu — thu hồi Admin NGAY để hộp thoại gỡ cài của hệ thống
+                // (đang chờ phía sau overlay) có thể tiếp tục bình thường.
+                // KHÔNG có bước ẩn nào — người dùng tự bấm gỡ cài lại như bình thường.
+                try {
+                    android.app.admin.DevicePolicyManager dpm =
+                        (android.app.admin.DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
+                    android.content.ComponentName adminComp =
+                        new android.content.ComponentName(this, EdgeAdminReceiver.class);
+                    if (dpm.isAdminActive(adminComp)) dpm.removeActiveAdmin(adminComp);
+                } catch (Exception ignored) {}
+isUninstallGuardActive = false;
+currentMorseAttempt = "";
+morseContainer.setVisibility(View.GONE);
+Toast.makeText(this, "Đã gỡ quyền Admin. Vui lòng thử gỡ cài đặt lại.", Toast.LENGTH_LONG).show();
+Intent home = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+home.putExtra("act", "HOME");
+sendBroadcast(home);
+updateVisibility();
+
+            } else {
+                uninstallGuardFailCount++;
+                currentMorseAttempt = "";
+                if (uninstallGuardFailCount >= 5) {
+                    tvMorseStatus.setText("Sai quá nhiều lần, thử lại sau");
+                    new Handler().postDelayed(() -> {
+                        isUninstallGuardActive = false;
+                        uninstallGuardFailCount = 0;
+                        morseContainer.setVisibility(View.GONE);
+                        Intent home = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+                        home.putExtra("act", "HOME");
+                        sendBroadcast(home);
+                    }, 2500);
+                } else {
+                    tvMorseStatus.setText("Sai! Còn " + (5 - uninstallGuardFailCount) + " lần");
+                }
+            }
+            return;
+        }
+        if (mappedKey.matches("\\d") && currentMorseAttempt.length() < 20) {
+            currentMorseAttempt += mappedKey;
+            tvMorseStatus.setText(currentMorseAttempt);
+        }
+        return;
+    }
+    // ... phần code MorseLock app thường giữ nguyên như cũ ...
         String mappedKey = mapComponentToNumber(comp);
         String masterPass = prefs.getString("morse_master_pass", "");
         int realMaxLen = masterPass.length();
@@ -1153,7 +1227,7 @@ numberDisplayHandler.postDelayed(hideNumberRunnable, showNumberMs);
     }
 private void showMorseOSCover() {
         if (morseContainer == null) return;
-        if (isMorseLockActive || isPreviewMorse) return;
+        if (isMorseLockActive || isPreviewMorse || isUninstallGuardActive) return; 
 
         isCoveringRecents = true;
         morseContainer.setVisibility(View.VISIBLE);
@@ -1197,7 +1271,8 @@ private void showMorseOSCover() {
         if (isMorseLockActive) {
     scheduleSuicideCheck();
 }
-        if (morseContainer != null && morseContainer.getVisibility() == View.VISIBLE) {
+        // SAU:
+if (morseContainer != null && morseContainer.getVisibility() == View.VISIBLE && !isUninstallGuardActive) {
     if (tvLockIcon != null) {
         tvLockIcon.setOnTouchListener((v, event) -> {
     if (event.getAction() == MotionEvent.ACTION_UP) {
@@ -1302,7 +1377,7 @@ if (accHomeRunning) {
 long thisLockUntil = perPkgLockUntil.containsKey(lockedPkg)
     ? perPkgLockUntil.get(lockedPkg) : 0L;
 boolean timeLocked = (System.currentTimeMillis() < thisLockUntil);
-if ((isMorseLockActive && !timeLocked) || isPreviewMorse) {
+if ((isMorseLockActive && !timeLocked) || isPreviewMorse || isUninstallGuardActive) {
             if (morseContainer.getVisibility() != View.VISIBLE) {
     // FIX-TEXT-1: Luôn apply style khi container vừa được hiện
     applyMorseTextStyle();

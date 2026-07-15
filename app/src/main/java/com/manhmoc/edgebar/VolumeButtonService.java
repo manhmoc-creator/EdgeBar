@@ -47,28 +47,57 @@ public class VolumeButtonService extends Service {
     private Runnable upEndCheck, downEndCheck;
     private static final long REPEAT_WINDOW_MS = 350;
     private static final int LONG_THRESHOLD = 5;
-
+    private String currentForegroundPkg = "";
+    private static final long HELD_MS_THRESHOLD = 550;
+    private long upBurstStartMs = 0, downBurstStartMs = 0;
     @Override public void onCreate() {
         super.onCreate();
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
         startForegroundQuiet(); // BẮT BUỘC gọi trong 5s đầu — thiếu dòng này gây crash ANR
-
-        screenReceiver = new BroadcastReceiver() {
-            @Override public void onReceive(Context c, Intent i) {
-                boolean off = Intent.ACTION_SCREEN_OFF.equals(i.getAction());
-                // Chỉ chiếm phím Volume khi màn TẮT. Màn sáng: trả lại cho hệ thống.
-                if (mediaSession != null) mediaSession.setActive(off);
-                if (!off) {
-                    upBurst = 0; downBurst = 0;
-                    upLongFired = false; downLongFired = false;
-                }
-            }
-        };
-        IntentFilter f = new IntentFilter();
-        f.addAction(Intent.ACTION_SCREEN_OFF);
-        f.addAction(Intent.ACTION_SCREEN_ON);
-        registerReceiver(screenReceiver, f);
-
+screenReceiver = new BroadcastReceiver() {
+    @Override public void onReceive(Context c, Intent i) {
+        String act = i.getAction();
+        if (Intent.ACTION_SCREEN_OFF.equals(act)) {
+            if (mediaSession != null) mediaSession.setActive(true);
+        } else if (Intent.ACTION_SCREEN_ON.equals(act)) {
+            // Màn vừa sáng nhưng CÓ THỂ vẫn đang khoá (lock screen) — chưa vội tắt.
+            android.app.KeyguardManager km =
+                (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+            boolean stillLocked = km != null && km.isKeyguardLocked();
+            if (mediaSession != null) mediaSession.setActive(stillLocked);
+            if (!stillLocked) resetBurst();
+        } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
+            // Mở khoá thật sự. Chỉ tắt nếu KHÔNG đứng ở Home — đứng ở Home vẫn giữ active
+            // theo đúng yêu cầu "màn chính bật" cũng dùng được phím Âm lượng.
+            boolean onLauncher = currentForegroundPkg.isEmpty()
+                    || currentForegroundPkg.contains("launcher")
+                    || currentForegroundPkg.contains("nexuslauncher");
+            if (mediaSession != null) mediaSession.setActive(onLauncher);
+            if (!onLauncher) resetBurst();
+        } else if ("com.manhmoc.edgebar.SYNC_STATE".equals(act)) {
+            String pkg = i.getStringExtra("foreground_pkg");
+            if (pkg != null && !pkg.isEmpty()) currentForegroundPkg = pkg;
+            // Đứng ở Home mà màn đang sáng + đã mở khoá → vẫn giữ active
+            android.os.PowerManager pm =
+                (android.os.PowerManager) getSystemService(POWER_SERVICE);
+            android.app.KeyguardManager km =
+                (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+            boolean screenOff = pm != null && !pm.isInteractive();
+            boolean locked = km != null && km.isKeyguardLocked();
+            boolean onLauncher = currentForegroundPkg.contains("launcher")
+                    || currentForegroundPkg.contains("nexuslauncher");
+            if (mediaSession != null) mediaSession.setActive(screenOff || locked || onLauncher);
+        }
+    }
+};
+IntentFilter f = new IntentFilter();
+f.addAction(Intent.ACTION_SCREEN_OFF);
+f.addAction(Intent.ACTION_SCREEN_ON);
+f.addAction(Intent.ACTION_USER_PRESENT);
+f.addAction("com.manhmoc.edgebar.SYNC_STATE");
+if (Build.VERSION.SDK_INT >= 33)
+    registerReceiver(screenReceiver, f, Context.RECEIVER_NOT_EXPORTED);
+else registerReceiver(screenReceiver, f);
         // MediaSession + VolumeProvider ABSOLUTE: AudioService định tuyến phím Volume
         // vào onAdjustVolume() thay vì chỉnh âm lượng thật — API công khai, không cần root,
         // hoạt động cả khi màn tắt vì độc lập với UI.
@@ -84,16 +113,34 @@ public class VolumeButtonService extends Service {
         mediaSession.setPlaybackToRemote(provider);
         mediaSession.setPlaybackState(new PlaybackState.Builder()
                 .setState(PlaybackState.STATE_PLAYING, 0, 1f).build());
-        mediaSession.setActive(false); // mặc định TẮT — chỉ SCREEN_OFF mới bật qua screenReceiver
-        isRunning = true;
+        // SAU:
+// V19.12.3.6.11: đọc đúng trạng thái thật ngay lúc khởi tạo, không giả định false
+android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+android.app.KeyguardManager km = (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+boolean screenOffNow = pm != null && !pm.isInteractive();
+boolean lockedNow = km != null && km.isKeyguardLocked();
+mediaSession.setActive(screenOffNow || lockedNow);
+isRunning = true;
     }
-
+    private void resetBurst() {
+    upBurst = 0; downBurst = 0;
+    upLongFired = false; downLongFired = false;
+}
     private void handleSide(boolean isUp) {
-        int burst = (isUp ? upBurst : downBurst) + 1;
-        if (isUp) upBurst = burst; else downBurst = burst;
+        // SAU:
+long nowMs = android.os.SystemClock.elapsedRealtime();
+if ((isUp ? upBurst : downBurst) == 0) {
+    if (isUp) upBurstStartMs = nowMs; else downBurstStartMs = nowMs;
+}
+int burst = (isUp ? upBurst : downBurst) + 1;
+if (isUp) upBurst = burst; else downBurst = burst;
+long heldMs = nowMs - (isUp ? upBurstStartMs : downBurstStartMs);
 
-        boolean longFired = isUp ? upLongFired : downLongFired;
-        if (burst >= LONG_THRESHOLD && !longFired) {
+// V19.12.3.6.11: dùng CẢ thời gian giữ lẫn số lần gọi lặp — vì tốc độ lặp phím
+// khi màn tắt có thể khác khi màn sáng (tuỳ bản Android/driver), chỉ đếm số lần
+// gọi (burst >= 5) không ổn định. Đạt 1 trong 2 điều kiện là đủ.
+boolean longFired = isUp ? upLongFired : downLongFired;
+if ((burst >= LONG_THRESHOLD || heldMs >= HELD_MS_THRESHOLD) && !longFired) {
             longFired = true;
             if (isUp) upLongFired = true; else downLongFired = true;
             fire("volkey_" + (isUp ? "up" : "down") + "_long");
