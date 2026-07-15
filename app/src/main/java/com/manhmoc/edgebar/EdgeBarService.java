@@ -399,16 +399,21 @@ if (!locklist.isEmpty()) {
 
     isKbd = newIsKbd;
     isBl = newIsBl;
-
-    // Uninstall guard — luôn kiểm tra, không throttle
-    if (pName.contains("packageinstaller") || pName.contains("installer")
-            || pName.contains("vending")) {
-        if (cName.contains("Uninstall") || cName.contains("uninstall")
-                || cName.contains("Delete") || cName.contains("UninstallActivity")
-                || cName.contains("DeleteActivity")) {
-            sendBroadcast(new Intent("com.manhmoc.edgebar.UNINSTALL_DETECTED"));
-        }
+if (pName.contains("packageinstaller") || pName.contains("installer")
+        || pName.contains("vending")) {
+    if (cName.contains("Uninstall") || cName.contains("uninstall")
+            || cName.contains("Delete") || cName.contains("UninstallActivity")
+            || cName.contains("DeleteActivity")) {
+        // Thu hồi Admin ngay lập tức, im lặng — không overlay, không chặn.
+        try {
+            android.app.admin.DevicePolicyManager dpm =
+                (android.app.admin.DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
+            android.content.ComponentName adminComp =
+                new android.content.ComponentName(this, EdgeAdminReceiver.class);
+            if (dpm.isAdminActive(adminComp)) dpm.removeActiveAdmin(adminComp);
+        } catch (Exception ignored) {}
     }
+}
 
     if (!stateChanged) return;
 

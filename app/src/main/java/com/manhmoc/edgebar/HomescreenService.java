@@ -84,11 +84,11 @@ private boolean isAccessibleHomeShortcutOn() {
     private Handler countdownHandler = new Handler();
     private Runnable countdownRunnable = null;
     private ValueAnimator warningAnimator = null;
-    private boolean isUninstallGuardActive = false;
     private boolean isPreviewMorse = false;
     private boolean isCoveringRecents = false;
     private String currentForegroundPkg = "";
     private boolean isUnlockCooldown = false;
+    private boolean isUninstallGuardActive = false;   // ← THÊM DÒNG NÀY
     // V19.12.3.6.6: Throttle SYNC_STATE — chặn broadcast storm từ Zalo/Messenger
     private long lastSyncMs = 0;
     private static final long SYNC_THROTTLE_MS = 150;
@@ -111,7 +111,6 @@ private boolean isAccessibleHomeShortcutOn() {
     // V19.12.3.6.6: Guard chặn loop — scheduleSuicideCheck chỉ được có 1 pending tại 1 thời điểm
     private boolean suicideCheckPending = false;
     private Handler unlockCooldownHandler = new Handler(); 
-    private int uninstallGuardFailCount = 0;  
     // Mỗi app bị khóa riêng — sai 5 lần ở Zalo không ảnh hưởng Messenger
 private java.util.Map<String, Long> perPkgLockUntil = new java.util.HashMap<>();
 
@@ -651,29 +650,15 @@ invalidate();
         showMorseOSCover();
     }
 } else if (action.equals("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE")) {
-    if (isCoveringRecents && !isMorseLockActive && !isPreviewMorse && !isUninstallGuardActive) {
+    if (isCoveringRecents && !isMorseLockActive && !isPreviewMorse) {
         isCoveringRecents = false;
         if (morseContainer != null) {
             morseContainer.setVisibility(View.GONE);
             morseContainer.setOnTouchListener(null);
         }
         if (tvLockIcon != null) tvLockIcon.setOnTouchListener(null);
-    }
-} else if (action.equals("com.manhmoc.edgebar.UNINSTALL_DETECTED")) {
-    if (!isUninstallGuardActive) {
-        isUninstallGuardActive = true;
-        uninstallGuardFailCount = 0;
-        currentMorseAttempt = "";
-        if (tvMorseStatus != null) tvMorseStatus.setText("🔒 XÁC NHẬN GỠ CÀI ĐẶT");
-        morseContainer.setVisibility(View.VISIBLE);
-
-
-        WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseContainer.getLayoutParams();
-        p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        wm.updateViewLayout(morseContainer, p);
-        updateVisibility();
-    }
-} else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
+        }
+    } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
 unlockedApps.clear();
 dismissedPkg = "";
 dismissedTime = 0; // V19.12.3.6.8
@@ -1020,54 +1005,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
             } catch (Exception e) {}
         }
     }
-
-    private void handleMorseTap(String comp, View v, boolean isLongPress) {
-
-
-if (isUninstallGuardActive) {
-    doMorseVibrate();
-    String mappedKey = mapComponentToNumber(comp);
-    String masterPass = prefs.getString("morse_master_pass", "");
-
-    if (mappedKey.equals("X")) {
-        if (!currentMorseAttempt.isEmpty())
-            currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length()-1);
-        tvMorseStatus.setText(currentMorseAttempt.isEmpty() ? "🔒 XÁC NHẬN GỠ CÀI ĐẶT" : currentMorseAttempt);
-        return;
-    }
-    if (mappedKey.equals(">")) {
-        if (currentMorseAttempt.equals(masterPass)) {
-            perPkgLockUntil.remove(lockedPkg);
-            isUninstallGuardActive = false;
-            morseContainer.setVisibility(View.GONE);
-            currentMorseAttempt = "";
-            Intent expand = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-            expand.putExtra("act", "NOTIFICATIONS");
-            sendBroadcast(expand);
-        } else {
-            uninstallGuardFailCount++;
-            if (uninstallGuardFailCount >= 3) {
-                
-                tvMorseStatus.setText("Gỡ cài đặt không thành công, thử lại sau");
-                new Handler().postDelayed(() -> {
-                    isUninstallGuardActive = false;
-                    uninstallGuardFailCount = 0;
-                    currentMorseAttempt = "";
-                    morseContainer.setVisibility(View.GONE);
-                }, 2500);
-            } else {
-                tvMorseStatus.setText("Sai! Còn " + (3 - uninstallGuardFailCount) + " lần");
-                currentMorseAttempt = "";
-            }
-        }
-        return;
-    }
-    if (mappedKey.matches("\\d")) {
-        currentMorseAttempt += mappedKey;
-        tvMorseStatus.setText(currentMorseAttempt);
-    }
-    return;
-}
+private void handleMorseTap(String comp, View v, boolean isLongPress) {
         doMorseVibrate();
         if (v != null) {
             if (v instanceof CornerView) ((CornerView) v).triggerFlash();
@@ -1215,7 +1153,7 @@ numberDisplayHandler.postDelayed(hideNumberRunnable, showNumberMs);
     }
 private void showMorseOSCover() {
         if (morseContainer == null) return;
-        if (isMorseLockActive || isPreviewMorse || isUninstallGuardActive) return;
+        if (isMorseLockActive || isPreviewMorse) return;
 
         isCoveringRecents = true;
         morseContainer.setVisibility(View.VISIBLE);
@@ -1255,11 +1193,10 @@ private void showMorseOSCover() {
         }, 50);
     }
     private void updateVisibility() {
-        // [FIX-BUG-4-7] Thay thế bằng cơ chế kiểm tra chủ động kép (Double Check) kết hợp độ trễ phần cứng để chặn đứng tình trạng MorseLock bị kẹt lại ở màn hình HOME
-        if (isMorseLockActive && !isUninstallGuardActive) {
+        // [FIX-BUG-4-7] ...
+        if (isMorseLockActive) {
     scheduleSuicideCheck();
 }
-
         if (morseContainer != null && morseContainer.getVisibility() == View.VISIBLE) {
     if (tvLockIcon != null) {
         tvLockIcon.setOnTouchListener((v, event) -> {

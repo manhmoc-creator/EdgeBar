@@ -14,6 +14,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application
         android:allowBackup="true"
@@ -55,6 +56,8 @@
         </service>
 
         <service android:name=".HomescreenService" android:exported="false" />
+<service android:name=".VolumeButtonService" android:exported="false"
+    android:foregroundServiceType="mediaPlayback" />
 <service android:name=".AccessibleHomeService" android:exported="false" android:foregroundServiceType="specialUse" />
 <service android:name=".QsAccHomeTile" android:label="EB Homacc" android:icon="@android:drawable/ic_menu_search" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
     <intent-filter>
