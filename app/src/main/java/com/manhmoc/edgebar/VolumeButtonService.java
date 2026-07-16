@@ -206,7 +206,7 @@ if ((burst >= LONG_THRESHOLD || heldMs >= HELD_MS_THRESHOLD) && !longFired) {
         c.setSound(null, null);
         getSystemService(NotificationManager.class).createNotificationChannel(c);
         Notification n = new Notification.Builder(this, cid)
-                .setContentTitle("EdgeBar VolKey")
+                .setContentTitle("VolKey")
                 .setSmallIcon(android.R.drawable.ic_lock_silent_mode)
                 .setOngoing(true).build();
         if (Build.VERSION.SDK_INT >= 29)

@@ -160,17 +160,17 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         if ("com.manhmoc.edgebar.TEST_ANIM".equals(act)) {
             playAnim();
         } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
-            // [YC1] Tắt màn → xóa unlock session...
-
-            // V19.12.3.6.9: gỡ HẲN Homacc (removeView, không chỉ ẩn) khi tắt
-            // màn hình — giải phóng SurfaceFlinger layer thật sự, giống hệt
-            // cách Homeb dừng khi khoá máy. Đây là phần chính giảm hao pin idle.
-            if (isHomaccDrawn) removeAccessibleHome();
-        } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
-            // Vừa mở khoá thành công → vẽ lại Homacc nếu đang bật
-            if (AccessibleHomeService.isRunning) drawAccessibleHome();
-            updateVisibility();
-        } else {
+    if (isHomaccDrawn) removeAccessibleHome();
+    // Cảm biến chắc chắn không khả dụng khi màn tắt — huỷ đăng ký, đỡ giữ callback vô ích
+    if (fpRegistered && fpController != null && fpCallback != null) {
+        try { fpController.unregisterFingerprintGestureCallback(fpCallback); } catch (Exception e) {}
+        fpRegistered = false;
+  }
+} else if (Intent.ACTION_USER_PRESENT.equals(act)) {
+    if (AccessibleHomeService.isRunning) drawAccessibleHome();
+    refreshFingerprintRegistration(); // ← THÊM: thử đăng ký lại đúng lúc cảm biến rảnh nhất
+    updateVisibility();
+} else {
             updateVisibility();
         }
     }
@@ -682,7 +682,14 @@ private void refreshFingerprintRegistration() {
                         String prefix = AccessibleHomeService.isRunning ? "homacc_fingerprint_" : "home_fingerprint_";
                         handleAction(prefix + dir);
                     }
-                    @Override public void onGestureDetectionAvailabilityChanged(boolean available) {}
+                    // SAU:
+@Override public void onGestureDetectionAvailabilityChanged(boolean available) {
+    // Cảm biến vừa rảnh trở lại (ví dụ vừa mở khoá xong) → thử đăng ký lại
+    // KHÔNG tốn pin thêm: đây là callback đẩy từ hệ thống, không phải polling
+    if (available && hasFingerprintRule() && !fpRegistered) {
+        refreshFingerprintRegistration();
+    }
+}
                 };
             }
             // handler=null → chạy trên main thread, không tạo thread riêng, tiết kiệm RAM

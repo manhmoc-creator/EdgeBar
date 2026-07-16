@@ -444,6 +444,21 @@ private void syncVolumeService() {
         stopService(i);
     }
 }
+   // Vân tay chỉ hỗ trợ 4 hướng swipe — ẩn các cử chỉ không khả dụng để tránh
+// người dùng gán nhầm (tap/long/diag/hold sẽ KHÔNG BAO GIỜ được phần cứng gửi lên)
+private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckBox> boxes) {
+    boolean isFingerprint = ALL_COMP_KEYS[compIdx].equals("fingerprint");
+    for (int i = 0; i < boxes.size() && i < C_GESTURES.length; i++) {
+        String g = C_GESTURES[i];
+        boolean allowed = g.equals("up") || g.equals("down") || g.equals("left") || g.equals("right");
+        if (isFingerprint) {
+            boxes.get(i).setVisibility(allowed ? View.VISIBLE : View.GONE);
+            if (!allowed) boxes.get(i).setChecked(false); // bỏ tick nếu đang chọn nhầm gesture không hỗ trợ
+        } else {
+            boxes.get(i).setVisibility(View.VISIBLE);
+        }
+    }
+}
     private void openRuleBuilderDialog(String editKey, int preComp, int preGes, String copyActs) { Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen); d.setContentView(buildRuleEditor(d, editKey, preComp, preGes, copyActs)); d.show(); }
 
     private View buildRuleEditor(Dialog dialog, String editKey, int preComp, int preGes, String copyActs) {
@@ -489,7 +504,14 @@ private void syncVolumeService() {
             int initPos = 0;
             for (int vi=0; vi<visibleIdx.size(); vi++) if (visibleIdx.get(vi) == selectedComp[0]) { initPos = vi; break; }
             spComp.setSelection(initPos);
-            spComp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){selectedComp[0] = visibleIdx.get(pos);}public void onNothingSelected(AdapterView<?> p){}});
+            // SAU: thêm cập nhật hiển thị gesture ngay khi đổi component
+spComp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+    public void onItemSelected(AdapterView<?> p, View v, int pos, long id){
+        selectedComp[0] = visibleIdx.get(pos);
+        updateGestureVisibilityForFingerprint(selectedComp[0], gestureBoxes);
+    }
+    public void onNothingSelected(AdapterView<?> p){}
+});
         }
         vTrig.addView(spComp);
 
@@ -497,7 +519,8 @@ private void syncVolumeService() {
         final String[] gesturesShown = isVolKeyMode ? VOLKEY_GESTURES : C_GESTURES;
         final String[] gestureNamesShown = isVolKeyMode ? VOLKEY_GESTURE_NAMES : C_GESTURE_NAMES;
         for (int i=0; i<gesturesShown.length; i++) { CheckBox cb = new CheckBox(this); cb.setText(gestureNamesShown[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0,20,0,20); if(preGes != -1 && i == preGes) cb.setChecked(true); gestureBoxes.add(cb); vTrig.addView(cb); }
-        
+        // Gọi ngay sau khi tạo xong gestureBoxes để áp dụng đúng trạng thái ban đầu
+updateGestureVisibilityForFingerprint(selectedComp[0], gestureBoxes);
         LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
         TextView tvA = new TextView(this); tvA.setText(T("CHOOSE ACTIONS (Multi-select)", "CHỌN HÀNH ĐỘNG THỰC THI (Được chọn nhiều)")); tvA.setTextColor(Color.parseColor("#00E5FF")); tvA.setPadding(0,0,0,20); vAct.addView(tvA);
         
