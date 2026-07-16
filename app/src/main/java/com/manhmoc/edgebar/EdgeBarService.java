@@ -1,6 +1,8 @@
 package com.manhmoc.edgebar;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.AccessibilityServiceInfo;
+import android.accessibilityservice.FingerprintGestureController;
 import android.animation.ValueAnimator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.Animator;
@@ -36,7 +38,6 @@ import android.view.View;
 import android.view.WindowManager;
 // ĐẰNG TRƯỚC (Có thể là các dòng import cuối cùng)
 import android.view.accessibility.AccessibilityEvent;
-import android.accessibilityservice.FingerprintGestureController;
 
 public class EdgeBarService extends AccessibilityService {
 
@@ -367,7 +368,19 @@ if (inv) {
         if (AccessibleHomeService.isRunning) drawAccessibleHome();
 
         createFloatingBars();
-        refreshFingerprintRegistration(); // ← THÊM DÒNG NÀY
+
+// V19.12.3.6.13: Set tường minh flag — một số ROM không parse đúng
+// canRequestFingerprintGestures từ XML, gây fpController không bao giờ
+// nhận gesture dù đăng ký callback "thành công".
+try {
+    AccessibilityServiceInfo info = getServiceInfo();
+    if (info != null) {
+        info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FINGERPRINT_GESTURES;
+        setServiceInfo(info);
+    }
+} catch (Exception e) {}
+
+refreshFingerprintRegistration();
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
     int eventType = event.getEventType();
@@ -687,8 +700,10 @@ private void refreshFingerprintRegistration() {
                         handleAction(prefix + dir);
                     }
                     @Override public void onGestureDetectionAvailabilityChanged(boolean available) {
-                        // Chỉ dùng để log chẩn đoán — KHÔNG cần gọi lại refreshFingerprintRegistration()
-                        // vì callback đã đăng ký sẵn từ đầu, tự động nhận gesture khi available=true.
+    // V19.12.3.6.13: log chẩn đoán THẬT — nếu "available" không bao giờ
+    // in ra true, nghĩa là cảm biến chưa từng ở gesture-mode khả dụng.
+    // Chạy: adb logcat -s EdgeBar_FP  để kiểm tra trong lúc test vuốt.
+    android.util.Log.d("EdgeBar_FP", "Fingerprint availability = " + available);
                     }
                 };
             }

@@ -38,8 +38,6 @@ public class VolumeButtonService extends Service {
     private SharedPreferences prefs;
     private BroadcastReceiver screenReceiver;
     private final Handler h = new Handler(Looper.getMainLooper());
-    
-
     // V19.12.3.6.10: đếm số lần bấm liên tiếp trong 1 "chuỗi" (burst) để phân biệt
     // tap / dtap / long — MediaSession không cho key-down/up thật, chỉ có
     // onAdjustVolume() gọi lặp, nên phải suy luận qua nhịp gọi.
@@ -77,11 +75,10 @@ screenReceiver = new BroadcastReceiver() {
     startKeepAlive();
 } else if (Intent.ACTION_SCREEN_ON.equals(act)) {
     stopKeepAlive();
-    android.app.KeyguardManager km =
-        (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
-    boolean stillLocked = km != null && km.isKeyguardLocked();
-    if (mediaSession != null) mediaSession.setActive(stillLocked);
-    if (!stillLocked) resetBurst();
+    // V19.12.3.6.13: màn sáng = trả quyền cho OS ngay lập tức, kể cả
+    // đang ở màn khoá. Chỉ giữ quyền khi màn HẲN tắt.
+    if (mediaSession != null) mediaSession.setActive(false);
+    resetBurst();
 } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
     stopKeepAlive();
             // Mở khoá thật sự. Chỉ tắt nếu KHÔNG đứng ở Home — đứng ở Home vẫn giữ active
@@ -117,13 +114,12 @@ VolumeProvider provider = new VolumeProvider(
 mediaSession.setPlaybackToRemote(provider);
 mediaSession.setPlaybackState(new PlaybackState.Builder()
         .setState(PlaybackState.STATE_PLAYING, 0, 1f).build());	
-        // SAU:
-// V19.12.3.6.11: đọc đúng trạng thái thật ngay lúc khởi tạo, không giả định false
-android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-android.app.KeyguardManager km = (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+        android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
 boolean screenOffNow = pm != null && !pm.isInteractive();
-boolean lockedNow = km != null && km.isKeyguardLocked();
-mediaSession.setActive(screenOffNow || lockedNow);
+// V19.12.3.6.13: CHỈ dựa vào trạng thái màn hình — bỏ hẳn KeyguardManager,
+// vì màn sáng luôn phải trả quyền cho OS bất kể có khoá hay không.
+// (Cũng bớt 1 lệnh Binder call lúc khởi động service — nhẹ pin hơn)
+mediaSession.setActive(screenOffNow);
 isRunning = true;
     }
     private void resetBurst() {
