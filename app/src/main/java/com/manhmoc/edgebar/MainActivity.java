@@ -410,9 +410,16 @@ btnHome.performClick();
                     TextView tCond = new TextView(this); tCond.setText(compNamesUsed[c] + "\n➔ " + gestureNamesUsed[g]); tCond.setTextColor(Color.parseColor("#BBBBBB")); tCond.setTextSize(13); tCond.setPadding(0,15,0,15); card.addView(tCond);
                     
                     TextView tAct = new TextView(this); String[] acts = action.split(","); StringBuilder actName = new StringBuilder();
-                    for(String a : acts) { for(int i=0;i<actKeysUsed.length;i++) { if(actKeysUsed[i].equals(a.trim())) { if(actName.length()>0) actName.append(" + "); actName.append(actLabsUsed[i]); } } }
-                    tAct.setText(actName.toString().isEmpty() ? T("Error", "Lỗi") : actName.toString()); tAct.setTextColor(Color.parseColor("#00E5FF")); tAct.setTextSize(15); card.addView(tAct);
-
+for(String a : acts) {
+    String at = a.trim();
+    if (at.equals("LAUNCH_APP")) {
+        if(actName.length()>0) actName.append(" + ");
+        actName.append("🚀 ").append(getAppLabelCached(prefs.getString(key + "_launch_pkg", "")));
+        continue;
+    }
+    for(int i=0;i<actKeysUsed.length;i++) { if(actKeysUsed[i].equals(at)) { if(actName.length()>0) actName.append(" + "); actName.append(actLabsUsed[i]); } }
+}
+tAct.setText(actName.toString().isEmpty() ? T("Error", "Lỗi") : actName.toString()); tAct.setTextColor(Color.parseColor("#00E5FF")); tAct.setTextSize(15); card.addView(tAct);
                     final int finalC = c; final int finalG = g; final String finalActs = action;
                     
                     LinearLayout rowBot = new LinearLayout(this); rowBot.setOrientation(LinearLayout.HORIZONTAL); rowBot.setPadding(0,20,0,0);
@@ -444,7 +451,7 @@ private void renderVolKeyRules() {
         card.setBackground(getRounded("#1E1E1E", 25f)); card.setPadding(35,35,35,35);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(15,15,15,15); card.setLayoutParams(lp);
         TextView t1 = new TextView(this); t1.setText(vNames[idx]); t1.setTextColor(Color.parseColor("#FFC107")); t1.setTextSize(15);
-        TextView t2 = new TextView(this); t2.setText(getActionLabel(action)); t2.setTextColor(Color.parseColor("#00E5FF")); t2.setTextSize(13); t2.setPadding(0,10,0,0);
+        TextView t2 = new TextView(this); t2.setText(getActionLabelSmart(action, prefs.getString(key + "_launch_pkg", ""))); t2.setTextColor(Color.parseColor("#00E5FF")); t2.setTextSize(13); t2.setPadding(0,10,0,10);
         card.addView(t1); card.addView(t2);
         card.setOnClickListener(v -> openVolKeyActionPicker(key, vName)); // ← đổi vNames[idx] thành vName 
         card.setOnLongClickListener(v -> {
@@ -723,10 +730,10 @@ btnStorage.setOnClickListener(v -> { ecoType=3; renderEcosystem(); });
             Button btnAdd = new Button(this); btnAdd.setText("+ THÊM INTENT"); btnAdd.setBackground(getRounded("#333333", 20f)); btnAdd.setTextColor(Color.WHITE); btnAdd.setOnClickListener(v -> openIntentEditor(0));
             ecoContainer.addView(btnAdd);
         } else if(ecoType == 1) {
-            for (int i = 1; i <= 15; i++) {
-                String action = prefs.getString("tile_"+i+"_act", "NONE");
-                String name = getActionLabel(action);
-                final int idx = i;
+    for (int i = 1; i <= 15; i++) {
+        String action = prefs.getString("tile_"+i+"_act", "NONE");
+        String name = getActionLabelSmart(action, prefs.getString("tile_"+i+"_launch_pkg", ""));
+        final int idx = i;
                 LinearLayout card = createEcoCard("Tile "+i, name, () -> openTileEditor(idx));
                 ecoContainer.addView(card);
             }
@@ -766,7 +773,13 @@ btnStorage.setOnClickListener(v -> { ecoType=3; renderEcosystem(); });
         }
         return actionKey;
     }
-
+    // THÊM MỚI — dùng khi cần hiện TÊN APP thay vì nhãn tĩnh "Mở Ứng dụng"
+private String getActionLabelSmart(String actionKey, String launchPkg) {
+    if ("LAUNCH_APP".equals(actionKey)) {
+        return "🚀 " + getAppLabelCached(launchPkg);
+    }
+    return getActionLabel(actionKey);
+}
     private LinearLayout createEcoCard(String title, String subtitle, Runnable onEdit) {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 25f)); card.setPadding(35,35,35,35);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(15,15,15,15); card.setLayoutParams(lp);
