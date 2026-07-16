@@ -1590,8 +1590,18 @@ if ((isMorseLockActive && !timeLocked) || isPreviewMorse || isUninstallGuardActi
         if (!action.equals("NONE") && isOn) {
             if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
             if (prefs.getBoolean(key + "_anim", true)) playAnim();
-            String[] acts = action.split(",");
-            for (String a : acts) exec(a.trim());
+String[] acts = action.split(",");
+for (String a : acts) {
+    if (a.trim().equals("LAUNCH_APP")) {
+        String pkg = prefs.getString(key + "_launch_pkg", "");
+        if (!pkg.isEmpty()) {
+            try {
+                Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
+                if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
+            } catch (Exception ignored) {}
+        }
+    } else exec(a.trim());
+}
         }
     }
 

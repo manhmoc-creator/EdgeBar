@@ -657,7 +657,18 @@ private void checkAndEngageMorseLock(String pkg, String locklist) {
             if (prefs.getBoolean(key+"_vib", true)) doVibrate(prefs.getInt("vib_dur",30));
             if (prefs.getBoolean(key+"_anim", true)) playAnim();
             String[] acts = action.split(",");
-            for (String a : acts) exec(a.trim());
+         for (String a : acts) {
+    if (a.trim().equals("LAUNCH_APP")) {
+        String pkg = prefs.getString(key + "_launch_pkg", "");
+        if (!pkg.isEmpty()) {
+            try {
+                Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
+                if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
+            } catch (Exception ignored) {}
+        }
+    } else exec(a.trim());
+}
+
         }
     }
     private void doVibrate(int dur) { if (dur<=0) return; try { if (Build.VERSION.SDK_INT>=26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }

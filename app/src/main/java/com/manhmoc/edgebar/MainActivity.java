@@ -51,7 +51,7 @@ private Button btnLock, btnHomacc, btnHome, btnVolKey, btnEditLock, btnEditHome,
 private Button fab;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.12 - Ghost Finger Protocol"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.13 - Scan App Protocol"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -534,13 +534,12 @@ LinearLayout rowLaunchApp = new LinearLayout(this);
 rowLaunchApp.setOrientation(LinearLayout.HORIZONTAL);
 rowLaunchApp.setVisibility(View.GONE); 
 EditText etLaunchApp = createEcoInput("Package (com.zalo...)", editKey != null ? prefs.getString(editKey+"_launch_pkg", "") : "");
-etLaunchApp.setTag("locklist_input"); // Tận dụng tag cũ để picker bắn data về
 etLaunchApp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 Button btnPickLaunchApp = new Button(this);
 btnPickLaunchApp.setText("📱 PICK APP");
 btnPickLaunchApp.setBackground(getRounded("#00E5FF", 20f));
 btnPickLaunchApp.setTextColor(Color.BLACK);
-btnPickLaunchApp.setOnClickListener(v -> showAppPickerDialog());
+btnPickLaunchApp.setOnClickListener(v -> showSingleAppPickerDialog(etLaunchApp));
 rowLaunchApp.addView(etLaunchApp);
 rowLaunchApp.addView(btnPickLaunchApp);
 
@@ -600,16 +599,38 @@ prefs.edit()
         });
         return root;
     }
-
     // ==================== KHÔNG GIAN HỆ SINH THÁI (ECOSYSTEM) ====================
     private void buildEcosystemSpace() {
+        pageEcosystem.addView(createSectionTitle(T("BACKUP / RESTORE", "KHU VỰC SAO LƯU")));
+        LinearLayout backupRow = new LinearLayout(this); backupRow.setOrientation(LinearLayout.HORIZONTAL);
+        Button btnBackup = new Button(this); btnBackup.setText(T("BACKUP", "💾 SAO LƯU")); btnBackup.setBackground(getRounded("#2E7D32", 20f)); btnBackup.setTextColor(Color.WHITE); LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, -2, 1f); bp.setMargins(0,0,15,0); btnBackup.setLayoutParams(bp); Button btnRestore = new Button(this); btnRestore.setText(T("RESTORE", "📂 PHỤC HỒI")); btnRestore.setBackground(getRounded("#EF6C00", 20f)); btnRestore.setTextColor(Color.WHITE); LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f); btnRestore.setLayoutParams(rp);
+        btnBackup.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("text/plain"); i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup.txt"); startActivityForResult(i, 101); }); btnRestore.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, 102); }); backupRow.addView(btnBackup); backupRow.addView(btnRestore); pageEcosystem.addView(wrapCard(backupRow));
+        
+        LinearLayout secSys = new LinearLayout(this); secSys.setOrientation(LinearLayout.VERTICAL); secSys.addView(createSectionTitle(T("SYSTEM BEHAVIOR", "HÀNH VI HỆ THỐNG"))); CheckBox cbKbd = new CheckBox(this); cbKbd.setText(T("Auto-hide on Keyboard", "Tự ẩn khi hiện Bàn Phím")); cbKbd.setTextColor(Color.WHITE); cbKbd.setChecked(prefs.getBoolean("avoid_kbd", true)); cbKbd.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("avoid_kbd", c).apply()); secSys.addView(cbKbd); 
+        secSys.addView(createSectionTitle("BLACKLIST (Hide Overlay)")); secSys.addView(createInput("Packages (com.ex.app)", "blacklist")); 
+        secSys.addView(createSectionTitle("LOCKLIST (Morse AppLock)")); 
+        LinearLayout lockRow = new LinearLayout(this); lockRow.setOrientation(LinearLayout.HORIZONTAL);
+        EditText etLock = createInput("Packages (com.zing.zalo,...)", "locklist"); etLock.setTag("locklist_input"); etLock.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        Button btnPickApps = new Button(this); btnPickApps.setText("📱 PICK APP"); btnPickApps.setTextColor(Color.BLACK); btnPickApps.setBackground(getRounded("#00E5FF", 20f));
+        btnPickApps.setOnClickListener(v -> showAppPickerDialog());
+        lockRow.addView(etLock); lockRow.addView(btnPickApps);
+        secSys.addView(lockRow);
+        pageEcosystem.addView(wrapCard(secSys));
+        addYTDLDesign(pageEcosystem);
+
         LinearLayout ecoNav = new LinearLayout(this); ecoNav.setOrientation(LinearLayout.HORIZONTAL); ecoNav.setPadding(0, 0, 0, 40);
         Button btnIntents = new Button(this); btnIntents.setText("INTENTS"); btnIntents.setBackground(getRounded("#D32F2F", 40f)); btnIntents.setTextColor(Color.WHITE);
         Button btnTiles = new Button(this); btnTiles.setText("QS TILES"); btnTiles.setBackground(getRounded("#4CAF50", 40f)); btnTiles.setTextColor(Color.WHITE);
         Button btnMacros = new Button(this); btnMacros.setText("MACROS"); btnMacros.setBackground(getRounded("#2196F3", 40f)); btnMacros.setTextColor(Color.WHITE);
-        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, -2, 1f); btnLp.setMargins(10,0,10,0);
-        btnIntents.setLayoutParams(btnLp); btnTiles.setLayoutParams(btnLp); btnMacros.setLayoutParams(btnLp);
-        ecoNav.addView(btnIntents); ecoNav.addView(btnTiles); ecoNav.addView(btnMacros);
+
+LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, -2, 1f); btnLp.setMargins(10,0,10,0);
+btnIntents.setLayoutParams(btnLp); btnTiles.setLayoutParams(btnLp); btnMacros.setLayoutParams(btnLp);
+
+Button btnStorage = new Button(this); btnStorage.setText("STORAGE");
+btnStorage.setBackground(getRounded("#795548", 40f)); btnStorage.setTextColor(Color.WHITE);
+btnStorage.setLayoutParams(btnLp);
+ecoNav.addView(btnIntents); ecoNav.addView(btnTiles); ecoNav.addView(btnMacros); ecoNav.addView(btnStorage);
+btnStorage.setOnClickListener(v -> { ecoType=3; renderEcosystem(); });
         pageEcosystem.addView(ecoNav);
         ecoContainer = new LinearLayout(this); ecoContainer.setOrientation(LinearLayout.VERTICAL);
         pageEcosystem.addView(ecoContainer);
@@ -642,7 +663,7 @@ prefs.edit()
             }
             Button btnAdd = new Button(this); btnAdd.setText("+ THÊM QS TILE"); btnAdd.setBackground(getRounded("#333333", 20f)); btnAdd.setTextColor(Color.WHITE); btnAdd.setOnClickListener(v -> openTileEditor(0));
             ecoContainer.addView(btnAdd);
-        } else {
+        } else if (ecoType == 2) {
             for (int i = 1; i <= 5; i++) {
                 String name = prefs.getString("macro_"+i+"_name", "Macro "+i);
                 String svcs = prefs.getString("macro_"+i+"_svcs", "");
@@ -652,7 +673,22 @@ prefs.edit()
             }
             Button btnAdd = new Button(this); btnAdd.setText("+ THÊM MACRO"); btnAdd.setBackground(getRounded("#333333", 20f)); btnAdd.setTextColor(Color.WHITE); btnAdd.setOnClickListener(v -> openMacroEditor(0));
             ecoContainer.addView(btnAdd);
-        }
+        } else if (ecoType == 3) {
+    long lastScanTs = prefs.getLong("storage_scan_ts", 0);
+    TextView tvInfo = new TextView(this);
+    tvInfo.setTextColor(Color.GRAY); tvInfo.setPadding(0,0,0,20);
+    tvInfo.setText(lastScanTs == 0 ? T("Chưa quét lần nào","Chưa quét lần nào")
+        : T("Lần quét gần nhất: ", "Lần quét gần nhất: ") + android.text.format.DateFormat.format("HH:mm dd/MM", lastScanTs));
+    ecoContainer.addView(tvInfo);
+
+    Button btnScan = new Button(this);
+    btnScan.setText("🔍 QUÉT DUNG LƯỢNG NGAY (Deep Scan)");
+    btnScan.setBackground(getRounded("#00E5FF", 20f)); btnScan.setTextColor(Color.BLACK);
+    btnScan.setOnClickListener(v -> runDeepStorageScan());
+    ecoContainer.addView(btnScan);
+
+    renderCachedStorageList(); // đọc JSON cache trong prefs, hiển thị list cũ ngay lập tức
+      } 
     }
 
     private String getActionLabel(String actionKey) {
@@ -897,6 +933,41 @@ private void openTileEditor(int idx) {
     d.setContentView(root);
     d.show();
 }
+    // THÊM 2 hàm sau openTileEditor():
+private void runDeepStorageScan() {
+    Toast.makeText(this, "Đang quét, chờ vài giây...", Toast.LENGTH_SHORT).show();
+    new Thread(() -> {
+        List<StorageScanner.AppStorageInfo> list = StorageScanner.scanAll(this);
+        // Nén xuống JSON gọn, chỉ lưu top 50 app nặng nhất để tiết kiệm RAM/dung lượng prefs
+        try {
+            org.json.JSONArray arr = new org.json.JSONArray();
+            for (int i=0; i<Math.min(50, list.size()); i++) {
+                StorageScanner.AppStorageInfo a = list.get(i);
+                org.json.JSONObject o = new org.json.JSONObject();
+                o.put("pkg", a.pkg); o.put("label", a.label);
+                o.put("bytes", a.totalBytes); o.put("island", a.isIsland);
+                arr.put(o);
+            }
+            prefs.edit().putString("storage_scan_data", arr.toString())
+                .putLong("storage_scan_ts", System.currentTimeMillis()).apply();
+        } catch (Exception ignored) {}
+        runOnUiThread(() -> { renderEcosystem(); Toast.makeText(this, "Quét xong!", Toast.LENGTH_SHORT).show(); });
+    }).start();
+}
+
+private void renderCachedStorageList() {
+    try {
+        String json = prefs.getString("storage_scan_data", "");
+        if (json.isEmpty()) return;
+        org.json.JSONArray arr = new org.json.JSONArray(json);
+        for (int i=0; i<arr.length(); i++) {
+            org.json.JSONObject o = arr.getJSONObject(i);
+            String subtitle = StorageScanner.formatSize(o.getLong("bytes")) + (o.getBoolean("island") ? " [Island]" : "");
+            LinearLayout card = createEcoCard(o.getString("label"), subtitle, () -> {}); // không cần edit, chỉ hiển thị
+            ecoContainer.addView(card);
+        }
+    } catch (Exception ignored) {}
+}
     private void openMacroEditor(int idx) {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,120,40,40);
@@ -936,23 +1007,6 @@ private void openTileEditor(int idx) {
 
     // ==================== KHÔNG GIAN THIẾT KẾ ====================
     private void buildDesignSpace() {
-        pageDesign.addView(createSectionTitle(T("BACKUP / RESTORE", "KHU VỰC SAO LƯU")));
-        LinearLayout backupRow = new LinearLayout(this); backupRow.setOrientation(LinearLayout.HORIZONTAL);
-        Button btnBackup = new Button(this); btnBackup.setText(T("BACKUP", "💾 SAO LƯU")); btnBackup.setBackground(getRounded("#2E7D32", 20f)); btnBackup.setTextColor(Color.WHITE); LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, -2, 1f); bp.setMargins(0,0,15,0); btnBackup.setLayoutParams(bp); Button btnRestore = new Button(this); btnRestore.setText(T("RESTORE", "📂 PHỤC HỒI")); btnRestore.setBackground(getRounded("#EF6C00", 20f)); btnRestore.setTextColor(Color.WHITE); LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f); btnRestore.setLayoutParams(rp);
-        btnBackup.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("text/plain"); i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup.txt"); startActivityForResult(i, 101); }); btnRestore.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, 102); }); backupRow.addView(btnBackup); backupRow.addView(btnRestore); pageDesign.addView(wrapCard(backupRow));
-        
-        LinearLayout secSys = new LinearLayout(this); secSys.setOrientation(LinearLayout.VERTICAL); secSys.addView(createSectionTitle(T("SYSTEM BEHAVIOR", "HÀNH VI HỆ THỐNG"))); CheckBox cbKbd = new CheckBox(this); cbKbd.setText(T("Auto-hide on Keyboard", "Tự ẩn khi hiện Bàn Phím")); cbKbd.setTextColor(Color.WHITE); cbKbd.setChecked(prefs.getBoolean("avoid_kbd", true)); cbKbd.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("avoid_kbd", c).apply()); secSys.addView(cbKbd); 
-        secSys.addView(createSectionTitle("BLACKLIST (Hide Overlay)")); secSys.addView(createInput("Packages (com.ex.app)", "blacklist")); 
-        secSys.addView(createSectionTitle("LOCKLIST (Morse AppLock)")); 
-        LinearLayout lockRow = new LinearLayout(this); lockRow.setOrientation(LinearLayout.HORIZONTAL);
-        EditText etLock = createInput("Packages (com.zing.zalo,...)", "locklist"); etLock.setTag("locklist_input"); etLock.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        Button btnPickApps = new Button(this); btnPickApps.setText("📱 PICK APP"); btnPickApps.setTextColor(Color.BLACK); btnPickApps.setBackground(getRounded("#00E5FF", 20f));
-        btnPickApps.setOnClickListener(v -> showAppPickerDialog());
-        lockRow.addView(etLock); lockRow.addView(btnPickApps);
-        secSys.addView(lockRow);
-        pageDesign.addView(wrapCard(secSys));
-        addYTDLDesign(pageDesign);
-        
         pageDesign.addView(createSectionTitle(T("CORE DESIGN (COLOR/SIZE)", "THIẾT KẾ CỐT LÕI (MÀU/KÍCH THƯỚC)")));
         LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL);
         btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
@@ -1439,8 +1493,31 @@ designSliderContainer.addView(relockRow);
             .setNegativeButton("HỦY", null)
             .show();
     }
+    // THÊM MỚI — picker single-select, không ghi đè locklist,
+// tái dùng lại đúng logic quét app (kể cả Island) đã có sẵn ở showAppPickerDialog()
+private void showSingleAppPickerDialog(EditText target) {
+    android.os.UserManager um = (android.os.UserManager) getSystemService(Context.USER_SERVICE);
+    android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
+    final List<String> pkgs = new ArrayList<>(); final List<String> names = new ArrayList<>();
+    try {
+        for (android.os.UserHandle profile : um.getUserProfiles()) {
+            for (android.content.pm.LauncherActivityInfo info : la.getActivityList(null, profile)) {
+                String pkg = info.getApplicationInfo().packageName;
+                String name = info.getLabel().toString() + (profile.equals(android.os.Process.myUserHandle()) ? "" : " [Island]");
+                if (!pkgs.contains(pkg)) { pkgs.add(pkg); names.add(name); }
+            }
+        }
+    } catch (Exception e) { /* fallback giữ nguyên như showAppPickerDialog() nếu cần */ }
+    List<String[]> combined = new ArrayList<>();
+    for (int i=0;i<pkgs.size();i++) combined.add(new String[]{names.get(i), pkgs.get(i)});
+    combined.sort((a,b) -> a[0].compareToIgnoreCase(b[0]));
+    String[] nameArr = new String[combined.size()]; String[] pkgArr = new String[combined.size()];
+    for (int i=0;i<combined.size();i++) { nameArr[i]=combined.get(i)[0]; pkgArr[i]=combined.get(i)[1]; }
 
-
+    new AlertDialog.Builder(this).setTitle(T("Choose one app", "Chọn 1 ứng dụng"))
+        .setItems(nameArr, (d, which) -> target.setText(pkgArr[which]))
+        .setNegativeButton("HỦY", null).show();
+}
     private void openMorseMapDialog() {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40, 120, 40, 40);
