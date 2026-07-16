@@ -56,7 +56,44 @@ private Button fab;
 
     private int ecoType = 0;
     private LinearLayout ecoContainer;
+    // THÊM 2 field static này ngay dưới khai báo ecoContainer:
+private static List<String[]> cachedAppList = null; // mỗi phần tử: {name, pkg}
+private static long cachedAppListTs = 0;
+private static final long APP_LIST_CACHE_MS = 5 * 60 * 1000; // 5 phút
+private static final java.util.Map<String,String> appLabelCache = new java.util.HashMap<>();
 
+private String getAppLabelCached(String pkg) {
+    if (pkg == null || pkg.isEmpty()) return T("(Not selected)", "(Chưa chọn)");
+    String cached = appLabelCache.get(pkg);
+    if (cached != null) return cached;
+    try {
+        String label = getPackageManager()
+            .getApplicationLabel(getPackageManager().getApplicationInfo(pkg, 0)).toString();
+        appLabelCache.put(pkg, label);
+        return label;
+    } catch (Exception e) { return pkg; }
+}
+
+private List<String[]> getAppListCached() {
+    long now = System.currentTimeMillis();
+    if (cachedAppList != null && (now - cachedAppListTs) < APP_LIST_CACHE_MS) return cachedAppList;
+    android.os.UserManager um = (android.os.UserManager) getSystemService(Context.USER_SERVICE);
+    android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
+    List<String[]> combined = new ArrayList<>();
+    try {
+        for (android.os.UserHandle profile : um.getUserProfiles()) {
+            boolean island = !profile.equals(android.os.Process.myUserHandle());
+            for (android.content.pm.LauncherActivityInfo info : la.getActivityList(null, profile)) {
+                String pkg = info.getApplicationInfo().packageName;
+                String name = info.getLabel().toString() + (island ? " [Island]" : "");
+                combined.add(new String[]{name, pkg});
+            }
+        }
+    } catch (Exception ignored) {}
+    combined.sort((a, b) -> a[0].compareToIgnoreCase(b[0]));
+    cachedAppList = combined; cachedAppListTs = now;
+    return combined;
+}
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     
     private void refreshPreview() { 
@@ -431,20 +468,12 @@ private void openVolKeyActionPicker(String key, String title) {
             prefs.edit().putString(key, ACT_KEYS[which]).apply();
             d.dismiss();
             if (ACT_KEYS[which].equals("LAUNCH_APP")) {
-                // Bắt buộc chọn app ngay, không cho lưu LAUNCH_APP mà thiếu package
-                EditText dummy = new EditText(this); // chỉ để tái dùng showSingleAppPickerDialog
-                showSingleAppPickerDialog(dummy);
-                dummy.addTextChangedListener(new android.text.TextWatcher(){
-                    public void afterTextChanged(android.text.Editable s){
-                        prefs.edit().putString(key + "_launch_pkg", s.toString()).apply();
-                        syncVolumeService(); renderVolKeyRules();
-                    }
-                    public void beforeTextChanged(CharSequence s,int a,int b,int c){}
-                    public void onTextChanged(CharSequence s,int a,int b,int c){}
+                showSingleAppPickerDialogCallback(pkg -> {
+                    prefs.edit().putString(key + "_launch_pkg", pkg).apply();
+                    syncVolumeService(); renderVolKeyRules();
                 });
             } else {
-                syncVolumeService();
-                renderVolKeyRules();
+                syncVolumeService(); renderVolKeyRules();
             }
         }).setNegativeButton("HỦY", null).show();
 }
@@ -542,35 +571,57 @@ updateGestureVisibilityForFingerprint(selectedComp[0], gestureBoxes);
         String savedActs = editKey != null ? prefs.getString(editKey, "") : copyActs;
 String[] savedArray = savedActs.split(",");
 
-// Giao diện chọn App ẩn (chỉ hiện khi chọn LAUNCH_APP)
-LinearLayout rowLaunchApp = new LinearLayout(this);
-rowLaunchApp.setOrientation(LinearLayout.HORIZONTAL);
-rowLaunchApp.setVisibility(View.GONE); 
-EditText etLaunchApp = createEcoInput("Package (com.zalo...)", editKey != null ? prefs.getString(editKey+"_launch_pkg", "") : "");
-etLaunchApp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+// LAUNCH_APP giờ là 1 "hộp không gian" riêng — KHÔNG còn nằm trong checkbox đa chọn
+final boolean[] launchAppSelected = { false };
+final String[] launchAppPkg = { editKey != null ? prefs.getString(editKey + "_launch_pkg", "") : "" };
+for (String sa : savedArray) if (sa.trim().equals("LAUNCH_APP")) launchAppSelected[0] = true;
+
+LinearLayout launchAppCard = new LinearLayout(this);
+launchAppCard.setOrientation(LinearLayout.VERTICAL);
+launchAppCard.setBackground(getRounded("#1A2C3A", 20f));
+launchAppCard.setPadding(30, 30, 30, 30);
+LinearLayout.LayoutParams lacLp = new LinearLayout.LayoutParams(-1, -2); lacLp.setMargins(0, 0, 0, 20);
+launchAppCard.setLayoutParams(lacLp);
+
+LinearLayout lacRow = new LinearLayout(this); lacRow.setOrientation(LinearLayout.HORIZONTAL); lacRow.setGravity(Gravity.CENTER_VERTICAL);
+TextView tvLacTitle = new TextView(this);
+tvLacTitle.setText("🚀 " + T("Launch App", "Mở Ứng Dụng"));
+tvLacTitle.setTextColor(Color.WHITE);
+tvLacTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+Switch swLaunchApp = new Switch(this);
+swLaunchApp.setChecked(launchAppSelected[0]);
+swLaunchApp.setOnCheckedChangeListener((b, c) -> launchAppSelected[0] = c);
+lacRow.addView(tvLacTitle); lacRow.addView(swLaunchApp);
+launchAppCard.addView(lacRow);
+
+TextView tvChosenApp = new TextView(this);
+tvChosenApp.setTextColor(Color.parseColor("#00E5FF"));
+tvChosenApp.setPadding(0, 10, 0, 10);
+tvChosenApp.setText(getAppLabelCached(launchAppPkg[0]));
+launchAppCard.addView(tvChosenApp);
+
 Button btnPickLaunchApp = new Button(this);
-btnPickLaunchApp.setText("📱 PICK APP");
+btnPickLaunchApp.setText("📱 " + T("CHOOSE APP", "CHỌN APP"));
 btnPickLaunchApp.setBackground(getRounded("#00E5FF", 20f));
 btnPickLaunchApp.setTextColor(Color.BLACK);
-btnPickLaunchApp.setOnClickListener(v -> showSingleAppPickerDialog(etLaunchApp));
-rowLaunchApp.addView(etLaunchApp);
-rowLaunchApp.addView(btnPickLaunchApp);
+btnPickLaunchApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> {
+    launchAppPkg[0] = pkg;
+    tvChosenApp.setText(getAppLabelCached(pkg));
+    swLaunchApp.setChecked(true); // chọn app xong thì tự bật, đỡ phải bấm switch thêm
+}));
+launchAppCard.addView(btnPickLaunchApp);
+vAct.addView(launchAppCard, 0); // đặt lên đầu danh sách hành động — nổi bật như 1 "hộp" riêng
 
-for (int i=1; i<actLabsUsed.length; i++) {
-CheckBox cbAct = new CheckBox(this); cbAct.setText(actLabsUsed[i]); cbAct.setTextColor(Color.WHITE); cbAct.setPadding(0,20,0,20);
-boolean isChecked = false;
-for(String sa : savedArray) { if(sa.trim().equals(actKeysUsed[i])) { isChecked = true; break; } }
-cbAct.setChecked(isChecked); actionBoxes.add(cbAct); vAct.addView(cbAct);
-
-// Logic lắng nghe LAUNCH_APP
-final int index = i;
-if(actKeysUsed[i].equals("LAUNCH_APP")) {
-    if(isChecked) rowLaunchApp.setVisibility(View.VISIBLE);
-    cbAct.setOnCheckedChangeListener((btn, chk) -> rowLaunchApp.setVisibility(chk ? View.VISIBLE : View.GONE));
+// Vòng lặp checkbox thường giờ BỎ QUA LAUNCH_APP hoàn toàn
+ArrayList<String> actionBoxKeys = new ArrayList<>();
+for (int i = 1; i < actLabsUsed.length; i++) {
+    if (actKeysUsed[i].equals("LAUNCH_APP")) continue;
+    CheckBox cbAct = new CheckBox(this); cbAct.setText(actLabsUsed[i]); cbAct.setTextColor(Color.WHITE); cbAct.setPadding(0, 20, 0, 20);
+    boolean isChecked = false;
+    for (String sa : savedArray) { if (sa.trim().equals(actKeysUsed[i])) { isChecked = true; break; } }
+    cbAct.setChecked(isChecked); actionBoxes.add(cbAct); actionBoxKeys.add(actKeysUsed[i]);
+    vAct.addView(cbAct);
 }
-}	
-vAct.addView(rowLaunchApp); // Chèn layout chọn app vào cuối danh sách
-
 LinearLayout vOpt = new LinearLayout(this); vOpt.setOrientation(LinearLayout.VERTICAL); vOpt.setVisibility(View.GONE);
         cbVib.setText(T("Haptic Feedback", "Bật Rung (Haptic Feedback)")); cbVib.setTextColor(Color.WHITE); cbVib.setChecked(editKey == null || prefs.getBoolean(editKey+"_vib", true)); vOpt.addView(cbVib);
         cbAnim.setText(T("Show Animation", "Bật Hiệu ứng Ánh sáng (Animation)")); cbAnim.setTextColor(Color.WHITE); cbAnim.setChecked(editKey == null || prefs.getBoolean(editKey+"_anim", true));
@@ -587,7 +638,12 @@ LinearLayout vOpt = new LinearLayout(this); vOpt.setOrientation(LinearLayout.VER
 
         bCancel.setOnClickListener(v -> dialog.dismiss());
         bSave.setOnClickListener(v -> {
-            ArrayList<String> acts = new ArrayList<>(); for(int i=0; i<actionBoxes.size(); i++) { if(actionBoxes.get(i).isChecked()) acts.add(actKeysUsed[i+1]); }
+            ArrayList<String> acts = new ArrayList<>();
+for (int i = 0; i < actionBoxes.size(); i++) { if (actionBoxes.get(i).isChecked()) acts.add(actionBoxKeys.get(i)); }
+if (launchAppSelected[0]) {
+    if (launchAppPkg[0].isEmpty()) { Toast.makeText(this, T("Pick an app first!", "Hãy chọn 1 app trước!"), Toast.LENGTH_SHORT).show(); return; }
+    acts.add("LAUNCH_APP");
+}
             if(acts.isEmpty()) { Toast.makeText(this, T("Select at least 1 Action!", "Hãy chọn ít nhất 1 Hành động!"), Toast.LENGTH_SHORT).show(); return; }
             String joinedActions = TextUtils.join(",", acts); 
             String prefix = isVolKeyMode ? "volkey_" : (currentGesTab == 0 ? "lock_" : (currentGesTab == 1 ? "homacc_" : "home_"));
@@ -602,7 +658,7 @@ prefs.edit()
      .putString(finalKey, joinedActions)
      .putBoolean(finalKey+"_vib", cbVib.isChecked())
      .putBoolean(finalKey+"_anim", cbAnim.isChecked())
-     .putString(finalKey+"_launch_pkg", etLaunchApp.getText().toString())
+     .putString(finalKey+"_launch_pkg", launchAppPkg[0])
      .apply();
 }
             }
@@ -1529,29 +1585,20 @@ designSliderContainer.addView(relockRow);
             .setNegativeButton("HỦY", null)
             .show();
     }
-    // THÊM MỚI — picker single-select, không ghi đè locklist,
-// tái dùng lại đúng logic quét app (kể cả Island) đã có sẵn ở showAppPickerDialog()
+    // GIỮ NGUYÊN bản cũ showSingleAppPickerDialog(EditText target) để không phá VOLKEY/TILE cũ,
+// nhưng đổi phần thân để dùng cache thay vì quét lại mỗi lần:
 private void showSingleAppPickerDialog(EditText target) {
-    android.os.UserManager um = (android.os.UserManager) getSystemService(Context.USER_SERVICE);
-    android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
-    final List<String> pkgs = new ArrayList<>(); final List<String> names = new ArrayList<>();
-    try {
-        for (android.os.UserHandle profile : um.getUserProfiles()) {
-            for (android.content.pm.LauncherActivityInfo info : la.getActivityList(null, profile)) {
-                String pkg = info.getApplicationInfo().packageName;
-                String name = info.getLabel().toString() + (profile.equals(android.os.Process.myUserHandle()) ? "" : " [Island]");
-                if (!pkgs.contains(pkg)) { pkgs.add(pkg); names.add(name); }
-            }
-        }
-    } catch (Exception e) { /* fallback giữ nguyên như showAppPickerDialog() nếu cần */ }
-    List<String[]> combined = new ArrayList<>();
-    for (int i=0;i<pkgs.size();i++) combined.add(new String[]{names.get(i), pkgs.get(i)});
-    combined.sort((a,b) -> a[0].compareToIgnoreCase(b[0]));
-    String[] nameArr = new String[combined.size()]; String[] pkgArr = new String[combined.size()];
-    for (int i=0;i<combined.size();i++) { nameArr[i]=combined.get(i)[0]; pkgArr[i]=combined.get(i)[1]; }
+    showSingleAppPickerDialogCallback(target::setText);
+}
 
+// THÊM MỚI — bản chuẩn dùng callback, thay hẳn kiểu "dummy EditText" đang bug ở VolKey
+private void showSingleAppPickerDialogCallback(java.util.function.Consumer<String> onPicked) {
+    List<String[]> combined = getAppListCached();
+    String[] nameArr = new String[combined.size()];
+    String[] pkgArr = new String[combined.size()];
+    for (int i = 0; i < combined.size(); i++) { nameArr[i] = combined.get(i)[0]; pkgArr[i] = combined.get(i)[1]; }
     new AlertDialog.Builder(this).setTitle(T("Choose one app", "Chọn 1 ứng dụng"))
-        .setItems(nameArr, (d, which) -> target.setText(pkgArr[which]))
+        .setItems(nameArr, (d, which) -> onPicked.accept(pkgArr[which]))
         .setNegativeButton("HỦY", null).show();
 }
     private void openMorseMapDialog() {
