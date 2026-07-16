@@ -51,7 +51,7 @@ private Button btnLock, btnHomacc, btnHome, btnVolKey, btnEditLock, btnEditHome,
 private Button fab;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.11 - Glass Vault Protocol"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.12 - Ghost Finger Protocol"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;

@@ -36,6 +36,7 @@ import android.view.View;
 import android.view.WindowManager;
 // ĐẰNG TRƯỚC (Có thể là các dòng import cuối cùng)
 import android.view.accessibility.AccessibilityEvent;
+import android.accessibilityservice.FingerprintGestureController;
 
 public class EdgeBarService extends AccessibilityService {
 
@@ -45,6 +46,10 @@ private android.view.View[] accHomeBars = new android.view.View[5];
 private android.view.View[] accHomeCorners = new android.view.View[4];
 private android.content.BroadcastReceiver accHomeReceiver;
 private boolean isHomaccDrawn = false; // Guard chặn vẽ lại khi đã có view
+private FingerprintGestureController fpController;
+private FingerprintGestureController.FingerprintGestureCallback fpCallback;
+private boolean fpRegistered = false;
+
 
     // ĐẰNG SAU (Các biến cũ của EdgeBarService)
     private WindowManager wm;
@@ -121,7 +126,11 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         if (fV != null) fV.updateStyle();
         return;
     }
-
+    // TẦNG 2.5: fingerprint_ → kiểm tra lại có cần đăng ký/huỷ đăng ký không
+if (k != null && k.contains("fingerprint_")) {
+    refreshFingerprintRegistration();
+    return;
+}
     // TẦNG 3: homacc_ → debounce DÀI 1000ms, chỉ gọi updateHomaccLive() sau khi dừng
     // Guard kép: isRunning + isHomaccDrawn tránh IPC vô nghĩa
     if (k != null && k.startsWith("homacc_")) {
@@ -358,6 +367,7 @@ if (inv) {
         if (AccessibleHomeService.isRunning) drawAccessibleHome();
 
         createFloatingBars();
+        refreshFingerprintRegistration(); // ← THÊM DÒNG NÀY
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
     int eventType = event.getEventType();
@@ -638,7 +648,54 @@ private void checkAndEngageMorseLock(String pkg, String locklist) {
         }
     }
     private void doVibrate(int dur) { if (dur<=0) return; try { if (Build.VERSION.SDK_INT>=26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
+    // Battery opt Pixel 2XL: CHỈ đăng ký callback khi user thực sự gán ít nhất
+// 1 rule cho "fingerprint" (ở tab HOMACC hoặc HOME). Nếu không có rule nào,
+// KHÔNG đăng ký — tránh giữ sensor driver ở trạng thái lắng nghe vô ích.
+private boolean hasFingerprintRule() {
+    String[] gestures = {"up","down","left","right","up_hold","down_hold","left_hold","right_hold"};
+    for (String prefix : new String[]{"home_fingerprint_", "homacc_fingerprint_"}) {
+        for (String g : gestures) {
+            if (!prefs.getString(prefix + g, "NONE").equals("NONE")) return true;
+        }
+    }
+    return false;
+}
 
+private void refreshFingerprintRegistration() {
+    if (Build.VERSION.SDK_INT < 26) return;
+    boolean needed = hasFingerprintRule();
+    if (needed && !fpRegistered) {
+        if (fpController == null) fpController = getFingerprintGestureController();
+        if (fpController != null && fpController.isGestureDetectionAvailable()) {
+            if (fpCallback == null) {
+                fpCallback = new FingerprintGestureController.FingerprintGestureCallback() {
+                    @Override public void onGestureDetected(int gesture) {
+                        String dir;
+                        switch (gesture) {
+                            case FingerprintGestureController.FINGERPRINT_GESTURE_SWIPE_UP: dir = "up"; break;
+                            case FingerprintGestureController.FINGERPRINT_GESTURE_SWIPE_DOWN: dir = "down"; break;
+                            case FingerprintGestureController.FINGERPRINT_GESTURE_SWIPE_LEFT: dir = "left"; break;
+                            case FingerprintGestureController.FINGERPRINT_GESTURE_SWIPE_RIGHT: dir = "right"; break;
+                            default: return;
+                        }
+                        // AccHome và HomeB loại trừ nhau (dual-soul) — route đúng prefix đang active
+                        String prefix = AccessibleHomeService.isRunning ? "homacc_fingerprint_" : "home_fingerprint_";
+                        handleAction(prefix + dir);
+                    }
+                    @Override public void onGestureDetectionAvailabilityChanged(boolean available) {}
+                };
+            }
+            // handler=null → chạy trên main thread, không tạo thread riêng, tiết kiệm RAM
+            fpController.registerFingerprintGestureCallback(fpCallback, null);
+            fpRegistered = true;
+        }
+    } else if (!needed && fpRegistered) {
+        if (fpController != null && fpCallback != null) {
+            fpController.unregisterFingerprintGestureCallback(fpCallback);
+        }
+        fpRegistered = false;
+    }
+}
     private void createFloatingBars() {
         fV = new FlashView(this);
         fV.setAlpha(0f); fV.setVisibility(View.GONE);
@@ -762,6 +819,9 @@ private void checkAndEngageMorseLock(String pkg, String locklist) {
         try{ unregisterReceiver(stateReceiver); }catch(Exception e){}
         try{ unregisterReceiver(ipcReceiver); }catch(Exception e){}
         if (accHomeReceiver != null) try{ unregisterReceiver(accHomeReceiver); }catch(Exception e){}
+        if (fpRegistered && fpController != null && fpCallback != null) {
+    try { fpController.unregisterFingerprintGestureCallback(fpCallback); } catch (Exception e) {}
+}
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
         for (int i=0;i<5;i++) if (bars[i]!=null) wm.removeView(bars[i]);
         for (int i=0;i<4;i++) if (corners[i]!=null) wm.removeView(corners[i]);

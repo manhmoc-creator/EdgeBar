@@ -5,4 +5,5 @@
     android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows"
     android:canPerformGestures="true"
     android:canRetrieveWindowContent="true"
+    android:canRequestFingerprintGestures="true"
     android:notificationTimeout="300" />
