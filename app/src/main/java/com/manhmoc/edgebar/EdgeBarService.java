@@ -666,7 +666,12 @@ private void refreshFingerprintRegistration() {
     boolean needed = hasFingerprintRule();
     if (needed && !fpRegistered) {
         if (fpController == null) fpController = getFingerprintGestureController();
-        if (fpController != null && fpController.isGestureDetectionAvailable()) {
+        // FIX: đăng ký NGAY khi có fpController, KHÔNG gate theo isGestureDetectionAvailable().
+        // Đăng ký callback không đòi hỏi cảm biến phải sẵn sàng ngay lúc đó — gesture sẽ chỉ
+        // không bắn cho tới khi availability = true, và onGestureDetectionAvailabilityChanged()
+        // sẽ tự báo khi đủ điều kiện. Gate cũ khiến callback không bao giờ được đăng ký nếu
+        // lần gọi đầu tiên rơi đúng lúc cảm biến bận (rất hay gặp lúc service vừa connect).
+        if (fpController != null) {
             if (fpCallback == null) {
                 fpCallback = new FingerprintGestureController.FingerprintGestureCallback() {
                     @Override public void onGestureDetected(int gesture) {
@@ -678,21 +683,15 @@ private void refreshFingerprintRegistration() {
                             case FingerprintGestureController.FINGERPRINT_GESTURE_SWIPE_RIGHT: dir = "right"; break;
                             default: return;
                         }
-                        // AccHome và HomeB loại trừ nhau (dual-soul) — route đúng prefix đang active
                         String prefix = AccessibleHomeService.isRunning ? "homacc_fingerprint_" : "home_fingerprint_";
                         handleAction(prefix + dir);
                     }
-                    // SAU:
-@Override public void onGestureDetectionAvailabilityChanged(boolean available) {
-    // Cảm biến vừa rảnh trở lại (ví dụ vừa mở khoá xong) → thử đăng ký lại
-    // KHÔNG tốn pin thêm: đây là callback đẩy từ hệ thống, không phải polling
-    if (available && hasFingerprintRule() && !fpRegistered) {
-        refreshFingerprintRegistration();
-    }
-}
+                    @Override public void onGestureDetectionAvailabilityChanged(boolean available) {
+                        // Chỉ dùng để log chẩn đoán — KHÔNG cần gọi lại refreshFingerprintRegistration()
+                        // vì callback đã đăng ký sẵn từ đầu, tự động nhận gesture khi available=true.
+                    }
                 };
             }
-            // handler=null → chạy trên main thread, không tạo thread riêng, tiết kiệm RAM
             fpController.registerFingerprintGestureCallback(fpCallback, null);
             fpRegistered = true;
         }

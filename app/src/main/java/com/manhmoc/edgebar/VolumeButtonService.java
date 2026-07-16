@@ -47,7 +47,6 @@ public class VolumeButtonService extends Service {
     private boolean upLongFired = false, downLongFired = false;
     private Runnable upEndCheck, downEndCheck;
     private static final long REPEAT_WINDOW_MS = 350;
-    private static final int LONG_THRESHOLD = 5;
     private String currentForegroundPkg = "";
     private final Handler keepAliveHandler = new Handler();
 private Runnable keepAliveRunnable;
@@ -66,7 +65,6 @@ private void startKeepAlive() {
 }
 private void stopKeepAlive() { if (keepAliveRunnable != null) keepAliveHandler.removeCallbacks(keepAliveRunnable); }
     private static final long HELD_MS_THRESHOLD = 550;
-    private long upBurstStartMs = 0, downBurstStartMs = 0;
     @Override public void onCreate() {
         super.onCreate();
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
@@ -87,26 +85,10 @@ screenReceiver = new BroadcastReceiver() {
 } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
     stopKeepAlive();
             // Mở khoá thật sự. Chỉ tắt nếu KHÔNG đứng ở Home — đứng ở Home vẫn giữ active
-            // theo đúng yêu cầu "màn chính bật" cũng dùng được phím Âm lượng.
-            boolean onLauncher = currentForegroundPkg.isEmpty()
-                    || currentForegroundPkg.contains("launcher")
-                    || currentForegroundPkg.contains("nexuslauncher");
-            if (mediaSession != null) mediaSession.setActive(onLauncher);
-            if (!onLauncher) resetBurst();
-        } else if ("com.manhmoc.edgebar.SYNC_STATE".equals(act)) {
-            String pkg = i.getStringExtra("foreground_pkg");
-            if (pkg != null && !pkg.isEmpty()) currentForegroundPkg = pkg;
-            // Đứng ở Home mà màn đang sáng + đã mở khoá → vẫn giữ active
-            android.os.PowerManager pm =
-                (android.os.PowerManager) getSystemService(POWER_SERVICE);
-            android.app.KeyguardManager km =
-                (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
-            boolean screenOff = pm != null && !pm.isInteractive();
-            boolean locked = km != null && km.isKeyguardLocked();
-            boolean onLauncher = currentForegroundPkg.contains("launcher")
-                    || currentForegroundPkg.contains("nexuslauncher");
-            if (mediaSession != null) mediaSession.setActive(screenOff || locked || onLauncher);
-        }
+            // THAY bằng: mở khoá xong là tắt tuyệt đối, không xét đang đứng ở đâu
+if (mediaSession != null) mediaSession.setActive(false);
+resetBurst();
+    }
     }
 };
 IntentFilter f = new IntentFilter();
@@ -148,41 +130,47 @@ isRunning = true;
     upBurst = 0; downBurst = 0;
     upLongFired = false; downLongFired = false;
 }
-    private void handleSide(boolean isUp) {
-        // SAU:
-long nowMs = android.os.SystemClock.elapsedRealtime();
-if ((isUp ? upBurst : downBurst) == 0) {
-    if (isUp) upBurstStartMs = nowMs; else downBurstStartMs = nowMs;
-}
-int burst = (isUp ? upBurst : downBurst) + 1;
-if (isUp) upBurst = burst; else downBurst = burst;
-long heldMs = nowMs - (isUp ? upBurstStartMs : downBurstStartMs);
+private Runnable upLongTimeout, downLongTimeout;
 
-// V19.12.3.6.11: dùng CẢ thời gian giữ lẫn số lần gọi lặp — vì tốc độ lặp phím
-// khi màn tắt có thể khác khi màn sáng (tuỳ bản Android/driver), chỉ đếm số lần
-// gọi (burst >= 5) không ổn định. Đạt 1 trong 2 điều kiện là đủ.
-boolean longFired = isUp ? upLongFired : downLongFired;
-if ((burst >= LONG_THRESHOLD || heldMs >= HELD_MS_THRESHOLD) && !longFired) {
-            longFired = true;
-            if (isUp) upLongFired = true; else downLongFired = true;
-            fire("volkey_" + (isUp ? "up" : "down") + "_long");
-        }
+private void handleSide(boolean isUp) {
+    int burst = (isUp ? upBurst : downBurst) + 1;
+    if (isUp) upBurst = burst; else downBurst = burst;
 
-        Runnable prev = isUp ? upEndCheck : downEndCheck;
-        if (prev != null) h.removeCallbacks(prev);
-        Runnable check = () -> {
-            boolean wasLong = isUp ? upLongFired : downLongFired;
-            int finalBurst = isUp ? upBurst : downBurst;
-            if (!wasLong) {
-                if (finalBurst >= 2) fire("volkey_" + (isUp ? "up" : "down") + "_dtap");
-                else fire("volkey_" + (isUp ? "up" : "down") + "_tap");
+    if (burst == 1) {
+        // Lần bấm đầu của burst — hẹn giờ long-press TUYỆT ĐỐI (550ms) kể từ đây,
+        // KHÔNG phụ thuộc onAdjustVolume() có gọi lặp thêm hay không. Firmware/driver
+        // không đảm bảo gửi key-repeat cho remote volume provider, nên đếm burst >= 5
+        // như code cũ có thể không bao giờ đạt được dù đang giữ phím thật.
+        Runnable timeout = () -> {
+            boolean already = isUp ? upLongFired : downLongFired;
+            if (!already) {
+                if (isUp) upLongFired = true; else downLongFired = true;
+                fire("volkey_" + (isUp ? "up" : "down") + "_long");
             }
-            if (isUp) { upBurst = 0; upLongFired = false; }
-            else { downBurst = 0; downLongFired = false; }
         };
-        if (isUp) upEndCheck = check; else downEndCheck = check;
-        h.postDelayed(check, REPEAT_WINDOW_MS);
+        if (isUp) upLongTimeout = timeout; else downLongTimeout = timeout;
+        h.postDelayed(timeout, HELD_MS_THRESHOLD);
     }
+
+    Runnable prev = isUp ? upEndCheck : downEndCheck;
+    if (prev != null) h.removeCallbacks(prev);
+    Runnable check = () -> {
+        // Buông phím — huỷ hẹn giờ long-press nếu chưa kịp bắn
+        Runnable pendingLong = isUp ? upLongTimeout : downLongTimeout;
+        if (pendingLong != null) h.removeCallbacks(pendingLong);
+
+        boolean wasLong = isUp ? upLongFired : downLongFired;
+        int finalBurst = isUp ? upBurst : downBurst;
+        if (!wasLong) {
+            if (finalBurst >= 2) fire("volkey_" + (isUp ? "up" : "down") + "_dtap");
+            else fire("volkey_" + (isUp ? "up" : "down") + "_tap");
+        }
+        if (isUp) { upBurst = 0; upLongFired = false; }
+        else { downBurst = 0; downLongFired = false; }
+    };
+    if (isUp) upEndCheck = check; else downEndCheck = check;
+    h.postDelayed(check, REPEAT_WINDOW_MS);
+}
     private void fire(String key) {
         if (!prefs.getBoolean(key + "_on", true)) return;
         String action = prefs.getString(key, "NONE");
