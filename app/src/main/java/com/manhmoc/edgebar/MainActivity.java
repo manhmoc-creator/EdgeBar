@@ -429,12 +429,25 @@ private void openVolKeyActionPicker(String key, String title) {
     new AlertDialog.Builder(this).setTitle(title)
         .setSingleChoiceItems(ACT_LABS, -1, (d, which) -> {
             prefs.edit().putString(key, ACT_KEYS[which]).apply();
-            syncVolumeService();
-            renderVolKeyRules();
             d.dismiss();
+            if (ACT_KEYS[which].equals("LAUNCH_APP")) {
+                // Bắt buộc chọn app ngay, không cho lưu LAUNCH_APP mà thiếu package
+                EditText dummy = new EditText(this); // chỉ để tái dùng showSingleAppPickerDialog
+                showSingleAppPickerDialog(dummy);
+                dummy.addTextChangedListener(new android.text.TextWatcher(){
+                    public void afterTextChanged(android.text.Editable s){
+                        prefs.edit().putString(key + "_launch_pkg", s.toString()).apply();
+                        syncVolumeService(); renderVolKeyRules();
+                    }
+                    public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+                    public void onTextChanged(CharSequence s,int a,int b,int c){}
+                });
+            } else {
+                syncVolumeService();
+                renderVolKeyRules();
+            }
         }).setNegativeButton("HỦY", null).show();
 }
-
 private void syncVolumeService() {
     boolean need = VolumeButtonService.hasAnyRule(prefs);
     Intent i = new Intent(this, VolumeButtonService.class);
@@ -844,6 +857,22 @@ private void openTileEditor(int idx) {
     cbAutoIcon.setChecked(idx <= 0 || prefs.getBoolean("tile_" + idx + "_auto_icon", true));
     content.addView(cbAutoIcon);
 
+    // === APP BEAM: hiện khi action = LAUNCH_APP ===
+    LinearLayout rowTileApp = new LinearLayout(this);
+    rowTileApp.setOrientation(LinearLayout.HORIZONTAL);
+    rowTileApp.setVisibility(View.GONE);
+    EditText etTileApp = createEcoInput("Package (com.zalo...)",
+        idx > 0 ? prefs.getString("tile_" + idx + "_launch_pkg", "") : "");
+    etTileApp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Button btnPickTileApp = new Button(this);
+    btnPickTileApp.setText("📱 PICK APP");
+    btnPickTileApp.setBackground(getRounded("#00E5FF", 20f));
+    btnPickTileApp.setTextColor(Color.BLACK);
+    btnPickTileApp.setOnClickListener(v -> showSingleAppPickerDialog(etTileApp));
+    rowTileApp.addView(etTileApp);
+    rowTileApp.addView(btnPickTileApp);
+    content.addView(rowTileApp);
+
     Spinner spIcon = createSpinner();
     spIcon.setAdapter(new ArrayAdapter<>(this,
         android.R.layout.simple_spinner_dropdown_item, TILE_ICON_NAMES));
@@ -857,10 +886,11 @@ private void openTileEditor(int idx) {
     // Auto-update icon spinner khi đổi action
     sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
         public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
+            boolean isLaunchApp = pos < ACT_KEYS.length && ACT_KEYS[pos].equals("LAUNCH_APP");
+            rowTileApp.setVisibility(isLaunchApp ? View.VISIBLE : View.GONE);
             if (cbAutoIcon.isChecked()) {
                 int autoIdx = (pos < ACT_AUTO_ICON.length) ? ACT_AUTO_ICON[pos] : 0;
                 spIcon.setSelection(autoIdx);
-                // Gợi ý tên tile từ action nếu ô label đang trống
                 if (etLabel.getText().toString().trim().isEmpty() && pos < ACT_LABS.length) {
                     etLabel.setHint("Gợi ý: " + ACT_LABS[pos]);
                 }
@@ -868,6 +898,10 @@ private void openTileEditor(int idx) {
         }
         public void onNothingSelected(AdapterView<?> p) {}
     });
+    // Gọi 1 lần lúc mở dialog để set đúng trạng thái ban đầu nếu đang edit tile LAUNCH_APP sẵn có
+    if (idx > 0 && prefs.getString("tile_" + idx + "_act", "NONE").equals("LAUNCH_APP")) {
+        rowTileApp.setVisibility(View.VISIBLE);
+    }
     content.addView(spIcon);
 
     LinearLayout footer = new LinearLayout(this);
@@ -917,6 +951,7 @@ private void openTileEditor(int idx) {
                 .putString("tile_" + newIdx + "_label", finalLabel)
                 .putInt("tile_" + newIdx + "_icon_idx", finalIconIdx)
                 .putBoolean("tile_" + newIdx + "_auto_icon", autoIcon)
+                .putString("tile_" + newIdx + "_launch_pkg", etTileApp.getText().toString())
                 .apply();
         } else {
             prefs.edit()
@@ -924,6 +959,7 @@ private void openTileEditor(int idx) {
                 .putString("tile_" + finalIdx + "_label", finalLabel)
                 .putInt("tile_" + finalIdx + "_icon_idx", finalIconIdx)
                 .putBoolean("tile_" + finalIdx + "_auto_icon", autoIcon)
+                .putString("tile_" + finalIdx + "_launch_pkg", etTileApp.getText().toString())
                 .apply();
         }
         sendBroadcast(new Intent("com.manhmoc.edgebar.TILE_CONFIG_CHANGED"));

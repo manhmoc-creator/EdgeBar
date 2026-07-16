@@ -179,8 +179,12 @@ private void handleSide(boolean isUp) {
                 else v.vibrate(25);
             } catch (Exception ignored) {}
         }
+        String act = action.split(",")[0].trim();
         Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-        ipc.putExtra("act", action.split(",")[0].trim());
+        ipc.putExtra("act", act);
+        if (act.equals("LAUNCH_APP")) {
+            ipc.putExtra("launch_pkg", prefs.getString(key + "_launch_pkg", ""));
+        }
         sendBroadcast(ipc);
     }
     private void startForegroundQuiet() {

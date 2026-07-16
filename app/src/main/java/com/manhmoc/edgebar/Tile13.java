@@ -82,6 +82,9 @@ public class Tile13 extends TileService {
         if (!act.equals("NONE")) {
             Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             ipc.putExtra("act", act);
+            if (act.equals("LAUNCH_APP")) {
+                ipc.putExtra("launch_pkg", prefs.getString("tile_13_launch_pkg", ""));
+            }
             sendBroadcast(ipc);
         }
         Tile t = getQsTile();

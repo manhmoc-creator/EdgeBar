@@ -180,11 +180,21 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
             if ("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) {
-                exec(i.getStringExtra("act"));
+                String act = i.getStringExtra("act");
+                if ("LAUNCH_APP".equals(act)) {
+                    String pkg = i.getStringExtra("launch_pkg");
+                    if (pkg != null && !pkg.isEmpty()) {
+                        try {
+                            Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
+                            if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
+                        } catch (Exception ignored) {}
+                    }
+                    return;
+                }
+                exec(act);
             }
         }
     };
-
     private class FlashView extends View {
         private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phaseFraction = 0f;
         public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); }
