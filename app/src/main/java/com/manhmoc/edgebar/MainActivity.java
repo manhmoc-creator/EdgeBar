@@ -171,7 +171,27 @@ if (android.os.Build.VERSION.SDK_INT >= 23 && !nm.isNotificationPolicyAccessGran
     btnDnd.setOnClickListener(v -> startActivity(new Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)));
     main.addView(btnDnd);
 }
-
+    android.os.PowerManager pmCheck = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
+        && !pmCheck.isIgnoringBatteryOptimizations(getPackageName())) {
+    Button btnBattery = new Button(this);
+    btnBattery.setText("⚠️ TẮT TỐI ƯU HÓA PIN\nGiúp Phím Âm Lượng ổn định hơn khi tắt màn hình");
+    btnBattery.setBackground(getRounded("#FF5722", 25f));
+    btnBattery.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams battLp = new LinearLayout.LayoutParams(-1, -2);
+    battLp.setMargins(0, 10, 0, 0);
+    btnBattery.setLayoutParams(battLp);
+    btnBattery.setOnClickListener(v -> {
+        try {
+            Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            i.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(i);
+        } catch (Exception e) {
+            startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+        }
+    });
+    main.addView(btnBattery);
+}
 // --- DEVICE ADMIN ---
 android.app.admin.DevicePolicyManager dpm =
 (android.app.admin.DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);

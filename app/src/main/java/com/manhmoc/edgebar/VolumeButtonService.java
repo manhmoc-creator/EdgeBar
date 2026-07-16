@@ -38,6 +38,7 @@ public class VolumeButtonService extends Service {
     private SharedPreferences prefs;
     private BroadcastReceiver screenReceiver;
     private final Handler h = new Handler(Looper.getMainLooper());
+    
 
     // V19.12.3.6.10: đếm số lần bấm liên tiếp trong 1 "chuỗi" (burst) để phân biệt
     // tap / dtap / long — MediaSession không cho key-down/up thật, chỉ có
@@ -48,6 +49,22 @@ public class VolumeButtonService extends Service {
     private static final long REPEAT_WINDOW_MS = 350;
     private static final int LONG_THRESHOLD = 5;
     private String currentForegroundPkg = "";
+    private final Handler keepAliveHandler = new Handler();
+private Runnable keepAliveRunnable;
+private static final long KEEP_ALIVE_INTERVAL_MS = 25000;
+
+private void startKeepAlive() {
+    stopKeepAlive();
+    keepAliveRunnable = () -> {
+        if (mediaSession != null) {
+            mediaSession.setPlaybackState(new PlaybackState.Builder()
+                    .setState(PlaybackState.STATE_PLAYING, 0, 1f).build());
+        }
+        keepAliveHandler.postDelayed(keepAliveRunnable, KEEP_ALIVE_INTERVAL_MS);
+    };
+    keepAliveHandler.postDelayed(keepAliveRunnable, KEEP_ALIVE_INTERVAL_MS);
+}
+private void stopKeepAlive() { if (keepAliveRunnable != null) keepAliveHandler.removeCallbacks(keepAliveRunnable); }
     private static final long HELD_MS_THRESHOLD = 550;
     private long upBurstStartMs = 0, downBurstStartMs = 0;
     @Override public void onCreate() {
@@ -58,15 +75,17 @@ screenReceiver = new BroadcastReceiver() {
     @Override public void onReceive(Context c, Intent i) {
         String act = i.getAction();
         if (Intent.ACTION_SCREEN_OFF.equals(act)) {
-            if (mediaSession != null) mediaSession.setActive(true);
-        } else if (Intent.ACTION_SCREEN_ON.equals(act)) {
-            // Màn vừa sáng nhưng CÓ THỂ vẫn đang khoá (lock screen) — chưa vội tắt.
-            android.app.KeyguardManager km =
-                (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
-            boolean stillLocked = km != null && km.isKeyguardLocked();
-            if (mediaSession != null) mediaSession.setActive(stillLocked);
-            if (!stillLocked) resetBurst();
-        } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
+    if (mediaSession != null) mediaSession.setActive(true);
+    startKeepAlive();
+} else if (Intent.ACTION_SCREEN_ON.equals(act)) {
+    stopKeepAlive();
+    android.app.KeyguardManager km =
+        (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+    boolean stillLocked = km != null && km.isKeyguardLocked();
+    if (mediaSession != null) mediaSession.setActive(stillLocked);
+    if (!stillLocked) resetBurst();
+} else if (Intent.ACTION_USER_PRESENT.equals(act)) {
+    stopKeepAlive();
             // Mở khoá thật sự. Chỉ tắt nếu KHÔNG đứng ở Home — đứng ở Home vẫn giữ active
             // theo đúng yêu cầu "màn chính bật" cũng dùng được phím Âm lượng.
             boolean onLauncher = currentForegroundPkg.isEmpty()
@@ -102,17 +121,20 @@ else registerReceiver(screenReceiver, f);
         // vào onAdjustVolume() thay vì chỉnh âm lượng thật — API công khai, không cần root,
         // hoạt động cả khi màn tắt vì độc lập với UI.
         mediaSession = new MediaSession(this, "EdgeBarVolKey");
-        VolumeProvider provider = new VolumeProvider(
-                VolumeProvider.VOLUME_CONTROL_ABSOLUTE, 10, 5) {
-            @Override public void onAdjustVolume(int direction) {
-                setCurrentVolume(5); // giữ mốc giữa, không cho chạm đáy/trần
-                if (direction > 0) handleSide(true);
-                else if (direction < 0) handleSide(false);
-            }
-        };
-        mediaSession.setPlaybackToRemote(provider);
-        mediaSession.setPlaybackState(new PlaybackState.Builder()
-                .setState(PlaybackState.STATE_PLAYING, 0, 1f).build());
+mediaSession.setCallback(new MediaSession.Callback() {});
+mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS
+        | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
+VolumeProvider provider = new VolumeProvider(
+        VolumeProvider.VOLUME_CONTROL_ABSOLUTE, 10, 5) {
+    @Override public void onAdjustVolume(int direction) {
+        setCurrentVolume(5);
+        if (direction > 0) handleSide(true);
+        else if (direction < 0) handleSide(false);
+    }
+};
+mediaSession.setPlaybackToRemote(provider);
+mediaSession.setPlaybackState(new PlaybackState.Builder()
+        .setState(PlaybackState.STATE_PLAYING, 0, 1f).build());	
         // SAU:
 // V19.12.3.6.11: đọc đúng trạng thái thật ngay lúc khởi tạo, không giả định false
 android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
@@ -197,7 +219,9 @@ if ((burst >= LONG_THRESHOLD || heldMs >= HELD_MS_THRESHOLD) && !longFired) {
 
     @Override public void onDestroy() {
         isRunning = false;
-        if (mediaSession != null) { mediaSession.setActive(false); mediaSession.release(); }
+        // SAU:
+stopKeepAlive();
+if (mediaSession != null) { mediaSession.setActive(false); mediaSession.release(); }
         try { unregisterReceiver(screenReceiver); } catch (Exception ignored) {}
         super.onDestroy();
     }

@@ -363,33 +363,42 @@ if (inv) {
     int eventType = event.getEventType();
     if (eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             && eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return;
-// SAU (throttle đặt TRƯỚC getWindows() — đúng vị trí để tiết kiệm IPC):
-String locklist = prefs.getString("locklist", "");
-if (!locklist.isEmpty()) {
-    long nowA = System.currentTimeMillis();
-    if (nowA - lastMorseLockCheckMs >= MORSE_LOCK_CHECK_THROTTLE) {
-        lastMorseLockCheckMs = nowA;
-        String foregroundFromWindows = getForegroundPackageFromWindows();
-        if (foregroundFromWindows != null && !foregroundFromWindows.isEmpty()) {
-            checkAndEngageMorseLock(foregroundFromWindows, locklist);
+
+    String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
+    String cName = event.getClassName() != null ? event.getClassName().toString() : "";
+
+    String locklist = prefs.getString("locklist", "");
+    if (!locklist.isEmpty()) {
+        long nowA = System.currentTimeMillis();
+        if (nowA - lastMorseLockCheckMs >= MORSE_LOCK_CHECK_THROTTLE) {
+            lastMorseLockCheckMs = nowA;
+            String foregroundFromWindows = getForegroundPackageFromWindows();
+            if (foregroundFromWindows != null && !foregroundFromWindows.isEmpty()) {
+                checkAndEngageMorseLock(foregroundFromWindows, locklist);
+            }
         }
     }
-}
-    // ===== PIPELINE B: SYNC_STATE / UI UPDATE — throttle 200ms như cũ =====
+
+    if (pName.contains("packageinstaller") || pName.contains("vending")) {
+        long nowU = System.currentTimeMillis();
+        if (nowU - lastUninstallCheckMs >= UNINSTALL_CHECK_THROTTLE) {
+            lastUninstallCheckMs = nowU;
+            if (uninstallTargetsSelf()) {
+                sendBroadcast(new Intent("com.manhmoc.edgebar.UNINSTALL_DETECTED"));
+            }
+        }
+    }
+
     long nowMs = System.currentTimeMillis();
     if (nowMs - lastEventMs < EVENT_THROTTLE_MS) return;
     lastEventMs = nowMs;
 
-    // Sync Homacc state
     boolean accShouldRun = AccessibleHomeService.isRunning;
     if (accShouldRun != lastAccHomeRunningState) {
         lastAccHomeRunningState = accShouldRun;
         if (accShouldRun && accHomeBars[0] == null) drawAccessibleHome();
         else if (!accShouldRun && accHomeBars[0] != null) removeAccessibleHome();
     }
-
-    String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
-    String cName = event.getClassName() != null ? event.getClassName().toString() : "";
 
     boolean newIsKbd = pName.contains("inputmethod") || cName.contains("InputWindow")
             || cName.contains("keyboard") || cName.contains("Keyboard");
@@ -402,22 +411,8 @@ if (!locklist.isEmpty()) {
 
     isKbd = newIsKbd;
     isBl = newIsBl;
-// SAU (V19.12.3.6.11 — minh bạch, chỉ chặn khi gỡ CHÍNH EdgeBar):
-// SAU (V19.12.3.6.12 — bắt đúng hộp thoại CHẶN của Device Admin, bỏ lọc className
-// vì hộp thoại đó không có tên class cố định qua các phiên bản Android):
-if (pName.contains("packageinstaller") || pName.contains("installer")
-        || pName.contains("vending") || pName.contains("com.android.settings")
-        || pName.contains("systemui")) {
-    long nowU = System.currentTimeMillis();
-    if (nowU - lastUninstallCheckMs >= UNINSTALL_CHECK_THROTTLE) {
-        lastUninstallCheckMs = nowU;
-        if (uninstallTargetsSelf()) {
-            sendBroadcast(new Intent("com.manhmoc.edgebar.UNINSTALL_DETECTED"));
-        }
-    }
-}
-    if (!stateChanged) return;
 
+    if (!stateChanged) return;
     lastEventPkg = pName;
     lastIsKbd_cache = newIsKbd;
     lastIsBl_cache = newIsBl;
@@ -482,20 +477,20 @@ private String getOwnAppLabel() {
 private boolean uninstallTargetsSelf() {
     android.view.accessibility.AccessibilityNodeInfo root = getRootInActiveWindow();
     if (root == null) return false;
-    boolean found = containsText(root, getOwnAppLabel());
+    boolean found = containsText(root, getOwnAppLabel(), 0);
     root.recycle();
     return found;
 }
 
-private boolean containsText(android.view.accessibility.AccessibilityNodeInfo node, String needle) {
-    if (node == null) return false;
+private boolean containsText(android.view.accessibility.AccessibilityNodeInfo node, String needle, int depth) {
+    if (node == null || depth > 12) return false;
     CharSequence t = node.getText();
     if (t != null && t.toString().contains(needle)) return true;
     int childCount = node.getChildCount();
     for (int i = 0; i < childCount; i++) {
         android.view.accessibility.AccessibilityNodeInfo child = node.getChild(i);
         if (child != null) {
-            boolean r = containsText(child, needle);
+            boolean r = containsText(child, needle, depth + 1);
             child.recycle();
             if (r) return true;
         }

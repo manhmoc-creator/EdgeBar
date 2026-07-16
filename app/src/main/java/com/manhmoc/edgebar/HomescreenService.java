@@ -688,10 +688,12 @@ lastUnlockedTime = 0;
     // [FIX-8] ÉP TỰ SÁT VÔ ĐIỀU KIỆN KHI TẮT MÀN HÌNH
     // Đảm bảo khi bật màn hình lại ở HOME, không có "bóng ma" MorseLock nào tồn tại
     isMorseLockActive = false;
-    lockedPkg = "";
-    currentMorseAttempt = "";
-    morseFailCount = 0;
-    isCountingDown = false;
+isUninstallGuardActive = false;
+uninstallGuardFailCount = 0;
+lockedPkg = "";
+currentMorseAttempt = "";
+morseFailCount = 0;
+isCountingDown = false;
     if (countdownRunnable != null) countdownHandler.removeCallbacks(countdownRunnable);
     if (warningAnimator != null) warningAnimator.cancel();
     
@@ -1054,10 +1056,16 @@ private void handleMorseTap(String comp, View v, boolean isLongPress) {
 isUninstallGuardActive = false;
 currentMorseAttempt = "";
 morseContainer.setVisibility(View.GONE);
-Toast.makeText(this, "Đã gỡ quyền Admin. Vui lòng thử gỡ cài đặt lại.", Toast.LENGTH_LONG).show();
-Intent home = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-home.putExtra("act", "HOME");
-sendBroadcast(home);
+new Handler().postDelayed(() -> {
+    try {
+        Intent uninstallIntent = new Intent(Intent.ACTION_DELETE);
+        uninstallIntent.setData(Uri.parse("package:" + getPackageName()));
+        uninstallIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(uninstallIntent);
+    } catch (Exception e) {
+        Toast.makeText(this, "Đã gỡ quyền Admin. Vui lòng gỡ cài đặt lại.", Toast.LENGTH_LONG).show();
+    }
+}, 400);
 updateVisibility();
 
             } else {
@@ -1727,7 +1735,7 @@ if ((isMorseLockActive && !timeLocked) || isPreviewMorse || isUninstallGuardActi
 
         @Override
         public boolean onTouch(View v, MotionEvent e) {
-            if (isMorseLockActive || isPreviewMorse) {
+            if (isMorseLockActive || isPreviewMorse || isUninstallGuardActive) {
                 String mapped = mapComponentToNumber(prefKeyBase);
                 if (e.getAction() == MotionEvent.ACTION_DOWN) {
                     if (mapped.equals("X")) {
