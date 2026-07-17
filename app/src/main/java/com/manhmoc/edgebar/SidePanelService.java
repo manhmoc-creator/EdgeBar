@@ -55,7 +55,7 @@ public class SidePanelService extends Service {
     private static final long DEBOUNCE_MS = 600; // was: 400 
 
     private final String[] POS_NAMES_KEY = {"bc","bl","br","lt","lc","lb","rt","rc","rb"};
-private String currentRenderPx = ""; // set NGAY ĐẦU mỗi buildPanelIfEnabled/renderPanelGrid, KHÔNG share giữa panel
+    // Ghi chú: dùng chung bởi buildPanelIfEnabled/renderPanelGrid, KHÔNG share giữa panel
     // ==== THÊM MỚI: Idle Teardown Optimizer ====
 private final Handler idleHandler = new Handler(Looper.getMainLooper());
 private Runnable idleTeardownRunnable;
@@ -67,15 +67,33 @@ private String getCachedAppLabel(String pkg) {
     try { String l = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg,0)).toString();
         labelCache.put(pkg, l); return l; } catch (Exception e) { return pkg; }
 }
-
-private float getPanelIconRadiusPercent() {
-    // Đọc theo panel hiện đang render — gọi từ renderPanelGrid nên biết idx qua field tạm
-    int shape = prefs.getInt(currentRenderPx + "icon_shape", 0);
+   // THÊM MỚI trong SidePanelService.java:
+private static final java.util.Map<String,String> ACT_LABEL_MAP = new java.util.HashMap<>();
+static {
+    ACT_LABEL_MAP.put("FLASH", "Đèn pin");
+    ACT_LABEL_MAP.put("SCREEN_OFF", "Tắt màn hình");
+    ACT_LABEL_MAP.put("SCREENSHOT", "Chụp màn hình");
+    ACT_LABEL_MAP.put("CAMERA", "Camera");
+    ACT_LABEL_MAP.put("VOLUME", "Âm lượng");
+    ACT_LABEL_MAP.put("NOTIFICATIONS", "Thông báo");
+    ACT_LABEL_MAP.put("BACK", "Quay lại");
+    ACT_LABEL_MAP.put("HOME", "Màn chính");
+    ACT_LABEL_MAP.put("RECENTS", "Đa nhiệm");
+    ACT_LABEL_MAP.put("VOICE_RECORD", "Ghi âm");
+    ACT_LABEL_MAP.put("TOGGLE_MORSE", "Khóa Morse");
+}
+private String getActionLabelForPanel(String key) {
+    String l = ACT_LABEL_MAP.get(key);
+    return l != null ? l : key;
+}
+// MỚI:
+private float getPanelIconRadiusPercent(String px) {
+    int shape = prefs.getInt(px + "icon_shape", 0);
     switch (shape) { case 1: return 0.28f; case 2: return 0.5f; case 3: return 0.12f; default: return 0.5f; }
 }
-
 // Bọc icon + optional label, dùng ViewOutlineProvider (rẻ, không cấp Bitmap mới -> nhẹ RAM/GPU)
-private View wrapIconCell(Drawable icon, String emoji, float radiusPct, View.OnClickListener onClick, String label) {
+private View wrapIconCell(String px, Drawable icon, String emoji, float radiusPct, View.OnClickListener onClick, String label) {
+    int iconSize = prefs.getInt(px + "icon_size", 110);
     LinearLayout box = new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER);
     View core;
     if (icon != null) {
@@ -85,7 +103,7 @@ private View wrapIconCell(Drawable icon, String emoji, float radiusPct, View.OnC
         GradientDrawable bg = new GradientDrawable(); bg.setColor(Color.argb(180,96,125,139)); tv.setBackground(bg);
         core = tv;
     }
-    core.setLayoutParams(new LinearLayout.LayoutParams(110, 110));
+    core.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize)); 
     core.setClipToOutline(true);
     core.setOutlineProvider(new ViewOutlineProvider() {
         @Override public void getOutline(View v, Outline o) {
@@ -94,7 +112,7 @@ private View wrapIconCell(Drawable icon, String emoji, float radiusPct, View.OnC
         }
     });
     box.addView(core);
-    boolean showName = prefs.getInt(currentRenderPx + "show_name", 0) == 1;
+    boolean showName = prefs.getInt(px + "show_name", 0) == 1;
     if (showName && label != null) {
         TextView tvLabel = new TextView(this); tvLabel.setText(label); tvLabel.setTextColor(Color.WHITE);
         tvLabel.setTextSize(9); tvLabel.setMaxLines(1); tvLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -200,35 +218,45 @@ private void ensurePanelAlive(int idx) {
 
     // TẦNG 1: LAZY VIEW — panel tắt thì không tạo view, zero cost
     private void buildPanelIfEnabled(int idx) {
-    String px = "panel" + (idx+1) + "_"; // giữ nguyên key lưu prefs cho tương thích ngược dữ liệu cũ
-    currentRenderPx = px; // chốt context ngay đầu — mọi hàm con (wrapIconCell, getPanelIconRadiusPercent) đọc đúng panel này
-    if (!prefs.getBoolean(px+"en", false)) return;
+    // MỚI — bỏ dòng currentRenderPx = px;
+String px = "panel" + (idx+1) + "_";
+if (!prefs.getBoolean(px+"en", false)) return;
         int pos = prefs.getInt(px+"pos", 0);
         int colorIdx = prefs.getInt(px+"color_idx", 0);
-        int size = prefs.getInt(px+"size", 500);   // chiều dài (theo mục 2, giờ là max-cap)
-int thick = prefs.getInt(px+"thick", 6);   // độ dày nhô ra — áp riêng cho handle, không áp cho panel
-int alpha = prefs.getInt(px+"alpha", 200); // alpha CHỈ áp lõi (core), viền handle giữ alpha 255 để dễ bắt mắt/chạm
-        int color = parsePanelColor(colorIdx);
-
+        // MỚI:
+int size = prefs.getInt(px+"size", 700);
+int thick = prefs.getInt(px+"thick", 40);
+int alpha = prefs.getInt(px+"alpha", 200);
+int handleAlpha = prefs.getInt(px+"handle_alpha", 255);
+float handleR = prefs.getInt(px+"handle_radius", 28);
+float panelR = prefs.getInt(px+"panel_radius", 24);
+int color = parsePanelColor(colorIdx);
         String edge = posToEdge(pos);      // "left" | "right" | "bottom"
         int gravity = posToGravity(pos);
 
         // --- HANDLE (tay cầm) — dùng đúng kiểu bo góc/màu như các thanh bar hiện có ---
-        View handle = new View(this);
-        GradientDrawable hgd = new GradientDrawable();
-        hgd.setColor(Color.argb(Math.min(255, alpha+30), Color.red(color), Color.green(color), Color.blue(color)));
-        float R = 28f;
-float[] radii = edge.equals("left")
-    ? new float[]{0,0, R,R, R,R, 0,0}   // dính cạnh trái -> 2 góc trái vuông
+View handle = new View(this);
+GradientDrawable hgd = new GradientDrawable();
+hgd.setColor(Color.argb(handleAlpha, Color.red(color), Color.green(color), Color.blue(color)));
+// Bo góc tay cầm theo slider riêng, không hardcode 28f
+float[] handleRadii = edge.equals("left")
+    ? new float[]{0,0, handleR,handleR, handleR,handleR, 0,0}
     : edge.equals("right")
-    ? new float[]{R,R, 0,0, 0,0, R,R}   // dính cạnh phải -> 2 góc phải vuông
-    : new float[]{R,R, R,R, 0,0, 0,0};  // dính đáy -> 2 góc dưới vuông
-hgd.setCornerRadii(radii);
-        hgd.setStroke(Math.max(2, thick/2), Color.argb(255, Color.red(color), Color.green(color), Color.blue(color)));
-        handle.setBackground(hgd);
-
-        int hw = edge.equals("bottom") ? 160 : thick;
-        int hh = edge.equals("bottom") ? thick : 160;
+    ? new float[]{handleR,handleR, 0,0, 0,0, handleR,handleR}
+    : new float[]{handleR,handleR, handleR,handleR, 0,0, 0,0};
+hgd.setCornerRadii(handleRadii);
+hgd.setStroke(Math.max(3, thick/6), Color.argb(255, Color.red(color), Color.green(color), Color.blue(color)));
+handle.setBackground(hgd);
+        // MỚI — đảm bảo cạnh ngắn (chiều dày để bấm) luôn tối thiểu 90px dù slider "thick" chỉnh nhỏ hơn,
+// chỉ phần vẽ (background) mới theo đúng "thick" nhìn mắt thường:
+int MIN_TOUCH_PX = 90;
+int visualThick = Math.max(20, thick / 3); // giảm tỉ lệ vẽ để khỏi chiếm quá nhiều màn hình, xem mục 3
+int hw = edge.equals("bottom") ? 200 : Math.max(MIN_TOUCH_PX, visualThick);
+int hh = edge.equals("bottom") ? Math.max(MIN_TOUCH_PX, visualThick) : 200;
+        // THÊM sau khi setBackground(hgd) — set padding để phần vẽ vẫn mảnh nhưng vùng chạm rộng:
+int padExtra = Math.max(0, (MIN_TOUCH_PX - visualThick) / 2);
+if (edge.equals("bottom")) handle.setPadding(0, padExtra, 0, padExtra);
+else handle.setPadding(padExtra, 0, padExtra, 0);
         WindowManager.LayoutParams hp = new WindowManager.LayoutParams(hw, hh,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
@@ -239,26 +267,28 @@ hgd.setCornerRadii(radii);
         try { wm.addView(handle, hp); handles[idx] = handle; } catch (Exception e) { return; }
 final int fIdx = idx;
 handle.setOnClickListener(v -> togglePanel(fIdx));
-handle.setOnTouchListener((v, ev) -> {
-    // Khi thick < 48px, chấp nhận chạm rớt ra ngoài view thật tối đa 20px mỗi phía
-    // Rẻ hơn setTouchDelegate (không cần view cha để dò), chỉ so sánh toạ độ raw.
-    if (ev.getAction() == MotionEvent.ACTION_DOWN) v.setTag(ev.getRawX()+","+ev.getRawY());
-    return false; // không chặn click listener, chỉ để mở rộng vùng nhận diện nếu cần mở rộng thật (xem ghi chú)
-});
+// MỚI — ép kích thước WindowManager tối thiểu 96px bất kể slider thickness đặt bao nhiêu,
+// đảm bảo vùng chạm luôn đủ lớn để bấm trúng trên Pixel 2XL (fix mục 4):
+// (xóa hẳn onTouchListener chết ở trên, không cần TouchDelegate vì sửa trực tiếp kích thước layout)
         // --- PANEL (khối lưới) — viền + nền dùng lại đúng tông màu handle ---
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable pgd = new GradientDrawable();
-        pgd.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
-        pgd.setStroke(thick, Color.argb(255, Color.red(color), Color.green(color), Color.blue(color)));
-        pgd.setCornerRadii(radii);
+        // MỚI — panel bo tròn cả 4 góc theo slider panel_radius riêng (yêu cầu mục 3: "bo tất cả 4 góc panel cho đẹp hơn"),
+// và KHÔNG dùng "thick" của handle làm viền panel nữa (viền panel giữ mỏng cố định 4px cho gọn):
+GradientDrawable pgd = new GradientDrawable();
+pgd.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
+pgd.setStroke(4, Color.argb(180, Color.red(color), Color.green(color), Color.blue(color)));
+pgd.setCornerRadius(panelR);
         panel.setBackground(pgd);
         panel.setVisibility(View.GONE);
 
         int itemCount = csvToList(prefs.getString(px+"apps","")).size() + csvToList(prefs.getString(px+"acts","")).size();
 int cols = Math.max(1, prefs.getInt(px+"cols", 4));
 int rows = Math.max(1, (int) Math.ceil(itemCount / (float) cols));
-int cellPx = 150; // 110 icon + margin, khớp wrapIconCell
+// MỚI:
+int iconSize = prefs.getInt(px+"icon_size", 110);
+int cellPx = iconSize + 40; // icon + margin/label
+ // 110 icon + margin, khớp wrapIconCell
 // size từ slider giờ là GIỚI HẠN TỐI ĐA, không phải giá trị cố định — tránh panel to hơn nội dung
 int computedCross = Math.min(size, (edge.equals("bottom") ? rows : cols) * cellPx + 80);
 int computedMain  = (edge.equals("bottom") ? cols : rows) * cellPx + 80;
@@ -282,7 +312,7 @@ int ph = edge.equals("bottom") ? computedCross : Math.min(computedMain, getResou
     // TẦNG 3: nạp icon trên background thread, tránh giật khi mở panel lần đầu
     private void renderPanelGrid(int idx) {
     String px = "panel" + (idx+1) + "_";
-    currentRenderPx = px; // set lại lần nữa vì hàm này cũng gọi độc lập từ renderCachedStorageList-style flow
+    // Áp dụng luồng tương tự renderCachedStorageList-style flow
         LinearLayout panel = panels[idx];
         if (panel == null) return;
         int cols = prefs.getInt(px+"cols", 4);
@@ -305,8 +335,9 @@ int ph = edge.equals("bottom") ? computedCross : Math.min(computedMain, getResou
             final LinearLayout expectedPanel = panels[idx]; // chốt tham chiếu tại thời điểm gọi
 new Handler(Looper.getMainLooper()).post(() -> {
     if (panels[idx] != expectedPanel || panels[idx] == null) return; // panel đã bị rebuild, huỷ bỏ kết quả cũ
-    for (Object[] item : loaded) {
-        View cell = buildCell((String) item[1], item[0], (String) item[2]);
+    // MỚI — truyền px:
+for (Object[] item : loaded) {
+    View cell = buildCell(px, (String) item[1], item[0], (String) item[2]);
         GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
         lp.width = 130; lp.height = 130; lp.setMargins(12,12,12,12);
         cell.setLayoutParams(lp);
@@ -328,32 +359,25 @@ new Handler(Looper.getMainLooper()).post(() -> {
         } catch (Exception e) { return null; }
     }
 
-    private View buildCell(String type, Object payload, String ref) {
-        if (type.equals("APP")) {
-    return wrapIconCell((Drawable) payload, null, getPanelIconRadiusPercent(), v -> {
-        Intent li = getPackageManager().getLaunchIntentForPackage(ref);
-        if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
-        closeAllPanels();
-    }, getCachedAppLabel(ref));
-} else {
-            TextView tv = new TextView(this);
-            tv.setText(actEmoji(ref));
-            tv.setTextSize(26);
-            tv.setGravity(Gravity.CENTER);
-            GradientDrawable bg = new GradientDrawable();
-            bg.setColor(Color.argb(180, 96,125,139));
-            bg.setCornerRadius(30f);
-            tv.setBackground(bg);
-            tv.setOnClickListener(v -> {
-                Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-                ipc.putExtra("act", ref);
-                sendBroadcast(ipc);
-                closeAllPanels();
-            });
-            return tv;
-        }
+    // MỚI — action icon giờ dùng chung wrapIconCell với icon_shape/show_name của đúng panel (fix mục 1 và mục 2):
+private View buildCell(String px, String type, Object payload, String ref) {
+    float radius = getPanelIconRadiusPercent(px);
+    if (type.equals("APP")) {
+        return wrapIconCell(px, (Drawable) payload, null, radius, v -> {
+            Intent li = getPackageManager().getLaunchIntentForPackage(ref);
+            if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
+            closeAllPanels();
+        }, getCachedAppLabel(ref));
+    } else {
+        String label = getActionLabelForPanel(ref); // xem hàm mới bên dưới, mục 2
+        return wrapIconCell(px, null, actEmoji(ref), radius, v -> {
+            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            ipc.putExtra("act", ref);
+            sendBroadcast(ipc);
+            closeAllPanels();
+        }, label);
     }
-
+}
     private String actEmoji(String key) {
         switch (key) {
             case "FLASH": return "🔦";

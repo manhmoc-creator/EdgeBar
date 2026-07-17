@@ -1624,13 +1624,16 @@ private void buildPanelBody(LinearLayout panelBody) {
     designSliderContainer.addView(createComboDropdown(T("Position","Vị trí"), px+"pos", PANEL_POS_NAMES, 0));
     designSliderContainer.addView(createComboDropdown(T("Color","Màu"), px+"color_idx", PANEL_COLOR_NAMES, 0));
 
-    // 3 slider bắt buộc: Size / Thickness / Transparency
-    designSliderContainer.addView(createSlider(T("Size (width)","Kích thước (chiều rộng)"), px+"size", 900, 500));
-    designSliderContainer.addView(createSlider(T("Border Thickness","Độ dày viền"), px+"thick", 30, 24)); // was: 30, 6
-    designSliderContainer.addView(createSlider(T("Transparency","Độ trong suốt"), px+"alpha", 255, 200));
+    // MỚI — nới rộng biên độ + thêm 3 slider mới:
+designSliderContainer.addView(createSlider(T("Size (width)","Kích thước (chiều rộng)"), px+"size", 2500, 700));
+designSliderContainer.addView(createSlider(T("Handle Thickness","Độ dày tay cầm"), px+"thick", 120, 40));
+designSliderContainer.addView(createSlider(T("Core Transparency","Độ trong suốt lõi"), px+"alpha", 255, 200));
+designSliderContainer.addView(createSlider(T("Handle Border Alpha","Độ đậm viền tay cầm"), px+"handle_alpha", 255, 255));
+designSliderContainer.addView(createSlider(T("Handle Corner Radius","Độ bo góc tay cầm"), px+"handle_radius", 100, 28));
+designSliderContainer.addView(createSlider(T("Panel Corner Radius","Độ bo góc Panel"), px+"panel_radius", 60, 24));
+designSliderContainer.addView(createSlider(T("Icon Size","Kích thước Icon"), px+"icon_size", 180, 110));
 
-    designSliderContainer.addView(createSlider(T("Columns (1-9)","Số cột (1-9)"), px+"cols", 9, 4));
-
+designSliderContainer.addView(createSlider(T("Columns (1-9)","Số cột (1-9)"), px+"cols", 9, 4));
 // Tap-to-cycle: KHÔNG dùng Spinner (tốn layout inflate) — chỉ 1 TextView + click listener,
 // nhẹ hơn cho Pixel 2XL vì không tạo dropdown popup window mỗi lần mở
 String[] iconShapes = {"Tròn", "Vuông Bo Nhẹ (Squircle)", "Bầu Dục (Pebble)", "Bo Góc Vuông"};
@@ -1638,7 +1641,7 @@ designSliderContainer.addView(createCycleRow(T("Icon Style","Kiểu Icon"),
     px+"icon_shape", iconShapes));
 
 String[] yesNo = {T("No","Không"), T("Yes","Có")};
-designSliderContainer.addView(createCycleRow(T("Show App Name","Hiện Tên App"),
+designSliderContainer.addView(createCycleRow(T("Show Name","Hiện Tên"),
     px+"show_name", yesNo));
     // Nút chọn App — y hệt luồng +NEW EB nhưng đa chọn
     int appCount = prefs.getString(px+"apps","").isEmpty() ? 0 : prefs.getString(px+"apps","").split(",").length;
@@ -1678,10 +1681,17 @@ private void showPanelMultiPicker(String prefKey, boolean isApp) {
                 syncPanelService(); renderSliders();
             }).setNegativeButton("HỦY", null).show();
     } else {
-        reloadActionLabels();
-        // Bỏ NONE (index 0) khỏi danh sách chọn
-        String[] names = Arrays.copyOfRange(ACT_LABS, 1, ACT_LABS.length);
-        String[] keys = Arrays.copyOfRange(ACT_KEYS, 1, ACT_KEYS.length);
+        // MỚI — lọc bỏ LAUNCH_APP (đã bỏ NONE ở index 0 sẵn rồi, giờ lọc thêm LAUNCH_APP):
+reloadActionLabels();
+ArrayList<String> namesList = new ArrayList<>();
+ArrayList<String> keysList = new ArrayList<>();
+for (int i = 1; i < ACT_KEYS.length; i++) {
+    if (ACT_KEYS[i].equals("LAUNCH_APP")) continue;
+    namesList.add(ACT_LABS[i]);
+    keysList.add(ACT_KEYS[i]);
+}
+String[] names = namesList.toArray(new String[0]);
+String[] keys = keysList.toArray(new String[0]);
         boolean[] checked = new boolean[names.length];
         for (int i=0;i<keys.length;i++) checked[i] = cur.contains(keys[i]);
         new AlertDialog.Builder(this).setTitle(T("Choose actions for Panel","Chọn hành động cho Panel"))
