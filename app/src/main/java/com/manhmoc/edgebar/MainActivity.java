@@ -51,7 +51,7 @@ private Button btnLock, btnHomacc, btnHome, btnVolKey, btnEditLock, btnEditHome,
 private Button fab;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.13 - Scan App Protocol"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.14 - The Hollow Mic Phantom"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -167,7 +167,16 @@ private String[] getVolKeyActLabs() {
             } catch(Exception e) { Toast.makeText(this, "IO Error!", Toast.LENGTH_LONG).show(); } 
         } 
     }
-
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    if (requestCode == 201 && grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        Intent i = new Intent(this, VoiceRecorderService.class);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+        renderEcosystem();
+    } else if (requestCode == 201) {
+        Toast.makeText(this, "Cần quyền Micro để ghi âm!", Toast.LENGTH_SHORT).show();
+    }
+}
     @Override public void onBackPressed() { if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); Button btnD = rootLayout.findViewWithTag("btnDesign"); if(btnD!=null){btnD.setText("⚙️"); btnD.setBackground(getRounded("#333333", 100f));} } else super.onBackPressed(); }
     private void closeDesignSpace() { currentMainTab = 1; pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(View.VISIBLE); updateFabVisibility(); refreshPreview(); }
 private void openDesignSpace() { currentMainTab = 0; refreshPreview(); navMain.setVisibility(View.GONE); pageConditions.setVisibility(View.GONE); pageEcosystem.setVisibility(View.GONE); pageDesign.setVisibility(View.VISIBLE); if(fab != null) fab.setVisibility(View.GONE); }
@@ -705,8 +714,12 @@ btnIntents.setLayoutParams(btnLp); btnTiles.setLayoutParams(btnLp); btnMacros.se
 Button btnStorage = new Button(this); btnStorage.setText("STORAGE");
 btnStorage.setBackground(getRounded("#795548", 40f)); btnStorage.setTextColor(Color.WHITE);
 btnStorage.setLayoutParams(btnLp);
-ecoNav.addView(btnIntents); ecoNav.addView(btnTiles); ecoNav.addView(btnMacros); ecoNav.addView(btnStorage);
+Button btnRecorder = new Button(this); btnRecorder.setText("GHI ÂM");
+btnRecorder.setBackground(getRounded("#E91E63", 40f)); btnRecorder.setTextColor(Color.WHITE);
+btnRecorder.setLayoutParams(btnLp);
+ecoNav.addView(btnIntents); ecoNav.addView(btnTiles); ecoNav.addView(btnMacros); ecoNav.addView(btnStorage); ecoNav.addView(btnRecorder);
 btnStorage.setOnClickListener(v -> { ecoType=3; renderEcosystem(); });
+btnRecorder.setOnClickListener(v -> { ecoType=4; renderEcosystem(); });
         pageEcosystem.addView(ecoNav);
         ecoContainer = new LinearLayout(this); ecoContainer.setOrientation(LinearLayout.VERTICAL);
         pageEcosystem.addView(ecoContainer);
@@ -762,8 +775,30 @@ btnStorage.setOnClickListener(v -> { ecoType=3; renderEcosystem(); });
     btnScan.setBackground(getRounded("#00E5FF", 20f)); btnScan.setTextColor(Color.BLACK);
     btnScan.setOnClickListener(v -> runDeepStorageScan());
     ecoContainer.addView(btnScan);
+    renderCachedStorageList();
+      } else if (ecoType == 4) {
+    boolean recOn = VoiceRecorderService.isRunning;
+    Button btnRec = new Button(this);
+    btnRec.setText(recOn ? "⏹ DỪNG GHI ÂM" : "🎤 BẮT ĐẦU GHI ÂM");
+    btnRec.setBackground(getRounded(recOn ? "#D32F2F" : "#E91E63", 20f));
+    btnRec.setTextColor(Color.WHITE);
+    btnRec.setPadding(0,30,0,30);
+    btnRec.setOnClickListener(v -> {
+    if (android.content.pm.PackageManager.PERMISSION_GRANTED !=
+        checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)) {
+        requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 201);
+        return;
+    }
+    Intent i = new Intent(this, VoiceRecorderService.class);
+    if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+    new Handler().postDelayed(this::renderEcosystem, 300);
+});
+    ecoContainer.addView(btnRec);
 
-    renderCachedStorageList(); // đọc JSON cache trong prefs, hiển thị list cũ ngay lập tức
+    TextView tvNote = new TextView(this);
+    tvNote.setText("Ghi âm sẽ tự dừng nếu phát hiện Quay màn hình hoặc app khác đang dùng mic.\nFile lưu tại: Music/EdgeBar — mở bằng Files by Google.");
+    tvNote.setTextColor(Color.GRAY); tvNote.setTextSize(12); tvNote.setPadding(0,20,0,0);
+    ecoContainer.addView(tvNote);
       } 
     }
 

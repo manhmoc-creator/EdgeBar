@@ -595,6 +595,12 @@ private void checkAndEngageMorseLock(String pkg, String locklist) {
                 case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break;
                 case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break;
                 case "VOLUME": ((AudioManager) getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break;
+                case "VOICE_RECORD": {
+                    Intent recIntent = new Intent(this, VoiceRecorderService.class);
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(recIntent);
+                    else startService(recIntent);
+                    break;
+                }
                 default: if (a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break;
             }
         } catch (Exception e) {}

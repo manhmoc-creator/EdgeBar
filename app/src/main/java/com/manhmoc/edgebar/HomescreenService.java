@@ -1672,6 +1672,12 @@ for (String a : acts) {
                 case "VOLUME":
                     ((AudioManager) getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI);
                     break;
+                case "VOICE_RECORD": {
+                    Intent recIntent = new Intent(this, VoiceRecorderService.class);
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(recIntent);
+                    else startService(recIntent);
+                    break;
+                }
                 default:
                     if (a.startsWith("INTENT_")) fireIntent(a.split("_")[1]);
                     break;
