@@ -45,13 +45,19 @@ private String[] VOLKEY_GESTURE_NAMES;
 private String[] M_BARS = {"r", "l", "t_r", "t_l", "t_c", "m_b_c", "m_mid_t", "m_mid_b"};
 private String[] M_BAR_NAMES;
 private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold"};
-    private String[] C_GESTURE_NAMES;
-private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain; 
-private Button btnLock, btnHomacc, btnHome, btnVolKey, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim;
+private String[] C_GESTURE_NAMES;
+private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain;
+private String[] PANEL_COLOR_KEYS = {"SLATE","STEEL","MIST","GRAPHITE","INDIGO_MIST","TEAL_GREY","COOL_ASH","DEEP_BLUE"};
+private String[] PANEL_COLOR_HEX  = {"#607D8B","#78909C","#90A4AE","#455A64","#5C6BC0","#4DB6AC","#B0BEC5","#37474F"};
+private String[] PANEL_COLOR_NAMES; // set trong reloadActionLabels()
+private String[] PANEL_POS_NAMES;   // 9 vị trí, set trong reloadActionLabels()
+
+private Button btnLock, btnHomacc, btnHome, btnVolKey, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim, btnEditPanel;
+private int currentPanelIdx = 1; // 1-3, panel nào đang được chỉnh trong tab PANEL
 private Button fab;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.14 - The Hollow Mic Phantom"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.15 - Edge Panel Genesis"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -123,6 +129,12 @@ C_GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm")
 BAR_NAMES = new String[]{T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"), T("Top Right", "Cạnh Phải"), T("Top Left", "Cạnh Trái"), T("Top Center", "Đỉnh giữa")};
 CORNER_NAMES = new String[]{T("Bottom Right Corner", "Góc đáy phải"), T("Bottom Left Corner", "Góc đáy trái"), T("Top Right Corner", "Góc đỉnh phải"), T("Top Left Corner", "Góc đỉnh trái")};
 COLOR_NAMES = new String[]{T("White", "Trắng"), "Neon", "Cyberpunk", "Lava", "Ocean", "Matrix", "Sunset", "Google", "Aurora", "Abyss", "Forest", "Flame", "Midnight", "Tropical", "Candy"};
+PANEL_COLOR_NAMES = new String[]{"Slate","Steel","Mist","Graphite", T("Indigo Mist","Chàm Sương"), T("Teal Grey","Xanh Lục Xám"), T("Cool Ash","Tro Lạnh"), T("Deep Blue","Xanh Đậm")};
+PANEL_POS_NAMES = new String[]{
+    T("Bottom Center","Đáy Giữa"), T("Bottom Left","Đáy Trái"), T("Bottom Right","Đáy Phải"),
+    T("Left Top","Trái Trên"), T("Left Center","Trái Giữa"), T("Left Bottom","Trái Dưới"),
+    T("Right Top","Phải Trên"), T("Right Center","Phải Giữa"), T("Right Bottom","Phải Dưới")
+};	
 }
 private String[] getVolKeyActKeys() {
     String[] arr = new String[ACT_KEYS.length + 1];
@@ -702,7 +714,6 @@ prefs.edit()
         secSys.addView(lockRow);
         pageEcosystem.addView(wrapCard(secSys));
         addYTDLDesign(pageEcosystem);
-
         LinearLayout ecoNav = new LinearLayout(this); ecoNav.setOrientation(LinearLayout.HORIZONTAL); ecoNav.setPadding(0, 0, 0, 40);
         Button btnIntents = new Button(this); btnIntents.setText("INTENTS"); btnIntents.setBackground(getRounded("#D32F2F", 40f)); btnIntents.setTextColor(Color.WHITE);
         Button btnTiles = new Button(this); btnTiles.setText("QS TILES"); btnTiles.setBackground(getRounded("#4CAF50", 40f)); btnTiles.setTextColor(Color.WHITE);
@@ -1147,10 +1158,10 @@ private void renderCachedStorageList() {
 
     // ==================== KHÔNG GIAN THIẾT KẾ ====================
     private void buildDesignSpace() {
-        pageDesign.addView(createSectionTitle(T("CORE DESIGN (COLOR/SIZE)", "THIẾT KẾ CỐT LÕI (MÀU/KÍCH THƯỚC)")));
-        LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL);
-        btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
-btnEditHome = new Button(this); btnEditHome.setText("HOME"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); 
+    pageDesign.addView(createSectionTitle(T("CORE DESIGN (COLOR/SIZE)", "THIẾT KẾ CỐT LÕI (MÀU/KÍCH THƯỚC)")));
+    LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL);
+    btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
+btnEditHome = new Button(this); btnEditHome.setText("HOMEB"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); 
 btnEditHomacc = new Button(this); btnEditHomacc.setText("HOMACC"); btnEditHomacc.setLayoutParams(mP);
 btnEditMorse = new Button(this); btnEditMorse.setText("MORSOS"); btnEditMorse.setLayoutParams(mP); 
 btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
@@ -1162,7 +1173,18 @@ btnEditHomacc.setOnClickListener(v -> { designTabState=4; refreshPreview(); upda
 btnEditMorse.setOnClickListener(v -> { designTabState=2; refreshPreview(); updateVisTabs(); renderSliders(); }); 
 btnEditAnim.setOnClickListener(v -> { designTabState=3; refreshPreview(); updateVisTabs(); renderSliders(); });
 toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addView(btnEditHomacc); toggleRow.addView(btnEditMorse); toggleRow.addView(btnEditAnim);
-        pageDesign.addView(toggleRow); pageDesign.addView(designSliderContainer);
+        pageDesign.addView(toggleRow);
+
+        // HÀNG 2 — chỉ có PANEL, đặt riêng hàng để dễ mở rộng thêm tab về sau
+        LinearLayout toggleRow2 = new LinearLayout(this); toggleRow2.setOrientation(LinearLayout.HORIZONTAL);
+        toggleRow2.setPadding(0, 15, 0, 0);
+        btnEditPanel = new Button(this); btnEditPanel.setText("PANEL");
+        btnEditPanel.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        btnEditPanel.setOnClickListener(v -> { designTabState=5; refreshPreview(); updateVisTabs(); renderSliders(); });
+        toggleRow2.addView(btnEditPanel);
+        pageDesign.addView(toggleRow2);
+
+        pageDesign.addView(designSliderContainer);
         btnEditHome.performClick();
     }
 
@@ -1183,11 +1205,14 @@ private void updateVisTabs() {
 
     btnEditAnim.setBackground(getRounded(designTabState==3 ? "#00E5FF" : "#222222", 20f));
     btnEditAnim.setTextColor(designTabState==3 ? Color.BLACK : Color.WHITE);
+    btnEditPanel.setBackground(getRounded(designTabState==5 ? "#00E5FF" : "#222222", 20f));
+    btnEditPanel.setTextColor(designTabState==5 ? Color.BLACK : Color.WHITE);   
 }
 
 
     private void renderSliders() { 
     designSliderContainer.removeAllViews();
+    if (designTabState == 5) { renderPanelDesign(); return; }
 
     // ===== TAB HOMACC (designTabState == 4) =====
     if (designTabState == 4) {
@@ -1555,7 +1580,119 @@ designSliderContainer.addView(relockRow);
             LinearLayout globalDrawer = new LinearLayout(this); globalDrawer.setOrientation(LinearLayout.VERTICAL); globalDrawer.setPadding(30,10,30,30); globalDrawer.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500)); globalDrawer.addView(createSlider("Độ mờ vùng TRĂNG NON (Đậm/Nhạt)", prefix+"corner_moon_alpha", 255, 100)); globalDrawer.addView(createSlider("Độ mờ VIỀN GÓC (Đậm/Nhạt)", prefix+"corner_stroke_alpha", 255, 200)); globalDrawer.addView(createSlider("Độ đậm viền (Dày/Mỏng)", prefix+"corner_thick", 50, 8)); designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", globalDrawer));
         } 
     }
+ private void renderPanelDesign() {
+    LinearLayout tabRow = new LinearLayout(this); tabRow.setOrientation(LinearLayout.HORIZONTAL);
+    Button b1 = createTabBtn("P1"), b2 = createTabBtn("P2"), b3 = createTabBtn("P3");
+    LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0,-2,1f); tlp.setMargins(6,0,6,0);
+    b1.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); b2.setLayoutParams(tlp); b3.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
 
+    // panelBody: container RIÊNG cho nội dung panel — rebuild container này
+    // thay vì gọi lại renderSliders() (nguyên nhân gây đệ quy vô hạn / ANR)
+    LinearLayout panelBody = new LinearLayout(this);
+    panelBody.setOrientation(LinearLayout.VERTICAL);
+
+    View.OnClickListener pTab = v -> {
+        currentPanelIdx = (v==b1) ? 1 : (v==b2) ? 2 : 3;
+        stylePanelTabs(b1, b2, b3);
+        buildPanelBody(panelBody);   // ← CHỈ rebuild nội dung, KHÔNG đụng renderSliders()
+    };
+    b1.setOnClickListener(pTab); b2.setOnClickListener(pTab); b3.setOnClickListener(pTab);
+    tabRow.addView(b1); tabRow.addView(b2); tabRow.addView(b3);
+    designSliderContainer.addView(tabRow);
+    designSliderContainer.addView(panelBody);
+
+    // Khởi tạo lần đầu: style tab + build nội dung, KHÔNG gọi onClick() giả lập
+    stylePanelTabs(b1, b2, b3);
+    buildPanelBody(panelBody);
+}
+
+private void stylePanelTabs(Button b1, Button b2, Button b3) {
+    b1.setBackground(getRounded(currentPanelIdx==1?"#00E5FF":"#222222",15f)); b1.setTextColor(currentPanelIdx==1?Color.BLACK:Color.WHITE);
+    b2.setBackground(getRounded(currentPanelIdx==2?"#00E5FF":"#222222",15f)); b2.setTextColor(currentPanelIdx==2?Color.BLACK:Color.WHITE);
+    b3.setBackground(getRounded(currentPanelIdx==3?"#00E5FF":"#222222",15f)); b3.setTextColor(currentPanelIdx==3?Color.BLACK:Color.WHITE);
+}
+
+private void buildPanelBody(LinearLayout panelBody) {
+    panelBody.removeAllViews();
+    String px = "panel" + currentPanelIdx + "_";
+    panelBody.addView(createSectionTitle("📱 EDGE PANEL " + currentPanelIdx));
+    CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable Panel " + currentPanelIdx, "Bật Panel " + currentPanelIdx));
+    cbEn.setTextColor(Color.WHITE); cbEn.setChecked(prefs.getBoolean(px+"en", false));
+    cbEn.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(px+"en", c).apply(); syncPanelService(); });
+    designSliderContainer.addView(cbEn);
+
+    designSliderContainer.addView(createComboDropdown(T("Position","Vị trí"), px+"pos", PANEL_POS_NAMES, 0));
+    designSliderContainer.addView(createComboDropdown(T("Color","Màu"), px+"color_idx", PANEL_COLOR_NAMES, 0));
+
+    // 3 slider bắt buộc: Size / Thickness / Transparency
+    designSliderContainer.addView(createSlider(T("Size (width)","Kích thước (chiều rộng)"), px+"size", 900, 500));
+    designSliderContainer.addView(createSlider(T("Border Thickness","Độ dày viền"), px+"thick", 30, 6));
+    designSliderContainer.addView(createSlider(T("Transparency","Độ trong suốt"), px+"alpha", 255, 200));
+
+    designSliderContainer.addView(createSlider(T("Columns (1-9)","Số cột (1-9)"), px+"cols", 9, 4));
+
+    // Nút chọn App — y hệt luồng +NEW EB nhưng đa chọn
+    int appCount = prefs.getString(px+"apps","").isEmpty() ? 0 : prefs.getString(px+"apps","").split(",").length;
+    Button btnApps = new Button(this);
+    btnApps.setText("📱 " + T("APPS","ỨNG DỤNG") + " (" + appCount + ")");
+    btnApps.setBackground(getRounded("#00E5FF", 20f)); btnApps.setTextColor(Color.BLACK);
+    LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(-1,-2); bLp.setMargins(0,15,0,10);
+    btnApps.setLayoutParams(bLp);
+    btnApps.setOnClickListener(v -> showPanelMultiPicker(px+"apps", true));
+    designSliderContainer.addView(btnApps);
+
+    // Nút chọn Hành động — dùng lại ACT_LABS/ACT_KEYS có sẵn (toggle flash, screenshot,...)
+    int actCount = prefs.getString(px+"acts","").isEmpty() ? 0 : prefs.getString(px+"acts","").split(",").length;
+    Button btnActs = new Button(this);
+    btnActs.setText("⚡ " + T("ACTIONS","HÀNH ĐỘNG") + " (" + actCount + ")");
+    btnActs.setBackground(getRounded("#E91E63", 20f)); btnActs.setTextColor(Color.WHITE);
+    btnActs.setLayoutParams(bLp);
+    btnActs.setOnClickListener(v -> showPanelMultiPicker(px+"acts", false));
+    designSliderContainer.addView(btnActs);
+}
+
+// isApp=true: multi-select app picker (ghi CSV package name)
+// isApp=false: multi-select action picker (ghi CSV action key, dùng ACT_KEYS/ACT_LABS có sẵn)
+private void showPanelMultiPicker(String prefKey, boolean isApp) {
+    String cur = prefs.getString(prefKey, "");
+    if (isApp) {
+        List<String[]> combined = getAppListCached();
+        String[] names = new String[combined.size()];
+        boolean[] checked = new boolean[combined.size()];
+        for (int i=0;i<combined.size();i++) { names[i]=combined.get(i)[0]; checked[i]=cur.contains(combined.get(i)[1]); }
+        new AlertDialog.Builder(this).setTitle(T("Choose apps for Panel","Chọn app cho Panel"))
+            .setMultiChoiceItems(names, checked, (d,which,isC)->checked[which]=isC)
+            .setPositiveButton("LƯU", (d,w) -> {
+                List<String> sel = new ArrayList<>();
+                for (int i=0;i<combined.size();i++) if (checked[i]) sel.add(combined.get(i)[1]);
+                prefs.edit().putString(prefKey, TextUtils.join(",", sel)).apply();
+                syncPanelService(); renderSliders();
+            }).setNegativeButton("HỦY", null).show();
+    } else {
+        reloadActionLabels();
+        // Bỏ NONE (index 0) khỏi danh sách chọn
+        String[] names = Arrays.copyOfRange(ACT_LABS, 1, ACT_LABS.length);
+        String[] keys = Arrays.copyOfRange(ACT_KEYS, 1, ACT_KEYS.length);
+        boolean[] checked = new boolean[names.length];
+        for (int i=0;i<keys.length;i++) checked[i] = cur.contains(keys[i]);
+        new AlertDialog.Builder(this).setTitle(T("Choose actions for Panel","Chọn hành động cho Panel"))
+            .setMultiChoiceItems(names, checked, (d,which,isC)->checked[which]=isC)
+            .setPositiveButton("LƯU", (d,w) -> {
+                List<String> sel = new ArrayList<>();
+                for (int i=0;i<keys.length;i++) if (checked[i]) sel.add(keys[i]);
+                prefs.edit().putString(prefKey, TextUtils.join(",", sel)).apply();
+                syncPanelService(); renderSliders();
+            }).setNegativeButton("HỦY", null).show();
+    }
+}
+
+private void syncPanelService() {
+    boolean anyEn = prefs.getBoolean("panel1_en",false) || prefs.getBoolean("panel2_en",false) || prefs.getBoolean("panel3_en",false);
+    Intent i = new Intent(this, SidePanelService.class);
+    if (anyEn) { if (Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i); }
+    else stopService(i);
+    sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
+}
     // ==================== CÁC HÀM PHỤ TRỢ CHUNG ====================
  private void showAppPickerDialog() {
         android.os.UserManager um =
@@ -1716,7 +1853,59 @@ private void showSingleAppPickerDialogCallback(java.util.function.Consumer<Strin
         ytdlDrawer.addView(btnRow);
         parent.addView(createDrawer("YTDL DOWNLOADER", ytdlDrawer));
     }
+    private void addPanelDesign(LinearLayout parent) {
+    LinearLayout panelDrawer = new LinearLayout(this); panelDrawer.setOrientation(LinearLayout.VERTICAL);
+    panelDrawer.setPadding(30,20,30,20); panelDrawer.setBackground(getRounded("#222222", 20f));
+    TextView title = new TextView(this); title.setText("📱 EDGE PANEL");
+    title.setTextColor(Color.parseColor("#00E5FF")); title.setPadding(0,0,0,20);
+    panelDrawer.addView(title);
 
+    CheckBox cbEn = new CheckBox(this); cbEn.setText("Bật Edge Panel");
+    cbEn.setTextColor(Color.WHITE); cbEn.setChecked(prefs.getBoolean("panel_en", false));
+    cbEn.setOnCheckedChangeListener((v, c) -> {
+        prefs.edit().putBoolean("panel_en", c).apply();
+        Intent i = new Intent(this, SidePanelService.class);
+        if (c) { if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i); }
+        else stopService(i);
+    });
+    panelDrawer.addView(cbEn);
+
+    panelDrawer.addView(createComboDropdown("Vị trí", "panel_side_idx",
+        new String[]{"Phải", "Trái"}, 0)); // lưu ý: cần map idx→"left"/"right" khi save, xem ghi chú dưới
+
+    Button btnPickPanelApps = new Button(this);
+    btnPickPanelApps.setText("📱 CHỌN APP CHO PANEL");
+    btnPickPanelApps.setBackground(getRounded("#00E5FF", 20f)); btnPickPanelApps.setTextColor(Color.BLACK);
+    btnPickPanelApps.setOnClickListener(v -> showPanelAppPicker());
+    panelDrawer.addView(btnPickPanelApps);
+
+    panelDrawer.addView(createComboDropdown("Kiểu Icon", "panel_icon_shape",
+        new String[]{"Tròn", "Vuông bo góc", "Bubble méo"}, 0));
+    panelDrawer.addView(createSlider("Số cột", "panel_columns", 6, 4));
+
+    parent.addView(createDrawer("EDGE PANEL (Kiểu Samsung)", panelDrawer));
+}
+
+// Multi-select app picker riêng cho panel — tái dùng logic showAppPickerDialog()
+// nhưng ghi vào "panel_apps" thay vì "locklist"
+private void showPanelAppPicker() {
+    List<String[]> combined = getAppListCached();
+    String cur = prefs.getString("panel_apps", "");
+    boolean[] checked = new boolean[combined.size()];
+    String[] names = new String[combined.size()];
+    for (int i=0; i<combined.size(); i++) {
+        names[i] = combined.get(i)[0];
+        checked[i] = cur.contains(combined.get(i)[1]);
+    }
+    new AlertDialog.Builder(this).setTitle("Chọn app cho Panel")
+        .setMultiChoiceItems(names, checked, (d, which, isChecked) -> checked[which] = isChecked)
+        .setPositiveButton("LƯU", (d, w) -> {
+            List<String> sel = new ArrayList<>();
+            for (int i=0; i<combined.size(); i++) if (checked[i]) sel.add(combined.get(i)[1]);
+            prefs.edit().putString("panel_apps", TextUtils.join(",", sel)).apply();
+            sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
+        }).setNegativeButton("HỦY", null).show();
+}
     private void showChangePasswordDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Đổi mật khẩu Morse");
