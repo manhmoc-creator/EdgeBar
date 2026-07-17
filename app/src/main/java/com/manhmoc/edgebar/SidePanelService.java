@@ -39,7 +39,15 @@ public class SidePanelService extends Service {
     private View[] handles = new View[3];       // tay cầm mở panel, index 0..2 = panel 1..3
     private LinearLayout[] panels = new LinearLayout[3];
     private boolean[] panelOpen = new boolean[3];
-    private BroadcastReceiver r;
+    // CŨ (giữ nguyên, chỉ thêm bên dưới):
+private BroadcastReceiver r;
+
+// MỚI — thêm ngay sau:
+private final java.util.concurrent.atomic.AtomicInteger[] renderGen = {
+    new java.util.concurrent.atomic.AtomicInteger(0),
+    new java.util.concurrent.atomic.AtomicInteger(0),
+    new java.util.concurrent.atomic.AtomicInteger(0)
+};
 
     // Icon cache tĩnh dùng chung toàn service — giới hạn cứng 80 entry để chặn phình RAM
     private static final int ICON_CACHE_LIMIT = 80;
@@ -49,11 +57,6 @@ public class SidePanelService extends Service {
                 return size() > ICON_CACHE_LIMIT;
             }
         };
-
-    private final Handler debounceHandler = new Handler(Looper.getMainLooper());
-    private Runnable debounceRunnable = null;
-    private static final long DEBOUNCE_MS = 600; // was: 400 
-
     private final String[] POS_NAMES_KEY = {"bc","bl","br","lt","lc","lb","rt","rc","rb"};
     // Ghi chú: dùng chung bởi buildPanelIfEnabled/renderPanelGrid, KHÔNG share giữa panel
     // ==== THÊM MỚI: Idle Teardown Optimizer ====
@@ -179,23 +182,37 @@ private void ensurePanelAlive(int idx) {
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, f, Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(r, f);
     }
+    // MỚI — THAY bằng:
+private final Handler debounceHandler = new Handler(Looper.getMainLooper());
+private final Runnable[] debounceRunnables = new Runnable[3];
+private static final long DEBOUNCE_MS = 500;
 
-    // TẦNG 6: debounce mọi thay đổi panelN_* — chỉ rebuild sau khi user dừng kéo slider
-    private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
-        if (k == null || !k.startsWith("panel")) return;
-        if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
-        debounceRunnable = this::rebuildAll;
-        debounceHandler.postDelayed(debounceRunnable, DEBOUNCE_MS);
-    };
+private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
+    if (k == null) return;
+    int idx;
+    if (k.startsWith("panel1_")) idx = 0;
+    else if (k.startsWith("panel2_")) idx = 1;
+    else if (k.startsWith("panel3_")) idx = 2;
+    else return;
 
-    private void rebuildAll() {
-        for (int i = 0; i < 3; i++) {
-            removePanel(i);
-            buildPanelIfEnabled(i);
-        }
-        checkSelfStop();
-    }
+    final int fIdx = idx;
+    if (debounceRunnables[fIdx] != null) debounceHandler.removeCallbacks(debounceRunnables[fIdx]);
+    debounceRunnables[fIdx] = () -> rebuildOne(fIdx);
+    debounceHandler.postDelayed(debounceRunnables[fIdx], DEBOUNCE_MS);
+};
 
+// Chỉ gỡ + build lại ĐÚNG 1 panel — 2 panel còn lại giữ nguyên, không tốn IPC
+private void rebuildOne(int idx) {
+    removePanel(idx);
+    buildPanelIfEnabled(idx);
+    checkSelfStop();
+}
+
+// Dùng cho broadcast PANEL_CONFIG_CHANGED (không rõ panel nào đổi) — vẫn an toàn
+// vì mỗi rebuildOne() độc lập theo generation riêng
+private void rebuildAll() {
+    for (int i = 0; i < 3; i++) rebuildOne(i);
+}
     private void checkSelfStop() {
         boolean any = prefs.getBoolean("panel1_en",false) || prefs.getBoolean("panel2_en",false) || prefs.getBoolean("panel3_en",false);
         if (!any) stopSelf();
@@ -210,12 +227,13 @@ private void ensurePanelAlive(int idx) {
         startForeground(94, n);
     }
 
-    private void removePanel(int idx) {
-        try { if (handles[idx] != null) wm.removeView(handles[idx]); } catch (Exception ignored) {}
-        try { if (panels[idx] != null) wm.removeView(panels[idx]); } catch (Exception ignored) {}
-        handles[idx] = null; panels[idx] = null; panelOpen[idx] = false;
-    }
-
+    // MỚI:
+private void removePanel(int idx) {
+    renderGen[idx].incrementAndGet(); // huỷ mọi thread nạp icon nền còn sót của panel này
+    try { if (handles[idx] != null) wm.removeView(handles[idx]); } catch (Exception ignored) {}
+    try { if (panels[idx] != null) wm.removeView(panels[idx]); } catch (Exception ignored) {}
+    handles[idx] = null; panels[idx] = null; panelOpen[idx] = false;
+}
     // TẦNG 1: LAZY VIEW — panel tắt thì không tạo view, zero cost
     private void buildPanelIfEnabled(int idx) {
     // MỚI — bỏ dòng currentRenderPx = px;
@@ -310,43 +328,45 @@ int ph = edge.equals("bottom") ? computedCross : Math.min(computedMain, getResou
     }
 
     // TẦNG 3: nạp icon trên background thread, tránh giật khi mở panel lần đầu
-    private void renderPanelGrid(int idx) {
+    // MỚI — THAY bằng:
+private void renderPanelGrid(int idx) {
     String px = "panel" + (idx+1) + "_";
-    // Áp dụng luồng tương tự renderCachedStorageList-style flow
-        LinearLayout panel = panels[idx];
-        if (panel == null) return;
-        int cols = prefs.getInt(px+"cols", 4);
-        GridLayout grid = new GridLayout(this);
-        grid.setColumnCount(cols);
-        grid.setPadding(30, 40, 30, 40);
-        panel.addView(grid);
+    LinearLayout panel = panels[idx];
+    if (panel == null) return;
+    final int myGen = renderGen[idx].incrementAndGet(); // tem thời gian riêng cho lần build này
 
-        List<String> apps = csvToList(prefs.getString(px+"apps", ""));
-        List<String> acts = csvToList(prefs.getString(px+"acts", ""));
+    int cols = prefs.getInt(px+"cols", 4);
+    GridLayout grid = new GridLayout(this);
+    grid.setColumnCount(cols);
+    grid.setPadding(30, 40, 30, 40);
+    panel.addView(grid);
 
-        new Thread(() -> {
-            List<Object[]> loaded = new ArrayList<>(); // {label placeholder(Drawable/emoji), type, ref}
-            for (String pkg : apps) {
-                Drawable d = getCachedIcon(pkg);
-                if (d != null) loaded.add(new Object[]{d, "APP", pkg});
+    List<String> apps = csvToList(prefs.getString(px+"apps", ""));
+    List<String> acts = csvToList(prefs.getString(px+"acts", ""));
+
+    new Thread(() -> {
+        List<Object[]> loaded = new ArrayList<>();
+        for (String pkg : apps) {
+            if (renderGen[idx].get() != myGen) return; // panel đã bị huỷ/build lại → dừng ngay, đỡ CPU/pin
+            Drawable d = getCachedIcon(pkg);
+            if (d != null) loaded.add(new Object[]{d, "APP", pkg});
+        }
+        if (renderGen[idx].get() != myGen) return;
+        for (String act : acts) loaded.add(new Object[]{null, "ACT", act});
+        if (renderGen[idx].get() != myGen) return;
+
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (renderGen[idx].get() != myGen || panels[idx] != panel) return;
+            for (Object[] item : loaded) {
+                View cell = buildCell(px, (String) item[1], item[0], (String) item[2]);
+                GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
+                lp.width = 130; lp.height = 130; lp.setMargins(12,12,12,12);
+                cell.setLayoutParams(lp);
+                grid.addView(cell);
             }
-            for (String act : acts) loaded.add(new Object[]{null, "ACT", act});
-
-            final LinearLayout expectedPanel = panels[idx]; // chốt tham chiếu tại thời điểm gọi
-new Handler(Looper.getMainLooper()).post(() -> {
-    if (panels[idx] != expectedPanel || panels[idx] == null) return; // panel đã bị rebuild, huỷ bỏ kết quả cũ
-    // MỚI — truyền px:
-for (Object[] item : loaded) {
-    View cell = buildCell(px, (String) item[1], item[0], (String) item[2]);
-        GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
-        lp.width = 130; lp.height = 130; lp.setMargins(12,12,12,12);
-        cell.setLayoutParams(lp);
-        grid.addView(cell);
-    }
-});
-        }).start();
-    }
-
+        });
+    }).start();
+}
     private Drawable getCachedIcon(String pkg) {
         synchronized (iconCache) {
             Drawable cached = iconCache.get(pkg);
@@ -434,10 +454,11 @@ private View buildCell(String px, String type, Object payload, String ref) {
     if (panelOpen[idx]) closePanel(idx); else openPanel(idx);
 }
 
-    private void openPanel(int idx) {
-        if (panels[idx] == null) return;
-        closeAllPanels(); // chỉ 1 panel mở tại 1 thời điểm — tiết kiệm overdraw
-        panelOpen[idx] = true;
+    // MỚI:
+private void openPanel(int idx) {
+    if (panels[idx] == null) return;
+    // 3 panel giờ mở/đóng HOÀN TOÀN ĐỘC LẬP — không còn ép đóng lẫn nhau
+    panelOpen[idx] = true;
         panels[idx].setVisibility(View.VISIBLE);
         String px = "panel" + (idx+1) + "_";
         String edge = posToEdge(prefs.getInt(px+"pos", 0));
