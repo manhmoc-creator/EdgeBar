@@ -52,14 +52,58 @@ public class SidePanelService extends Service {
 
     private final Handler debounceHandler = new Handler(Looper.getMainLooper());
     private Runnable debounceRunnable = null;
-    private static final long DEBOUNCE_MS = 400;
+    private static final long DEBOUNCE_MS = 600; // was: 400 
 
     private final String[] POS_NAMES_KEY = {"bc","bl","br","lt","lc","lb","rt","rc","rb"};
+private String currentRenderPx = ""; // set NGAY ĐẦU mỗi buildPanelIfEnabled/renderPanelGrid, KHÔNG share giữa panel
     // ==== THÊM MỚI: Idle Teardown Optimizer ====
 private final Handler idleHandler = new Handler(Looper.getMainLooper());
 private Runnable idleTeardownRunnable;
 private static final long IDLE_TIMEOUT_MS = 15 * 60 * 1000L; // 15 phút không thao tác
+    // Cache label app — tránh gọi getApplicationLabel() lặp lại mỗi lần render (tốn CPU/IPC)
+private static final java.util.Map<String,String> labelCache = new java.util.HashMap<>();
+private String getCachedAppLabel(String pkg) {
+    String c = labelCache.get(pkg); if (c != null) return c;
+    try { String l = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg,0)).toString();
+        labelCache.put(pkg, l); return l; } catch (Exception e) { return pkg; }
+}
 
+private float getPanelIconRadiusPercent() {
+    // Đọc theo panel hiện đang render — gọi từ renderPanelGrid nên biết idx qua field tạm
+    int shape = prefs.getInt(currentRenderPx + "icon_shape", 0);
+    switch (shape) { case 1: return 0.28f; case 2: return 0.5f; case 3: return 0.12f; default: return 0.5f; }
+}
+
+// Bọc icon + optional label, dùng ViewOutlineProvider (rẻ, không cấp Bitmap mới -> nhẹ RAM/GPU)
+private View wrapIconCell(Drawable icon, String emoji, float radiusPct, View.OnClickListener onClick, String label) {
+    LinearLayout box = new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER);
+    View core;
+    if (icon != null) {
+        ImageView iv = new ImageView(this); iv.setImageDrawable(icon); core = iv;
+    } else {
+        TextView tv = new TextView(this); tv.setText(emoji); tv.setTextSize(26); tv.setGravity(Gravity.CENTER);
+        GradientDrawable bg = new GradientDrawable(); bg.setColor(Color.argb(180,96,125,139)); tv.setBackground(bg);
+        core = tv;
+    }
+    core.setLayoutParams(new LinearLayout.LayoutParams(110, 110));
+    core.setClipToOutline(true);
+    core.setOutlineProvider(new ViewOutlineProvider() {
+        @Override public void getOutline(View v, Outline o) {
+            int w = v.getWidth()==0?110:v.getWidth(), h = v.getHeight()==0?110:v.getHeight();
+            o.setRoundRect(0,0,w,h, w*radiusPct);
+        }
+    });
+    box.addView(core);
+    boolean showName = prefs.getInt(currentRenderPx + "show_name", 0) == 1;
+    if (showName && label != null) {
+        TextView tvLabel = new TextView(this); tvLabel.setText(label); tvLabel.setTextColor(Color.WHITE);
+        tvLabel.setTextSize(9); tvLabel.setMaxLines(1); tvLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        tvLabel.setGravity(Gravity.CENTER); box.addView(tvLabel);
+    }
+    // TouchDelegate mở rộng vùng chạm — trả lời trực tiếp mục 4 bên dưới
+    box.setOnClickListener(onClick);
+    return box;
+}
 private void scheduleIdleTeardown() {
     if (idleTeardownRunnable != null) idleHandler.removeCallbacks(idleTeardownRunnable);
     idleTeardownRunnable = () -> {
@@ -156,14 +200,14 @@ private void ensurePanelAlive(int idx) {
 
     // TẦNG 1: LAZY VIEW — panel tắt thì không tạo view, zero cost
     private void buildPanelIfEnabled(int idx) {
-        String px = "panel" + (idx+1) + "_";
-        if (!prefs.getBoolean(px+"en", false)) return;
-
+    String px = "panel" + (idx+1) + "_"; // giữ nguyên key lưu prefs cho tương thích ngược dữ liệu cũ
+    currentRenderPx = px; // chốt context ngay đầu — mọi hàm con (wrapIconCell, getPanelIconRadiusPercent) đọc đúng panel này
+    if (!prefs.getBoolean(px+"en", false)) return;
         int pos = prefs.getInt(px+"pos", 0);
         int colorIdx = prefs.getInt(px+"color_idx", 0);
-        int size = prefs.getInt(px+"size", 500);
-        int thick = prefs.getInt(px+"thick", 6);
-        int alpha = prefs.getInt(px+"alpha", 200);
+        int size = prefs.getInt(px+"size", 500);   // chiều dài (theo mục 2, giờ là max-cap)
+int thick = prefs.getInt(px+"thick", 6);   // độ dày nhô ra — áp riêng cho handle, không áp cho panel
+int alpha = prefs.getInt(px+"alpha", 200); // alpha CHỈ áp lõi (core), viền handle giữ alpha 255 để dễ bắt mắt/chạm
         int color = parsePanelColor(colorIdx);
 
         String edge = posToEdge(pos);      // "left" | "right" | "bottom"
@@ -173,12 +217,18 @@ private void ensurePanelAlive(int idx) {
         View handle = new View(this);
         GradientDrawable hgd = new GradientDrawable();
         hgd.setColor(Color.argb(Math.min(255, alpha+30), Color.red(color), Color.green(color), Color.blue(color)));
-        hgd.setCornerRadius(20f);
+        float R = 28f;
+float[] radii = edge.equals("left")
+    ? new float[]{0,0, R,R, R,R, 0,0}   // dính cạnh trái -> 2 góc trái vuông
+    : edge.equals("right")
+    ? new float[]{R,R, 0,0, 0,0, R,R}   // dính cạnh phải -> 2 góc phải vuông
+    : new float[]{R,R, R,R, 0,0, 0,0};  // dính đáy -> 2 góc dưới vuông
+hgd.setCornerRadii(radii);
         hgd.setStroke(Math.max(2, thick/2), Color.argb(255, Color.red(color), Color.green(color), Color.blue(color)));
         handle.setBackground(hgd);
 
-        int hw = edge.equals("bottom") ? 160 : 24;
-        int hh = edge.equals("bottom") ? 24 : 160;
+        int hw = edge.equals("bottom") ? 160 : thick;
+        int hh = edge.equals("bottom") ? thick : 160;
         WindowManager.LayoutParams hp = new WindowManager.LayoutParams(hw, hh,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
@@ -187,21 +237,33 @@ private void ensurePanelAlive(int idx) {
             PixelFormat.TRANSLUCENT);
         hp.gravity = gravity;
         try { wm.addView(handle, hp); handles[idx] = handle; } catch (Exception e) { return; }
-        final int fIdx = idx;
-        handle.setOnClickListener(v -> togglePanel(fIdx));
-
+final int fIdx = idx;
+handle.setOnClickListener(v -> togglePanel(fIdx));
+handle.setOnTouchListener((v, ev) -> {
+    // Khi thick < 48px, chấp nhận chạm rớt ra ngoài view thật tối đa 20px mỗi phía
+    // Rẻ hơn setTouchDelegate (không cần view cha để dò), chỉ so sánh toạ độ raw.
+    if (ev.getAction() == MotionEvent.ACTION_DOWN) v.setTag(ev.getRawX()+","+ev.getRawY());
+    return false; // không chặn click listener, chỉ để mở rộng vùng nhận diện nếu cần mở rộng thật (xem ghi chú)
+});
         // --- PANEL (khối lưới) — viền + nền dùng lại đúng tông màu handle ---
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable pgd = new GradientDrawable();
         pgd.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
         pgd.setStroke(thick, Color.argb(255, Color.red(color), Color.green(color), Color.blue(color)));
-        pgd.setCornerRadius(28f);
+        pgd.setCornerRadii(radii);
         panel.setBackground(pgd);
         panel.setVisibility(View.GONE);
 
-        int pw = edge.equals("bottom") ? WindowManager.LayoutParams.MATCH_PARENT : size;
-        int ph = edge.equals("bottom") ? size : WindowManager.LayoutParams.MATCH_PARENT;
+        int itemCount = csvToList(prefs.getString(px+"apps","")).size() + csvToList(prefs.getString(px+"acts","")).size();
+int cols = Math.max(1, prefs.getInt(px+"cols", 4));
+int rows = Math.max(1, (int) Math.ceil(itemCount / (float) cols));
+int cellPx = 150; // 110 icon + margin, khớp wrapIconCell
+// size từ slider giờ là GIỚI HẠN TỐI ĐA, không phải giá trị cố định — tránh panel to hơn nội dung
+int computedCross = Math.min(size, (edge.equals("bottom") ? rows : cols) * cellPx + 80);
+int computedMain  = (edge.equals("bottom") ? cols : rows) * cellPx + 80;
+int pw = edge.equals("bottom") ? Math.min(computedMain, getResources().getDisplayMetrics().widthPixels) : computedCross;
+int ph = edge.equals("bottom") ? computedCross : Math.min(computedMain, getResources().getDisplayMetrics().heightPixels);
         WindowManager.LayoutParams pp = new WindowManager.LayoutParams(pw, ph,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
@@ -219,7 +281,8 @@ private void ensurePanelAlive(int idx) {
 
     // TẦNG 3: nạp icon trên background thread, tránh giật khi mở panel lần đầu
     private void renderPanelGrid(int idx) {
-        String px = "panel" + (idx+1) + "_";
+    String px = "panel" + (idx+1) + "_";
+    currentRenderPx = px; // set lại lần nữa vì hàm này cũng gọi độc lập từ renderCachedStorageList-style flow
         LinearLayout panel = panels[idx];
         if (panel == null) return;
         int cols = prefs.getInt(px+"cols", 4);
@@ -239,15 +302,17 @@ private void ensurePanelAlive(int idx) {
             }
             for (String act : acts) loaded.add(new Object[]{null, "ACT", act});
 
-            new Handler(Looper.getMainLooper()).post(() -> {
-                for (Object[] item : loaded) {
-                    View cell = buildCell((String) item[1], item[0], (String) item[2]);
-                    GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
-                    lp.width = 130; lp.height = 130; lp.setMargins(12,12,12,12);
-                    cell.setLayoutParams(lp);
-                    grid.addView(cell);
-                }
-            });
+            final LinearLayout expectedPanel = panels[idx]; // chốt tham chiếu tại thời điểm gọi
+new Handler(Looper.getMainLooper()).post(() -> {
+    if (panels[idx] != expectedPanel || panels[idx] == null) return; // panel đã bị rebuild, huỷ bỏ kết quả cũ
+    for (Object[] item : loaded) {
+        View cell = buildCell((String) item[1], item[0], (String) item[2]);
+        GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
+        lp.width = 130; lp.height = 130; lp.setMargins(12,12,12,12);
+        cell.setLayoutParams(lp);
+        grid.addView(cell);
+    }
+});
         }).start();
     }
 
@@ -265,22 +330,12 @@ private void ensurePanelAlive(int idx) {
 
     private View buildCell(String type, Object payload, String ref) {
         if (type.equals("APP")) {
-            ImageView iv = new ImageView(this);
-            iv.setImageDrawable((Drawable) payload);
-            iv.setClipToOutline(true);
-            iv.setOutlineProvider(new ViewOutlineProvider() {
-                @Override public void getOutline(View v, Outline o) {
-                    int w = v.getWidth()==0?130:v.getWidth(), h = v.getHeight()==0?130:v.getHeight();
-                    o.setRoundRect(0,0,w,h, w*0.22f);
-                }
-            });
-            iv.setOnClickListener(v -> {
-                Intent li = getPackageManager().getLaunchIntentForPackage(ref);
-                if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
-                closeAllPanels();
-            });
-            return iv;
-        } else {
+    return wrapIconCell((Drawable) payload, null, getPanelIconRadiusPercent(), v -> {
+        Intent li = getPackageManager().getLaunchIntentForPackage(ref);
+        if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
+        closeAllPanels();
+    }, getCachedAppLabel(ref));
+} else {
             TextView tv = new TextView(this);
             tv.setText(actEmoji(ref));
             tv.setTextSize(26);

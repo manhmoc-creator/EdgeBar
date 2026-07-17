@@ -1582,7 +1582,7 @@ designSliderContainer.addView(relockRow);
     }
  private void renderPanelDesign() {
     LinearLayout tabRow = new LinearLayout(this); tabRow.setOrientation(LinearLayout.HORIZONTAL);
-    Button b1 = createTabBtn("P1"), b2 = createTabBtn("P2"), b3 = createTabBtn("P3");
+    Button b1 = createTabBtn("1"), b2 = createTabBtn("2"), b3 = createTabBtn("3");
     LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0,-2,1f); tlp.setMargins(6,0,6,0);
     b1.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); b2.setLayoutParams(tlp); b3.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
 
@@ -1626,11 +1626,20 @@ private void buildPanelBody(LinearLayout panelBody) {
 
     // 3 slider bắt buộc: Size / Thickness / Transparency
     designSliderContainer.addView(createSlider(T("Size (width)","Kích thước (chiều rộng)"), px+"size", 900, 500));
-    designSliderContainer.addView(createSlider(T("Border Thickness","Độ dày viền"), px+"thick", 30, 6));
+    designSliderContainer.addView(createSlider(T("Border Thickness","Độ dày viền"), px+"thick", 30, 24)); // was: 30, 6
     designSliderContainer.addView(createSlider(T("Transparency","Độ trong suốt"), px+"alpha", 255, 200));
 
     designSliderContainer.addView(createSlider(T("Columns (1-9)","Số cột (1-9)"), px+"cols", 9, 4));
 
+// Tap-to-cycle: KHÔNG dùng Spinner (tốn layout inflate) — chỉ 1 TextView + click listener,
+// nhẹ hơn cho Pixel 2XL vì không tạo dropdown popup window mỗi lần mở
+String[] iconShapes = {"Tròn", "Vuông Bo Nhẹ (Squircle)", "Bầu Dục (Pebble)", "Bo Góc Vuông"};
+designSliderContainer.addView(createCycleRow(T("Icon Style","Kiểu Icon"),
+    px+"icon_shape", iconShapes));
+
+String[] yesNo = {T("No","Không"), T("Yes","Có")};
+designSliderContainer.addView(createCycleRow(T("Show App Name","Hiện Tên App"),
+    px+"show_name", yesNo));
     // Nút chọn App — y hệt luồng +NEW EB nhưng đa chọn
     int appCount = prefs.getString(px+"apps","").isEmpty() ? 0 : prefs.getString(px+"apps","").split(",").length;
     Button btnApps = new Button(this);
@@ -1955,6 +1964,22 @@ private void showPanelAppPicker() {
     private TextView createSectionTitle(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.parseColor("#00E5FF")); tv.setPadding(0,10,0,20); return tv; }
     private Spinner createSpinner() { Spinner sp = new Spinner(this); sp.setBackground(getRounded("#2C2C2C", 20f)); sp.setPadding(20,20,20,20); return sp; }
     private EditText createInput(String h, String k) { EditText et = new EditText(this); et.setHint(h); et.setHintTextColor(Color.GRAY); et.setTextColor(Color.WHITE); et.setText(prefs.getString(k,"")); et.setBackground(getRounded("#2C2C2C", 20f)); et.setPadding(30,30,30,30); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,10,0,10); et.setLayoutParams(lp); et.addTextChangedListener(new android.text.TextWatcher(){public void afterTextChanged(android.text.Editable s){prefs.edit().putString(k,s.toString()).apply();}public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}}); return et; }
+    private LinearLayout createCycleRow(String title, String key, String[] states) {
+    LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL);
+    l.setGravity(Gravity.CENTER_VERTICAL); l.setPadding(0,10,0,20);
+    TextView tv = new TextView(this); tv.setText(title); tv.setTextColor(Color.parseColor("#E91E63"));
+    tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+    TextView tvVal = new TextView(this); tvVal.setTextColor(Color.parseColor("#00E5FF"));
+    int cur = prefs.getInt(key, 0);
+    tvVal.setText(states[cur % states.length]);
+    tvVal.setPadding(30,15,30,15); tvVal.setBackground(getRounded("#2C2C2C", 20f));
+    tvVal.setOnClickListener(v -> {
+        int next = (prefs.getInt(key, 0) + 1) % states.length;
+        prefs.edit().putInt(key, next).apply(); // service tự bắt qua prefListener, không cần gọi gì thêm
+        tvVal.setText(states[next]);
+    });
+    l.addView(tv); l.addView(tvVal); return l;
+}
     private LinearLayout wrapCard(View content) { LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 40f)); card.setPadding(40,40,40,40); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,40); card.setLayoutParams(lp); card.addView(content); return card; }
 
 
