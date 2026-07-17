@@ -253,17 +253,18 @@ int color = parsePanelColor(colorIdx);
         int gravity = posToGravity(pos);
 
         // --- HANDLE (tay cầm) — dùng đúng kiểu bo góc/màu như các thanh bar hiện có ---
+// MỚI — bỏ hẳn setStroke, handle chỉ có lõi (fill), nhẹ hơn cho GPU vì
+// GradientDrawable không-stroke không cần vẽ thêm 1 lớp outline path:
 View handle = new View(this);
 GradientDrawable hgd = new GradientDrawable();
 hgd.setColor(Color.argb(handleAlpha, Color.red(color), Color.green(color), Color.blue(color)));
-// Bo góc tay cầm theo slider riêng, không hardcode 28f
 float[] handleRadii = edge.equals("left")
     ? new float[]{0,0, handleR,handleR, handleR,handleR, 0,0}
     : edge.equals("right")
     ? new float[]{handleR,handleR, 0,0, 0,0, handleR,handleR}
     : new float[]{handleR,handleR, handleR,handleR, 0,0, 0,0};
 hgd.setCornerRadii(handleRadii);
-hgd.setStroke(Math.max(3, thick/6), Color.argb(255, Color.red(color), Color.green(color), Color.blue(color)));
+// KHÔNG setStroke — viền chỉ dành riêng cho Panel (pgd bên dưới)
 handle.setBackground(hgd);
         // MỚI — đảm bảo cạnh ngắn (chiều dày để bấm) luôn tối thiểu 90px dù slider "thick" chỉnh nhỏ hơn,
 // chỉ phần vẽ (background) mới theo đúng "thick" nhìn mắt thường:
@@ -457,24 +458,28 @@ private View buildCell(String px, String type, Object payload, String ref) {
     // MỚI:
 private void openPanel(int idx) {
     if (panels[idx] == null) return;
-    // 3 panel giờ mở/đóng HOÀN TOÀN ĐỘC LẬP — không còn ép đóng lẫn nhau
     panelOpen[idx] = true;
-        panels[idx].setVisibility(View.VISIBLE);
-        String px = "panel" + (idx+1) + "_";
-        String edge = posToEdge(prefs.getInt(px+"pos", 0));
-        Animation anim = edge.equals("bottom")
-            ? new TranslateAnimation(0,0, prefs.getInt(px+"size",500), 0)
-            : new TranslateAnimation(edge.equals("left") ? -prefs.getInt(px+"size",500) : prefs.getInt(px+"size",500), 0, 0, 0);
-        anim.setDuration(200);
-        panels[idx].startAnimation(anim);
-    }
+    panels[idx].setVisibility(View.VISIBLE);
+    // Ẩn handle của ĐÚNG panel này — zero cost, chỉ 1 lệnh setVisibility,
+    // không tốn thêm surface/layer nào trên SurfaceFlinger
+    if (handles[idx] != null) handles[idx].setVisibility(View.GONE);
+    String px = "panel" + (idx+1) + "_";
+    String edge = posToEdge(prefs.getInt(px+"pos", 0));
+    Animation anim = edge.equals("bottom")
+        ? new TranslateAnimation(0,0, prefs.getInt(px+"size",500), 0)
+        : new TranslateAnimation(edge.equals("left") ? -prefs.getInt(px+"size",500) : prefs.getInt(px+"size",500), 0, 0, 0);
+    anim.setDuration(200);
+    panels[idx].startAnimation(anim);
+}
 
-    private void closePanel(int idx) {
-        if (panels[idx] == null || !panelOpen[idx]) return;
-        panelOpen[idx] = false;
-        panels[idx].setVisibility(View.GONE);
-    }
-
+    // MỚI:
+private void closePanel(int idx) {
+    if (panels[idx] == null || !panelOpen[idx]) return;
+    panelOpen[idx] = false;
+    panels[idx].setVisibility(View.GONE);
+    // Trả lại handle — panel đóng thì tay cầm phải sống lại ngay để user mở lại được
+    if (handles[idx] != null) handles[idx].setVisibility(View.VISIBLE);
+}
     private void closeAllPanels() {
     for (int i=0;i<3;i++) closePanel(i);
     scheduleIdleTeardown();             // ← THÊM: hẹn giờ dọn dẹp sau khi đóng hết panel

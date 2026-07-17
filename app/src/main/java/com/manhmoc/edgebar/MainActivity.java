@@ -1582,7 +1582,8 @@ designSliderContainer.addView(relockRow);
     }
  private void renderPanelDesign() {
     LinearLayout tabRow = new LinearLayout(this); tabRow.setOrientation(LinearLayout.HORIZONTAL);
-    Button b1 = createTabBtn("1"), b2 = createTabBtn("2"), b3 = createTabBtn("3");
+    // MỚI:
+Button b1 = createTabBtn("PANEL 1"), b2 = createTabBtn("PANEL 2"), b3 = createTabBtn("PANEL 3");
     LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0,-2,1f); tlp.setMargins(6,0,6,0);
     b1.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); b2.setLayoutParams(tlp); b3.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
 
@@ -1611,14 +1612,16 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
     b2.setBackground(getRounded(currentPanelIdx==2?"#00E5FF":"#222222",15f)); b2.setTextColor(currentPanelIdx==2?Color.BLACK:Color.WHITE);
     b3.setBackground(getRounded(currentPanelIdx==3?"#00E5FF":"#222222",15f)); b3.setTextColor(currentPanelIdx==3?Color.BLACK:Color.WHITE);
 }
-
-private void buildPanelBody(LinearLayout panelBody) {
+    private void buildPanelBody(LinearLayout panelBody) {
     panelBody.removeAllViews();
+    // GUARD: đảm bảo currentPanelIdx luôn nằm trong 1..3, tránh px rác kiểu "panel0_"/"panel4_"
+    if (currentPanelIdx < 1 || currentPanelIdx > 3) currentPanelIdx = 1;
     String px = "panel" + currentPanelIdx + "_";
+    final String fpx = px; // biến final riêng để lambda bên dưới có thể "capture" hợp lệ
     panelBody.addView(createSectionTitle("📱 EDGE PANEL " + currentPanelIdx));
     CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable Panel " + currentPanelIdx, "Bật Panel " + currentPanelIdx));
     cbEn.setTextColor(Color.WHITE); cbEn.setChecked(prefs.getBoolean(px+"en", false));
-    cbEn.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(px+"en", c).apply(); syncPanelService(); });
+    cbEn.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(fpx+"en", c).apply(); syncPanelService(); });
     designSliderContainer.addView(cbEn);
 
     designSliderContainer.addView(createComboDropdown(T("Position","Vị trí"), px+"pos", PANEL_POS_NAMES, 0));
@@ -1650,7 +1653,7 @@ designSliderContainer.addView(createCycleRow(T("Show Name","Hiện Tên"),
     btnApps.setBackground(getRounded("#00E5FF", 20f)); btnApps.setTextColor(Color.BLACK);
     LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(-1,-2); bLp.setMargins(0,15,0,10);
     btnApps.setLayoutParams(bLp);
-    btnApps.setOnClickListener(v -> showPanelMultiPicker(px+"apps", true));
+    btnApps.setOnClickListener(v -> showPanelMultiPicker(fpx+"apps", true));
     designSliderContainer.addView(btnApps);
 
     // Nút chọn Hành động — dùng lại ACT_LABS/ACT_KEYS có sẵn (toggle flash, screenshot,...)
@@ -1659,7 +1662,7 @@ designSliderContainer.addView(createCycleRow(T("Show Name","Hiện Tên"),
     btnActs.setText("⚡ " + T("ACTIONS","HÀNH ĐỘNG") + " (" + actCount + ")");
     btnActs.setBackground(getRounded("#E91E63", 20f)); btnActs.setTextColor(Color.WHITE);
     btnActs.setLayoutParams(bLp);
-    btnActs.setOnClickListener(v -> showPanelMultiPicker(px+"acts", false));
+    btnActs.setOnClickListener(v -> showPanelMultiPicker(fpx+"acts", false));
     designSliderContainer.addView(btnActs);
 }
 
