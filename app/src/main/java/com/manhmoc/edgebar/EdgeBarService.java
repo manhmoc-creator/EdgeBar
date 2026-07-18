@@ -177,6 +177,8 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     if (panelEngine != null) panelEngine.togglePanel(idx);
 } else if ("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED".equals(act)) {
     if (panelEngine != null) panelEngine.rebuildAll();
+} else if ("com.manhmoc.edgebar.PANEL_TEST_TOGGLE".equals(act)) {
+    if (panelEngine != null) panelEngine.setForceTest(i.getIntExtra("idx",0), i.getBooleanExtra("on", false));
 } else {
     updateVisibility();
        }
@@ -343,6 +345,7 @@ if (inv) {
         // CODE MỚI — thêm ngay dưới dòng addAction cuối:
 filter.addAction("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
 filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
+filter.addAction("com.manhmoc.edgebar.PANEL_TEST_TOGGLE");
         registerReceiver(stateReceiver, filter);
         if (Build.VERSION.SDK_INT >= 33)
             registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"), Context.RECEIVER_NOT_EXPORTED);

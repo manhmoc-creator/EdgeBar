@@ -57,7 +57,7 @@ private int currentPanelIdx = 1; // 1-3, panel nào đang được chỉnh trong
 private Button fab;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.16 - The Panel Trinity"; 
+    private final String CURRENT_VERSION = "V19123.6.17 - The Panel Harmony"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -1616,7 +1616,18 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
     if (currentPanelIdx < 1 || currentPanelIdx > 3) currentPanelIdx = 1;
     String px = "panel" + currentPanelIdx + "_";
     final String fpx = px;
+    final int fIdxTest = currentPanelIdx - 1;
     panelBody.addView(createSectionTitle("📱 EDGE PANEL " + currentPanelIdx));
+
+    CheckBox cbTest = new CheckBox(this);
+    cbTest.setText("👁 " + T("TEST PREVIEW HERE (Panel + Handle)", "XEM THỬ TẠI ĐÂY (Panel + Tay cầm)"));
+    cbTest.setTextColor(Color.parseColor("#FFC107"));
+    cbTest.setOnCheckedChangeListener((v, c) -> {
+        Intent t = new Intent("com.manhmoc.edgebar.PANEL_TEST_TOGGLE");
+        t.putExtra("idx", fIdxTest); t.putExtra("on", c);
+        sendBroadcast(t);
+    });
+    panelBody.addView(cbTest);
     CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable Panel " + currentPanelIdx, "Bật Panel " + currentPanelIdx));
     cbEn.setTextColor(Color.WHITE); cbEn.setChecked(prefs.getBoolean(px+"en", false));
     cbEn.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(fpx+"en", c).apply(); syncPanelService(); });
@@ -1633,8 +1644,8 @@ panelBody.addView(tvVisNote);
     panelBody.addView(createComboDropdown(T("Position","Vị trí"), px+"pos", PANEL_POS_NAMES, 0));
     panelBody.addView(createComboDropdown(T("Color","Màu"), px+"color_idx", PANEL_COLOR_NAMES, 0));
 
-    panelBody.addView(createSlider(T("Size (width)","Kích thước (chiều rộng)"), px+"size", 2500, 700));
-    panelBody.addView(createSlider(T("Handle Thickness","Độ dày tay cầm"), px+"thick", 120, 40));
+    panelBody.addView(createSlider(T("Panel Size (cross-axis)","Kích thước PANEL (bề ngang panel)"), px+"size", 2500, 700));
+panelBody.addView(createSlider(T("Handle Length (drag bar)","Chiều dài TAY CẦM (thanh kéo)"), px+"thick", 400, 200));
     panelBody.addView(createSlider(T("Core Transparency","Độ trong suốt lõi"), px+"alpha", 255, 200));
     panelBody.addView(createSlider(T("Handle Border Alpha","Độ đậm viền tay cầm"), px+"handle_alpha", 255, 255));
     panelBody.addView(createSlider(T("Handle Corner Radius","Độ bo góc tay cầm"), px+"handle_radius", 100, 28));
@@ -1642,7 +1653,7 @@ panelBody.addView(tvVisNote);
     panelBody.addView(createSlider(T("Icon Size","Kích thước Icon"), px+"icon_size", 180, 110));
 
     panelBody.addView(createSlider(T("Columns (1-9)","Số cột (1-9)"), px+"cols", 9, 4));
-    String[] iconShapes = {"Tròn", "Vuông Bo Nhẹ (Squircle)", "Bầu Dục (Pebble)", "Bo Góc Vuông"};
+    String[] iconShapes = {"Tròn", "Vuông Bo Góc (Kiểu Google)"};
     panelBody.addView(createCycleRow(T("Icon Style","Kiểu Icon"),
         px+"icon_shape", iconShapes));
 
@@ -1671,42 +1682,100 @@ panelBody.addView(tvVisNote);
 // isApp=false: multi-select action picker (ghi CSV action key, dùng ACT_KEYS/ACT_LABS có sẵn)
 private void showPanelMultiPicker(String prefKey, boolean isApp) {
     String cur = prefs.getString(prefKey, "");
+    final java.util.LinkedHashSet<String> selectedOrder = new java.util.LinkedHashSet<>();
+    for (String s : cur.split(",")) if (!s.trim().isEmpty()) selectedOrder.add(s.trim());
+
+    final List<String[]> allItems = new ArrayList<>();
     if (isApp) {
-        List<String[]> combined = getAppListCached();
-        String[] names = new String[combined.size()];
-        boolean[] checked = new boolean[combined.size()];
-        for (int i=0;i<combined.size();i++) { names[i]=combined.get(i)[0]; checked[i]=cur.contains(combined.get(i)[1]); }
-        new AlertDialog.Builder(this).setTitle(T("Choose apps for Panel","Chọn app cho Panel"))
-            .setMultiChoiceItems(names, checked, (d,which,isC)->checked[which]=isC)
-            .setPositiveButton("LƯU", (d,w) -> {
-                List<String> sel = new ArrayList<>();
-                for (int i=0;i<combined.size();i++) if (checked[i]) sel.add(combined.get(i)[1]);
-                prefs.edit().putString(prefKey, TextUtils.join(",", sel)).apply();
-                syncPanelService(); renderSliders();
-            }).setNegativeButton("HỦY", null).show();
+        allItems.addAll(getAppListCached());
     } else {
-        // MỚI — lọc bỏ LAUNCH_APP (đã bỏ NONE ở index 0 sẵn rồi, giờ lọc thêm LAUNCH_APP):
-reloadActionLabels();
-ArrayList<String> namesList = new ArrayList<>();
-ArrayList<String> keysList = new ArrayList<>();
-for (int i = 1; i < ACT_KEYS.length; i++) {
-    if (ACT_KEYS[i].equals("LAUNCH_APP")) continue;
-    namesList.add(ACT_LABS[i]);
-    keysList.add(ACT_KEYS[i]);
-}
-String[] names = namesList.toArray(new String[0]);
-String[] keys = keysList.toArray(new String[0]);
-        boolean[] checked = new boolean[names.length];
-        for (int i=0;i<keys.length;i++) checked[i] = cur.contains(keys[i]);
-        new AlertDialog.Builder(this).setTitle(T("Choose actions for Panel","Chọn hành động cho Panel"))
-            .setMultiChoiceItems(names, checked, (d,which,isC)->checked[which]=isC)
-            .setPositiveButton("LƯU", (d,w) -> {
-                List<String> sel = new ArrayList<>();
-                for (int i=0;i<keys.length;i++) if (checked[i]) sel.add(keys[i]);
-                prefs.edit().putString(prefKey, TextUtils.join(",", sel)).apply();
-                syncPanelService(); renderSliders();
-            }).setNegativeButton("HỦY", null).show();
+        reloadActionLabels();
+        for (int i = 1; i < ACT_KEYS.length; i++) {
+            if (ACT_KEYS[i].equals("LAUNCH_APP")) continue;
+            allItems.add(new String[]{ACT_LABS[i], ACT_KEYS[i]});
+        }
     }
+
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
+
+    EditText etSearch = new EditText(this);
+    etSearch.setHint("🔍 " + T("Search...","Tìm kiếm..."));
+    etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
+    etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
+    root.addView(etSearch);
+
+    ListView lv = new ListView(this);
+    lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    root.addView(lv);
+
+    final List<String[]> shown = new ArrayList<>();
+    final Runnable[] refreshHolder = new Runnable[1];
+    BaseAdapter adapter = new BaseAdapter() {
+        @Override public int getCount() { return shown.size(); }
+        @Override public Object getItem(int p) { return shown.get(p); }
+        @Override public long getItemId(int p) { return p; }
+        @Override public View getView(int p, View cv, ViewGroup parent) {
+            LinearLayout row = new LinearLayout(MainActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(20,22,20,22);
+            String[] item = shown.get(p);
+            CheckBox cb = new CheckBox(MainActivity.this);
+            cb.setChecked(selectedOrder.contains(item[1]));
+            cb.setClickable(false);
+            TextView tv = new TextView(MainActivity.this);
+            tv.setText(item[0]); tv.setTextColor(Color.WHITE);
+            tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+            row.addView(cb); row.addView(tv);
+            row.setOnClickListener(v -> {
+                if (selectedOrder.contains(item[1])) selectedOrder.remove(item[1]);
+                else selectedOrder.add(item[1]); // mục vừa chọn -> cuối danh sách đã chọn (thứ tự ưu tiên)
+                refreshHolder[0].run(); // nhảy lên đầu ngay lập tức
+            });
+            return row;
+        }
+    };
+    lv.setAdapter(adapter);
+
+    Runnable doRefresh = () -> {
+        String q = etSearch.getText().toString().trim().toLowerCase();
+        shown.clear();
+        List<String[]> selectedSorted = new ArrayList<>();
+        List<String[]> restList = new ArrayList<>();
+        for (String key : selectedOrder) {
+            for (String[] it : allItems) {
+                if (it[1].equals(key) && (q.isEmpty() || it[0].toLowerCase().contains(q))) { selectedSorted.add(it); break; }
+            }
+        }
+        for (String[] it : allItems) {
+            if (selectedOrder.contains(it[1])) continue;
+            if (!q.isEmpty() && !it[0].toLowerCase().contains(q)) continue;
+            restList.add(it);
+        }
+        shown.addAll(selectedSorted);
+        shown.addAll(restList);
+        adapter.notifyDataSetChanged();
+    };
+    refreshHolder[0] = doRefresh;
+    etSearch.addTextChangedListener(new android.text.TextWatcher(){
+        public void afterTextChanged(android.text.Editable s){ doRefresh.run(); }
+        public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+        public void onTextChanged(CharSequence s,int a,int b,int c){}
+    });
+    doRefresh.run();
+
+    LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,20,0,0);
+    Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY")); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+    Button bSave = new Button(this); bSave.setText(T("SAVE","LƯU")); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0); bSave.setLayoutParams(slp);
+    footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave.setOnClickListener(v -> {
+        prefs.edit().putString(prefKey, TextUtils.join(",", selectedOrder)).apply();
+        syncPanelService(); renderSliders();
+        d.dismiss();
+    });
+    d.setContentView(root); d.show();
 }
 // CODE MỚI — thay toàn bộ hàm bằng:
 private void syncPanelService() {

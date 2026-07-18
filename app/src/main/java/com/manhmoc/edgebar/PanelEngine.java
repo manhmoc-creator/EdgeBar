@@ -12,6 +12,8 @@ public class PanelEngine {
     private View[] handles = new View[3];
     private LinearLayout[] panels = new LinearLayout[3];
     private boolean[] panelOpen = new boolean[3];
+private String[] lastSignature = new String[3];
+private boolean[] forceTestOn = new boolean[3]; // Bật/tắt từ checkbox TEST trong màn Design
     private final AtomicInteger[] renderGen = {new AtomicInteger(0), new AtomicInteger(0), new AtomicInteger(0)};
     private static final int ICON_CACHE_LIMIT = 80;
     private static final LinkedHashMap<String, Drawable> iconCache =
@@ -38,8 +40,50 @@ public class PanelEngine {
     /** Gọi mỗi khi lock state / accessibility state đổi — decide xem instance này
      *  (Lock hay Homacc, tùy trạng thái) có được phép giữ panel hay không. */
     public void rebuildAll() { for (int i = 0; i < 3; i++) rebuildOne(i); }
-    private void rebuildOne(int idx) { removePanel(idx); buildPanelIfEnabled(idx); }
+    private void rebuildOne(int idx) {
+    String sig = computeSignature(idx);
+    boolean shouldExist = shouldPanelExistNow(idx);
+    boolean exists = (handles[idx] != null || panels[idx] != null);
+    // CHỈ rebuild khi thật sự có thay đổi (bật/tắt hoặc đổi cấu hình) —
+    // đây là fix gốc cho lỗi nháy tay cầm mỗi 1-2 giây, đồng thời giảm hẳn
+    // số lần gọi wm.addView/removeView -> tiết kiệm pin/CPU cho Pixel 2XL.
+    if (exists == shouldExist && sig.equals(lastSignature[idx])) return;
+    removePanel(idx);
+    if (shouldExist) buildPanelIfEnabled(idx);
+    lastSignature[idx] = sig;
+}
 
+private String computeSignature(int idx) {
+    String px = "panel" + (idx+1) + "_";
+    return prefs.getBoolean(px+"en", false) + "|" + prefs.getInt(px+"vis", 0) + "|"
+        + prefs.getInt(px+"pos", 0) + "|" + prefs.getInt(px+"color_idx", 0) + "|"
+        + prefs.getInt(px+"size", 700) + "|" + prefs.getInt(px+"thick", 40) + "|"
+        + prefs.getInt(px+"alpha", 200) + "|" + prefs.getInt(px+"handle_alpha", 255) + "|"
+        + prefs.getInt(px+"handle_radius", 28) + "|" + prefs.getInt(px+"panel_radius", 24) + "|"
+        + prefs.getInt(px+"icon_size", 110) + "|" + prefs.getInt(px+"cols", 4) + "|"
+        + prefs.getInt(px+"icon_shape", 0) + "|" + prefs.getInt(px+"show_name", 0) + "|"
+        + prefs.getString(px+"apps","") + "|" + prefs.getString(px+"acts","") + "|"
+        + forceTestOn[idx];
+}
+
+private boolean shouldPanelExistNow(int idx) {
+    String px = "panel" + (idx+1) + "_";
+    if (forceTestOn[idx]) return true; // Checkbox TEST ép hiện ngay tại đây để xem trước
+    if (!prefs.getBoolean(px+"en", false)) return false;
+    int visMode = prefs.getInt(px+"vis", 0);
+    boolean shouldBuildHere = isAnyMode ? (visMode == 1) : (visMode == 0);
+    if (!shouldBuildHere) return false;
+    boolean locked = km != null && km.isKeyguardLocked();
+    if (isAnyMode) { if (!locked && !AccessibleHomeService.isRunning) return false; }
+    else { if (locked) return false; }
+    return true;
+}
+
+// Gọi từ Activity (qua broadcast) khi bật/tắt checkbox TEST
+public void setForceTest(int idx, boolean on) {
+    forceTestOn[idx] = on;
+    rebuildOne(idx);
+}
     private boolean shouldOwnPanelNow() {
         if (!isAnyMode) return true; // Homeb: luôn được phép (chỉ cần unlock, check riêng bên dưới)
         // isAnyMode=true dùng chung cho Lock + Homacc trong EdgeBarService.
@@ -47,24 +91,9 @@ public class PanelEngine {
         // unlocked + Homacc chạy -> Homacc giữ panel. Không bao giờ cả hai cùng lúc.
         return true; // panel Lock vs Homacc tự phân biệt qua px+"owner" bên dưới nếu cần mở rộng
     }
-
     private void buildPanelIfEnabled(int idx) {
-        String px = "panel" + (idx+1) + "_";
-        if (!prefs.getBoolean(px+"en", false)) return;
-        int visMode = prefs.getInt(px+"vis", 0); // 0=Cục Bộ(Homeb), 1=Toàn Cục(Lock/Homacc)
-        boolean shouldBuildHere = isAnyMode ? (visMode == 1) : (visMode == 0);
-        if (!shouldBuildHere) return;
-
-        boolean locked = km != null && km.isKeyguardLocked();
-        if (isAnyMode) {
-            // Toàn Cục: khi màn khoá -> panel chạy trong ngữ cảnh Lock; khi mở khoá -> Homacc.
-            // Cả hai đều dùng chính EdgeBarService/panelEngine này nên không có xung đột 2 view.
-            if (!locked && !AccessibleHomeService.isRunning) return; // chưa unlock xong AccHome thì chưa vẽ
-        } else {
-            // Cục Bộ (Homeb): chỉ vẽ khi KHÔNG khoá máy, giống bars Homeb hiện tại
-            if (locked) return;
-        }
-
+    String px = "panel" + (idx+1) + "_";
+    if (!shouldPanelExistNow(idx)) return;
         int pos = prefs.getInt(px+"pos", 0);
         int colorIdx = prefs.getInt(px+"color_idx", 0);
         int size = prefs.getInt(px+"size", 700);
@@ -90,14 +119,12 @@ public class PanelEngine {
             : new float[]{handleR,handleR,handleR,handleR,0,0,0,0};
         hgd.setCornerRadii(hr);
         handle.setBackground(hgd);
-        int MIN_TOUCH_PX = 90;
-        int visualThick = Math.max(20, thick / 3);
-        int hw = edge.equals("bottom") ? 200 : Math.max(MIN_TOUCH_PX, visualThick);
-        int hh = edge.equals("bottom") ? Math.max(MIN_TOUCH_PX, visualThick) : 200;
-        int padExtra = Math.max(0, (MIN_TOUCH_PX - visualThick) / 2);
-        if (edge.equals("bottom")) handle.setPadding(0, padExtra, 0, padExtra);
-        else handle.setPadding(padExtra, 0, padExtra, 0);
-
+        // "Handle Thickness" (thick) giờ điều khiển CHIỀU DÀI tay cầm (kéo dài/rút ngắn thanh) —
+// đúng như mong muốn — thay vì độ dày. Bề ngang (độ dày thật) dùng hằng số cố định.
+final int HANDLE_BREADTH = 56;
+int handleLength = Math.max(80, thick);
+int hw = edge.equals("bottom") ? handleLength : HANDLE_BREADTH;
+int hh = edge.equals("bottom") ? HANDLE_BREADTH : handleLength;
         WindowManager.LayoutParams hp = new WindowManager.LayoutParams(hw, hh, wmType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
@@ -119,15 +146,19 @@ public class PanelEngine {
         panel.setVisibility(View.GONE);
 
         int itemCount = csvToList(prefs.getString(px+"apps","")).size() + csvToList(prefs.getString(px+"acts","")).size();
-        int cols = Math.max(1, prefs.getInt(px+"cols", 4));
-        int rows = Math.max(1, (int) Math.ceil(itemCount / (float) cols));
-        int iconSize = prefs.getInt(px+"icon_size", 110);
-        int cellPx = iconSize + 40;
-        int computedCross = Math.min(size, (edge.equals("bottom") ? rows : cols) * cellPx + 80);
-        int computedMain  = (edge.equals("bottom") ? cols : rows) * cellPx + 80;
-        int pw = edge.equals("bottom") ? Math.min(computedMain, ctx.getResources().getDisplayMetrics().widthPixels) : computedCross;
-        int ph = edge.equals("bottom") ? computedCross : Math.min(computedMain, ctx.getResources().getDisplayMetrics().heightPixels);
-
+if (itemCount == 0) itemCount = 1;
+// Không cho số cột nhiều hơn số item đang có -> hết cảnh panel thừa khoảng trống
+int cols = Math.max(1, Math.min(prefs.getInt(px+"cols", 4), itemCount));
+int rows = Math.max(1, (int) Math.ceil(itemCount / (float) cols));
+int iconSize = prefs.getInt(px+"icon_size", 110);
+int cellPx = iconSize + CELL_EXTRA; // KHỚP với renderPanelGrid()
+int panelPadding = 48;
+int computedMain  = (edge.equals("bottom") ? cols : rows) * cellPx + panelPadding;
+// "size" (Kích thước) giờ dùng TRỰC TIẾP làm bề rộng/cao trục ngang của panel —
+// trước đây bị Math.min() ghi đè âm thầm nên slider "không có tác dụng".
+int crossFixed = Math.max(size, iconSize + panelPadding);
+int pw = edge.equals("bottom") ? Math.min(computedMain, ctx.getResources().getDisplayMetrics().widthPixels) : crossFixed;
+int ph = edge.equals("bottom") ? crossFixed : Math.min(computedMain, ctx.getResources().getDisplayMetrics().heightPixels);
         WindowManager.LayoutParams pp = new WindowManager.LayoutParams(pw, ph, wmType,
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
             | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
@@ -143,41 +174,63 @@ public class PanelEngine {
         renderPanelGrid(idx);
     }
 
-    private void renderPanelGrid(int idx) {
-        String px = "panel" + (idx+1) + "_";
-        LinearLayout panel = panels[idx];
-        if (panel == null) return;
-        final int myGen = renderGen[idx].incrementAndGet();
-        int cols = prefs.getInt(px+"cols", 4);
-        GridLayout grid = new GridLayout(ctx);
-        grid.setColumnCount(cols);
-        grid.setPadding(30, 40, 30, 40);
-        panel.addView(grid);
-        List<String> apps = csvToList(prefs.getString(px+"apps", ""));
-        List<String> acts = csvToList(prefs.getString(px+"acts", ""));
-        new Thread(() -> {
-            List<Object[]> loaded = new ArrayList<>();
-            for (String pkg : apps) {
-                if (renderGen[idx].get() != myGen) return;
-                Drawable d = getCachedIcon(pkg);
-                if (d != null) loaded.add(new Object[]{d, "APP", pkg});
-            }
-            if (renderGen[idx].get() != myGen) return;
-            for (String act : acts) loaded.add(new Object[]{null, "ACT", act});
-            if (renderGen[idx].get() != myGen) return;
-            new Handler(Looper.getMainLooper()).post(() -> {
-                if (renderGen[idx].get() != myGen || panels[idx] != panel) return;
-                for (Object[] item : loaded) {
-                    View cell = buildCell(px, (String) item[1], item[0], (String) item[2]);
-                    GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
-                    lp.width = 130; lp.height = 130; lp.setMargins(12,12,12,12);
-                    cell.setLayoutParams(lp);
-                    grid.addView(cell);
-                }
-            });
-        }).start();
-    }
+    // Hằng số DÙNG CHUNG giữa renderPanelGrid() và buildPanelIfEnabled() —
+// đảm bảo kích thước panel tính toán KHỚP 100% với kích thước cell thực vẽ,
+// đây chính là fix gốc cho lỗi lệch trái/phải khi đổi icon size.
+private static final int CELL_INNER_PAD = 16; // đệm 8px mỗi bên quanh icon
+private static final int CELL_MARGIN   = 16;  // margin 8px mỗi bên giữa các cell
+private static final int CELL_EXTRA    = CELL_INNER_PAD + CELL_MARGIN; // = 32
 
+private void renderPanelGrid(int idx) {
+    String px = "panel" + (idx+1) + "_";
+    LinearLayout panel = panels[idx];
+    if (panel == null) return;
+    final int myGen = renderGen[idx].incrementAndGet();
+    int cols = Math.max(1, prefs.getInt(px+"cols", 4));
+    int iconSize = prefs.getInt(px+"icon_size", 110);
+    int cellSize = iconSize + CELL_INNER_PAD;
+
+    // Dùng LinearLayout nhiều HÀNG thay GridLayout — mỗi hàng Gravity.CENTER_HORIZONTAL
+    // để hàng cuối (thiếu ô) tự canh giữa, KHÔNG dồn về bên trái như GridLayout mặc định
+    // (đây là nguyên nhân "bên phải trống nhiều hơn bên trái").
+    LinearLayout gridContainer = new LinearLayout(ctx);
+    gridContainer.setOrientation(LinearLayout.VERTICAL);
+    gridContainer.setGravity(Gravity.CENTER_HORIZONTAL);
+    gridContainer.setPadding(16, 24, 16, 24);
+    panel.addView(gridContainer);
+
+    List<String> apps = csvToList(prefs.getString(px+"apps", ""));
+    List<String> acts = csvToList(prefs.getString(px+"acts", ""));
+    new Thread(() -> {
+        List<Object[]> loaded = new ArrayList<>();
+        for (String pkg : apps) {
+            if (renderGen[idx].get() != myGen) return;
+            Drawable d = getCachedIcon(pkg);
+            if (d != null) loaded.add(new Object[]{d, "APP", pkg});
+        }
+        if (renderGen[idx].get() != myGen) return;
+        for (String act : acts) loaded.add(new Object[]{null, "ACT", act});
+        if (renderGen[idx].get() != myGen) return;
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (renderGen[idx].get() != myGen || panels[idx] != panel) return;
+            LinearLayout row = null;
+            for (int i = 0; i < loaded.size(); i++) {
+                if (i % cols == 0) {
+                    row = new LinearLayout(ctx);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    row.setGravity(Gravity.CENTER_HORIZONTAL);
+                    gridContainer.addView(row);
+                }
+                Object[] item = loaded.get(i);
+                View cell = buildCell(px, (String) item[1], item[0], (String) item[2]);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(cellSize, LinearLayout.LayoutParams.WRAP_CONTENT);
+                lp.setMargins(8, 8, 8, 8);
+                cell.setLayoutParams(lp);
+                row.addView(cell);
+            }
+        });
+    }).start();
+}
     private Drawable getCachedIcon(String pkg) {
         synchronized (iconCache) { Drawable c = iconCache.get(pkg); if (c != null) return c; }
         try {
@@ -196,29 +249,42 @@ public class PanelEngine {
     }
     private String getActionLabelForPanel(String key) { String l = ACT_LABEL_MAP.get(key); return l != null ? l : key; }
     private float getPanelIconRadiusPercent(String px) {
-        int shape = prefs.getInt(px + "icon_shape", 0);
-        switch (shape) { case 1: return 0.28f; case 2: return 0.5f; case 3: return 0.12f; default: return 0.5f; }
-    }
-
+    int shape = prefs.getInt(px + "icon_shape", 0);
+    // Chỉ còn 2 lựa chọn: 0 = Tròn (bo 50%), 1 = Vuông bo góc kiểu Google (~22%)
+    return shape == 1 ? 0.22f : 0.5f;
+}
     private View wrapIconCell(String px, Drawable icon, String emoji, float radiusPct, View.OnClickListener onClick, String label) {
-        int iconSize = prefs.getInt(px + "icon_size", 110);
-        LinearLayout box = new LinearLayout(ctx); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER);
-        View core;
-        if (icon != null) { ImageView iv = new ImageView(ctx); iv.setImageDrawable(icon); core = iv; }
-        else {
-            TextView tv = new TextView(ctx); tv.setText(emoji); tv.setTextSize(26); tv.setGravity(Gravity.CENTER);
-            GradientDrawable bg = new GradientDrawable(); bg.setColor(Color.argb(180,96,125,139)); tv.setBackground(bg);
-            core = tv;
+    int iconSize = prefs.getInt(px + "icon_size", 110);
+    LinearLayout box = new LinearLayout(ctx); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER);
+
+    // "Đế" đồng nhất kích thước + nền trắng mờ cho MỌI icon (kể cả icon adaptive có
+    // viền trong suốt sẵn) -> khắc phục lỗi "một số app vẫn vuông / pebble bị méo"
+    // do icon gốc mỗi app có vùng trong suốt khác nhau.
+    FrameLayout shapeBox = new FrameLayout(ctx);
+    GradientDrawable backdrop = new GradientDrawable();
+    backdrop.setColor(Color.argb(235, 255, 255, 255));
+    backdrop.setCornerRadius(iconSize * radiusPct);
+    shapeBox.setBackground(backdrop);
+    shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
+    shapeBox.setClipToOutline(true);
+    shapeBox.setOutlineProvider(new ViewOutlineProvider() {
+        public void getOutline(View v, Outline o) {
+            int w = v.getWidth()==0?iconSize:v.getWidth(), h = v.getHeight()==0?iconSize:v.getHeight();
+            o.setRoundRect(0,0,w,h, w*radiusPct);
         }
-        core.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
-        core.setClipToOutline(true);
-        core.setOutlineProvider(new ViewOutlineProvider() {
-            public void getOutline(View v, Outline o) {
-                int w = v.getWidth()==0?110:v.getWidth(), h = v.getHeight()==0?110:v.getHeight();
-                o.setRoundRect(0,0,w,h, w*radiusPct);
-            }
-        });
-        box.addView(core);
+    });
+    View core;
+    if (icon != null) {
+        ImageView iv = new ImageView(ctx);
+        iv.setImageDrawable(icon);
+        iv.setScaleType(ImageView.ScaleType.CENTER_CROP); // lấp đầy đế -> bo góc đều nhau ở mọi app
+        core = iv;
+    } else {
+        TextView tv = new TextView(ctx); tv.setText(emoji); tv.setTextSize(26); tv.setGravity(Gravity.CENTER);
+        core = tv;
+    }
+    shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
+    box.addView(shapeBox);
         boolean showName = prefs.getInt(px + "show_name", 0) == 1;
         if (showName && label != null) {
             TextView tvLabel = new TextView(ctx); tvLabel.setText(label); tvLabel.setTextColor(Color.WHITE);

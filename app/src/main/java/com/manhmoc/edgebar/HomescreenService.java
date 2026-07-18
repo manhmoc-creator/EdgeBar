@@ -734,6 +734,8 @@ isCountingDown = false;
     if (panelEngine != null) panelEngine.togglePanel(idx);
 } else if ("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED".equals(action)) {
     if (panelEngine != null) panelEngine.rebuildAll();
+} else if ("com.manhmoc.edgebar.PANEL_TEST_TOGGLE".equals(action)) {
+    if (panelEngine != null) panelEngine.setForceTest(i.getIntExtra("idx",0), i.getBooleanExtra("on", false));
 }
     } // đóng onReceive()
 };
