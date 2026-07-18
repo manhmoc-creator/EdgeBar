@@ -1614,39 +1614,35 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
 }
     private void buildPanelBody(LinearLayout panelBody) {
     panelBody.removeAllViews();
-    // GUARD: đảm bảo currentPanelIdx luôn nằm trong 1..3, tránh px rác kiểu "panel0_"/"panel4_"
     if (currentPanelIdx < 1 || currentPanelIdx > 3) currentPanelIdx = 1;
     String px = "panel" + currentPanelIdx + "_";
-    final String fpx = px; // biến final riêng để lambda bên dưới có thể "capture" hợp lệ
+    final String fpx = px;
     panelBody.addView(createSectionTitle("📱 EDGE PANEL " + currentPanelIdx));
     CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable Panel " + currentPanelIdx, "Bật Panel " + currentPanelIdx));
     cbEn.setTextColor(Color.WHITE); cbEn.setChecked(prefs.getBoolean(px+"en", false));
     cbEn.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(fpx+"en", c).apply(); syncPanelService(); });
-    designSliderContainer.addView(cbEn);
+    panelBody.addView(cbEn);
 
-    designSliderContainer.addView(createComboDropdown(T("Position","Vị trí"), px+"pos", PANEL_POS_NAMES, 0));
-    designSliderContainer.addView(createComboDropdown(T("Color","Màu"), px+"color_idx", PANEL_COLOR_NAMES, 0));
+    panelBody.addView(createComboDropdown(T("Position","Vị trí"), px+"pos", PANEL_POS_NAMES, 0));
+    panelBody.addView(createComboDropdown(T("Color","Màu"), px+"color_idx", PANEL_COLOR_NAMES, 0));
 
-    // MỚI — nới rộng biên độ + thêm 3 slider mới:
-designSliderContainer.addView(createSlider(T("Size (width)","Kích thước (chiều rộng)"), px+"size", 2500, 700));
-designSliderContainer.addView(createSlider(T("Handle Thickness","Độ dày tay cầm"), px+"thick", 120, 40));
-designSliderContainer.addView(createSlider(T("Core Transparency","Độ trong suốt lõi"), px+"alpha", 255, 200));
-designSliderContainer.addView(createSlider(T("Handle Border Alpha","Độ đậm viền tay cầm"), px+"handle_alpha", 255, 255));
-designSliderContainer.addView(createSlider(T("Handle Corner Radius","Độ bo góc tay cầm"), px+"handle_radius", 100, 28));
-designSliderContainer.addView(createSlider(T("Panel Corner Radius","Độ bo góc Panel"), px+"panel_radius", 60, 24));
-designSliderContainer.addView(createSlider(T("Icon Size","Kích thước Icon"), px+"icon_size", 180, 110));
+    panelBody.addView(createSlider(T("Size (width)","Kích thước (chiều rộng)"), px+"size", 2500, 700));
+    panelBody.addView(createSlider(T("Handle Thickness","Độ dày tay cầm"), px+"thick", 120, 40));
+    panelBody.addView(createSlider(T("Core Transparency","Độ trong suốt lõi"), px+"alpha", 255, 200));
+    panelBody.addView(createSlider(T("Handle Border Alpha","Độ đậm viền tay cầm"), px+"handle_alpha", 255, 255));
+    panelBody.addView(createSlider(T("Handle Corner Radius","Độ bo góc tay cầm"), px+"handle_radius", 100, 28));
+    panelBody.addView(createSlider(T("Panel Corner Radius","Độ bo góc Panel"), px+"panel_radius", 60, 24));
+    panelBody.addView(createSlider(T("Icon Size","Kích thước Icon"), px+"icon_size", 180, 110));
 
-designSliderContainer.addView(createSlider(T("Columns (1-9)","Số cột (1-9)"), px+"cols", 9, 4));
-// Tap-to-cycle: KHÔNG dùng Spinner (tốn layout inflate) — chỉ 1 TextView + click listener,
-// nhẹ hơn cho Pixel 2XL vì không tạo dropdown popup window mỗi lần mở
-String[] iconShapes = {"Tròn", "Vuông Bo Nhẹ (Squircle)", "Bầu Dục (Pebble)", "Bo Góc Vuông"};
-designSliderContainer.addView(createCycleRow(T("Icon Style","Kiểu Icon"),
-    px+"icon_shape", iconShapes));
+    panelBody.addView(createSlider(T("Columns (1-9)","Số cột (1-9)"), px+"cols", 9, 4));
+    String[] iconShapes = {"Tròn", "Vuông Bo Nhẹ (Squircle)", "Bầu Dục (Pebble)", "Bo Góc Vuông"};
+    panelBody.addView(createCycleRow(T("Icon Style","Kiểu Icon"),
+        px+"icon_shape", iconShapes));
 
-String[] yesNo = {T("No","Không"), T("Yes","Có")};
-designSliderContainer.addView(createCycleRow(T("Show Name","Hiện Tên"),
-    px+"show_name", yesNo));
-    // Nút chọn App — y hệt luồng +NEW EB nhưng đa chọn
+    String[] yesNo = {T("No","Không"), T("Yes","Có")};
+    panelBody.addView(createCycleRow(T("Show Name","Hiện Tên"),
+        px+"show_name", yesNo));
+
     int appCount = prefs.getString(px+"apps","").isEmpty() ? 0 : prefs.getString(px+"apps","").split(",").length;
     Button btnApps = new Button(this);
     btnApps.setText("📱 " + T("APPS","ỨNG DỤNG") + " (" + appCount + ")");
@@ -1654,18 +1650,16 @@ designSliderContainer.addView(createCycleRow(T("Show Name","Hiện Tên"),
     LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(-1,-2); bLp.setMargins(0,15,0,10);
     btnApps.setLayoutParams(bLp);
     btnApps.setOnClickListener(v -> showPanelMultiPicker(fpx+"apps", true));
-    designSliderContainer.addView(btnApps);
+    panelBody.addView(btnApps);
 
-    // Nút chọn Hành động — dùng lại ACT_LABS/ACT_KEYS có sẵn (toggle flash, screenshot,...)
     int actCount = prefs.getString(px+"acts","").isEmpty() ? 0 : prefs.getString(px+"acts","").split(",").length;
     Button btnActs = new Button(this);
     btnActs.setText("⚡ " + T("ACTIONS","HÀNH ĐỘNG") + " (" + actCount + ")");
     btnActs.setBackground(getRounded("#E91E63", 20f)); btnActs.setTextColor(Color.WHITE);
     btnActs.setLayoutParams(bLp);
     btnActs.setOnClickListener(v -> showPanelMultiPicker(fpx+"acts", false));
-    designSliderContainer.addView(btnActs);
+    panelBody.addView(btnActs);
 }
-
 // isApp=true: multi-select app picker (ghi CSV package name)
 // isApp=false: multi-select action picker (ghi CSV action key, dùng ACT_KEYS/ACT_LABS có sẵn)
 private void showPanelMultiPicker(String prefKey, boolean isApp) {
