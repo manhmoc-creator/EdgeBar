@@ -16,16 +16,5 @@ public class BootReceiver extends BroadcastReceiver {
             if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(svc);
             else c.startService(svc);
         }
-        boolean anyPanel = prefs.getBoolean("panel1_en", false) || prefs.getBoolean("panel2_en", false) || prefs.getBoolean("panel3_en", false);
-if (anyPanel) {
-    Intent svc2 = new Intent(c, SidePanelService.class);
-    if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(svc2);
-    else c.startService(svc2);
-        }
-        if (prefs.getBoolean("panel_en", false)) {
-    Intent svc = new Intent(c, SidePanelService.class);
-    if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(svc);
-    else c.startService(svc);
-     }
-   }
+    }
 }

@@ -65,7 +65,7 @@ private boolean fpRegistered = false;
     private KeyguardManager km;
     private SharedPreferences prefs;
     private Vibrator vibrator;
-
+    private PanelEngine panelEngine; 
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
@@ -171,9 +171,15 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     if (AccessibleHomeService.isRunning) drawAccessibleHome();
     refreshFingerprintRegistration(); // ← THÊM: thử đăng ký lại đúng lúc cảm biến rảnh nhất
     updateVisibility();
+// CODE MỚI — thay bằng:
+} else if ("com.manhmoc.edgebar.OPEN_PANEL_REQUEST".equals(act)) {
+    int idx = i.getIntExtra("idx", 0);
+    if (panelEngine != null) panelEngine.togglePanel(idx);
+} else if ("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED".equals(act)) {
+    if (panelEngine != null) panelEngine.rebuildAll();
 } else {
-            updateVisibility();
-        }
+    updateVisibility();
+       }
     }
 };
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() {
@@ -334,6 +340,9 @@ if (inv) {
         filter.addAction(Intent.ACTION_USER_PRESENT);
         filter.addAction("com.manhmoc.edgebar.TEST_ANIM");
         filter.addAction("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS");
+        // CODE MỚI — thêm ngay dưới dòng addAction cuối:
+filter.addAction("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
+filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
         registerReceiver(stateReceiver, filter);
         if (Build.VERSION.SDK_INT >= 33)
             registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"), Context.RECEIVER_NOT_EXPORTED);
@@ -378,7 +387,7 @@ if (inv) {
         if (AccessibleHomeService.isRunning) drawAccessibleHome();
 
         createFloatingBars();
-
+        panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ true); // EdgeBarService
 // V19.12.3.6.13: Set tường minh flag — một số ROM không parse đúng
 // canRequestFingerprintGestures từ XML, gây fpController không bao giờ
 // nhận gesture dù đăng ký callback "thành công".
@@ -601,6 +610,14 @@ private void checkAndEngageMorseLock(String pkg, String locklist) {
                     else startService(recIntent);
                     break;
                 }
+                // THÊM case mới trong switch(a) của cả 2 file:
+case "OPEN_PANEL_1": case "OPEN_PANEL_2": case "OPEN_PANEL_3": {
+    int idx = Character.getNumericValue(a.charAt(a.length()-1)) - 1;
+    Intent op = new Intent("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
+    op.putExtra("idx", idx);
+    sendBroadcast(op);
+    break;
+}
                 default: if (a.startsWith("INTENT_")) fireIntent(a.split("_")[1]); break;
             }
         } catch (Exception e) {}
@@ -823,6 +840,8 @@ private void refreshFingerprintRegistration() {
                 wm.updateViewLayout(corners[i], p);
             }
         }
+// CODE MỚI — thêm ngay trước dấu } đóng hàm:
+if (panelEngine != null) panelEngine.rebuildAll();
     }
 
     private class SidebarTouchListener implements View.OnTouchListener {

@@ -32,7 +32,7 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs; private boolean isVi;
     private String T(String en, String vi) { return isVi ? vi : en; }
     
-    private String[] ACT_KEYS = new String[37]; private String[] ACT_LABS = new String[37];
+    private String[] ACT_KEYS = new String[40]; private String[] ACT_LABS = new String[40];
     private String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; private String[] BAR_NAMES; 
     private String[] CORNERS = {"br", "bl", "tr", "tl"}; private String[] CORNER_NAMES;
     private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; private String[] COLOR_NAMES;
@@ -57,7 +57,7 @@ private int currentPanelIdx = 1; // 1-3, panel nào đang được chỉnh trong
 private Button fab;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.15 - Edge Panel Genesis"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.16 - The Panel Trinity"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -113,13 +113,12 @@ private List<String[]> getAppListCached() {
     @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
 
     private void reloadActionLabels() {
-String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD", "LAUNCH_APP"};
-String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"), T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm"), T("Launch App", "Mở Ứng dụng")};
+String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD", "LAUNCH_APP", "OPEN_PANEL_1", "OPEN_PANEL_2", "OPEN_PANEL_3"};
+String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"), T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm"), T("Launch App", "Mở Ứng dụng"), T("Open Panel 1","Mở Panel 1"), T("Open Panel 2","Mở Panel 2"), T("Open Panel 3","Mở Panel 3")};
 // V19.12.3.6.10: bỏ SCREEN_ON khỏi danh sách chung — chỉ còn dùng riêng cho VOLKEY
-for(int i=0; i<17; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
-for(int i=1; i<=15; i++) { ACT_KEYS[16+i]="INTENT_"+i; ACT_LABS[16+i] = prefs.getString("intent_"+i+"_name", "Intent " + i); }
-for(int i=1; i<=5; i++) { ACT_KEYS[31+i]="MACRO_"+i; ACT_LABS[31+i] = prefs.getString("macro_"+i+"_name", "Macro " + i); }
-
+for(int i=0; i<20; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
+for(int i=1; i<=15; i++) { ACT_KEYS[19+i]="INTENT_"+i; ACT_LABS[19+i] = prefs.getString("intent_"+i+"_name", "Intent " + i); }
+for(int i=1; i<=5; i++) { ACT_KEYS[34+i]="MACRO_"+i; ACT_LABS[34+i] = prefs.getString("macro_"+i+"_name", "Macro " + i); }
 // V19.12.3.6.10: bỏ vol_on/vol_off khỏi component chung (đã có không gian VOLKEY riêng)
 ALL_COMP_NAMES = new String[]{T("Bottom Right", "Thanh Đáy Phải"), T("Bottom Left", "Thanh Đáy Trái"), T("Top Right", "Thanh Cạnh Phải"), T("Top Left", "Thanh Cạnh Trái"), T("Top Center", "Thanh Đỉnh Giữa"), T("Corner BR", "Góc Viền Đáy Phải"), T("Corner BL", "Góc Viền Đáy Trái"), T("Corner TR", "Góc Viền Đỉnh Phải"), T("Corner TL", "Góc Viền Đỉnh Trái"), T("Fingerprint", "Vân Tay"), T("Launch App", "Lắng nghe Mở Ứng dụng")};
 VOLKEY_COMP_NAMES = new String[]{T("Volume Up Button", "Nút Tăng Âm Lượng"), T("Volume Down Button", "Nút Giảm Âm Lượng")};
@@ -1621,8 +1620,16 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
     CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable Panel " + currentPanelIdx, "Bật Panel " + currentPanelIdx));
     cbEn.setTextColor(Color.WHITE); cbEn.setChecked(prefs.getBoolean(px+"en", false));
     cbEn.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(fpx+"en", c).apply(); syncPanelService(); });
-    panelBody.addView(cbEn);
-
+    // THAY vào panelBody.addView(cbEn); — thêm option chế độ hiển thị
+panelBody.addView(createCycleRow(T("Visibility","Chế độ hiện"),
+    px+"vis", new String[]{"Cục Bộ", "Toàn Cục"}));
+TextView tvVisNote = new TextView(this);
+tvVisNote.setTextColor(Color.parseColor("#777777")); tvVisNote.setTextSize(11);
+tvVisNote.setText(T(
+  "IAO: chỉ hiện trong Homeb, không cần Trợ năng, ổn định hơn.\nANY: hiện cả khi khoá máy/Homacc, cần Trợ năng, dễ bị hệ thống kill hơn.",
+  "IAO: chỉ hiện ở Homeb, không cần Trợ năng, ổn định hơn.\nANY: hiện cả khi khoá máy/Homacc, cần Trợ năng, dễ bị hệ thống kill hơn."));
+tvVisNote.setPadding(0,0,0,15);
+panelBody.addView(tvVisNote);
     panelBody.addView(createComboDropdown(T("Position","Vị trí"), px+"pos", PANEL_POS_NAMES, 0));
     panelBody.addView(createComboDropdown(T("Color","Màu"), px+"color_idx", PANEL_COLOR_NAMES, 0));
 
@@ -1701,12 +1708,8 @@ String[] keys = keysList.toArray(new String[0]);
             }).setNegativeButton("HỦY", null).show();
     }
 }
-
+// CODE MỚI — thay toàn bộ hàm bằng:
 private void syncPanelService() {
-    boolean anyEn = prefs.getBoolean("panel1_en",false) || prefs.getBoolean("panel2_en",false) || prefs.getBoolean("panel3_en",false);
-    Intent i = new Intent(this, SidePanelService.class);
-    if (anyEn) { if (Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i); }
-    else stopService(i);
     sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
 }
     // ==================== CÁC HÀM PHỤ TRỢ CHUNG ====================

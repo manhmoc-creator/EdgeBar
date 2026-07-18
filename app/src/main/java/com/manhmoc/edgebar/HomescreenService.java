@@ -73,7 +73,7 @@ private boolean isAccessibleHomeShortcutOn() {
     private SharedPreferences prefs;
     private KeyguardManager km;
     private Vibrator vibrator;
-
+    private PanelEngine panelEngine;
     private boolean isMorseLockActive = false;
     private String currentMorseAttempt = "";
     private int morseFailCount = 0;
@@ -704,7 +704,6 @@ isCountingDown = false;
 } else if (action.equals(Intent.ACTION_USER_PRESENT)) {
     dismissedPkg = "";
     new Handler().postDelayed(() -> {
-        // Lấy package thực tế tại đúng thời điểm sau độ trễ render của hệ thống
         String activePkg = currentForegroundPkg;
         boolean isRealHome = activePkg.isEmpty()
                 || activePkg.contains("launcher")
@@ -730,8 +729,13 @@ isCountingDown = false;
             }
         }
     }, 600);
+} else if ("com.manhmoc.edgebar.OPEN_PANEL_REQUEST".equals(action)) {
+    int idx = i.getIntExtra("idx", 0);
+    if (panelEngine != null) panelEngine.togglePanel(idx);
+} else if ("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED".equals(action)) {
+    if (panelEngine != null) panelEngine.rebuildAll();
 }
-    }
+    } // đóng onReceive()
 };
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -786,6 +790,9 @@ filter.addAction("com.manhmoc.edgebar.TOGGLE_MORSE");
 filter.addAction("com.manhmoc.edgebar.UNINSTALL_DETECTED");
 filter.addAction("com.manhmoc.edgebar.MORSE_OS_RECENTS_SHOW");
 filter.addAction("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE");
+// CODE MỚI — thêm 2 dòng:
+filter.addAction("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
+filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
         if (Build.VERSION.SDK_INT >= 33)
             registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         else
@@ -876,6 +883,8 @@ try { wm.addView(morseContainer, bgP); } catch (Exception e) {}
         // HYBRID HOME V2: Lắng nghe thay đổi Accessibility bằng ContentObserver
         // Tiết kiệm pin tối đa: KHÔNG polling, KHÔNG query mỗi frame
         // Chỉ cập nhật type overlay khi user thực sự bật/tắt Accessibility
+        // CODE MỚI — thêm dòng này:
+panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ false); // HomescreenService = IAO
         accStateCached = isAccOn(); // đọc 1 lần lúc khởi động
         accObserver = new android.database.ContentObserver(
                 new Handler(android.os.Looper.getMainLooper())) {
@@ -1363,6 +1372,8 @@ sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
             return true;
         });
     }
+// CODE MỚI — thêm ngay trước dấu } đóng hàm:
+if (panelEngine != null) panelEngine.rebuildAll();
 } // Khối lệnh trên kết thúc an toàn, hàm updateVisibility() tiếp tục chạy bên dưới
        boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
@@ -1678,6 +1689,14 @@ for (String a : acts) {
                     else startService(recIntent);
                     break;
                 }
+                // THÊM case mới trong switch(a) của cả 2 file:
+case "OPEN_PANEL_1": case "OPEN_PANEL_2": case "OPEN_PANEL_3": {
+    int idx = Character.getNumericValue(a.charAt(a.length()-1)) - 1;
+    Intent op = new Intent("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
+    op.putExtra("idx", idx);
+    sendBroadcast(op);
+    break;
+}
                 default:
                     if (a.startsWith("INTENT_")) fireIntent(a.split("_")[1]);
                     break;
