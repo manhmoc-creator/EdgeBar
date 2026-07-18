@@ -103,12 +103,12 @@ private List<String[]> getAppListCached() {
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     
     private void refreshPreview() { 
-        boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); 
-        boolean pMorse = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==2);
-        prefs.edit().putBoolean("preview_lock", pLock).putBoolean("preview_morse", pMorse).apply(); 
-        Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); 
-    }
-    
+    boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); 
+    boolean pMorse = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==2);
+    boolean pPanel = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==5);
+    prefs.edit().putBoolean("preview_lock", pLock).putBoolean("preview_morse", pMorse).putBoolean("preview_panel", pPanel).apply(); 
+    Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); 
+}
     @Override protected void onResume() { super.onResume(); refreshPreview(); }
     @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
 
@@ -1643,17 +1643,32 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
     TextView tvHandleTitle = new TextView(this); tvHandleTitle.setText("🎚 HANDLE");
     tvHandleTitle.setTextColor(Color.parseColor("#FFC107")); tvHandleTitle.setTextSize(13); tvHandleTitle.setPadding(0,0,0,10);
     colHandle.addView(tvHandleTitle);
-    colHandle.addView(createCycleRow(T("Visibility","Chế độ hiện"), px+"vis", new String[]{"Cục Bộ", "Toàn Cục"}));
+    colHandle.addView(createCycleRow(T("Visibility","Chế độ hiện Handle"), px+"vis",
+    new String[]{ T("Local (Design only)","Cục Bộ (chỉ trong Design)"), T("Global (Everywhere)","Toàn Cục (mọi nơi)") }));
     colHandle.addView(createMiniSlider(T("Opacity","Độ trong suốt"), px+"handle_alpha", 255, 255));
     colHandle.addView(createMiniSlider(T("Length","Chiều dài"), px+"thick", 400, 200));
     colHandle.addView(createMiniSlider(T("Width","Độ dày"), px+"handle_width", 200, 56));
     colHandle.addView(createMiniSlider(T("Corner Radius","Bo góc"), px+"handle_radius", 100, 28));
-
+Button btnSyncHandle = new Button(this);
+btnSyncHandle.setText("🔗 " + T("Sync = Panel","Đồng bộ = Panel"));
+btnSyncHandle.setBackground(getRounded("#FFC107", 15f));
+btnSyncHandle.setTextColor(Color.BLACK);
+btnSyncHandle.setTextSize(11);
+LinearLayout.LayoutParams syncLp = new LinearLayout.LayoutParams(-1, -2); syncLp.setMargins(0,10,0,0);
+btnSyncHandle.setLayoutParams(syncLp);
+btnSyncHandle.setOnClickListener(v -> {
+    int panelWidth = prefs.getInt(fpx+"size", 700);
+    int panelLength = prefs.getInt(fpx+"panel_length", 700);
+    prefs.edit().putInt(fpx+"handle_width", panelWidth).putInt(fpx+"thick", panelLength).apply();
+    Toast.makeText(this, T("Handle synced!","Đã đồng bộ Handle theo Panel!"), Toast.LENGTH_SHORT).show();
+    buildPanelBody(panelBody);
+});
+colHandle.addView(btnSyncHandle);
     // --- PANEL ---
     TextView tvPanelTitle = new TextView(this); tvPanelTitle.setText("🗂 PANEL");
     tvPanelTitle.setTextColor(Color.parseColor("#00E5FF")); tvPanelTitle.setTextSize(13); tvPanelTitle.setPadding(0,0,0,10);
     colPanel.addView(tvPanelTitle);
-    String[] iconShapes = {"Tròn", "Google", "Pebble"};
+    String[] iconShapes = {"Tròn", "Google (bo vuông)", "Pebble", "Hệ thống"};
     colPanel.addView(createCycleRow(T("Icon Style","Kiểu Icon"), px+"icon_shape", iconShapes));
     String[] yesNo = {T("No","Không"), T("Yes","Có")};
     colPanel.addView(createCycleRow(T("Show Name","Hiện Tên"), px+"show_name", yesNo));
@@ -1675,18 +1690,6 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
     TextView tvCommonTitle = new TextView(this); tvCommonTitle.setText("⚙ COMMON");
     tvCommonTitle.setTextColor(Color.parseColor("#4CAF50")); tvCommonTitle.setTextSize(13); tvCommonTitle.setPadding(0,0,0,10);
     common.addView(tvCommonTitle);
-
-    LinearLayout previewRow = new LinearLayout(this); previewRow.setOrientation(LinearLayout.HORIZONTAL); previewRow.setGravity(Gravity.CENTER_VERTICAL);
-    TextView tvPrev = new TextView(this); tvPrev.setText(T("Preview (Handle/Panel)","Xem thử (Tay cầm/Panel)")); tvPrev.setTextColor(Color.WHITE); tvPrev.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-    CheckBox cbTest = new CheckBox(this);
-    cbTest.setOnCheckedChangeListener((v, c) -> {
-        Intent t = new Intent("com.manhmoc.edgebar.PANEL_TEST_TOGGLE");
-        t.putExtra("idx", fIdxTest); t.putExtra("on", c);
-        sendBroadcast(t);
-    });
-    previewRow.addView(tvPrev); previewRow.addView(cbTest);
-    common.addView(previewRow);
-
     CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable Panel " + currentPanelIdx, "Bật Panel " + currentPanelIdx));
     cbEn.setTextColor(Color.WHITE); cbEn.setChecked(prefs.getBoolean(px+"en", false));
     cbEn.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(fpx+"en", c).apply(); syncPanelService(); });
@@ -1724,13 +1727,20 @@ private LinearLayout createMiniSlider(String t, String k, int max, int def) {
     LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,4,0,4);
     TextView tv = new TextView(this); tv.setTextColor(Color.parseColor("#BBBBBB")); tv.setTextSize(11);
     tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv);
-    SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def));
+
+    LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
+    Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(16);
+    Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(16);
+    SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
     sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
         public void onProgressChanged(SeekBar s, int p, boolean b){ tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); }
         public void onStartTrackingTouch(SeekBar s){}
         public void onStopTrackingTouch(SeekBar s){}
     });
-    l.addView(sb);
+    btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); });
+    btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) sb.setProgress(p+1); });
+    row.addView(btnMinus); row.addView(sb); row.addView(btnPlus);
+    l.addView(row);
     return l;
 }
 // isApp=true: multi-select app picker (ghi CSV package name)

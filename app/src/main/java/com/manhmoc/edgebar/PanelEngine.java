@@ -1,6 +1,6 @@
 package com.manhmoc.edgebar;
 import android.app.*; import android.content.*; import android.graphics.*;
-import android.graphics.drawable.Drawable; import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.Drawable; import android.graphics.drawable.AdaptiveIconDrawable; import android.graphics.drawable.GradientDrawable;
 import android.os.*; import android.view.*; import android.view.animation.*; import android.widget.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -115,8 +115,9 @@ private boolean[] forceTestOn = new boolean[3]; // Bật/tắt từ checkbox TES
             int contentMain = (edge.equals("bottom") ? cols : rows) * cellPx + 48;
             int userLength = prefs.getInt(px + "panel_length", contentMain);
             int mainAxis = Math.max(userLength, contentMain);
-            int cross = Math.max(size, iconSize + 48);
-
+            boolean showNameOn = prefs.getInt(px+"show_name", 0) == 1;
+int labelExtra = showNameOn ? 40 : 0;
+int cross = Math.max(size, iconSize + 48 + labelExtra);
             WindowManager.LayoutParams pp = (WindowManager.LayoutParams) panel.getLayoutParams();
             if (edge.equals("bottom")) {
                 pp.height = cross;
@@ -145,20 +146,27 @@ private String computeSignature(int idx) {
         + prefs.getString(px+"apps","") + "|" + prefs.getString(px+"acts","") + "|"
         + forceTestOn[idx];
 }
-
 private boolean shouldPanelExistNow(int idx) {
     String px = "panel" + (idx+1) + "_";
-    if (forceTestOn[idx]) return true; // Checkbox TEST ép hiện ngay tại đây để xem trước
     if (!prefs.getBoolean(px+"en", false)) return false;
-    int visMode = prefs.getInt(px+"vis", 0);
-    boolean shouldBuildHere = isAnyMode ? (visMode == 1) : (visMode == 0);
-    if (!shouldBuildHere) return false;
+
+    int visMode = prefs.getInt(px+"vis", 0); // 0 = Cục Bộ, 1 = Toàn Cục
+
+    if (visMode == 0) {
+        // Cục Bộ: KHÔNG hiện thật ở Home/Lock — chỉ hiện khi user đang đứng
+        // trong tab Design > Panel để xem thử (đồng bộ preview_lock/preview_morse)
+        return prefs.getBoolean("preview_panel", false);
+    }
+
+    // Toàn Cục: hiện thật ở cả Lock lẫn Home. Panel nội dung không đổi gì cả.
     boolean locked = km != null && km.isKeyguardLocked();
-    if (isAnyMode) { if (!locked && !AccessibleHomeService.isRunning) return false; }
-    else { if (locked) return false; }
+    if (isAnyMode) {
+        if (!locked && !AccessibleHomeService.isRunning) return false;
+    } else {
+        if (locked) return false;
+    }
     return true;
 }
-
 // Gọi từ Activity (qua broadcast) khi bật/tắt checkbox TEST
 public void setForceTest(int idx, boolean on) {
     forceTestOn[idx] = on;
@@ -237,7 +245,9 @@ int contentMain = (edge.equals("bottom") ? cols : rows) * cellPx + panelPadding;
 int userLength = prefs.getInt(px+"panel_length", contentMain);
 int mainAxis = Math.max(userLength, contentMain);
 // "size" = Width (bề dày panel), giữ nguyên key cũ để không phá cấu hình đã lưu
-int crossFixed = Math.max(size, iconSize + panelPadding);
+boolean showNameOn = prefs.getInt(px+"show_name", 0) == 1;
+int labelExtra = showNameOn ? 40 : 0; // chừa thêm chỗ hiển thị tên
+int crossFixed = Math.max(size, iconSize + panelPadding + labelExtra);
 int pw = edge.equals("bottom") ? Math.min(mainAxis, ctx.getResources().getDisplayMetrics().widthPixels) : crossFixed;
 int ph = edge.equals("bottom") ? crossFixed : Math.min(mainAxis, ctx.getResources().getDisplayMetrics().heightPixels);
         WindowManager.LayoutParams pp = new WindowManager.LayoutParams(pw, ph, wmType,
@@ -340,49 +350,64 @@ private void renderPanelGrid(int idx) {
     int iconSize = prefs.getInt(px + "icon_size", 110);
     LinearLayout box = new LinearLayout(ctx); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER);
 
-    FrameLayout shapeBox = new FrameLayout(ctx);
-    GradientDrawable backdrop = new GradientDrawable();
-    backdrop.setColor(Color.argb(235, 255, 255, 255));
-    backdrop.setCornerRadii(new float[]{
-        iconSize*radii[0], iconSize*radii[0],
-        iconSize*radii[1], iconSize*radii[1],
-        iconSize*radii[2], iconSize*radii[2],
-        iconSize*radii[3], iconSize*radii[3]
-    });
-    shapeBox.setBackground(backdrop);
-    shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
-    shapeBox.setClipToOutline(true);
-    // Outline.setRoundRect chỉ nhận 1 bán kính — dùng bán kính lớn nhất để clip mượt,
-    // tránh Path-clip tốn GPU trên Adreno 540. Lệch nhỏ ở góc là đánh đổi chấp nhận được.
-    final float maxR = Math.max(Math.max(radii[0],radii[1]), Math.max(radii[2],radii[3]));
-    shapeBox.setOutlineProvider(new ViewOutlineProvider() {
-        public void getOutline(View v, Outline o) {
-            int w = v.getWidth()==0?iconSize:v.getWidth(), h = v.getHeight()==0?iconSize:v.getHeight();
-            o.setRoundRect(0,0,w,h, w*maxR);
-        }
-    });
-    View core;
-    if (icon != null) {
+    int shape = prefs.getInt(px + "icon_shape", 0);
+    boolean useSystemMask = shape == 3 && icon != null
+        && Build.VERSION.SDK_INT >= 26 && icon instanceof AdaptiveIconDrawable;
+
+    if (useSystemMask) {
+        // Dùng thẳng AdaptiveIconDrawable gốc — để chính OS tự vẽ đúng hình dạng
+        // thiết bị (vuông tròn/squircle/pebble tuỳ máy) thay vì mình tự đoán path.
+        // Vừa khớp pixel-perfect, vừa ÍT lệnh vẽ hơn clipToOutline thủ công
+        // => nhẹ GPU hơn cho Adreno 540 trên Pixel 2XL.
         ImageView iv = new ImageView(ctx);
         iv.setImageDrawable(icon);
-        iv.setScaleType(ImageView.ScaleType.CENTER_CROP); // lấp đầy đế -> bo góc đều nhau ở mọi app
-        core = iv;
+        iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
+        box.addView(iv);
     } else {
-        TextView tv = new TextView(ctx); tv.setText(emoji); tv.setTextSize(26); tv.setGravity(Gravity.CENTER);
-        core = tv;
-    }
-    shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
-    box.addView(shapeBox);
-        boolean showName = prefs.getInt(px + "show_name", 0) == 1;
-        if (showName && label != null) {
-            TextView tvLabel = new TextView(ctx); tvLabel.setText(label); tvLabel.setTextColor(Color.WHITE);
-            tvLabel.setTextSize(9); tvLabel.setMaxLines(1); tvLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            tvLabel.setGravity(Gravity.CENTER); box.addView(tvLabel);
+        FrameLayout shapeBox = new FrameLayout(ctx);
+        GradientDrawable backdrop = new GradientDrawable();
+        backdrop.setColor(Color.argb(235, 255, 255, 255));
+        backdrop.setCornerRadii(new float[]{
+            iconSize*radii[0], iconSize*radii[0],
+            iconSize*radii[1], iconSize*radii[1],
+            iconSize*radii[2], iconSize*radii[2],
+            iconSize*radii[3], iconSize*radii[3]
+        });
+        shapeBox.setBackground(backdrop);
+        shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
+        shapeBox.setClipToOutline(true);
+        final float maxR = Math.max(Math.max(radii[0],radii[1]), Math.max(radii[2],radii[3]));
+        shapeBox.setOutlineProvider(new ViewOutlineProvider() {
+            public void getOutline(View v, Outline o) {
+                int w = v.getWidth()==0?iconSize:v.getWidth(), h = v.getHeight()==0?iconSize:v.getHeight();
+                o.setRoundRect(0,0,w,h, w*maxR);
+            }
+        });
+        View core;
+        if (icon != null) {
+            ImageView iv = new ImageView(ctx);
+            iv.setImageDrawable(icon);
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            core = iv;
+        } else {
+            TextView tv = new TextView(ctx); tv.setText(emoji); tv.setTextSize(26); tv.setGravity(Gravity.CENTER);
+            core = tv;
         }
-        box.setOnClickListener(onClick);
-        return box;
+        shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
+        box.addView(shapeBox);
     }
 
+    boolean showName = prefs.getInt(px + "show_name", 0) == 1;
+    if (showName && label != null) {
+        TextView tvLabel = new TextView(ctx); tvLabel.setText(label); tvLabel.setTextColor(Color.WHITE);
+        tvLabel.setTextSize(9); tvLabel.setMaxLines(1); tvLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        tvLabel.setGravity(Gravity.CENTER);
+        tvLabel.setLayoutParams(new LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT));
+        box.addView(tvLabel);
+    }
+    box.setOnClickListener(onClick);
+    return box;
+}
     private View buildCell(String px, String type, Object payload, String ref) {
         float[] radii = getPanelIconCornerRadii(px);
         if (type.equals("APP")) {
