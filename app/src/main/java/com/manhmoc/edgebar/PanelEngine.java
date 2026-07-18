@@ -346,6 +346,36 @@ private void renderPanelGrid(int idx) {
         if (shape == 2) return new float[]{0.55f, 0.28f, 0.5f, 0.32f}; // TL,TR,BR,BL
         return new float[]{0.5f, 0.5f, 0.5f, 0.5f};
     }
+// Ngũ giác bo góc mềm — dùng Outline.setConvexPath() để clip, KHÔNG cần custom Drawable
+// riêng, tận dụng luôn backdrop trắng sẵn có -> nhẹ GPU, không thêm object vẽ nào.
+private Path buildRoundedPentagon(int size) {
+    Path path = new Path();
+    int n = 5;
+    float cx = size / 2f, cy = size / 2f;
+    float r = size / 2f * 0.98f;
+    float cornerR = size * 0.16f; // độ bo mềm ở mỗi đỉnh
+    float[] xs = new float[n], ys = new float[n];
+    for (int i = 0; i < n; i++) {
+        double angle = Math.toRadians(-90 + i * 72);
+        xs[i] = (float) (cx + r * Math.cos(angle));
+        ys[i] = (float) (cy + r * Math.sin(angle));
+    }
+    for (int i = 0; i < n; i++) {
+        int prev = (i - 1 + n) % n, next = (i + 1) % n;
+        float vx1 = xs[i] - xs[prev], vy1 = ys[i] - ys[prev];
+        float len1 = (float) Math.hypot(vx1, vy1);
+        float ax = xs[i] - vx1 / len1 * Math.min(cornerR, len1 / 2);
+        float ay = ys[i] - vy1 / len1 * Math.min(cornerR, len1 / 2);
+        float vx2 = xs[next] - xs[i], vy2 = ys[next] - ys[i];
+        float len2 = (float) Math.hypot(vx2, vy2);
+        float bx = xs[i] + vx2 / len2 * Math.min(cornerR, len2 / 2);
+        float by = ys[i] + vy2 / len2 * Math.min(cornerR, len2 / 2);
+        if (i == 0) path.moveTo(ax, ay); else path.lineTo(ax, ay);
+        path.quadTo(xs[i], ys[i], bx, by);
+    }
+    path.close();
+    return path;
+}
     private View wrapIconCell(String px, Drawable icon, String emoji, float[] radii, View.OnClickListener onClick, String label) {
     int iconSize = prefs.getInt(px + "icon_size", 110);
     LinearLayout box = new LinearLayout(ctx); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER);
@@ -376,13 +406,23 @@ private void renderPanelGrid(int idx) {
         shapeBox.setBackground(backdrop);
         shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
         shapeBox.setClipToOutline(true);
-        final float maxR = Math.max(Math.max(radii[0],radii[1]), Math.max(radii[2],radii[3]));
-        shapeBox.setOutlineProvider(new ViewOutlineProvider() {
-            public void getOutline(View v, Outline o) {
-                int w = v.getWidth()==0?iconSize:v.getWidth(), h = v.getHeight()==0?iconSize:v.getHeight();
-                o.setRoundRect(0,0,w,h, w*maxR);
-            }
-        });
+        if (shape == 2) {
+            // Pebble -> ngũ giác bo góc mềm, path convex nên setConvexPath dùng được từ API 21
+            shapeBox.setOutlineProvider(new ViewOutlineProvider() {
+                public void getOutline(View v, Outline o) {
+                    int w = v.getWidth()==0?iconSize:v.getWidth();
+                    o.setConvexPath(buildRoundedPentagon(w));
+                }
+            });
+        } else {
+            final float maxR = Math.max(Math.max(radii[0],radii[1]), Math.max(radii[2],radii[3]));
+            shapeBox.setOutlineProvider(new ViewOutlineProvider() {
+                public void getOutline(View v, Outline o) {
+                    int w = v.getWidth()==0?iconSize:v.getWidth(), h = v.getHeight()==0?iconSize:v.getHeight();
+                    o.setRoundRect(0,0,w,h, w*maxR);
+                }
+            });
+        }
         View core;
         if (icon != null) {
             ImageView iv = new ImageView(ctx);

@@ -110,8 +110,7 @@ private List<String[]> getAppListCached() {
     Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); 
 }
     @Override protected void onResume() { super.onResume(); refreshPreview(); }
-    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
-
+    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).putBoolean("preview_panel", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
     private void reloadActionLabels() {
 String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD", "LAUNCH_APP", "OPEN_PANEL_1", "OPEN_PANEL_2", "OPEN_PANEL_3"};
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"), T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm"), T("Launch App", "Mở Ứng dụng"), T("Open Panel 1","Mở Panel 1"), T("Open Panel 2","Mở Panel 2"), T("Open Panel 3","Mở Panel 3")};
@@ -1619,52 +1618,39 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
     final int fIdxTest = currentPanelIdx - 1;
     panelBody.addView(createSectionTitle("📱 EDGE PANEL " + currentPanelIdx));
 
-    // ===== HÀNG 2 CỘT: HANDLE (trái) | PANEL (phải) =====
-    LinearLayout twoCol = new LinearLayout(this);
-    twoCol.setOrientation(LinearLayout.HORIZONTAL);
+    // ===== HÀNG NGANG 3 CỘT: HANDLE | PANEL | COMMON =====
+    // Pixel 2XL opt: HorizontalScrollView chỉ measure 1 lần khi build tab,
+    // không đụng lại mỗi lần đổi slider (đã tách liveUpdateCosmetic() riêng),
+    // nên overhead layout gần như zero sau lần dựng đầu.
+    HorizontalScrollView hScroll = new HorizontalScrollView(this);
+    hScroll.setHorizontalScrollBarEnabled(true);
+    hScroll.setScrollbarFadingEnabled(false); // LUÔN hiện thanh cuộn — fix vấn đề "không thấy scrollbar"
+    hScroll.setScrollBarSize((int)(4 * getResources().getDisplayMetrics().density));
+    hScroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
 
-    LinearLayout colHandle = new LinearLayout(this);
-    colHandle.setOrientation(LinearLayout.VERTICAL);
-    LinearLayout.LayoutParams colLp1 = new LinearLayout.LayoutParams(0, -2, 1f);
-    colLp1.setMargins(0,0,8,0);
-    colHandle.setLayoutParams(colLp1);
-    colHandle.setBackground(getRounded("#1A1A1A", 20f));
-    colHandle.setPadding(20,20,20,20);
+    LinearLayout threeCol = new LinearLayout(this);
+    threeCol.setOrientation(LinearLayout.HORIZONTAL);
+    threeCol.setPadding(0, 0, 0, 20); // chừa chỗ cho thanh cuộn ngang không đè lên nội dung
 
-    LinearLayout colPanel = new LinearLayout(this);
-    colPanel.setOrientation(LinearLayout.VERTICAL);
-    LinearLayout.LayoutParams colLp2 = new LinearLayout.LayoutParams(0, -2, 1f);
-    colLp2.setMargins(8,0,0,0);
-    colPanel.setLayoutParams(colLp2);
-    colPanel.setBackground(getRounded("#1A1A1A", 20f));
-    colPanel.setPadding(20,20,20,20);
+    int colW = (int) (Math.min(
+        getResources().getDisplayMetrics().widthPixels * 0.78f, // mỗi cột ~78% màn hình -> vừa đủ hé cột kế bên, gợi ý "còn nữa"
+        720 // trần tối đa, tránh cột quá to trên tablet
+    ));
 
-    // --- HANDLE ---
+    // --- CỘT 1: HANDLE ---
+    LinearLayout colHandle = newPanelColumn(colW);
     TextView tvHandleTitle = new TextView(this); tvHandleTitle.setText("🎚 HANDLE");
     tvHandleTitle.setTextColor(Color.parseColor("#FFC107")); tvHandleTitle.setTextSize(13); tvHandleTitle.setPadding(0,0,0,10);
     colHandle.addView(tvHandleTitle);
     colHandle.addView(createCycleRow(T("Visibility","Chế độ hiện Handle"), px+"vis",
-    new String[]{ T("Local (Design only)","Cục Bộ (chỉ trong Design)"), T("Global (Everywhere)","Toàn Cục (mọi nơi)") }));
+        new String[]{ T("Local (Design only)","Cục Bộ (chỉ trong Design)"), T("Global (Everywhere)","Toàn Cục (mọi nơi)") }));
     colHandle.addView(createMiniSlider(T("Opacity","Độ trong suốt"), px+"handle_alpha", 255, 255));
     colHandle.addView(createMiniSlider(T("Length","Chiều dài"), px+"thick", 400, 200));
     colHandle.addView(createMiniSlider(T("Width","Độ dày"), px+"handle_width", 200, 56));
     colHandle.addView(createMiniSlider(T("Corner Radius","Bo góc"), px+"handle_radius", 100, 28));
-Button btnSyncHandle = new Button(this);
-btnSyncHandle.setText("🔗 " + T("Sync = Panel","Đồng bộ = Panel"));
-btnSyncHandle.setBackground(getRounded("#FFC107", 15f));
-btnSyncHandle.setTextColor(Color.BLACK);
-btnSyncHandle.setTextSize(11);
-LinearLayout.LayoutParams syncLp = new LinearLayout.LayoutParams(-1, -2); syncLp.setMargins(0,10,0,0);
-btnSyncHandle.setLayoutParams(syncLp);
-btnSyncHandle.setOnClickListener(v -> {
-    int panelWidth = prefs.getInt(fpx+"size", 700);
-    int panelLength = prefs.getInt(fpx+"panel_length", 700);
-    prefs.edit().putInt(fpx+"handle_width", panelWidth).putInt(fpx+"thick", panelLength).apply();
-    Toast.makeText(this, T("Handle synced!","Đã đồng bộ Handle theo Panel!"), Toast.LENGTH_SHORT).show();
-    buildPanelBody(panelBody);
-});
-colHandle.addView(btnSyncHandle);
-    // --- PANEL ---
+
+    // --- CỘT 2: PANEL ---
+    LinearLayout colPanel = newPanelColumn(colW);
     TextView tvPanelTitle = new TextView(this); tvPanelTitle.setText("🗂 PANEL");
     tvPanelTitle.setTextColor(Color.parseColor("#00E5FF")); tvPanelTitle.setTextSize(13); tvPanelTitle.setPadding(0,0,0,10);
     colPanel.addView(tvPanelTitle);
@@ -1677,33 +1663,37 @@ colHandle.addView(btnSyncHandle);
     colPanel.addView(createMiniSlider(T("Width","Bề dày"), px+"size", 2500, 700));
     colPanel.addView(createMiniSlider(T("Corner Radius","Bo góc"), px+"panel_radius", 60, 24));
 
-    twoCol.addView(colHandle); twoCol.addView(colPanel);
-    panelBody.addView(twoCol);
-
-    // ===== COMMON (dưới cùng, full width) =====
-    LinearLayout common = new LinearLayout(this);
-    common.setOrientation(LinearLayout.VERTICAL);
-    common.setBackground(getRounded("#222222", 20f));
-    common.setPadding(20,20,20,20);
-    LinearLayout.LayoutParams commonLp = new LinearLayout.LayoutParams(-1,-2); commonLp.setMargins(0,15,0,0);
-    common.setLayoutParams(commonLp);
+    // --- CỘT 3: COMMON ---
+    LinearLayout colCommon = newPanelColumn(colW);
     TextView tvCommonTitle = new TextView(this); tvCommonTitle.setText("⚙ COMMON");
     tvCommonTitle.setTextColor(Color.parseColor("#4CAF50")); tvCommonTitle.setTextSize(13); tvCommonTitle.setPadding(0,0,0,10);
-    common.addView(tvCommonTitle);
-    CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable Panel " + currentPanelIdx, "Bật Panel " + currentPanelIdx));
-    cbEn.setTextColor(Color.WHITE); cbEn.setChecked(prefs.getBoolean(px+"en", false));
-    cbEn.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(fpx+"en", c).apply(); syncPanelService(); });
-    common.addView(cbEn);
+    colCommon.addView(tvCommonTitle);
 
-    common.addView(createComboDropdown(T("Position","Vị trí"), px+"pos", PANEL_POS_NAMES, 0));
-    common.addView(createComboDropdown(T("Color","Màu"), px+"color_idx", PANEL_COLOR_NAMES, 0));
-    common.addView(createMiniSlider(T("Icon Size","Kích thước Icon"), px+"icon_size", 180, 110));
-    common.addView(createMiniSlider(T("Columns (1-9)","Số cột"), px+"cols", 9, 4));
+    LinearLayout previewRow = new LinearLayout(this); previewRow.setOrientation(LinearLayout.HORIZONTAL); previewRow.setGravity(Gravity.CENTER_VERTICAL);
+    TextView tvPrev = new TextView(this); tvPrev.setText(T("Preview","Xem thử")); tvPrev.setTextColor(Color.WHITE); tvPrev.setTextSize(12); tvPrev.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+    CheckBox cbTest = new CheckBox(this);
+    cbTest.setOnCheckedChangeListener((v, c) -> {
+        Intent t = new Intent("com.manhmoc.edgebar.PANEL_TEST_TOGGLE");
+        t.putExtra("idx", fIdxTest); t.putExtra("on", c);
+        sendBroadcast(t);
+    });
+    previewRow.addView(tvPrev); previewRow.addView(cbTest);
+    colCommon.addView(previewRow);
+
+    CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable Panel " + currentPanelIdx, "Bật Panel " + currentPanelIdx));
+    cbEn.setTextColor(Color.WHITE); cbEn.setTextSize(13); cbEn.setChecked(prefs.getBoolean(px+"en", false));
+    cbEn.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(fpx+"en", c).apply(); syncPanelService(); });
+    colCommon.addView(cbEn);
+
+    colCommon.addView(createComboDropdown(T("Position","Vị trí"), px+"pos", PANEL_POS_NAMES, 0));
+    colCommon.addView(createComboDropdown(T("Color","Màu"), px+"color_idx", PANEL_COLOR_NAMES, 0));
+    colCommon.addView(createMiniSlider(T("Icon Size","Kích thước Icon"), px+"icon_size", 180, 110));
+    colCommon.addView(createMiniSlider(T("Columns (1-9)","Số cột"), px+"cols", 9, 4));
 
     LinearLayout pickRow = new LinearLayout(this); pickRow.setOrientation(LinearLayout.HORIZONTAL); pickRow.setPadding(0,10,0,0);
     int appCount = prefs.getString(px+"apps","").isEmpty() ? 0 : prefs.getString(px+"apps","").split(",").length;
     Button btnApps = new Button(this);
-    btnApps.setText("📱 " + T("APPS","ỨNG DỤNG") + " (" + appCount + ")");
+    btnApps.setText("📱 (" + appCount + ")");
     btnApps.setBackground(getRounded("#00E5FF", 20f)); btnApps.setTextColor(Color.BLACK);
     LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(0,-2,1f); bLp.setMargins(0,0,10,0);
     btnApps.setLayoutParams(bLp);
@@ -1711,17 +1701,41 @@ colHandle.addView(btnSyncHandle);
 
     int actCount = prefs.getString(px+"acts","").isEmpty() ? 0 : prefs.getString(px+"acts","").split(",").length;
     Button btnActs = new Button(this);
-    btnActs.setText("⚡ " + T("ACTIONS","HÀNH ĐỘNG") + " (" + actCount + ")");
+    btnActs.setText("⚡ (" + actCount + ")");
     btnActs.setBackground(getRounded("#E91E63", 20f)); btnActs.setTextColor(Color.WHITE);
     btnActs.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     btnActs.setOnClickListener(v -> showPanelMultiPicker(fpx+"acts", false));
 
     pickRow.addView(btnApps); pickRow.addView(btnActs);
-    common.addView(pickRow);
+    colCommon.addView(pickRow);
 
-    panelBody.addView(common);
+    threeCol.addView(colHandle);
+    threeCol.addView(colPanel);
+    threeCol.addView(colCommon);
+    hScroll.addView(threeCol);
+    panelBody.addView(hScroll);
+
+    // Gợi ý trực quan: chỉ báo nhỏ cho biết có thể vuốt ngang xem thêm cột
+    TextView tvSwipeHint = new TextView(this);
+    tvSwipeHint.setText("← " + T("Swipe to see more","Vuốt ngang để xem thêm") + " →");
+    tvSwipeHint.setTextColor(Color.GRAY); tvSwipeHint.setTextSize(11); tvSwipeHint.setGravity(Gravity.CENTER);
+    tvSwipeHint.setPadding(0, 8, 0, 0);
+    panelBody.addView(tvSwipeHint);
 }
 
+// Cột dùng chung cho layout 3-cột ngang — width CỐ ĐỊNH (không dùng weight=1f)
+// vì trong HorizontalScrollView, weight bị bỏ qua/measure sai; phải set width tường minh.
+// Pixel 2XL opt: background bo góc dùng lại getRounded() cache sẵn logic, không tạo Drawable dư thừa.
+private LinearLayout newPanelColumn(int widthPx) {
+    LinearLayout col = new LinearLayout(this);
+    col.setOrientation(LinearLayout.VERTICAL);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(widthPx, LinearLayout.LayoutParams.WRAP_CONTENT);
+    lp.setMargins(0, 0, 16, 0);
+    col.setLayoutParams(lp);
+    col.setBackground(getRounded("#1A1A1A", 20f));
+    col.setPadding(20, 20, 20, 20);
+    return col;
+}
 // Slider gọn cho layout 2-cột: KHÔNG có nút +/- để tiết kiệm bề ngang.
 private LinearLayout createMiniSlider(String t, String k, int max, int def) {
     LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,4,0,4);
@@ -1847,82 +1861,85 @@ private void syncPanelService() {
     sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
 }
     // ==================== CÁC HÀM PHỤ TRỢ CHUNG ====================
- private void showAppPickerDialog() {
-        android.os.UserManager um =
-            (android.os.UserManager) getSystemService(Context.USER_SERVICE);
-        android.content.pm.LauncherApps la =
-            (android.content.pm.LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
+    private void showAppPickerDialog() {
+    List<String[]> combined = getAppListCached();
+    String currentLocklist = prefs.getString("locklist", "");
+    final java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>();
+    for (String s : currentLocklist.split(",")) if (!s.trim().isEmpty()) selected.add(s.trim());
 
-        final List<String> allPkgs = new ArrayList<>();
-        final List<String> allNames = new ArrayList<>();
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
 
-        try {
-            List<android.os.UserHandle> profiles = um.getUserProfiles();
-            for (android.os.UserHandle profile : profiles) {
-                List<android.content.pm.LauncherActivityInfo> activities =
-                    la.getActivityList(null, profile);
-                for (android.content.pm.LauncherActivityInfo info : activities) {
-                    String pkg = info.getApplicationInfo().packageName;
-                    String name = info.getLabel().toString();
-                    // Gắn tag [Island] nếu không phải profile chính
-                    if (!profile.equals(android.os.Process.myUserHandle())) {
-                        name += " [Island]";
-                    }
-                    if (!allPkgs.contains(pkg)) {
-                        allPkgs.add(pkg);
-                        allNames.add(name);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            // Fallback: dùng queryIntentActivities nếu LauncherApps lỗi
-            Intent intent = new Intent(Intent.ACTION_MAIN);
-            intent.addCategory(Intent.CATEGORY_LAUNCHER);
-            List<ResolveInfo> apps = getPackageManager().queryIntentActivities(intent, 0);
-            for (ResolveInfo app : apps) {
-                String pkg = app.activityInfo.packageName;
-                if (!allPkgs.contains(pkg)) {
-                    allPkgs.add(pkg);
-                    allNames.add(app.loadLabel(getPackageManager()).toString());
-                }
-            }
+    TextView title = new TextView(this); title.setText(T("Choose App to Lock", "Chọn ứng dụng cần khóa"));
+    title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(18); title.setPadding(0,0,0,20);
+    root.addView(title);
+
+    EditText etSearch = new EditText(this);
+    etSearch.setHint("🔍 " + T("Search...","Tìm kiếm..."));
+    etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
+    etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
+    root.addView(etSearch);
+
+    ListView lv = new ListView(this);
+    lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    root.addView(lv);
+
+    final List<String[]> shown = new ArrayList<>(combined);
+    BaseAdapter adapter = new BaseAdapter() {
+        @Override public int getCount() { return shown.size(); }
+        @Override public Object getItem(int p) { return shown.get(p); }
+        @Override public long getItemId(int p) { return p; }
+        @Override public View getView(int p, View cv, ViewGroup parent) {
+            LinearLayout row = new LinearLayout(MainActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(20,22,20,22);
+            String[] item = shown.get(p);
+            CheckBox cb = new CheckBox(MainActivity.this);
+            cb.setChecked(selected.contains(item[1])); cb.setClickable(false);
+            TextView tv = new TextView(MainActivity.this);
+            tv.setText(item[0]); tv.setTextColor(Color.WHITE);
+            tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+            row.addView(cb); row.addView(tv);
+            row.setOnClickListener(v -> {
+                if (selected.contains(item[1])) selected.remove(item[1]); else selected.add(item[1]);
+                cb.setChecked(selected.contains(item[1]));
+            });
+            return row;
         }
+    };
+    lv.setAdapter(adapter);
 
-        // Sort theo tên (đồng bộ cả 2 list)
-        List<String[]> combined = new ArrayList<>();
-        for (int i = 0; i < allPkgs.size(); i++)
-            combined.add(new String[]{allNames.get(i), allPkgs.get(i)});
-        combined.sort((a, b) -> a[0].compareToIgnoreCase(b[0]));
-        allNames.clear(); allPkgs.clear();
-        for (String[] pair : combined) { allNames.add(pair[0]); allPkgs.add(pair[1]); }
+    etSearch.addTextChangedListener(new android.text.TextWatcher(){
+        public void afterTextChanged(android.text.Editable s){
+            String q = s.toString().trim().toLowerCase();
+            shown.clear();
+            for (String[] it : combined) if (q.isEmpty() || it[0].toLowerCase().contains(q)) shown.add(it);
+            adapter.notifyDataSetChanged();
+        }
+        public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+        public void onTextChanged(CharSequence s,int a,int b,int c){}
+    });
 
-        String currentLocklist = prefs.getString("locklist", "");
-        final boolean[] checked = new boolean[allPkgs.size()];
-        for (int i = 0; i < allPkgs.size(); i++)
-            checked[i] = currentLocklist.contains(allPkgs.get(i));
+    LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,20,0,0);
+    Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY")); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+    Button bSave = new Button(this); bSave.setText(T("SAVE","LƯU")); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0); bSave.setLayoutParams(slp);
+    footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
 
-        new AlertDialog.Builder(this)
-            .setTitle(T("Choose App to Lock", "Chọn ứng dụng cần khóa"))
-            .setMultiChoiceItems(
-                allNames.toArray(new String[0]), checked,
-                (dialog, which, isChecked) -> checked[which] = isChecked)
-            .setPositiveButton("LƯU", (d, w) -> {
-                List<String> selected = new ArrayList<>();
-                for (int i = 0; i < allPkgs.size(); i++)
-                    if (checked[i]) selected.add(allPkgs.get(i));
-                String newLocklist = TextUtils.join(",", selected);
-                prefs.edit().putString("locklist", newLocklist).apply();
-                // Cập nhật EditText nếu đang hiển thị
-                try {
-                    ViewGroup rootView = (ViewGroup)
-                        ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
-                    EditText et = rootView.findViewWithTag("locklist_input");
-                    if (et != null) et.setText(newLocklist);
-                } catch (Exception ignored) {}
-            })
-            .setNegativeButton("HỦY", null)
-            .show();
-    }
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave.setOnClickListener(v -> {
+        String newLocklist = TextUtils.join(",", selected);
+        prefs.edit().putString("locklist", newLocklist).apply();
+        try {
+            ViewGroup rootView = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
+            EditText et = rootView.findViewWithTag("locklist_input");
+            if (et != null) et.setText(newLocklist);
+        } catch (Exception ignored) {}
+        d.dismiss();
+    });
+
+    d.setContentView(root); d.show();
+}
     // GIỮ NGUYÊN bản cũ showSingleAppPickerDialog(EditText target) để không phá VOLKEY/TILE cũ,
 // nhưng đổi phần thân để dùng cache thay vì quét lại mỗi lần:
 private void showSingleAppPickerDialog(EditText target) {
@@ -1932,12 +1949,59 @@ private void showSingleAppPickerDialog(EditText target) {
 // THÊM MỚI — bản chuẩn dùng callback, thay hẳn kiểu "dummy EditText" đang bug ở VolKey
 private void showSingleAppPickerDialogCallback(java.util.function.Consumer<String> onPicked) {
     List<String[]> combined = getAppListCached();
-    String[] nameArr = new String[combined.size()];
-    String[] pkgArr = new String[combined.size()];
-    for (int i = 0; i < combined.size(); i++) { nameArr[i] = combined.get(i)[0]; pkgArr[i] = combined.get(i)[1]; }
-    new AlertDialog.Builder(this).setTitle(T("Choose one app", "Chọn 1 ứng dụng"))
-        .setItems(nameArr, (d, which) -> onPicked.accept(pkgArr[which]))
-        .setNegativeButton("HỦY", null).show();
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
+
+    TextView title = new TextView(this); title.setText(T("Choose one app", "Chọn 1 ứng dụng"));
+    title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(18); title.setPadding(0,0,0,20);
+    root.addView(title);
+
+    EditText etSearch = new EditText(this);
+    etSearch.setHint("🔍 " + T("Search...","Tìm kiếm..."));
+    etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
+    etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
+    root.addView(etSearch);
+
+    ListView lv = new ListView(this);
+    lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    root.addView(lv);
+
+    final List<String[]> shown = new ArrayList<>(combined);
+    BaseAdapter adapter = new BaseAdapter() {
+        @Override public int getCount() { return shown.size(); }
+        @Override public Object getItem(int p) { return shown.get(p); }
+        @Override public long getItemId(int p) { return p; }
+        @Override public View getView(int p, View cv, ViewGroup parent) {
+            TextView tv = new TextView(MainActivity.this);
+            tv.setText(shown.get(p)[0]); tv.setTextColor(Color.WHITE); tv.setTextSize(15);
+            tv.setPadding(20,26,20,26);
+            return tv;
+        }
+    };
+    lv.setAdapter(adapter);
+    lv.setOnItemClickListener((parent, v, position, id) -> {
+        onPicked.accept(shown.get(position)[1]);
+        d.dismiss();
+    });
+
+    etSearch.addTextChangedListener(new android.text.TextWatcher(){
+        public void afterTextChanged(android.text.Editable s){
+            String q = s.toString().trim().toLowerCase();
+            shown.clear();
+            for (String[] it : combined) if (q.isEmpty() || it[0].toLowerCase().contains(q)) shown.add(it);
+            adapter.notifyDataSetChanged();
+        }
+        public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+        public void onTextChanged(CharSequence s,int a,int b,int c){}
+    });
+
+    Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY"));
+    bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE);
+    bCancel.setOnClickListener(v -> d.dismiss());
+    root.addView(bCancel);
+
+    d.setContentView(root); d.show();
 }
     private void openMorseMapDialog() {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
