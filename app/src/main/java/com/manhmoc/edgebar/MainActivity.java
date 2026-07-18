@@ -1617,28 +1617,12 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
     final String fpx = px;
     final int fIdxTest = currentPanelIdx - 1;
     panelBody.addView(createSectionTitle("📱 EDGE PANEL " + currentPanelIdx));
-
-    // ===== HÀNG NGANG 3 CỘT: HANDLE | PANEL | COMMON =====
-    // Pixel 2XL opt: HorizontalScrollView chỉ measure 1 lần khi build tab,
-    // không đụng lại mỗi lần đổi slider (đã tách liveUpdateCosmetic() riêng),
-    // nên overhead layout gần như zero sau lần dựng đầu.
-    HorizontalScrollView hScroll = new HorizontalScrollView(this);
-    hScroll.setHorizontalScrollBarEnabled(true);
-    hScroll.setScrollbarFadingEnabled(false); // LUÔN hiện thanh cuộn — fix vấn đề "không thấy scrollbar"
-    hScroll.setScrollBarSize((int)(4 * getResources().getDisplayMetrics().density));
-    hScroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-
-    LinearLayout threeCol = new LinearLayout(this);
-    threeCol.setOrientation(LinearLayout.HORIZONTAL);
-    threeCol.setPadding(0, 0, 0, 20); // chừa chỗ cho thanh cuộn ngang không đè lên nội dung
-
-    int colW = (int) (Math.min(
-        getResources().getDisplayMetrics().widthPixels * 0.78f, // mỗi cột ~78% màn hình -> vừa đủ hé cột kế bên, gợi ý "còn nữa"
-        720 // trần tối đa, tránh cột quá to trên tablet
-    ));
-
-    // --- CỘT 1: HANDLE ---
-    LinearLayout colHandle = newPanelColumn(colW);
+    // ===== VERTICAL STACK: HANDLE → PANEL → COMMON =====
+// Pixel 2XL opt: bỏ hẳn HorizontalScrollView (mỗi frame cuộn ngang tốn thêm
+// 1 lượt measure/layout phụ trên Adreno 540). Dùng LinearLayout dọc đơn giản
+// -> chỉ 1 lần layout pass, các drawer/slider bên trong full-width nên
+// SeekBar/Spinner không còn bị bóp nhỏ, không cần scroll kép.
+LinearLayout colHandle = newPanelColumn();
     TextView tvHandleTitle = new TextView(this); tvHandleTitle.setText("🎚 HANDLE");
     tvHandleTitle.setTextColor(Color.parseColor("#FFC107")); tvHandleTitle.setTextSize(13); tvHandleTitle.setPadding(0,0,0,10);
     colHandle.addView(tvHandleTitle);
@@ -1650,7 +1634,7 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
     colHandle.addView(createMiniSlider(T("Corner Radius","Bo góc"), px+"handle_radius", 100, 28));
 
     // --- CỘT 2: PANEL ---
-    LinearLayout colPanel = newPanelColumn(colW);
+    LinearLayout colPanel = newPanelColumn();
     TextView tvPanelTitle = new TextView(this); tvPanelTitle.setText("🗂 PANEL");
     tvPanelTitle.setTextColor(Color.parseColor("#00E5FF")); tvPanelTitle.setTextSize(13); tvPanelTitle.setPadding(0,0,0,10);
     colPanel.addView(tvPanelTitle);
@@ -1664,21 +1648,10 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
     colPanel.addView(createMiniSlider(T("Corner Radius","Bo góc"), px+"panel_radius", 60, 24));
 
     // --- CỘT 3: COMMON ---
-    LinearLayout colCommon = newPanelColumn(colW);
+    LinearLayout colCommon = newPanelColumn();
     TextView tvCommonTitle = new TextView(this); tvCommonTitle.setText("⚙ COMMON");
     tvCommonTitle.setTextColor(Color.parseColor("#4CAF50")); tvCommonTitle.setTextSize(13); tvCommonTitle.setPadding(0,0,0,10);
     colCommon.addView(tvCommonTitle);
-
-    LinearLayout previewRow = new LinearLayout(this); previewRow.setOrientation(LinearLayout.HORIZONTAL); previewRow.setGravity(Gravity.CENTER_VERTICAL);
-    TextView tvPrev = new TextView(this); tvPrev.setText(T("Preview","Xem thử")); tvPrev.setTextColor(Color.WHITE); tvPrev.setTextSize(12); tvPrev.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-    CheckBox cbTest = new CheckBox(this);
-    cbTest.setOnCheckedChangeListener((v, c) -> {
-        Intent t = new Intent("com.manhmoc.edgebar.PANEL_TEST_TOGGLE");
-        t.putExtra("idx", fIdxTest); t.putExtra("on", c);
-        sendBroadcast(t);
-    });
-    previewRow.addView(tvPrev); previewRow.addView(cbTest);
-    colCommon.addView(previewRow);
 
     CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable Panel " + currentPanelIdx, "Bật Panel " + currentPanelIdx));
     cbEn.setTextColor(Color.WHITE); cbEn.setTextSize(13); cbEn.setChecked(prefs.getBoolean(px+"en", false));
@@ -1709,12 +1682,9 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
     pickRow.addView(btnApps); pickRow.addView(btnActs);
     colCommon.addView(pickRow);
 
-    threeCol.addView(colHandle);
-    threeCol.addView(colPanel);
-    threeCol.addView(colCommon);
-    hScroll.addView(threeCol);
-    panelBody.addView(hScroll);
-
+    panelBody.addView(colHandle);
+panelBody.addView(colPanel);
+panelBody.addView(colCommon);
     // Gợi ý trực quan: chỉ báo nhỏ cho biết có thể vuốt ngang xem thêm cột
     TextView tvSwipeHint = new TextView(this);
     tvSwipeHint.setText("← " + T("Swipe to see more","Vuốt ngang để xem thêm") + " →");
@@ -1722,18 +1692,14 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
     tvSwipeHint.setPadding(0, 8, 0, 0);
     panelBody.addView(tvSwipeHint);
 }
-
-// Cột dùng chung cho layout 3-cột ngang — width CỐ ĐỊNH (không dùng weight=1f)
-// vì trong HorizontalScrollView, weight bị bỏ qua/measure sai; phải set width tường minh.
-// Pixel 2XL opt: background bo góc dùng lại getRounded() cache sẵn logic, không tạo Drawable dư thừa.
-private LinearLayout newPanelColumn(int widthPx) {
+private LinearLayout newPanelColumn() {
     LinearLayout col = new LinearLayout(this);
     col.setOrientation(LinearLayout.VERTICAL);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(widthPx, LinearLayout.LayoutParams.WRAP_CONTENT);
-    lp.setMargins(0, 0, 16, 0);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
+    lp.setMargins(0, 0, 0, 20); // margin dưới thay vì margin phải
     col.setLayoutParams(lp);
     col.setBackground(getRounded("#1A1A1A", 20f));
-    col.setPadding(20, 20, 20, 20);
+    col.setPadding(30, 20, 30, 20);
     return col;
 }
 // Slider gọn cho layout 2-cột: KHÔNG có nút +/- để tiết kiệm bề ngang.
