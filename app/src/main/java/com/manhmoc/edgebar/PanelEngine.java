@@ -33,24 +33,34 @@ private boolean[] forceTestOn = new boolean[3]; // Bật/tắt từ checkbox TES
     }
 
     public PanelEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode) {
-        this.ctx = ctx; this.wm = wm; this.prefs = prefs; this.isAnyMode = isAnyMode;
-        this.km = (KeyguardManager) ctx.getSystemService(Context.KEYGUARD_SERVICE);
-        for (int i = 0; i < 3; i++) buildPanelIfEnabled(i);
+    this.ctx = ctx; this.wm = wm; this.prefs = prefs; this.isAnyMode = isAnyMode;
+    this.km = (KeyguardManager) ctx.getSystemService(Context.KEYGUARD_SERVICE);
+    for (int i = 0; i < 3; i++) {
+        if (shouldPanelBodyExistNow(i)) buildPanelBody(i);
+        if (shouldHandleExistNow(i)) buildHandle(i);
     }
-
+}
     /** Gọi mỗi khi lock state / accessibility state đổi — decide xem instance này
      *  (Lock hay Homacc, tùy trạng thái) có được phép giữ panel hay không. */
     public void rebuildAll() { for (int i = 0; i < 3; i++) rebuildOne(i); }
     private void rebuildOne(int idx) {
     String sig = computeSignature(idx);
-    boolean shouldExist = shouldPanelExistNow(idx);
-    boolean exists = (handles[idx] != null || panels[idx] != null);
-    // CHỈ rebuild khi thật sự có thay đổi (bật/tắt hoặc đổi cấu hình) —
-    // đây là fix gốc cho lỗi nháy tay cầm mỗi 1-2 giây, đồng thời giảm hẳn
-    // số lần gọi wm.addView/removeView -> tiết kiệm pin/CPU cho Pixel 2XL.
-    if (exists == shouldExist && sig.equals(lastSignature[idx])) return;
-    removePanel(idx);
-    if (shouldExist) buildPanelIfEnabled(idx);
+    boolean sigChanged = !sig.equals(lastSignature[idx]);
+
+    boolean shouldPanel = shouldPanelBodyExistNow(idx);
+    boolean panelExists = panels[idx] != null;
+    if (panelExists != shouldPanel || (panelExists && sigChanged)) {
+        removePanelBody(idx);
+        if (shouldPanel) buildPanelBody(idx);
+    }
+
+    boolean shouldHandle = shouldHandleExistNow(idx);
+    boolean handleExists = handles[idx] != null;
+    if (handleExists != shouldHandle || (handleExists && sigChanged)) {
+        removeHandle(idx);
+        if (shouldHandle) buildHandle(idx);
+    }
+
     lastSignature[idx] = sig;
 }
     /** Gọi từ prefListener khi 1 key panelN_xxx đổi — quyết định rebuild nặng hay update nhẹ. */
@@ -146,19 +156,11 @@ private String computeSignature(int idx) {
         + prefs.getString(px+"apps","") + "|" + prefs.getString(px+"acts","") + "|"
         + forceTestOn[idx];
 }
-private boolean shouldPanelExistNow(int idx) {
+// PANEL BODY: luôn theo đúng vòng đời Lock/Home, KHÔNG phụ thuộc vis nữa
+private boolean shouldPanelBodyExistNow(int idx) {
     String px = "panel" + (idx+1) + "_";
     if (!prefs.getBoolean(px+"en", false)) return false;
 
-    int visMode = prefs.getInt(px+"vis", 0); // 0 = Cục Bộ, 1 = Toàn Cục
-
-    if (visMode == 0) {
-        // Cục Bộ: KHÔNG hiện thật ở Home/Lock — chỉ hiện khi user đang đứng
-        // trong tab Design > Panel để xem thử (đồng bộ preview_lock/preview_morse)
-        return prefs.getBoolean("preview_panel", false);
-    }
-
-    // Toàn Cục: hiện thật ở cả Lock lẫn Home. Panel nội dung không đổi gì cả.
     boolean locked = km != null && km.isKeyguardLocked();
     if (isAnyMode) {
         if (!locked && !AccessibleHomeService.isRunning) return false;
@@ -166,6 +168,20 @@ private boolean shouldPanelExistNow(int idx) {
         if (locked) return false;
     }
     return true;
+}
+
+// HANDLE: Cục Bộ chỉ hiện trong Design; Toàn Cục hiện như panel
+private boolean shouldHandleExistNow(int idx) {
+    String px = "panel" + (idx+1) + "_";
+    if (!prefs.getBoolean(px+"en", false)) return false;
+
+    int visMode = prefs.getInt(px+"vis", 0); // 0 = Cục Bộ, 1 = Toàn Cục
+    if (visMode == 0) {
+        // Cục Bộ: chỉ hiện khi đang preview trong Design (không đụng Lock/Home thật)
+        return prefs.getBoolean("preview_panel", false);
+    }
+    // Toàn Cục: dùng chung điều kiện với panel body
+    return shouldPanelBodyExistNow(idx);
 }
 // Gọi từ Activity (qua broadcast) khi bật/tắt checkbox TEST
 public void setForceTest(int idx, boolean on) {
@@ -179,92 +195,95 @@ public void setForceTest(int idx, boolean on) {
         // unlocked + Homacc chạy -> Homacc giữ panel. Không bao giờ cả hai cùng lúc.
         return true; // panel Lock vs Homacc tự phân biệt qua px+"owner" bên dưới nếu cần mở rộng
     }
-    private void buildPanelIfEnabled(int idx) {
+    private void buildHandle(int idx) {
     String px = "panel" + (idx+1) + "_";
-    if (!shouldPanelExistNow(idx)) return;
-        int pos = prefs.getInt(px+"pos", 0);
-        int colorIdx = prefs.getInt(px+"color_idx", 0);
-        int size = prefs.getInt(px+"size", 700);
-        int thick = prefs.getInt(px+"thick", 40);
-        int alpha = prefs.getInt(px+"alpha", 200);
-        int handleAlpha = prefs.getInt(px+"handle_alpha", 255);
-        float handleR = prefs.getInt(px+"handle_radius", 28);
-        float panelR = prefs.getInt(px+"panel_radius", 24);
-        int color = parsePanelColor(colorIdx);
-        String edge = posToEdge(pos);
-        int gravity = posToGravity(pos);
-        // isAnyMode -> vẽ bằng TYPE_ACCESSIBILITY_OVERLAY (sống được cả khi khoá máy)
-        // !isAnyMode -> TYPE_APPLICATION_OVERLAY (chỉ cần SYSTEM_ALERT_WINDOW, không cần accessibility)
-        int wmType = isAnyMode
-            ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
-            : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+    int pos = prefs.getInt(px+"pos", 0);
+    int color = parsePanelColor(prefs.getInt(px+"color_idx", 0));
+    String edge = posToEdge(pos);
+    int gravity = posToGravity(pos);
+    int thick = prefs.getInt(px+"thick", 40);
+    int handleAlpha = prefs.getInt(px+"handle_alpha", 255);
+    float handleR = prefs.getInt(px+"handle_radius", 28);
+    int handleWidth = prefs.getInt(px+"handle_width", 56);
+    int wmType = isAnyMode
+        ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+        : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 
-        View handle = new View(ctx);
-        GradientDrawable hgd = new GradientDrawable();
-        hgd.setColor(Color.argb(handleAlpha, Color.red(color), Color.green(color), Color.blue(color)));
-        float[] hr = edge.equals("left") ? new float[]{0,0,handleR,handleR,handleR,handleR,0,0}
-            : edge.equals("right") ? new float[]{handleR,handleR,0,0,0,0,handleR,handleR}
-            : new float[]{handleR,handleR,handleR,handleR,0,0,0,0};
-        hgd.setCornerRadii(hr);
-        handle.setBackground(hgd);
-        // Length (thick) = chiều dài tay cầm dọc cạnh; Width (handle_width) = độ dày —
-// cả hai giờ do người dùng chỉnh (trước đây width là hằng số cố định 56).
-int handleWidth = prefs.getInt(px+"handle_width", 56);
-int handleLength = Math.max(80, thick);
-int hw = edge.equals("bottom") ? handleLength : handleWidth;
-int hh = edge.equals("bottom") ? handleWidth : handleLength;
-        WindowManager.LayoutParams hp = new WindowManager.LayoutParams(hw, hh, wmType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
-            PixelFormat.TRANSLUCENT);
-        hp.gravity = gravity;
-        try { wm.addView(handle, hp); handles[idx] = handle; } catch (Exception e) { return; }
-        final int fIdx = idx;
-        handle.setOnClickListener(v -> togglePanel(fIdx));
+    View handle = new View(ctx);
+    GradientDrawable hgd = new GradientDrawable();
+    hgd.setColor(Color.argb(handleAlpha, Color.red(color), Color.green(color), Color.blue(color)));
+    float[] hr = edge.equals("left") ? new float[]{0,0,handleR,handleR,handleR,handleR,0,0}
+        : edge.equals("right") ? new float[]{handleR,handleR,0,0,0,0,handleR,handleR}
+        : new float[]{handleR,handleR,handleR,handleR,0,0,0,0};
+    hgd.setCornerRadii(hr);
+    handle.setBackground(hgd);
+    int handleLength = Math.max(80, thick);
+    int hw = edge.equals("bottom") ? handleLength : handleWidth;
+    int hh = edge.equals("bottom") ? handleWidth : handleLength;
+    WindowManager.LayoutParams hp = new WindowManager.LayoutParams(hw, hh, wmType,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+        PixelFormat.TRANSLUCENT);
+    hp.gravity = gravity;
+    try { wm.addView(handle, hp); handles[idx] = handle; } catch (Exception e) { return; }
+    final int fIdx = idx;
+    handle.setOnClickListener(v -> togglePanel(fIdx));
+}
 
-        LinearLayout panel = new LinearLayout(ctx);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable pgd = new GradientDrawable();
-        pgd.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
-        pgd.setStroke(4, Color.argb(180, Color.red(color), Color.green(color), Color.blue(color)));
-        pgd.setCornerRadius(panelR);
-        panel.setBackground(pgd);
-        panel.setVisibility(View.GONE);
+private void buildPanelBody(int idx) {
+    String px = "panel" + (idx+1) + "_";
+    int pos = prefs.getInt(px+"pos", 0);
+    int color = parsePanelColor(prefs.getInt(px+"color_idx", 0));
+    String edge = posToEdge(pos);
+    int size = prefs.getInt(px+"size", 700);
+    int alpha = prefs.getInt(px+"alpha", 200);
+    float panelR = prefs.getInt(px+"panel_radius", 24);
+    int wmType = isAnyMode
+        ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+        : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 
-        int itemCount = csvToList(prefs.getString(px+"apps","")).size() + csvToList(prefs.getString(px+"acts","")).size();
-if (itemCount == 0) itemCount = 1;
-int cols = Math.max(1, Math.min(prefs.getInt(px+"cols", 4), itemCount));
-int rows = Math.max(1, (int) Math.ceil(itemCount / (float) cols));
-int iconSize = prefs.getInt(px+"icon_size", 110);
-int cellPx = iconSize + CELL_EXTRA;
-int panelPadding = 48;
-int contentMain = (edge.equals("bottom") ? cols : rows) * cellPx + panelPadding;
-// "Length" (panel_length) người dùng chỉnh — không cho nhỏ hơn nội dung cần, tránh cắt icon
-int userLength = prefs.getInt(px+"panel_length", contentMain);
-int mainAxis = Math.max(userLength, contentMain);
-// "size" = Width (bề dày panel), giữ nguyên key cũ để không phá cấu hình đã lưu
-boolean showNameOn = prefs.getInt(px+"show_name", 0) == 1;
-int labelExtra = showNameOn ? 40 : 0; // chừa thêm chỗ hiển thị tên
-int crossFixed = Math.max(size, iconSize + panelPadding + labelExtra);
-int pw = edge.equals("bottom") ? Math.min(mainAxis, ctx.getResources().getDisplayMetrics().widthPixels) : crossFixed;
-int ph = edge.equals("bottom") ? crossFixed : Math.min(mainAxis, ctx.getResources().getDisplayMetrics().heightPixels);
-        WindowManager.LayoutParams pp = new WindowManager.LayoutParams(pw, ph, wmType,
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-            | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
-            PixelFormat.TRANSLUCENT);
-        pp.gravity = edge.equals("left") ? (Gravity.LEFT|Gravity.CENTER_VERTICAL)
-                   : edge.equals("right") ? (Gravity.RIGHT|Gravity.CENTER_VERTICAL)
-                   : (Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
-        try { wm.addView(panel, pp); panels[idx] = panel; } catch (Exception e) { return; }
-        panel.setOnTouchListener((v,e) -> { closePanel(fIdx); return true; });
+    LinearLayout panel = new LinearLayout(ctx);
+    panel.setOrientation(LinearLayout.VERTICAL);
+    GradientDrawable pgd = new GradientDrawable();
+    pgd.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
+    pgd.setStroke(4, Color.argb(180, Color.red(color), Color.green(color), Color.blue(color)));
+    pgd.setCornerRadius(panelR);
+    panel.setBackground(pgd);
+    panel.setVisibility(View.GONE);
 
-        lastIconSizeCache[idx] = iconSize;
-        renderPanelGrid(idx);
-    }
+    int itemCount = csvToList(prefs.getString(px+"apps","")).size() + csvToList(prefs.getString(px+"acts","")).size();
+    if (itemCount == 0) itemCount = 1;
+    int cols = Math.max(1, Math.min(prefs.getInt(px+"cols", 4), itemCount));
+    int rows = Math.max(1, (int) Math.ceil(itemCount / (float) cols));
+    int iconSize = prefs.getInt(px+"icon_size", 110);
+    int cellPx = iconSize + CELL_EXTRA;
+    int panelPadding = 48;
+    int contentMain = (edge.equals("bottom") ? cols : rows) * cellPx + panelPadding;
+    int userLength = prefs.getInt(px+"panel_length", contentMain);
+    int mainAxis = Math.max(userLength, contentMain);
+    boolean showNameOn = prefs.getInt(px+"show_name", 0) == 1;
+    int labelExtra = showNameOn ? 40 : 0;
+    int crossFixed = Math.max(size, iconSize + panelPadding + labelExtra);
+    int pw = edge.equals("bottom") ? Math.min(mainAxis, ctx.getResources().getDisplayMetrics().widthPixels) : crossFixed;
+    int ph = edge.equals("bottom") ? crossFixed : Math.min(mainAxis, ctx.getResources().getDisplayMetrics().heightPixels);
+    WindowManager.LayoutParams pp = new WindowManager.LayoutParams(pw, ph, wmType,
+        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+        | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+        PixelFormat.TRANSLUCENT);
+    pp.gravity = edge.equals("left") ? (Gravity.LEFT|Gravity.CENTER_VERTICAL)
+               : edge.equals("right") ? (Gravity.RIGHT|Gravity.CENTER_VERTICAL)
+               : (Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
+    try { wm.addView(panel, pp); panels[idx] = panel; } catch (Exception e) { return; }
+    final int fIdx = idx;
+    panel.setOnTouchListener((v,e) -> { closePanel(fIdx); return true; });
+
+    lastIconSizeCache[idx] = iconSize;
+    renderPanelGrid(idx);
+}
     // Hằng số DÙNG CHUNG giữa renderPanelGrid() và buildPanelIfEnabled() —
 // đảm bảo kích thước panel tính toán KHỚP 100% với kích thước cell thực vẽ,
 // đây chính là fix gốc cho lỗi lệch trái/phải khi đổi icon size.
@@ -499,9 +518,11 @@ private Path buildRoundedPentagon(int size) {
     }
 
     public void togglePanel(int idx) {
-        if (handles[idx] == null && panels[idx] == null) buildPanelIfEnabled(idx);
-        if (panelOpen[idx]) closePanel(idx); else openPanel(idx);
-    }
+    // Panel body luôn phải tồn tại (theo shouldPanelBodyExistNow), không phụ thuộc Handle
+    if (panels[idx] == null && shouldPanelBodyExistNow(idx)) buildPanelBody(idx);
+    if (panels[idx] == null) return; // chưa đủ điều kiện (chưa bật/đang sai trạng thái khoá)
+    if (panelOpen[idx]) closePanel(idx); else openPanel(idx);
+}
     private void openPanel(int idx) {
         if (panels[idx] == null) return;
         panelOpen[idx] = true;
@@ -522,10 +543,14 @@ private Path buildRoundedPentagon(int size) {
         if (handles[idx] != null) handles[idx].setVisibility(View.VISIBLE);
     }
     private void closeAllPanels() { for (int i=0;i<3;i++) closePanel(i); }
-    private void removePanel(int idx) {
-        renderGen[idx].incrementAndGet();
-        try { if (handles[idx] != null) wm.removeView(handles[idx]); } catch (Exception ignored) {}
-        try { if (panels[idx] != null) wm.removeView(panels[idx]); } catch (Exception ignored) {}
-        handles[idx] = null; panels[idx] = null; panelOpen[idx] = false;
-    }
+    private void removeHandle(int idx) {
+    try { if (handles[idx] != null) wm.removeView(handles[idx]); } catch (Exception ignored) {}
+    handles[idx] = null;
+}
+
+private void removePanelBody(int idx) {
+    renderGen[idx].incrementAndGet();
+    try { if (panels[idx] != null) wm.removeView(panels[idx]); } catch (Exception ignored) {}
+    panels[idx] = null; panelOpen[idx] = false;
+  }
 }
