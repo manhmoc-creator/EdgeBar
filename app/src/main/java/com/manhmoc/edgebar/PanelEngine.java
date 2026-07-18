@@ -14,6 +14,7 @@ public class PanelEngine {
     private boolean[] panelOpen = new boolean[3];
 private String[] lastSignature = new String[3];
 private boolean[] forceTestOn = new boolean[3]; // Bật/tắt từ checkbox TEST trong màn Design
+    private int[] lastIconSizeCache = new int[]{-1,-1,-1};
     private final AtomicInteger[] renderGen = {new AtomicInteger(0), new AtomicInteger(0), new AtomicInteger(0)};
     private static final int ICON_CACHE_LIMIT = 80;
     private static final LinkedHashMap<String, Drawable> iconCache =
@@ -52,7 +53,86 @@ private boolean[] forceTestOn = new boolean[3]; // Bật/tắt từ checkbox TES
     if (shouldExist) buildPanelIfEnabled(idx);
     lastSignature[idx] = sig;
 }
+    /** Gọi từ prefListener khi 1 key panelN_xxx đổi — quyết định rebuild nặng hay update nhẹ. */
+    public void onPrefChanged(String key) {
+        if (key == null || !key.startsWith("panel") || key.length() < 7) return;
+        int idx;
+        try { idx = Character.getNumericValue(key.charAt(5)) - 1; } catch (Exception e) { return; }
+        if (idx < 0 || idx > 2) return;
+        boolean structural = key.endsWith("_apps") || key.endsWith("_acts") || key.endsWith("_cols")
+            || key.endsWith("_icon_shape") || key.endsWith("_show_name") || key.endsWith("_en")
+            || key.endsWith("_vis") || key.endsWith("_pos") || key.endsWith("_color_idx");
+        if (structural) { rebuildOne(idx); return; }
+        liveUpdateCosmetic(idx);
+    }
 
+    /** Update tại chỗ (KHÔNG removeView/addView) cho opacity/length/width/radius/icon size. */
+    private void liveUpdateCosmetic(int idx) {
+        View handle = handles[idx]; LinearLayout panel = panels[idx];
+        if (handle == null && panel == null) return; // chưa build -> để rebuildAll() lo sau
+        String px = "panel" + (idx + 1) + "_";
+        int color = parsePanelColor(prefs.getInt(px + "color_idx", 0));
+        String edge = posToEdge(prefs.getInt(px + "pos", 0));
+
+        if (handle != null) {
+            int handleAlpha = prefs.getInt(px + "handle_alpha", 255);
+            float handleR = prefs.getInt(px + "handle_radius", 28);
+            int thick = prefs.getInt(px + "thick", 40);
+            int handleWidth = prefs.getInt(px + "handle_width", 56);
+            GradientDrawable hgd = new GradientDrawable();
+            hgd.setColor(Color.argb(handleAlpha, Color.red(color), Color.green(color), Color.blue(color)));
+            float[] hr = edge.equals("left") ? new float[]{0,0,handleR,handleR,handleR,handleR,0,0}
+                : edge.equals("right") ? new float[]{handleR,handleR,0,0,0,0,handleR,handleR}
+                : new float[]{handleR,handleR,handleR,handleR,0,0,0,0};
+            hgd.setCornerRadii(hr);
+            handle.setBackground(hgd);
+            int handleLength = Math.max(80, thick);
+            int hw = edge.equals("bottom") ? handleLength : handleWidth;
+            int hh = edge.equals("bottom") ? handleWidth : handleLength;
+            WindowManager.LayoutParams hp = (WindowManager.LayoutParams) handle.getLayoutParams();
+            if (hp.width != hw || hp.height != hh) {
+                hp.width = hw; hp.height = hh;
+                try { wm.updateViewLayout(handle, hp); } catch (Exception ignored) {}
+            }
+        }
+        if (panel != null) {
+            int alpha = prefs.getInt(px + "alpha", 200);
+            float panelR = prefs.getInt(px + "panel_radius", 24);
+            int size = prefs.getInt(px + "size", 700);
+            int iconSize = prefs.getInt(px + "icon_size", 110);
+
+            GradientDrawable pgd = new GradientDrawable();
+            pgd.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
+            pgd.setStroke(4, Color.argb(180, Color.red(color), Color.green(color), Color.blue(color)));
+            pgd.setCornerRadius(panelR);
+            panel.setBackground(pgd);
+
+            int cols = Math.max(1, prefs.getInt(px + "cols", 4));
+            int itemCount = Math.max(1, csvToList(prefs.getString(px+"apps","")).size()
+                + csvToList(prefs.getString(px+"acts","")).size());
+            int rows = Math.max(1, (int) Math.ceil(itemCount / (float) cols));
+            int cellPx = iconSize + CELL_EXTRA;
+            int contentMain = (edge.equals("bottom") ? cols : rows) * cellPx + 48;
+            int userLength = prefs.getInt(px + "panel_length", contentMain);
+            int mainAxis = Math.max(userLength, contentMain);
+            int cross = Math.max(size, iconSize + 48);
+
+            WindowManager.LayoutParams pp = (WindowManager.LayoutParams) panel.getLayoutParams();
+            if (edge.equals("bottom")) {
+                pp.height = cross;
+                pp.width = Math.min(mainAxis, ctx.getResources().getDisplayMetrics().widthPixels);
+            } else {
+                pp.width = cross;
+                pp.height = Math.min(mainAxis, ctx.getResources().getDisplayMetrics().heightPixels);
+            }
+            try { wm.updateViewLayout(panel, pp); } catch (Exception ignored) {}
+
+            if (lastIconSizeCache[idx] != iconSize) {
+                lastIconSizeCache[idx] = iconSize;
+                renderPanelGrid(idx); // chỉ vẽ lại grid con, không đụng handle/panel view
+            }
+        }
+    }
 private String computeSignature(int idx) {
     String px = "panel" + (idx+1) + "_";
     return prefs.getBoolean(px+"en", false) + "|" + prefs.getInt(px+"vis", 0) + "|"
@@ -119,12 +199,12 @@ public void setForceTest(int idx, boolean on) {
             : new float[]{handleR,handleR,handleR,handleR,0,0,0,0};
         hgd.setCornerRadii(hr);
         handle.setBackground(hgd);
-        // "Handle Thickness" (thick) giờ điều khiển CHIỀU DÀI tay cầm (kéo dài/rút ngắn thanh) —
-// đúng như mong muốn — thay vì độ dày. Bề ngang (độ dày thật) dùng hằng số cố định.
-final int HANDLE_BREADTH = 56;
+        // Length (thick) = chiều dài tay cầm dọc cạnh; Width (handle_width) = độ dày —
+// cả hai giờ do người dùng chỉnh (trước đây width là hằng số cố định 56).
+int handleWidth = prefs.getInt(px+"handle_width", 56);
 int handleLength = Math.max(80, thick);
-int hw = edge.equals("bottom") ? handleLength : HANDLE_BREADTH;
-int hh = edge.equals("bottom") ? HANDLE_BREADTH : handleLength;
+int hw = edge.equals("bottom") ? handleLength : handleWidth;
+int hh = edge.equals("bottom") ? handleWidth : handleLength;
         WindowManager.LayoutParams hp = new WindowManager.LayoutParams(hw, hh, wmType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
@@ -147,18 +227,19 @@ int hh = edge.equals("bottom") ? HANDLE_BREADTH : handleLength;
 
         int itemCount = csvToList(prefs.getString(px+"apps","")).size() + csvToList(prefs.getString(px+"acts","")).size();
 if (itemCount == 0) itemCount = 1;
-// Không cho số cột nhiều hơn số item đang có -> hết cảnh panel thừa khoảng trống
 int cols = Math.max(1, Math.min(prefs.getInt(px+"cols", 4), itemCount));
 int rows = Math.max(1, (int) Math.ceil(itemCount / (float) cols));
 int iconSize = prefs.getInt(px+"icon_size", 110);
-int cellPx = iconSize + CELL_EXTRA; // KHỚP với renderPanelGrid()
+int cellPx = iconSize + CELL_EXTRA;
 int panelPadding = 48;
-int computedMain  = (edge.equals("bottom") ? cols : rows) * cellPx + panelPadding;
-// "size" (Kích thước) giờ dùng TRỰC TIẾP làm bề rộng/cao trục ngang của panel —
-// trước đây bị Math.min() ghi đè âm thầm nên slider "không có tác dụng".
+int contentMain = (edge.equals("bottom") ? cols : rows) * cellPx + panelPadding;
+// "Length" (panel_length) người dùng chỉnh — không cho nhỏ hơn nội dung cần, tránh cắt icon
+int userLength = prefs.getInt(px+"panel_length", contentMain);
+int mainAxis = Math.max(userLength, contentMain);
+// "size" = Width (bề dày panel), giữ nguyên key cũ để không phá cấu hình đã lưu
 int crossFixed = Math.max(size, iconSize + panelPadding);
-int pw = edge.equals("bottom") ? Math.min(computedMain, ctx.getResources().getDisplayMetrics().widthPixels) : crossFixed;
-int ph = edge.equals("bottom") ? crossFixed : Math.min(computedMain, ctx.getResources().getDisplayMetrics().heightPixels);
+int pw = edge.equals("bottom") ? Math.min(mainAxis, ctx.getResources().getDisplayMetrics().widthPixels) : crossFixed;
+int ph = edge.equals("bottom") ? crossFixed : Math.min(mainAxis, ctx.getResources().getDisplayMetrics().heightPixels);
         WindowManager.LayoutParams pp = new WindowManager.LayoutParams(pw, ph, wmType,
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
             | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
@@ -171,9 +252,9 @@ int ph = edge.equals("bottom") ? crossFixed : Math.min(computedMain, ctx.getReso
         try { wm.addView(panel, pp); panels[idx] = panel; } catch (Exception e) { return; }
         panel.setOnTouchListener((v,e) -> { closePanel(fIdx); return true; });
 
+        lastIconSizeCache[idx] = iconSize;
         renderPanelGrid(idx);
     }
-
     // Hằng số DÙNG CHUNG giữa renderPanelGrid() và buildPanelIfEnabled() —
 // đảm bảo kích thước panel tính toán KHỚP 100% với kích thước cell thực vẽ,
 // đây chính là fix gốc cho lỗi lệch trái/phải khi đổi icon size.
@@ -248,29 +329,36 @@ private void renderPanelGrid(int idx) {
         } catch (Exception e) { return pkg; }
     }
     private String getActionLabelForPanel(String key) { String l = ACT_LABEL_MAP.get(key); return l != null ? l : key; }
-    private float getPanelIconRadiusPercent(String px) {
-    int shape = prefs.getInt(px + "icon_shape", 0);
-    // Chỉ còn 2 lựa chọn: 0 = Tròn (bo 50%), 1 = Vuông bo góc kiểu Google (~22%)
-    return shape == 1 ? 0.22f : 0.5f;
-}
-    private View wrapIconCell(String px, Drawable icon, String emoji, float radiusPct, View.OnClickListener onClick, String label) {
+    // 0=Tròn, 1=Vuông bo góc Google, 2=Pebble (bất đối xứng, giống Material You)
+    private float[] getPanelIconCornerRadii(String px) {
+        int shape = prefs.getInt(px + "icon_shape", 0);
+        if (shape == 1) return new float[]{0.22f, 0.22f, 0.22f, 0.22f};
+        if (shape == 2) return new float[]{0.55f, 0.28f, 0.5f, 0.32f}; // TL,TR,BR,BL
+        return new float[]{0.5f, 0.5f, 0.5f, 0.5f};
+    }
+    private View wrapIconCell(String px, Drawable icon, String emoji, float[] radii, View.OnClickListener onClick, String label) {
     int iconSize = prefs.getInt(px + "icon_size", 110);
     LinearLayout box = new LinearLayout(ctx); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER);
 
-    // "Đế" đồng nhất kích thước + nền trắng mờ cho MỌI icon (kể cả icon adaptive có
-    // viền trong suốt sẵn) -> khắc phục lỗi "một số app vẫn vuông / pebble bị méo"
-    // do icon gốc mỗi app có vùng trong suốt khác nhau.
     FrameLayout shapeBox = new FrameLayout(ctx);
     GradientDrawable backdrop = new GradientDrawable();
     backdrop.setColor(Color.argb(235, 255, 255, 255));
-    backdrop.setCornerRadius(iconSize * radiusPct);
+    backdrop.setCornerRadii(new float[]{
+        iconSize*radii[0], iconSize*radii[0],
+        iconSize*radii[1], iconSize*radii[1],
+        iconSize*radii[2], iconSize*radii[2],
+        iconSize*radii[3], iconSize*radii[3]
+    });
     shapeBox.setBackground(backdrop);
     shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
     shapeBox.setClipToOutline(true);
+    // Outline.setRoundRect chỉ nhận 1 bán kính — dùng bán kính lớn nhất để clip mượt,
+    // tránh Path-clip tốn GPU trên Adreno 540. Lệch nhỏ ở góc là đánh đổi chấp nhận được.
+    final float maxR = Math.max(Math.max(radii[0],radii[1]), Math.max(radii[2],radii[3]));
     shapeBox.setOutlineProvider(new ViewOutlineProvider() {
         public void getOutline(View v, Outline o) {
             int w = v.getWidth()==0?iconSize:v.getWidth(), h = v.getHeight()==0?iconSize:v.getHeight();
-            o.setRoundRect(0,0,w,h, w*radiusPct);
+            o.setRoundRect(0,0,w,h, w*maxR);
         }
     });
     View core;
@@ -296,16 +384,16 @@ private void renderPanelGrid(int idx) {
     }
 
     private View buildCell(String px, String type, Object payload, String ref) {
-        float radius = getPanelIconRadiusPercent(px);
+        float[] radii = getPanelIconCornerRadii(px);
         if (type.equals("APP")) {
-            return wrapIconCell(px, (Drawable) payload, null, radius, v -> {
+            return wrapIconCell(px, (Drawable) payload, null, radii, v -> {
                 Intent li = ctx.getPackageManager().getLaunchIntentForPackage(ref);
                 if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(li); }
                 closeAllPanels();
             }, getCachedAppLabel(ref));
         } else {
             String label = getActionLabelForPanel(ref);
-            return wrapIconCell(px, null, actEmoji(ref), radius, v -> {
+            return wrapIconCell(px, null, actEmoji(ref), radii, v -> {
                 Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
                 ipc.putExtra("act", ref);
                 ctx.sendBroadcast(ipc);

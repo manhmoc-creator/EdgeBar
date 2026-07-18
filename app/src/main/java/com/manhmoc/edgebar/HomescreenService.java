@@ -919,13 +919,15 @@ updateVisibility();
 
     private final Handler debounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable debounceRunnable = null;
+private final Handler panelDebounceHandler = new Handler(android.os.Looper.getMainLooper());
+private Runnable panelDebounceRunnable = null;
 
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     if (k == null) return;
 
     // V19.12.3.6.6: Whitelist — bỏ qua key lạ của Zalo/Messenger/app bên thứ ba
     boolean isOurKey = false;
-    String[] ourPrefixes = {"lock_","home_","morse_","homacc_","anim_","vib_","hold_",
+    String[] ourPrefixes = {"lock_","home_","morse_","homacc_","anim_","vib_","hold_","panel",
         "blacklist","locklist","avoid_kbd","shortcut_","preview_","lang_","ytdl_",
         "intent_","tile_","macro_","i1_","i2_","i3_","i4_","i5_","i6_","i7_",
         "i8_","i9_","i10_","i11_","i12_","i13_","i14_","i15_"};
@@ -949,6 +951,15 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     }
     if (k.equals("morse_lock_icon_y")) { updateLockIconPosition(); return; }
     if (k.startsWith("anim_") && fV != null) { fV.updateStyle(); return; }
+
+    // panel_ → debounce ngắn, update tại chỗ, KHÔNG chạy updateVisibility() nặng
+    if (k.startsWith("panel")) {
+        if (panelEngine == null) return;
+        if (panelDebounceRunnable != null) panelDebounceHandler.removeCallbacks(panelDebounceRunnable);
+        panelDebounceRunnable = () -> panelEngine.onPrefChanged(k);
+        panelDebounceHandler.postDelayed(panelDebounceRunnable, 120);
+        return;
+    }
 
     // Debounce 500ms cho updateVisibility — debounceRunnable tự xóa sau khi fire
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);

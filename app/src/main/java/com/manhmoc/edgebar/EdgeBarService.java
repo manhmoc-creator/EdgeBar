@@ -73,6 +73,9 @@ private boolean fpRegistered = false;
 
 private final Handler homaccDebounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable homaccDebounceRunnable = null;
+private final Handler panelDebounceHandler = new Handler(android.os.Looper.getMainLooper());
+private Runnable panelDebounceRunnable = null;
+private static final long PANEL_DEBOUNCE_MS = 120;
 
 private final Handler debounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable debounceRunnable = null;
@@ -98,11 +101,10 @@ private static final java.util.Set<String> EB_KEY_PREFIXES =
     new java.util.HashSet<>(java.util.Arrays.asList(
         "lock_","home_","morse_","homacc_","anim_","vib_","hold_",
         "blacklist","locklist","avoid_kbd","shortcut_","preview_",
-        "lang_","ytdl_","intent_","tile_","macro_",
+        "lang_","ytdl_","intent_","tile_","macro_","panel",
         "i1_","i2_","i3_","i4_","i5_","i6_","i7_","i8_",
         "i9_","i10_","i11_","i12_","i13_","i14_","i15_"
     ));
-
 private boolean isOurKey(String k) {
     if (k == null) return false;
     for (String prefix : EB_KEY_PREFIXES)
@@ -132,6 +134,15 @@ if (k != null && k.contains("fingerprint_")) {
     refreshFingerprintRegistration();
     return;
 }
+    // TẦNG 2.8: panel_ → debounce ngắn 120ms, update TẠI CHỖ, không removeView/addView
+    if (k != null && k.startsWith("panel")) {
+        if (panelEngine == null) return;
+        final String key = k;
+        if (panelDebounceRunnable != null) panelDebounceHandler.removeCallbacks(panelDebounceRunnable);
+        panelDebounceRunnable = () -> panelEngine.onPrefChanged(key);
+        panelDebounceHandler.postDelayed(panelDebounceRunnable, PANEL_DEBOUNCE_MS);
+        return;
+    }
     // TẦNG 3: homacc_ → debounce DÀI 1000ms, chỉ gọi updateHomaccLive() sau khi dừng
     // Guard kép: isRunning + isHomaccDrawn tránh IPC vô nghĩa
     if (k != null && k.startsWith("homacc_")) {

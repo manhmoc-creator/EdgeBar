@@ -1619,64 +1619,119 @@ private void stylePanelTabs(Button b1, Button b2, Button b3) {
     final int fIdxTest = currentPanelIdx - 1;
     panelBody.addView(createSectionTitle("📱 EDGE PANEL " + currentPanelIdx));
 
+    // ===== HÀNG 2 CỘT: HANDLE (trái) | PANEL (phải) =====
+    LinearLayout twoCol = new LinearLayout(this);
+    twoCol.setOrientation(LinearLayout.HORIZONTAL);
+
+    LinearLayout colHandle = new LinearLayout(this);
+    colHandle.setOrientation(LinearLayout.VERTICAL);
+    LinearLayout.LayoutParams colLp1 = new LinearLayout.LayoutParams(0, -2, 1f);
+    colLp1.setMargins(0,0,8,0);
+    colHandle.setLayoutParams(colLp1);
+    colHandle.setBackground(getRounded("#1A1A1A", 20f));
+    colHandle.setPadding(20,20,20,20);
+
+    LinearLayout colPanel = new LinearLayout(this);
+    colPanel.setOrientation(LinearLayout.VERTICAL);
+    LinearLayout.LayoutParams colLp2 = new LinearLayout.LayoutParams(0, -2, 1f);
+    colLp2.setMargins(8,0,0,0);
+    colPanel.setLayoutParams(colLp2);
+    colPanel.setBackground(getRounded("#1A1A1A", 20f));
+    colPanel.setPadding(20,20,20,20);
+
+    // --- HANDLE ---
+    TextView tvHandleTitle = new TextView(this); tvHandleTitle.setText("🎚 HANDLE");
+    tvHandleTitle.setTextColor(Color.parseColor("#FFC107")); tvHandleTitle.setTextSize(13); tvHandleTitle.setPadding(0,0,0,10);
+    colHandle.addView(tvHandleTitle);
+    colHandle.addView(createCycleRow(T("Visibility","Chế độ hiện"), px+"vis", new String[]{"Cục Bộ", "Toàn Cục"}));
+    colHandle.addView(createMiniSlider(T("Opacity","Độ trong suốt"), px+"handle_alpha", 255, 255));
+    colHandle.addView(createMiniSlider(T("Length","Chiều dài"), px+"thick", 400, 200));
+    colHandle.addView(createMiniSlider(T("Width","Độ dày"), px+"handle_width", 200, 56));
+    colHandle.addView(createMiniSlider(T("Corner Radius","Bo góc"), px+"handle_radius", 100, 28));
+
+    // --- PANEL ---
+    TextView tvPanelTitle = new TextView(this); tvPanelTitle.setText("🗂 PANEL");
+    tvPanelTitle.setTextColor(Color.parseColor("#00E5FF")); tvPanelTitle.setTextSize(13); tvPanelTitle.setPadding(0,0,0,10);
+    colPanel.addView(tvPanelTitle);
+    String[] iconShapes = {"Tròn", "Google", "Pebble"};
+    colPanel.addView(createCycleRow(T("Icon Style","Kiểu Icon"), px+"icon_shape", iconShapes));
+    String[] yesNo = {T("No","Không"), T("Yes","Có")};
+    colPanel.addView(createCycleRow(T("Show Name","Hiện Tên"), px+"show_name", yesNo));
+    colPanel.addView(createMiniSlider(T("Opacity","Độ trong suốt"), px+"alpha", 255, 200));
+    colPanel.addView(createMiniSlider(T("Length","Chiều dài"), px+"panel_length", 3000, 700));
+    colPanel.addView(createMiniSlider(T("Width","Bề dày"), px+"size", 2500, 700));
+    colPanel.addView(createMiniSlider(T("Corner Radius","Bo góc"), px+"panel_radius", 60, 24));
+
+    twoCol.addView(colHandle); twoCol.addView(colPanel);
+    panelBody.addView(twoCol);
+
+    // ===== COMMON (dưới cùng, full width) =====
+    LinearLayout common = new LinearLayout(this);
+    common.setOrientation(LinearLayout.VERTICAL);
+    common.setBackground(getRounded("#222222", 20f));
+    common.setPadding(20,20,20,20);
+    LinearLayout.LayoutParams commonLp = new LinearLayout.LayoutParams(-1,-2); commonLp.setMargins(0,15,0,0);
+    common.setLayoutParams(commonLp);
+    TextView tvCommonTitle = new TextView(this); tvCommonTitle.setText("⚙ COMMON");
+    tvCommonTitle.setTextColor(Color.parseColor("#4CAF50")); tvCommonTitle.setTextSize(13); tvCommonTitle.setPadding(0,0,0,10);
+    common.addView(tvCommonTitle);
+
+    LinearLayout previewRow = new LinearLayout(this); previewRow.setOrientation(LinearLayout.HORIZONTAL); previewRow.setGravity(Gravity.CENTER_VERTICAL);
+    TextView tvPrev = new TextView(this); tvPrev.setText(T("Preview (Handle/Panel)","Xem thử (Tay cầm/Panel)")); tvPrev.setTextColor(Color.WHITE); tvPrev.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     CheckBox cbTest = new CheckBox(this);
-    cbTest.setText("👁 " + T("TEST PREVIEW HERE (Panel + Handle)", "XEM THỬ TẠI ĐÂY (Panel + Tay cầm)"));
-    cbTest.setTextColor(Color.parseColor("#FFC107"));
     cbTest.setOnCheckedChangeListener((v, c) -> {
         Intent t = new Intent("com.manhmoc.edgebar.PANEL_TEST_TOGGLE");
         t.putExtra("idx", fIdxTest); t.putExtra("on", c);
         sendBroadcast(t);
     });
-    panelBody.addView(cbTest);
+    previewRow.addView(tvPrev); previewRow.addView(cbTest);
+    common.addView(previewRow);
+
     CheckBox cbEn = new CheckBox(this); cbEn.setText(T("Enable Panel " + currentPanelIdx, "Bật Panel " + currentPanelIdx));
     cbEn.setTextColor(Color.WHITE); cbEn.setChecked(prefs.getBoolean(px+"en", false));
     cbEn.setOnCheckedChangeListener((v,c) -> { prefs.edit().putBoolean(fpx+"en", c).apply(); syncPanelService(); });
-    // THAY vào panelBody.addView(cbEn); — thêm option chế độ hiển thị
-panelBody.addView(createCycleRow(T("Visibility","Chế độ hiện"),
-    px+"vis", new String[]{"Cục Bộ", "Toàn Cục"}));
-TextView tvVisNote = new TextView(this);
-tvVisNote.setTextColor(Color.parseColor("#777777")); tvVisNote.setTextSize(11);
-tvVisNote.setText(T(
-  "IAO: chỉ hiện trong Homeb, không cần Trợ năng, ổn định hơn.\nANY: hiện cả khi khoá máy/Homacc, cần Trợ năng, dễ bị hệ thống kill hơn.",
-  "IAO: chỉ hiện ở Homeb, không cần Trợ năng, ổn định hơn.\nANY: hiện cả khi khoá máy/Homacc, cần Trợ năng, dễ bị hệ thống kill hơn."));
-tvVisNote.setPadding(0,0,0,15);
-panelBody.addView(tvVisNote);
-    panelBody.addView(createComboDropdown(T("Position","Vị trí"), px+"pos", PANEL_POS_NAMES, 0));
-    panelBody.addView(createComboDropdown(T("Color","Màu"), px+"color_idx", PANEL_COLOR_NAMES, 0));
+    common.addView(cbEn);
 
-    panelBody.addView(createSlider(T("Panel Size (cross-axis)","Kích thước PANEL (bề ngang panel)"), px+"size", 2500, 700));
-panelBody.addView(createSlider(T("Handle Length (drag bar)","Chiều dài TAY CẦM (thanh kéo)"), px+"thick", 400, 200));
-    panelBody.addView(createSlider(T("Core Transparency","Độ trong suốt lõi"), px+"alpha", 255, 200));
-    panelBody.addView(createSlider(T("Handle Border Alpha","Độ đậm viền tay cầm"), px+"handle_alpha", 255, 255));
-    panelBody.addView(createSlider(T("Handle Corner Radius","Độ bo góc tay cầm"), px+"handle_radius", 100, 28));
-    panelBody.addView(createSlider(T("Panel Corner Radius","Độ bo góc Panel"), px+"panel_radius", 60, 24));
-    panelBody.addView(createSlider(T("Icon Size","Kích thước Icon"), px+"icon_size", 180, 110));
+    common.addView(createComboDropdown(T("Position","Vị trí"), px+"pos", PANEL_POS_NAMES, 0));
+    common.addView(createComboDropdown(T("Color","Màu"), px+"color_idx", PANEL_COLOR_NAMES, 0));
+    common.addView(createMiniSlider(T("Icon Size","Kích thước Icon"), px+"icon_size", 180, 110));
+    common.addView(createMiniSlider(T("Columns (1-9)","Số cột"), px+"cols", 9, 4));
 
-    panelBody.addView(createSlider(T("Columns (1-9)","Số cột (1-9)"), px+"cols", 9, 4));
-    String[] iconShapes = {"Tròn", "Vuông Bo Góc (Kiểu Google)"};
-    panelBody.addView(createCycleRow(T("Icon Style","Kiểu Icon"),
-        px+"icon_shape", iconShapes));
-
-    String[] yesNo = {T("No","Không"), T("Yes","Có")};
-    panelBody.addView(createCycleRow(T("Show Name","Hiện Tên"),
-        px+"show_name", yesNo));
-
+    LinearLayout pickRow = new LinearLayout(this); pickRow.setOrientation(LinearLayout.HORIZONTAL); pickRow.setPadding(0,10,0,0);
     int appCount = prefs.getString(px+"apps","").isEmpty() ? 0 : prefs.getString(px+"apps","").split(",").length;
     Button btnApps = new Button(this);
     btnApps.setText("📱 " + T("APPS","ỨNG DỤNG") + " (" + appCount + ")");
     btnApps.setBackground(getRounded("#00E5FF", 20f)); btnApps.setTextColor(Color.BLACK);
-    LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(-1,-2); bLp.setMargins(0,15,0,10);
+    LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(0,-2,1f); bLp.setMargins(0,0,10,0);
     btnApps.setLayoutParams(bLp);
     btnApps.setOnClickListener(v -> showPanelMultiPicker(fpx+"apps", true));
-    panelBody.addView(btnApps);
 
     int actCount = prefs.getString(px+"acts","").isEmpty() ? 0 : prefs.getString(px+"acts","").split(",").length;
     Button btnActs = new Button(this);
     btnActs.setText("⚡ " + T("ACTIONS","HÀNH ĐỘNG") + " (" + actCount + ")");
     btnActs.setBackground(getRounded("#E91E63", 20f)); btnActs.setTextColor(Color.WHITE);
-    btnActs.setLayoutParams(bLp);
+    btnActs.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     btnActs.setOnClickListener(v -> showPanelMultiPicker(fpx+"acts", false));
-    panelBody.addView(btnActs);
+
+    pickRow.addView(btnApps); pickRow.addView(btnActs);
+    common.addView(pickRow);
+
+    panelBody.addView(common);
+}
+
+// Slider gọn cho layout 2-cột: KHÔNG có nút +/- để tiết kiệm bề ngang.
+private LinearLayout createMiniSlider(String t, String k, int max, int def) {
+    LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,4,0,4);
+    TextView tv = new TextView(this); tv.setTextColor(Color.parseColor("#BBBBBB")); tv.setTextSize(11);
+    tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv);
+    SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def));
+    sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+        public void onProgressChanged(SeekBar s, int p, boolean b){ tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); }
+        public void onStartTrackingTouch(SeekBar s){}
+        public void onStopTrackingTouch(SeekBar s){}
+    });
+    l.addView(sb);
+    return l;
 }
 // isApp=true: multi-select app picker (ghi CSV package name)
 // isApp=false: multi-select action picker (ghi CSV action key, dùng ACT_KEYS/ACT_LABS có sẵn)
