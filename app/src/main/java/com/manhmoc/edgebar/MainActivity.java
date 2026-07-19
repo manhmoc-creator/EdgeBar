@@ -58,7 +58,7 @@ private int currentPanelIdx = 1; // 1-3, panel nào đang được chỉnh trong
 private Button fab;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.18 - Immortal Guardian Build"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.19 - Quantum Singularity"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -222,7 +222,16 @@ private void openDesignSpace() { currentMainTab = 0; refreshPreview(); navMain.s
 // buildRuleEditor(), nên không cần ẩn cả nút.
 private void updateFabVisibility() {
     if (fab == null) return;
-    fab.setVisibility(currentMainTab == 1 ? View.VISIBLE : View.GONE);
+    if (currentMainTab == 1) {
+        fab.setVisibility(View.VISIBLE);
+        fab.setText("+ NEW EB");
+    } else if (currentMainTab == 2 && (ecoType == 0 || ecoType == 1 || ecoType == 2)) {
+        fab.setVisibility(View.VISIBLE);
+        // Tự động đổi tên dựa theo mục đang chọn ở Ecosystem
+        fab.setText(ecoType == 0 ? "+ INTENT" : (ecoType == 1 ? "+ QS TILE" : "+ MACRO"));
+    } else {
+        fab.setVisibility(View.GONE);
+    }
 }
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
@@ -322,7 +331,9 @@ android.app.admin.DevicePolicyManager dpm =
         } catch (Exception e) { /* bỏ qua nếu thiết bị không hỗ trợ */ }
 
 
-        navMain = new LinearLayout(this); navMain.setOrientation(LinearLayout.HORIZONTAL); navMain.setPadding(0, 0, 0, 40);
+        // Tối ưu UI Pixel 2XL: Xếp dọc các tab không gian để tiết kiệm chiều ngang, giao diện gọn gàng hơn
+navMain = new LinearLayout(this);
+navMain.setOrientation(LinearLayout.VERTICAL); navMain.setPadding(0, 0, 0, 40);
         Button btnNavCond = createNavBtn(T("CONDITIONS", "ĐIỀU KIỆN"));
         Button btnNavEco = createNavBtn("ECOSYSTEM");
         navMain.addView(btnNavCond); navMain.addView(btnNavEco); main.addView(navMain);
@@ -342,7 +353,18 @@ android.app.admin.DevicePolicyManager dpm =
         View spacer = new View(this); spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
         fab = new Button(this); fab.setText("+ NEW EB"); fab.setTextColor(Color.BLACK); fab.setBackground(getRounded("#00E5FF", 100f)); fab.setTag("fab");
         LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, -1); fLp.setMargins(10,0,10,0); fab.setLayoutParams(fLp); fab.setPadding(40,0,40,0); 
-        fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
+        // Tái sử dụng cùng một nút FAB cho toàn bộ app để tiết kiệm RAM, thay đổi chức năng theo ngữ cảnh
+fab.setOnClickListener(v -> {
+    if (currentMainTab == 1) { // Đang ở Condition Space
+        openRuleBuilderDialog(null, -1, -1, "");
+    } else if (currentMainTab == 2) { // Đang ở Ecosystem Space
+        String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
+        String newId = addDynamicId(listKey);
+        if (ecoType == 0) openIntentEditorV2(newId);
+        else if (ecoType == 1) openTileEditorV2(newId);
+        else openMacroEditorV2(newId);
+    }
+});
         Button btnDesign = createCircleBtn("⚙️", "#333333"); btnDesign.setTag("btnDesign");
         btnDesign.setOnClickListener(v -> { if(pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); btnDesign.setText("⚙️"); btnDesign.setBackground(getRounded("#333333", 100f)); } else { openDesignSpace(); btnDesign.setText("⬅"); btnDesign.setBackground(getRounded("#D32F2F", 100f)); } });
         bottomBar.addView(btnUpdate); bottomBar.addView(btnPremium); bottomBar.addView(spacer); bottomBar.addView(fab); bottomBar.addView(btnDesign);
@@ -638,7 +660,7 @@ launchAppCard.setLayoutParams(lacLp);
 
 LinearLayout lacRow = new LinearLayout(this); lacRow.setOrientation(LinearLayout.HORIZONTAL); lacRow.setGravity(Gravity.CENTER_VERTICAL);
 TextView tvLacTitle = new TextView(this);
-tvLacTitle.setText("🚀 " + T("Launch App", "Mở Ứng Dụng"));
+tvLacTitle.setText("📱 " + T("Launch App", "Mở Ứng Dụng"));
 tvLacTitle.setTextColor(Color.WHITE);
 tvLacTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 Switch swLaunchApp = new Switch(this);
@@ -981,48 +1003,118 @@ private void showActionCategoryPicker(String title, List<String[]> items,
 }
     // ==================== KHÔNG GIAN HỆ SINH THÁI (ECOSYSTEM) ====================
     private void buildEcosystemSpace() {
-        pageEcosystem.addView(createSectionTitle(T("BACKUP / RESTORE", "KHU VỰC SAO LƯU")));
-        LinearLayout backupRow = new LinearLayout(this); backupRow.setOrientation(LinearLayout.HORIZONTAL);
-        Button btnBackup = new Button(this); btnBackup.setText(T("BACKUP", "💾 SAO LƯU")); btnBackup.setBackground(getRounded("#2E7D32", 20f)); btnBackup.setTextColor(Color.WHITE); LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, -2, 1f); bp.setMargins(0,0,15,0); btnBackup.setLayoutParams(bp); Button btnRestore = new Button(this); btnRestore.setText(T("RESTORE", "📂 PHỤC HỒI")); btnRestore.setBackground(getRounded("#EF6C00", 20f)); btnRestore.setTextColor(Color.WHITE); LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f); btnRestore.setLayoutParams(rp);
-        btnBackup.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("text/plain"); i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup.txt"); startActivityForResult(i, 101); }); btnRestore.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, 102); }); backupRow.addView(btnBackup); backupRow.addView(btnRestore); pageEcosystem.addView(wrapCard(backupRow));
-        
-        LinearLayout secSys = new LinearLayout(this); secSys.setOrientation(LinearLayout.VERTICAL); secSys.addView(createSectionTitle(T("SYSTEM BEHAVIOR", "HÀNH VI HỆ THỐNG"))); CheckBox cbKbd = new CheckBox(this); cbKbd.setText(T("Auto-hide on Keyboard", "Tự ẩn khi hiện Bàn Phím")); cbKbd.setTextColor(Color.WHITE); cbKbd.setChecked(prefs.getBoolean("avoid_kbd", true)); cbKbd.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("avoid_kbd", c).apply()); secSys.addView(cbKbd); 
-        secSys.addView(createSectionTitle("BLACKLIST (Hide Overlay)")); secSys.addView(createInput("Packages (com.ex.app)", "blacklist")); 
-        secSys.addView(createSectionTitle("LOCKLIST (Morse AppLock)")); 
-        LinearLayout lockRow = new LinearLayout(this); lockRow.setOrientation(LinearLayout.HORIZONTAL);
-        EditText etLock = createInput("Packages (com.zing.zalo,...)", "locklist"); etLock.setTag("locklist_input"); etLock.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        Button btnPickApps = new Button(this); btnPickApps.setText("📱 PICK APP"); btnPickApps.setTextColor(Color.BLACK); btnPickApps.setBackground(getRounded("#00E5FF", 20f));
-        btnPickApps.setOnClickListener(v -> showAppPickerDialog());
-        lockRow.addView(etLock); lockRow.addView(btnPickApps);
-        secSys.addView(lockRow);
-        pageEcosystem.addView(wrapCard(secSys));
-        addYTDLDesign(pageEcosystem);
-        LinearLayout ecoNav = new LinearLayout(this); ecoNav.setOrientation(LinearLayout.HORIZONTAL); ecoNav.setPadding(0, 0, 0, 40);
-        Button btnIntents = new Button(this); btnIntents.setText("INTENTS"); btnIntents.setBackground(getRounded("#D32F2F", 40f)); btnIntents.setTextColor(Color.WHITE);
-        Button btnTiles = new Button(this); btnTiles.setText("QS TILES"); btnTiles.setBackground(getRounded("#4CAF50", 40f)); btnTiles.setTextColor(Color.WHITE);
-        Button btnMacros = new Button(this); btnMacros.setText("MACROS"); btnMacros.setBackground(getRounded("#2196F3", 40f)); btnMacros.setTextColor(Color.WHITE);
+    pageEcosystem.addView(createSectionTitle(T("BACKUP / RESTORE", "KHU VỰC SAO LƯU")));
+    LinearLayout backupRow = new LinearLayout(this);
+    backupRow.setOrientation(LinearLayout.HORIZONTAL);
+    Button btnBackup = new Button(this); btnBackup.setText(T("💾 BACKUP", "💾  SAO LƯU")); 
+    btnBackup.setBackground(getRounded("#2E7D32", 20f));
+    btnBackup.setTextColor(Color.WHITE); 
+    LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, -2, 1f); 
+    bp.setMargins(0,0,15,0); btnBackup.setLayoutParams(bp); 
+    
+    Button btnRestore = new Button(this); btnRestore.setText(T("📂 RESTORE", "📂 PHỤC HỒI"));
+    btnRestore.setBackground(getRounded("#EF6C00", 20f));
+    btnRestore.setTextColor(Color.WHITE); 
+    LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f); 
+    btnRestore.setLayoutParams(rp);
+    
+    btnBackup.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("text/plain"); i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup.txt"); startActivityForResult(i, 101); });
+    btnRestore.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, 102); }); 
+    backupRow.addView(btnBackup); backupRow.addView(btnRestore);
+    pageEcosystem.addView(wrapCard(backupRow));
 
-LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, -2, 1f); btnLp.setMargins(10,0,10,0);
-btnIntents.setLayoutParams(btnLp); btnTiles.setLayoutParams(btnLp); btnMacros.setLayoutParams(btnLp);
+    LinearLayout secSys = new LinearLayout(this);
+    secSys.setOrientation(LinearLayout.VERTICAL);
+    secSys.addView(createSectionTitle(T("SYSTEM BEHAVIOR", "HÀNH VI HỆ THỐNG (Zero-RAM Overhead)")));
+    
+    CheckBox cbKbd = new CheckBox(this); cbKbd.setText(T("Auto-hide on Keyboard", "Tự ẩn khi hiện Bàn Phím")); 
+    cbKbd.setTextColor(Color.WHITE); cbKbd.setChecked(prefs.getBoolean("avoid_kbd", true));
+    cbKbd.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean("avoid_kbd", c).apply()); 
+    secSys.addView(cbKbd);
 
-Button btnStorage = new Button(this); btnStorage.setText("STORAGE");
-btnStorage.setBackground(getRounded("#795548", 40f)); btnStorage.setTextColor(Color.WHITE);
-btnStorage.setLayoutParams(btnLp);
-Button btnRecorder = new Button(this); btnRecorder.setText("GHI ÂM");
-btnRecorder.setBackground(getRounded("#E91E63", 40f)); btnRecorder.setTextColor(Color.WHITE);
-btnRecorder.setLayoutParams(btnLp);
-ecoNav.addView(btnIntents); ecoNav.addView(btnTiles); ecoNav.addView(btnMacros); ecoNav.addView(btnStorage); ecoNav.addView(btnRecorder);
-btnStorage.setOnClickListener(v -> { ecoType=3; renderEcosystem(); });
-btnRecorder.setOnClickListener(v -> { ecoType=4; renderEcosystem(); });
-        pageEcosystem.addView(ecoNav);
-        ecoContainer = new LinearLayout(this); ecoContainer.setOrientation(LinearLayout.VERTICAL);
-        pageEcosystem.addView(ecoContainer);
+    // Giao diện Blacklist / Locklist mới (Xóa bỏ TextEdit Class Name cồng kềnh)
+    secSys.addView(createSectionTitle("APP LIST (Quản lý ứng dụng)"));
+    LinearLayout appListRow = new LinearLayout(this);
+    appListRow.setOrientation(LinearLayout.HORIZONTAL);
+    
+    Button btnPickBlacklist = new Button(this); 
+    btnPickBlacklist.setText("🚫 BLACKLIST");
+    btnPickBlacklist.setBackground(getRounded("#D32F2F", 20f));
+    btnPickBlacklist.setTextColor(Color.WHITE);
+    btnPickBlacklist.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    // Dùng chung Picker nhưng ghi vào key khác
+    btnPickBlacklist.setOnClickListener(v -> showPanelMultiPicker("blacklist", true));
 
-        btnIntents.setOnClickListener(v -> { ecoType=0; renderEcosystem(); });
-        btnTiles.setOnClickListener(v -> { ecoType=1; renderEcosystem(); });
-        btnMacros.setOnClickListener(v -> { ecoType=2; renderEcosystem(); });
-        renderEcosystem();
-    }
+    Button btnPickLocklist = new Button(this); 
+    btnPickLocklist.setText("📱 LOCKLIST");
+    btnPickLocklist.setBackground(getRounded("#00E5FF", 20f));
+    btnPickLocklist.setTextColor(Color.BLACK);
+    LinearLayout.LayoutParams lpLock = new LinearLayout.LayoutParams(0, -2, 1f);
+    lpLock.setMargins(15, 0, 0, 0);
+    btnPickLocklist.setLayoutParams(lpLock);
+    btnPickLocklist.setOnClickListener(v -> showAppPickerDialog());
+
+    appListRow.addView(btnPickBlacklist);
+    appListRow.addView(btnPickLocklist);
+    secSys.addView(appListRow);
+    
+    pageEcosystem.addView(wrapCard(secSys));
+
+    // Gộp YTDL, Storage, Recorder vào cùng khu vực hệ thống cho gọn
+    addYTDLDesign(pageEcosystem);
+
+    LinearLayout toolRow = new LinearLayout(this);
+    toolRow.setOrientation(LinearLayout.HORIZONTAL);
+    toolRow.setPadding(0, 0, 0, 40);
+
+    Button btnStorage = new Button(this); btnStorage.setText("STORAGE");
+    btnStorage.setBackground(getRounded("#795548", 40f));
+    btnStorage.setTextColor(Color.WHITE);
+    btnStorage.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    Button btnRecorder = new Button(this); btnRecorder.setText("GHI ÂM");
+    btnRecorder.setBackground(getRounded("#E91E63", 40f));
+    btnRecorder.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams lpRec = new LinearLayout.LayoutParams(0, -2, 1f);
+    lpRec.setMargins(15, 0, 0, 0);
+    btnRecorder.setLayoutParams(lpRec);
+
+    toolRow.addView(btnStorage); toolRow.addView(btnRecorder);
+    pageEcosystem.addView(toolRow);
+
+    // Khu vực Intent / QS Tiles / Macros
+    LinearLayout ecoNav = new LinearLayout(this);
+    ecoNav.setOrientation(LinearLayout.HORIZONTAL); ecoNav.setPadding(0, 0, 0, 40);
+    
+    Button btnIntents = new Button(this); btnIntents.setText("INTENTS");
+    btnIntents.setBackground(getRounded("#D32F2F", 40f)); btnIntents.setTextColor(Color.WHITE);
+    
+    Button btnTiles = new Button(this); btnTiles.setText("QS TILES");
+    btnTiles.setBackground(getRounded("#4CAF50", 40f)); btnTiles.setTextColor(Color.WHITE);
+    
+    Button btnMacros = new Button(this); btnMacros.setText("MACROS");
+    btnMacros.setBackground(getRounded("#2196F3", 40f)); btnMacros.setTextColor(Color.WHITE);
+    
+    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, -2, 1f);
+    btnLp.setMargins(10,0,10,0);
+    btnIntents.setLayoutParams(btnLp); btnTiles.setLayoutParams(btnLp); btnMacros.setLayoutParams(btnLp);
+
+    ecoNav.addView(btnIntents); ecoNav.addView(btnTiles); ecoNav.addView(btnMacros);
+    pageEcosystem.addView(ecoNav);
+
+    ecoContainer = new LinearLayout(this);
+    ecoContainer.setOrientation(LinearLayout.VERTICAL);
+    pageEcosystem.addView(ecoContainer);
+
+    // Kèm gọi updateFabVisibility khi chuyển không gian
+    btnIntents.setOnClickListener(v -> { ecoType = 0; updateFabVisibility(); renderEcosystem(); });
+    btnTiles.setOnClickListener(v -> { ecoType = 1; updateFabVisibility(); renderEcosystem(); });
+    btnMacros.setOnClickListener(v -> { ecoType = 2; updateFabVisibility(); renderEcosystem(); });
+    btnStorage.setOnClickListener(v -> { ecoType = 3; updateFabVisibility(); renderEcosystem(); });
+    btnRecorder.setOnClickListener(v -> { ecoType = 4; updateFabVisibility(); renderEcosystem(); });
+
+    renderEcosystem();
+}
     // ==================== DANH SÁCH ĐỘNG (KHÔNG GIỚI HẠN SỐ LƯỢNG) ====================
 // Thay cho kiểu "i1_.. i15_" cố định — dùng JSON array chứa list các ID (UUID rút gọn).
 // Mỗi item vẫn lưu field riêng theo prefix "intent_<id>_..." như cũ để không phải
@@ -1048,64 +1140,89 @@ private void removeDynamicId(String listKey, String id) {
     private void renderEcosystem() {
     ecoContainer.removeAllViews();
     if (ecoType == 0 || ecoType == 1 || ecoType == 2) {
-        String listKey = ecoType==0 ? "intent_ids" : (ecoType==1 ? "tile_ids_v2" : "macro_ids");
-        String prefixBase = ecoType==0 ? "intent_" : (ecoType==1 ? "tilev2_" : "macro_");
+        String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
+        String prefixBase = ecoType == 0 ? "intent_" : (ecoType == 1 ? "tilev2_" : "macro_");
         List<String> ids = getDynamicIds(listKey);
-        // WRAP LAYOUT: LinearLayout ngang nhiều hàng, tự xuống hàng thủ công
-        // (Pixel 2XL opt: không dùng FlexboxLayout thư viện ngoài — thêm 1 dependency
-        // là thêm APK size + parse layout phức tạp hơn cho GC; tự quản lý đơn giản hơn)
-        LinearLayout wrapRow = new LinearLayout(this); wrapRow.setOrientation(LinearLayout.HORIZONTAL);
-        wrapRow.setPadding(0,10,0,10);
-        int rowWidthUsed = 0, screenW = getResources().getDisplayMetrics().widthPixels - 160;
-        ecoContainer.addView(wrapRow);
+
         for (String id : ids) {
-            String name = ecoType==0 ? prefs.getString(prefixBase+id+"_name","Intent")
-                        : ecoType==1 ? prefs.getString(prefixBase+id+"_label","Tile")
-                        : prefs.getString(prefixBase+id+"_name","Macro");
-            Button btn = new Button(this); btn.setText(name);
-            btn.setBackground(getRounded("#1E1E1E", 100f)); btn.setTextColor(Color.parseColor("#00E5FF"));
-            btn.setPadding(30,15,30,15); btn.setTextSize(13);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2,-2); lp.setMargins(0,0,15,15);
-            btn.setLayoutParams(lp);
-            final String finalId = id; final int finalType = ecoType;
-            btn.setOnClickListener(v -> {
-                if (finalType==0) openIntentEditorV2(finalId);
-                else if (finalType==1) openTileEditorV2(finalId);
+            String name = ecoType == 0 ? prefs.getString(prefixBase+id+"_name", "Intent")
+                        : ecoType == 1 ? prefs.getString(prefixBase+id+"_label", "Tile")
+                        : prefs.getString(prefixBase+id+"_name", "Macro");
+
+            // Tạo cấu trúc thẻ như Condition Space để đồng bộ UI và quản lý dễ dàng
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setBackground(getRounded("#1E1E1E", 25f));
+            card.setPadding(35, 35, 35, 35);
+            LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(-1, -2);
+            cardLp.setMargins(15, 15, 15, 15);
+            card.setLayoutParams(cardLp);
+
+            LinearLayout rowTop = new LinearLayout(this);
+            rowTop.setOrientation(LinearLayout.HORIZONTAL);
+            rowTop.setGravity(Gravity.CENTER_VERTICAL);
+
+            Switch swOn = new Switch(this);
+            swOn.setChecked(prefs.getBoolean(prefixBase + id + "_en", true));
+            swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(prefixBase + id + "_en", chk).apply());
+
+            TextView tvTitle = new TextView(this);
+            tvTitle.setText(name);
+            tvTitle.setTextColor(Color.parseColor("#00E5FF"));
+            tvTitle.setTextSize(16);
+            tvTitle.setPadding(20, 0, 0, 0);
+            tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+            rowTop.addView(swOn);
+            rowTop.addView(tvTitle);
+            card.addView(rowTop);
+
+            final String finalId = id;
+            final int finalType = ecoType;
+
+            LinearLayout rowBot = new LinearLayout(this);
+            rowBot.setOrientation(LinearLayout.HORIZONTAL);
+            rowBot.setPadding(0, 20, 0, 0);
+
+            Button btnEdit = new Button(this); btnEdit.setText("SỬA");
+            btnEdit.setBackground(getRounded("#333333", 15f));
+            btnEdit.setTextColor(Color.WHITE);
+            btnEdit.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            btnEdit.setOnClickListener(v -> {
+                if (finalType == 0) openIntentEditorV2(finalId);
+                else if (finalType == 1) openTileEditorV2(finalId);
                 else openMacroEditorV2(finalId);
             });
-            btn.setOnLongClickListener(v -> {
-                new AlertDialog.Builder(this).setTitle(T("Delete?","Xóa?"))
+
+            Button btnCopy = new Button(this); btnCopy.setText("COPY");
+            btnCopy.setBackground(getRounded("#2196F3", 15f));
+            btnCopy.setTextColor(Color.WHITE);
+            LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(0, -2, 1f);
+            cpLp.setMargins(10, 0, 10, 0);
+            btnCopy.setLayoutParams(cpLp);
+            btnCopy.setOnClickListener(v -> {
+                String newId = addDynamicId(listKey);
+                // Copy cấu hình
+                prefs.edit().putString(prefixBase+newId+"_name", name + " Copy").apply();
+                if (finalType == 0) openIntentEditorV2(newId);
+                else if (finalType == 1) openTileEditorV2(newId);
+                else openMacroEditorV2(newId);
+            });
+
+            rowBot.addView(btnEdit);
+            rowBot.addView(btnCopy);
+            card.addView(rowBot);
+
+            card.setOnLongClickListener(v -> {
+                new AlertDialog.Builder(this).setTitle(T("Delete?", "Xóa?"))
                     .setPositiveButton(T("DELETE","XÓA"), (d,w) -> {
                         removeDynamicId(listKey, finalId);
-                        // dọn field lẻ để prefs không phình rác
-                        if (finalType==0) prefs.edit().remove(prefixBase+finalId+"_name").remove(prefixBase+finalId+"_act")
-                            .remove(prefixBase+finalId+"_pkg").remove(prefixBase+finalId+"_cls").apply();
-                        else if (finalType==1) { sendBroadcast(new Intent("com.manhmoc.edgebar.TILE_CONFIG_CHANGED")); }
                         renderEcosystem();
-                    }).setNegativeButton(T("CANCEL","HỦY"), null).show();
+                    }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
                 return true;
             });
-            // Đo bề rộng ước lượng để xuống hàng (đủ dùng, không cần measure() chính xác)
-            int estW = name.length()*22 + 90;
-            if (rowWidthUsed + estW > screenW && rowWidthUsed > 0) {
-                wrapRow = new LinearLayout(this); wrapRow.setOrientation(LinearLayout.HORIZONTAL);
-                wrapRow.setPadding(0,0,0,10); ecoContainer.addView(wrapRow); rowWidthUsed = 0;
-            }
-            wrapRow.addView(btn); rowWidthUsed += estW;
+            ecoContainer.addView(card);
         }
-        Button btnAdd = new Button(this);
-        btnAdd.setText(ecoType==0 ? "+ INTENT" : ecoType==1 ? "+ QS TILE" : "+ MACRO");
-        btnAdd.setBackground(getRounded("#00E5FF", 100f)); btnAdd.setTextColor(Color.BLACK);
-        btnAdd.setPadding(30,15,30,15);
-        LinearLayout.LayoutParams addLp = new LinearLayout.LayoutParams(-2,-2); addLp.setMargins(0,0,15,15);
-        btnAdd.setLayoutParams(addLp);
-        btnAdd.setOnClickListener(v -> {
-            String newId = addDynamicId(listKey);
-            if (ecoType==0) openIntentEditorV2(newId);
-            else if (ecoType==1) openTileEditorV2(newId);
-            else openMacroEditorV2(newId);
-        });
-        wrapRow.addView(btnAdd);
     } else if (ecoType == 3) {
         // ... giữ nguyên phần Storage cũ (không đổi)
         long lastScanTs = prefs.getLong("storage_scan_ts", 0);
@@ -2132,7 +2249,7 @@ LinearLayout colHandle = newPanelColumn();
     LinearLayout pickRow = new LinearLayout(this); pickRow.setOrientation(LinearLayout.HORIZONTAL); pickRow.setPadding(0,10,0,0);
     int appCount = prefs.getString(px+"apps","").isEmpty() ? 0 : prefs.getString(px+"apps","").split(",").length;
     Button btnApps = new Button(this);
-    btnApps.setText("📱 (" + appCount + ")");
+    btnApps.setText("📱COLLECT APP (" + appCount + ")");
     btnApps.setBackground(getRounded("#00E5FF", 20f)); btnApps.setTextColor(Color.BLACK);
     LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(0,-2,1f); bLp.setMargins(0,0,10,0);
     btnApps.setLayoutParams(bLp);
@@ -2140,7 +2257,7 @@ LinearLayout colHandle = newPanelColumn();
 
     int actCount = prefs.getString(px+"acts","").isEmpty() ? 0 : prefs.getString(px+"acts","").split(",").length;
     Button btnActs = new Button(this);
-    btnActs.setText("⚡ (" + actCount + ")");
+    btnActs.setText("⚡ COLLECT ACTION(" + actCount + ")");
     btnActs.setBackground(getRounded("#E91E63", 20f)); btnActs.setTextColor(Color.WHITE);
     btnActs.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     btnActs.setOnClickListener(v -> showPanelMultiPicker(fpx+"acts", false));
@@ -2680,7 +2797,15 @@ private void showPanelAppPicker() {
         sp.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.2f)); l.addView(tv); l.addView(sp); 
         return l; 
     }
-    private Button createNavBtn(String t) { Button b = new Button(this); b.setText(t); b.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); return b; }
+    private Button createNavBtn(String t) { 
+    Button b = new Button(this); 
+    b.setText(t);
+    // Đổi chiều ngang thành MATCH_PARENT (-1), bỏ weight 1f, thêm margin dưới
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+    lp.setMargins(0, 0, 0, 20);
+    b.setLayoutParams(lp); 
+    return b; 
+}
     private Button createTabBtn(String t) { Button b = new Button(this); b.setText(t); return b; }
     private TextView createSectionTitle(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.parseColor("#00E5FF")); tv.setPadding(0,10,0,20); return tv; }
     private Spinner createSpinner() { Spinner sp = new Spinner(this); sp.setBackground(getRounded("#2C2C2C", 20f)); sp.setPadding(20,20,20,20); return sp; }
