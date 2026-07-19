@@ -706,26 +706,30 @@ btnPickShortcut.setOnClickListener(v -> showShortcutPickerDialog((id, name) -> {
 }));
 shortcutCard.addView(btnPickShortcut);
 vAct.addView(shortcutCard, 1); // đặt ngay sau launchAppCard
-    // V19.12.3.6.18: nhóm action theo 4 danh mục — khai báo TRƯỚC khi dùng
+    // V19.12.3.6.19: 4 danh mục hành động giờ là CARD cố định (đồng bộ với
+    // launchAppCard/shortcutCard) thay vì drawer xổ xuống — nhẹ RAM hơn vì
+    // checkbox chỉ tạo lúc dialog mở, KHÔNG tồn tại sẵn trong cây view.
     final String[] SYS_KEYS = {"BACK","HOME","RECENTS","SCREEN_OFF","SCREEN_ON","FLASH","POWER_DIALOG",
         "VOLUME","SCREENSHOT","CAMERA","NOTIFICATIONS","VOICE_RECORD"};
     final String[] UTIL_KEYS = {"TOGGLE_ACC","TOGGLE_OVERLAY","TOGGLE_MORSE","YTDL_DOWNLOAD",
         "OPEN_PANEL_1","OPEN_PANEL_2","OPEN_PANEL_3"};
-    ArrayList<String> actionBoxKeys = new ArrayList<>();
 
-    vAct.addView(buildActionCategoryDrawer(T("SYSTEM","HỆ THỐNG"), SYS_KEYS,
-        actKeysUsed, actLabsUsed, savedArray, actionBoxes, actionBoxKeys));
-    vAct.addView(buildActionCategoryDrawer(T("UTILITIES","TIỆN ÍCH"), UTIL_KEYS,
-        actKeysUsed, actLabsUsed, savedArray, actionBoxes, actionBoxKeys));
-    vAct.addView(buildActionCategoryDrawerByPrefix(T("INTENTS","INTENT"), "INTENT_",
-        actKeysUsed, actLabsUsed, savedArray, actionBoxes, actionBoxKeys));
-    vAct.addView(buildActionCategoryDrawerByPrefix(T("MACROS","MACRO"), "MACRO_",
-        actKeysUsed, actLabsUsed, savedArray, actionBoxes, actionBoxKeys));
-    // XOÁ HẲN vòng for cũ ở đây — KHÔNG còn checkbox phẳng nữa,
-    // vì mọi action đã được liệt kê hết trong 4 drawer ở trên (SYS_KEYS
-    // phủ hết action hệ thống, UTIL_KEYS phủ hết tiện ích, phần INTENT/MACRO
-    // dùng buildActionCategoryDrawerByPrefix tự quét theo prefix nên không sót).
+    // Gom sẵn các action đã lưu (trừ LAUNCH_APP/RUN_SHORTCUT đã có hộp riêng)
+    // vào 1 tập dùng chung cho cả 4 card — Save chỉ cần addAll() tập này.
+    final java.util.LinkedHashSet<String> categoryActs = new java.util.LinkedHashSet<>();
+    for (String sa : savedArray) {
+        String t = sa.trim();
+        if (!t.isEmpty() && !t.equals("LAUNCH_APP") && !t.equals("RUN_SHORTCUT")) categoryActs.add(t);
+    }
 
+    vAct.addView(buildActionCategoryCard(T("SYSTEM","HỆ THỐNG"), "⚙️",
+        buildItemsForKeys(SYS_KEYS, actKeysUsed, actLabsUsed), categoryActs, "#2A2A1A"));
+    vAct.addView(buildActionCategoryCard(T("UTILITIES","TIỆN ÍCH"), "🛠️",
+        buildItemsForKeys(UTIL_KEYS, actKeysUsed, actLabsUsed), categoryActs, "#1A2A2A"));
+    vAct.addView(buildActionCategoryCard(T("INTENTS","INTENT"), "📨",
+        buildItemsForPrefix("INTENT_", actKeysUsed, actLabsUsed), categoryActs, "#2A1A1A"));
+    vAct.addView(buildActionCategoryCard(T("MACROS","MACRO"), "🔀",
+        buildItemsForPrefix("MACRO_", actKeysUsed, actLabsUsed), categoryActs, "#1A1A2A"));
 LinearLayout vOpt = new LinearLayout(this); vOpt.setOrientation(LinearLayout.VERTICAL); vOpt.setVisibility(View.GONE);
         cbVib.setText(T("Haptic Feedback", "Bật Rung (Haptic Feedback)")); cbVib.setTextColor(Color.WHITE); cbVib.setChecked(editKey == null || prefs.getBoolean(editKey+"_vib", true)); vOpt.addView(cbVib);
         cbAnim.setText(T("Show Animation", "Bật Hiệu ứng Ánh sáng (Animation)")); cbAnim.setTextColor(Color.WHITE); cbAnim.setChecked(editKey == null || prefs.getBoolean(editKey+"_anim", true));
@@ -743,7 +747,7 @@ LinearLayout vOpt = new LinearLayout(this); vOpt.setOrientation(LinearLayout.VER
         bCancel.setOnClickListener(v -> dialog.dismiss());
         bSave.setOnClickListener(v -> {
             ArrayList<String> acts = new ArrayList<>();
-for (int i = 0; i < actionBoxes.size(); i++) { if (actionBoxes.get(i).isChecked()) acts.add(actionBoxKeys.get(i)); }
+acts.addAll(categoryActs); // gom từ 4 card SYSTEM/UTILITIES/INTENTS/MACROS
 if (launchAppSelected[0]) {
     if (launchAppPkg[0].isEmpty()) { Toast.makeText(this, T("Pick an app first!", "Hãy chọn 1 app trước!"), Toast.LENGTH_SHORT).show(); return; }
     acts.add("LAUNCH_APP");
@@ -826,6 +830,154 @@ private LinearLayout buildActionCategoryDrawerByPrefix(String title, String pref
         content.addView(cb);
     }
     return createDrawer(title, content);
+}
+    // ==================== ACTION CATEGORY CARDS (thay cho Drawer) ====================
+// Battery/RAM Pixel 2XL: card chỉ có 3 view nhẹ (tiêu đề, đếm số, nút) — KHÔNG
+// tạo checkbox nào cho tới khi user bấm "CHỌN". Dialog picker bị destroy hoàn
+// toàn khi đóng (GC thu hồi), khác hẳn Drawer cũ vốn luôn giữ toàn bộ checkbox
+// trong RAM ngay cả khi đang cuộn ẩn (chỉ setVisibility GONE, không giải phóng).
+
+private List<String[]> buildItemsForKeys(String[] keys, String[] actKeysUsed, String[] actLabsUsed) {
+    List<String[]> out = new ArrayList<>();
+    for (String gk : keys) {
+        for (int i = 0; i < actKeysUsed.length; i++) {
+            if (actKeysUsed[i].equals(gk)) { out.add(new String[]{actLabsUsed[i], gk}); break; }
+        }
+    }
+    return out;
+}
+
+private List<String[]> buildItemsForPrefix(String prefix, String[] actKeysUsed, String[] actLabsUsed) {
+    List<String[]> out = new ArrayList<>();
+    for (int i = 0; i < actKeysUsed.length; i++) {
+        if (actKeysUsed[i].startsWith(prefix)) out.add(new String[]{actLabsUsed[i], actKeysUsed[i]});
+    }
+    return out;
+}
+
+private LinearLayout buildActionCategoryCard(String title, String emoji, List<String[]> items,
+        java.util.LinkedHashSet<String> selectedSet, String colorHex) {
+    LinearLayout card = new LinearLayout(this);
+    card.setOrientation(LinearLayout.VERTICAL);
+    card.setBackground(getRounded(colorHex, 20f));
+    card.setPadding(30, 30, 30, 30);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.setMargins(0, 0, 0, 20);
+    card.setLayoutParams(lp);
+
+    LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
+    TextView tvTitle = new TextView(this);
+    tvTitle.setText(emoji + " " + title);
+    tvTitle.setTextColor(Color.WHITE);
+    tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    row.addView(tvTitle);
+    card.addView(row);
+
+    TextView tvCount = new TextView(this);
+    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setPadding(0, 10, 0, 10);
+    Runnable updateCount = () -> {
+        int cnt = 0;
+        for (String[] it : items) if (selectedSet.contains(it[1])) cnt++;
+        tvCount.setText(cnt == 0 ? T("(Not selected)", "(Chưa chọn)") : cnt + " " + T("selected", "đã chọn"));
+    };
+    updateCount.run();
+    card.addView(tvCount);
+
+    Button btnPick = new Button(this);
+    btnPick.setText("📋 " + T("CHOOSE", "CHỌN"));
+    btnPick.setBackground(getRounded("#00000055", 20f));
+    btnPick.setTextColor(Color.WHITE);
+    btnPick.setOnClickListener(v -> showActionCategoryPicker(title, items, selectedSet, updateCount));
+    card.addView(btnPick);
+
+    return card;
+}
+
+// Dialog picker DÙNG CHUNG cho cả 4 category — có ô tìm kiếm + multi-select,
+// y hệt pattern showPanelMultiPicker() đã có sẵn, để đồng bộ trải nghiệm.
+private void showActionCategoryPicker(String title, List<String[]> items,
+        java.util.LinkedHashSet<String> selectedSet, Runnable onChange) {
+    // Làm việc trên bản sao — chỉ apply khi bấm LƯU, tránh sửa dở dang khi HỦY
+    final java.util.LinkedHashSet<String> working = new java.util.LinkedHashSet<>(selectedSet);
+
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30, 80, 30, 30);
+
+    TextView tvTitle = new TextView(this); tvTitle.setText(title);
+    tvTitle.setTextColor(Color.parseColor("#00E5FF")); tvTitle.setTextSize(18); tvTitle.setPadding(0, 0, 0, 20);
+    root.addView(tvTitle);
+
+    EditText etSearch = new EditText(this);
+    etSearch.setHint("🔍 " + T("Search...", "Tìm kiếm..."));
+    etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
+    etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30, 25, 30, 25);
+    root.addView(etSearch);
+
+    ListView lv = new ListView(this);
+    lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    root.addView(lv);
+
+    final List<String[]> shown = new ArrayList<>();
+    final Runnable[] refreshHolder = new Runnable[1];
+    BaseAdapter adapter = new BaseAdapter() {
+        @Override public int getCount() { return shown.size(); }
+        @Override public Object getItem(int p) { return shown.get(p); }
+        @Override public long getItemId(int p) { return p; }
+        @Override public View getView(int p, View cv, ViewGroup parent) {
+            LinearLayout row = new LinearLayout(MainActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(20, 22, 20, 22);
+            String[] item = shown.get(p);
+            CheckBox cb = new CheckBox(MainActivity.this);
+            cb.setChecked(working.contains(item[1])); cb.setClickable(false);
+            TextView tv = new TextView(MainActivity.this);
+            tv.setText(item[0]); tv.setTextColor(Color.WHITE);
+            tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            row.addView(cb); row.addView(tv);
+            row.setOnClickListener(v -> {
+                if (working.contains(item[1])) working.remove(item[1]); else working.add(item[1]);
+                refreshHolder[0].run();
+            });
+            return row;
+        }
+    };
+    lv.setAdapter(adapter);
+
+    Runnable doRefresh = () -> {
+        String q = etSearch.getText().toString().trim().toLowerCase();
+        shown.clear();
+        List<String[]> selSorted = new ArrayList<>();
+        List<String[]> rest = new ArrayList<>();
+        for (String[] it : items) {
+            if (!q.isEmpty() && !it[0].toLowerCase().contains(q)) continue;
+            if (working.contains(it[1])) selSorted.add(it); else rest.add(it);
+        }
+        shown.addAll(selSorted); shown.addAll(rest);
+        adapter.notifyDataSetChanged();
+    };
+    refreshHolder[0] = doRefresh;
+    etSearch.addTextChangedListener(new android.text.TextWatcher() {
+        public void afterTextChanged(android.text.Editable s) { doRefresh.run(); }
+        public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+        public void onTextChanged(CharSequence s, int a, int b, int c) {}
+    });
+    doRefresh.run();
+
+    LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0, 20, 0, 0);
+    Button bCancel = new Button(this); bCancel.setText(T("CANCEL", "HỦY")); bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Button bSave = new Button(this); bSave.setText(T("SAVE", "LƯU")); bSave.setBackground(getRounded("#4CAF50", 20f)); bSave.setTextColor(Color.WHITE); LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f); slp.setMargins(20, 0, 0, 0); bSave.setLayoutParams(slp);
+    footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
+
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave.setOnClickListener(v -> {
+        selectedSet.clear();
+        selectedSet.addAll(working);
+        onChange.run();
+        d.dismiss();
+    });
+
+    d.setContentView(root); d.show();
 }
     // ==================== KHÔNG GIAN HỆ SINH THÁI (ECOSYSTEM) ====================
     private void buildEcosystemSpace() {
