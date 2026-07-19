@@ -58,7 +58,7 @@ private int currentPanelIdx = 1; // 1-3, panel nào đang được chỉnh trong
 private Button fab;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; 
-    private final String CURRENT_VERSION = "V19.12.3.6.19 - Quantum Singularity"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.20"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -222,13 +222,38 @@ private void openDesignSpace() { currentMainTab = 0; refreshPreview(); navMain.s
 // buildRuleEditor(), nên không cần ẩn cả nút.
 private void updateFabVisibility() {
     if (fab == null) return;
-    if (currentMainTab == 1) {
+    if (currentMainTab == 1) { // Condition Space
         fab.setVisibility(View.VISIBLE);
         fab.setText("+ NEW EB");
-    } else if (currentMainTab == 2 && (ecoType == 0 || ecoType == 1 || ecoType == 2)) {
+        fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
+    } else if (currentMainTab == 2) { // Ecosystem Space
         fab.setVisibility(View.VISIBLE);
-        // Tự động đổi tên dựa theo mục đang chọn ở Ecosystem
-        fab.setText(ecoType == 0 ? "+ INTENT" : (ecoType == 1 ? "+ QS TILE" : "+ MACRO"));
+        if (ecoType == 0 || ecoType == 1 || ecoType == 2) {
+            fab.setText(ecoType == 0 ? "+ INTENT" : (ecoType == 1 ? "+ QS TILE" : "+ MACRO"));
+            fab.setOnClickListener(v -> {
+                String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
+                String newId = addDynamicId(listKey);
+                if (ecoType == 0) openIntentEditorV2(newId);
+                else if (ecoType == 1) openTileEditorV2(newId);
+                else openMacroEditorV2(newId);
+            });
+        } else if (ecoType == 3) {
+            fab.setText("🔍 DEEP SCAN");
+            fab.setOnClickListener(v -> runDeepStorageScan());
+        } else if (ecoType == 4) {
+            boolean recOn = VoiceRecorderService.isRunning;
+            fab.setText(recOn ? "⏹ OFF RECORD" : "🎙 ON RECORD");
+            fab.setOnClickListener(v -> {
+                if (android.content.pm.PackageManager.PERMISSION_GRANTED != checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)) {
+                    requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 201);
+                    return;
+                }
+                Intent i = new Intent(this, VoiceRecorderService.class);
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+                // Delay nhỏ để service kịp cập nhật trạng thái
+                new Handler().postDelayed(this::updateFabVisibility, 300);
+            });
+        }
     } else {
         fab.setVisibility(View.GONE);
     }
@@ -238,16 +263,45 @@ private void updateFabVisibility() {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);syncVolumeService();updateFabVisibility();isVi = prefs.getBoolean("lang_vi", true); reloadActionLabels();
         
-        rootLayout = new RelativeLayout(this); rootLayout.setBackgroundColor(Color.parseColor("#121212"));
-        ScrollView scroll = new ScrollView(this); RelativeLayout.LayoutParams rLp = new RelativeLayout.LayoutParams(-1,-1); rLp.bottomMargin = 240; scroll.setLayoutParams(rLp);
-        LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,60,40,40); 
-        
-        LinearLayout headerRow = new LinearLayout(this); headerRow.setOrientation(LinearLayout.HORIZONTAL); headerRow.setGravity(Gravity.CENTER_VERTICAL); headerRow.setPadding(0, 0, 0, 50);
-        TextView title = new TextView(this); title.setText("Edge Bar\n" + CURRENT_VERSION); title.setTextColor(Color.WHITE); title.setTextSize(24); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        Button btnLang = new Button(this); btnLang.setText(isVi ? "🇻🇳 TIẾNG VIỆT" : "🇺🇸 ENGLISH"); btnLang.setTextColor(Color.WHITE); btnLang.setBackground(getRounded("#2E7D32", 20f)); btnLang.setPadding(30, 20, 30, 20); 
-        btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
-        headerRow.addView(title); headerRow.addView(btnLang); main.addView(headerRow);
-        
+        // Tối ưu OLED: Nền đen tuyệt đối #000000 tắt hoàn toàn bóng LED trên Pixel 2XL
+    rootLayout = new RelativeLayout(this);
+    rootLayout.setBackgroundColor(Color.parseColor("#000000"));
+
+    ScrollView scroll = new ScrollView(this); 
+    RelativeLayout.LayoutParams rLp = new RelativeLayout.LayoutParams(-1,-1); 
+    rLp.bottomMargin = 240;
+    scroll.setLayoutParams(rLp);
+
+    LinearLayout main = new LinearLayout(this);
+    main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,60,40,40);
+
+    // Xây dựng Header 3 dòng siêu gọn + Dàn nút điều khiển trung tâm
+    LinearLayout headerRow = new LinearLayout(this);
+    headerRow.setOrientation(LinearLayout.VERTICAL);
+    headerRow.setPadding(0, 0, 0, 50);
+
+    TextView title = new TextView(this); 
+    title.setText("Edge Launcher\n" + CURRENT_VERSION); 
+    title.setTextColor(Color.parseColor("#E8EAED")); // Trắng xám chuẩn Material
+    title.setTextSize(22);
+    title.setPadding(0, 0, 0, 30);
+    headerRow.addView(title);
+
+    LinearLayout actionRow = new LinearLayout(this);
+    actionRow.setOrientation(LinearLayout.HORIZONTAL);
+    
+    // Nút hệ thống tiệm cận Settings Pixel
+    Button btnBackup = createSystemBtn("BACKUP", "#202124", "#8AB4F8");
+    Button btnRestore = createSystemBtn("RESTORE", "#202124", "#8AB4F8");
+    Button btnLang = createSystemBtn(isVi ? "TIẾNG VIỆT" : "ENGLISH", "#202124", "#E8EAED");
+
+    btnBackup.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("text/plain"); i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup.txt"); startActivityForResult(i, 101); });
+    btnRestore.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, 102); });
+    btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
+
+    actionRow.addView(btnBackup); actionRow.addView(btnRestore); actionRow.addView(btnLang);
+    headerRow.addView(actionRow);
+    main.addView(headerRow);
         if (!Settings.canDrawOverlays(this)) { Button btnReq = new Button(this); btnReq.setText(T("⚠️ GRANT OVERLAY", "⚠️ CẤP QUYỀN LỚP PHỦ")); btnReq.setBackground(getRounded("#D32F2F", 25f)); btnReq.setTextColor(Color.WHITE); btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))); main.addView(btnReq); }
 
 // --- DO NOT DISTURB (DND) --- Xin quyền ghi đè âm lượng (Volume Mapper)
@@ -463,45 +517,97 @@ btnHome.performClick();
     for (int c = 0; c < compsUsed.length; c++) {
         for (int g = 0; g < gesturesUsed.length; g++) {
             String key = prefix + compsUsed[c] + "_" + gesturesUsed[g];
-                String action = prefs.getString(key, "NONE");
-                if (!action.equals("NONE")) {
-                    if(count % 2 == 0) { currentRow = new LinearLayout(this); currentRow.setOrientation(LinearLayout.HORIZONTAL); currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1,-2)); listRules.addView(currentRow); }
-                    
-                    LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 25f)); card.setPadding(35,35,35,35); 
-                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,-2, 1f); lp.setMargins(15,15,15,15); card.setLayoutParams(lp);
-
-                    LinearLayout rowTop = new LinearLayout(this); rowTop.setOrientation(LinearLayout.HORIZONTAL); rowTop.setGravity(Gravity.CENTER_VERTICAL);
-                    Switch swOn = new Switch(this); swOn.setChecked(prefs.getBoolean(key+"_on", true)); swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(key+"_on", chk).apply());
-                    TextView tIcons = new TextView(this); tIcons.setText((prefs.getBoolean(key+"_vib",true)?"📳 ":"") + (prefs.getBoolean(key+"_anim",true)?"✨":"")); tIcons.setGravity(Gravity.RIGHT); tIcons.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-                    rowTop.addView(swOn); rowTop.addView(tIcons); card.addView(rowTop);
-
-                    TextView tCond = new TextView(this); tCond.setText(compNamesUsed[c] + "\n➔ " + gestureNamesUsed[g]); tCond.setTextColor(Color.parseColor("#BBBBBB")); tCond.setTextSize(13); tCond.setPadding(0,15,0,15); card.addView(tCond);
-                    
-                    TextView tAct = new TextView(this); String[] acts = action.split(","); StringBuilder actName = new StringBuilder();
-for(String a : acts) {
-    String at = a.trim();
-    if (at.equals("LAUNCH_APP")) {
-        if(actName.length()>0) actName.append(" + ");
-        actName.append("🚀 ").append(getAppLabelCached(prefs.getString(key + "_launch_pkg", "")));
-        continue;
+String action = prefs.getString(key, "NONE");
+if (!action.equals("NONE")) {
+    if (count % 2 == 0) { 
+        currentRow = new LinearLayout(this);
+        currentRow.setOrientation(LinearLayout.HORIZONTAL);
+        currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        listRules.addView(currentRow); 
     }
-    for(int i=0;i<actKeysUsed.length;i++) { if(actKeysUsed[i].equals(at)) { if(actName.length()>0) actName.append(" + "); actName.append(actLabsUsed[i]); } }
-}
-tAct.setText(actName.toString().isEmpty() ? T("Error", "Lỗi") : actName.toString()); tAct.setTextColor(Color.parseColor("#00E5FF")); tAct.setTextSize(15); card.addView(tAct);
-                    final int finalC = c; final int finalG = g; final String finalActs = action;
-                    
-                    LinearLayout rowBot = new LinearLayout(this); rowBot.setOrientation(LinearLayout.HORIZONTAL); rowBot.setPadding(0,20,0,0);
-                    Button btnEdit = new Button(this); btnEdit.setText("SỬA"); btnEdit.setBackground(getRounded("#333333", 15f)); btnEdit.setTextColor(Color.WHITE); btnEdit.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-                    btnEdit.setOnClickListener(v -> openRuleBuilderDialog(key, finalC, finalG, ""));
-                    
-                    Button btnCopy = new Button(this); btnCopy.setText("COPY"); btnCopy.setBackground(getRounded("#2196F3", 15f)); btnCopy.setTextColor(Color.WHITE); LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(0,-2,1f); cpLp.setMargins(10,0,10,0); btnCopy.setLayoutParams(cpLp);
-                    btnCopy.setOnClickListener(v -> openRuleBuilderDialog(null, finalC, finalG, finalActs)); 
-                    
-                    rowBot.addView(btnEdit); rowBot.addView(btnCopy); card.addView(rowBot);
+    
+    // Thẻ Condition bọc ngoài, màu xám đậm Material
+    LinearLayout card = new LinearLayout(this);
+    card.setOrientation(LinearLayout.HORIZONTAL);
+    card.setBackground(getRounded("#202124", 24f)); 
+    card.setPadding(24, 24, 24, 24);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+    lp.setMargins(10, 10, 10, 10); 
+    card.setLayoutParams(lp);
 
-                    card.setOnLongClickListener(v -> { new AlertDialog.Builder(this).setTitle(T("Delete Rule?", "Xóa Quy tắc?")).setPositiveButton(T("DELETE", "XÓA"), (d,w)->{prefs.edit().putString(key, "NONE").apply(); if(isVolKeyMode) syncVolumeService(); renderRulesList();}).setNegativeButton(T("CANCEL", "HỦY"), null).show(); return true; });
-                    currentRow.addView(card); count++;
-                }
+    // Cột trái: Hiển thị chữ
+    LinearLayout leftCol = new LinearLayout(this);
+    leftCol.setOrientation(LinearLayout.VERTICAL);
+    leftCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    TextView tCond = new TextView(this); 
+    tCond.setText(compNamesUsed[c] + "\n" + gestureNamesUsed[g]); 
+    tCond.setTextColor(Color.parseColor("#9AA0A6")); // Màu text thứ cấp
+    tCond.setTextSize(11); 
+    leftCol.addView(tCond);
+
+    TextView tAct = new TextView(this); 
+    String[] acts = action.split(",");
+    StringBuilder actName = new StringBuilder();
+    for(String a : acts) {
+        String at = a.trim();
+        if (at.equals("LAUNCH_APP")) {
+            if(actName.length() > 0) actName.append(" + ");
+            actName.append(getAppLabelCached(prefs.getString(key + "_launch_pkg", "")));
+            continue;
+        }
+        for(int i = 0; i < actKeysUsed.length; i++) { 
+            if(actKeysUsed[i].equals(at)) {
+                if(actName.length() > 0) actName.append(" + "); 
+                actName.append(actLabsUsed[i]); 
+            } 
+        }
+    }
+    tAct.setText(actName.toString().isEmpty() ? "Lỗi" : actName.toString());
+    tAct.setTextColor(Color.parseColor("#8AB4F8")); // Xanh Material thanh lịch
+    tAct.setTextSize(13); tAct.setPadding(0, 10, 0, 0);
+    leftCol.addView(tAct);
+
+    // Cột phải: Các nút thu nhỏ (Switch, Copy xếp trên Sửa)
+    LinearLayout rightCol = new LinearLayout(this);
+    rightCol.setOrientation(LinearLayout.VERTICAL);
+    rightCol.setGravity(Gravity.CENTER_HORIZONTAL);
+
+    Switch swOn = new Switch(this);
+    swOn.setChecked(prefs.getBoolean(key + "_on", true));
+    swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(key + "_on", chk).apply());
+    
+    final int finalC = c; final int finalG = g; final String finalActs = action;
+    
+    Button btnCopy = new Button(this); btnCopy.setText("COPY");
+    btnCopy.setBackground(getRounded("#303134", 12f)); btnCopy.setTextColor(Color.WHITE);
+    btnCopy.setTextSize(10); btnCopy.setPadding(0,0,0,0);
+    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(90, 60);
+    btnLp.setMargins(0, 10, 0, 5); btnCopy.setLayoutParams(btnLp);
+    btnCopy.setOnClickListener(v -> openRuleBuilderDialog(null, finalC, finalG, finalActs));
+
+    Button btnEdit = new Button(this); btnEdit.setText("SỬA");
+    btnEdit.setBackground(getRounded("#303134", 12f)); btnEdit.setTextColor(Color.WHITE);
+    btnEdit.setTextSize(10); btnEdit.setPadding(0,0,0,0);
+    btnEdit.setLayoutParams(new LinearLayout.LayoutParams(90, 60));
+    btnEdit.setOnClickListener(v -> openRuleBuilderDialog(key, finalC, finalG, ""));
+
+    rightCol.addView(swOn); rightCol.addView(btnCopy); rightCol.addView(btnEdit);
+    
+    card.addView(leftCol); card.addView(rightCol);
+
+    card.setOnLongClickListener(v -> { 
+        new AlertDialog.Builder(this).setTitle(T("Delete?", "Xóa?"))
+            .setPositiveButton("XÓA", (d,w) -> {
+                prefs.edit().putString(key, "NONE").apply(); 
+                if(isVolKeyMode) syncVolumeService(); 
+                renderRulesList();
+            }).setNegativeButton("HỦY", null).show(); 
+        return true; 
+    });
+
+    currentRow.addView(card); count++;
+               }
             }
         }
         if(count % 2 != 0 && currentRow != null) { View dummy = new View(this); dummy.setLayoutParams(new LinearLayout.LayoutParams(0,1,1f)); currentRow.addView(dummy); }
@@ -1003,26 +1109,6 @@ private void showActionCategoryPicker(String title, List<String[]> items,
 }
     // ==================== KHÔNG GIAN HỆ SINH THÁI (ECOSYSTEM) ====================
     private void buildEcosystemSpace() {
-    pageEcosystem.addView(createSectionTitle(T("BACKUP / RESTORE", "KHU VỰC SAO LƯU")));
-    LinearLayout backupRow = new LinearLayout(this);
-    backupRow.setOrientation(LinearLayout.HORIZONTAL);
-    Button btnBackup = new Button(this); btnBackup.setText(T("💾 BACKUP", "💾  SAO LƯU")); 
-    btnBackup.setBackground(getRounded("#2E7D32", 20f));
-    btnBackup.setTextColor(Color.WHITE); 
-    LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, -2, 1f); 
-    bp.setMargins(0,0,15,0); btnBackup.setLayoutParams(bp); 
-    
-    Button btnRestore = new Button(this); btnRestore.setText(T("📂 RESTORE", "📂 PHỤC HỒI"));
-    btnRestore.setBackground(getRounded("#EF6C00", 20f));
-    btnRestore.setTextColor(Color.WHITE); 
-    LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f); 
-    btnRestore.setLayoutParams(rp);
-    
-    btnBackup.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("text/plain"); i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup.txt"); startActivityForResult(i, 101); });
-    btnRestore.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, 102); }); 
-    backupRow.addView(btnBackup); backupRow.addView(btnRestore);
-    pageEcosystem.addView(wrapCard(backupRow));
-
     LinearLayout secSys = new LinearLayout(this);
     secSys.setOrientation(LinearLayout.VERTICAL);
     secSys.addView(createSectionTitle(T("SYSTEM BEHAVIOR", "HÀNH VI HỆ THỐNG (Zero-RAM Overhead)")));
@@ -1139,127 +1225,116 @@ private void removeDynamicId(String listKey, String id) {
 }
     private void renderEcosystem() {
     ecoContainer.removeAllViews();
-    if (ecoType == 0 || ecoType == 1 || ecoType == 2) {
-        String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
-        String prefixBase = ecoType == 0 ? "intent_" : (ecoType == 1 ? "tilev2_" : "macro_");
-        List<String> ids = getDynamicIds(listKey);
+   if (ecoType == 0 || ecoType == 1 || ecoType == 2) {
+    String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
+    String prefixBase = ecoType == 0 ? "intent_" : (ecoType == 1 ? "tilev2_" : "macro_");
+    List<String> ids = getDynamicIds(listKey);
 
-        for (String id : ids) {
-            String name = ecoType == 0 ? prefs.getString(prefixBase+id+"_name", "Intent")
-                        : ecoType == 1 ? prefs.getString(prefixBase+id+"_label", "Tile")
-                        : prefs.getString(prefixBase+id+"_name", "Macro");
+    LinearLayout currentRow = null;
+    int count = 0;
 
-            // Tạo cấu trúc thẻ như Condition Space để đồng bộ UI và quản lý dễ dàng
-            LinearLayout card = new LinearLayout(this);
-            card.setOrientation(LinearLayout.VERTICAL);
-            card.setBackground(getRounded("#1E1E1E", 25f));
-            card.setPadding(35, 35, 35, 35);
-            LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(-1, -2);
-            cardLp.setMargins(15, 15, 15, 15);
-            card.setLayoutParams(cardLp);
-
-            LinearLayout rowTop = new LinearLayout(this);
-            rowTop.setOrientation(LinearLayout.HORIZONTAL);
-            rowTop.setGravity(Gravity.CENTER_VERTICAL);
-
-            Switch swOn = new Switch(this);
-            swOn.setChecked(prefs.getBoolean(prefixBase + id + "_en", true));
-            swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(prefixBase + id + "_en", chk).apply());
-
-            TextView tvTitle = new TextView(this);
-            tvTitle.setText(name);
-            tvTitle.setTextColor(Color.parseColor("#00E5FF"));
-            tvTitle.setTextSize(16);
-            tvTitle.setPadding(20, 0, 0, 0);
-            tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-            rowTop.addView(swOn);
-            rowTop.addView(tvTitle);
-            card.addView(rowTop);
-
-            final String finalId = id;
-            final int finalType = ecoType;
-
-            LinearLayout rowBot = new LinearLayout(this);
-            rowBot.setOrientation(LinearLayout.HORIZONTAL);
-            rowBot.setPadding(0, 20, 0, 0);
-
-            Button btnEdit = new Button(this); btnEdit.setText("SỬA");
-            btnEdit.setBackground(getRounded("#333333", 15f));
-            btnEdit.setTextColor(Color.WHITE);
-            btnEdit.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-            btnEdit.setOnClickListener(v -> {
-                if (finalType == 0) openIntentEditorV2(finalId);
-                else if (finalType == 1) openTileEditorV2(finalId);
-                else openMacroEditorV2(finalId);
-            });
-
-            Button btnCopy = new Button(this); btnCopy.setText("COPY");
-            btnCopy.setBackground(getRounded("#2196F3", 15f));
-            btnCopy.setTextColor(Color.WHITE);
-            LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(0, -2, 1f);
-            cpLp.setMargins(10, 0, 10, 0);
-            btnCopy.setLayoutParams(cpLp);
-            btnCopy.setOnClickListener(v -> {
-                String newId = addDynamicId(listKey);
-                // Copy cấu hình
-                prefs.edit().putString(prefixBase+newId+"_name", name + " Copy").apply();
-                if (finalType == 0) openIntentEditorV2(newId);
-                else if (finalType == 1) openTileEditorV2(newId);
-                else openMacroEditorV2(newId);
-            });
-
-            rowBot.addView(btnEdit);
-            rowBot.addView(btnCopy);
-            card.addView(rowBot);
-
-            card.setOnLongClickListener(v -> {
-                new AlertDialog.Builder(this).setTitle(T("Delete?", "Xóa?"))
-                    .setPositiveButton(T("DELETE","XÓA"), (d,w) -> {
-                        removeDynamicId(listKey, finalId);
-                        renderEcosystem();
-                    }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
-                return true;
-            });
-            ecoContainer.addView(card);
+    for (String id : ids) {
+        if (count % 2 == 0) {
+            currentRow = new LinearLayout(this);
+            currentRow.setOrientation(LinearLayout.HORIZONTAL);
+            currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+            ecoContainer.addView(currentRow);
         }
-    } else if (ecoType == 3) {
-        // ... giữ nguyên phần Storage cũ (không đổi)
-        long lastScanTs = prefs.getLong("storage_scan_ts", 0);
-        TextView tvInfo = new TextView(this);
-        tvInfo.setTextColor(Color.GRAY); tvInfo.setPadding(0,0,0,20);
-        tvInfo.setText(lastScanTs == 0 ? T("Chưa quét lần nào","Chưa quét lần nào")
-            : T("Lần quét gần nhất: ", "Lần quét gần nhất: ") + android.text.format.DateFormat.format("HH:mm dd/MM", lastScanTs));
-        ecoContainer.addView(tvInfo);
-        Button btnScan = new Button(this);
-        btnScan.setText("🔍 QUÉT DUNG LƯỢNG NGAY (Deep Scan)");
-        btnScan.setBackground(getRounded("#00E5FF", 20f)); btnScan.setTextColor(Color.BLACK);
-        btnScan.setOnClickListener(v -> runDeepStorageScan());
-        ecoContainer.addView(btnScan);
-        renderCachedStorageList();
-    } else if (ecoType == 4) {
-        // ... giữ nguyên phần Ghi âm cũ (không đổi) — copy y nguyên block cũ tại đây
-        boolean recOn = VoiceRecorderService.isRunning;
-        Button btnRec = new Button(this);
-        btnRec.setText(recOn ? "⏹ DỪNG GHI ÂM" : "🎤 BẮT ĐẦU GHI ÂM");
-        btnRec.setBackground(getRounded(recOn ? "#D32F2F" : "#E91E63", 20f));
-        btnRec.setTextColor(Color.WHITE); btnRec.setPadding(0,30,0,30);
-        btnRec.setOnClickListener(v -> {
-            if (android.content.pm.PackageManager.PERMISSION_GRANTED !=
-                checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)) {
-                requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 201);
-                return;
-            }
-            Intent i = new Intent(this, VoiceRecorderService.class);
-            if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
-            new Handler().postDelayed(this::renderEcosystem, 300);
+
+        String name = ecoType == 0 ? prefs.getString(prefixBase+id+"_name", "Intent")
+                    : ecoType == 1 ? prefs.getString(prefixBase+id+"_label", "Tile")
+                    : prefs.getString(prefixBase+id+"_name", "Macro");
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setBackground(getRounded("#202124", 24f));
+        card.setPadding(24, 24, 24, 24);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+        lp.setMargins(10, 10, 10, 10);
+        card.setLayoutParams(lp);
+
+        LinearLayout leftCol = new LinearLayout(this);
+        leftCol.setOrientation(LinearLayout.VERTICAL);
+        leftCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+        TextView tvTitle = new TextView(this);
+        tvTitle.setText(name);
+        tvTitle.setTextColor(Color.parseColor("#E8EAED"));
+        tvTitle.setTextSize(13);
+        leftCol.addView(tvTitle);
+
+        LinearLayout rightCol = new LinearLayout(this);
+        rightCol.setOrientation(LinearLayout.VERTICAL);
+        rightCol.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        Switch swOn = new Switch(this);
+        swOn.setChecked(prefs.getBoolean(prefixBase + id + "_en", true));
+        swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(prefixBase + id + "_en", chk).apply());
+
+        final String finalId = id; final int finalType = ecoType;
+        
+        Button btnCopy = new Button(this); btnCopy.setText("COPY");
+        btnCopy.setBackground(getRounded("#303134", 12f)); btnCopy.setTextColor(Color.WHITE);
+        btnCopy.setTextSize(10); btnCopy.setPadding(0,0,0,0);
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(90, 60);
+        btnLp.setMargins(0, 10, 0, 5); btnCopy.setLayoutParams(btnLp);
+        btnCopy.setOnClickListener(v -> {
+            String newId = addDynamicId(listKey);
+            prefs.edit().putString(prefixBase+newId+"_name", name + " Copy").apply();
+            if (finalType == 0) openIntentEditorV2(newId);
+            else if (finalType == 1) openTileEditorV2(newId);
+            else openMacroEditorV2(newId);
         });
-        ecoContainer.addView(btnRec);
-        TextView tvNote = new TextView(this);
-        tvNote.setText("Ghi âm sẽ tự dừng nếu phát hiện Quay màn hình hoặc app khác đang dùng mic.\nFile lưu tại: Music/EdgeBar — mở bằng Files by Google.");
-        tvNote.setTextColor(Color.GRAY); tvNote.setTextSize(12); tvNote.setPadding(0,20,0,0);
-        ecoContainer.addView(tvNote);
+
+        Button btnEdit = new Button(this); btnEdit.setText("SỬA");
+        btnEdit.setBackground(getRounded("#303134", 12f)); btnEdit.setTextColor(Color.WHITE);
+        btnEdit.setTextSize(10); btnEdit.setPadding(0,0,0,0);
+        btnEdit.setLayoutParams(new LinearLayout.LayoutParams(90, 60));
+        btnEdit.setOnClickListener(v -> {
+            if (finalType == 0) openIntentEditorV2(finalId);
+            else if (finalType == 1) openTileEditorV2(finalId);
+            else openMacroEditorV2(finalId);
+        });
+
+        rightCol.addView(swOn); rightCol.addView(btnCopy); rightCol.addView(btnEdit);
+        card.addView(leftCol); card.addView(rightCol);
+
+        card.setOnLongClickListener(v -> {
+            new AlertDialog.Builder(this).setTitle(T("Delete?", "Xóa?"))
+                .setPositiveButton("XÓA", (d,w) -> {
+                    removeDynamicId(listKey, finalId);
+                    renderEcosystem();
+                }).setNegativeButton("HỦY", null).show();
+            return true;
+        });
+
+        currentRow.addView(card); count++;
     }
+    
+    if (count % 2 != 0 && currentRow != null) { 
+        View dummy = new View(this);
+        dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+        currentRow.addView(dummy); 
+    }
+} else if (ecoType == 3) {
+    // Không gian Storage: Nút Scan đã chuyển xuống FAB, chỉ giữ hiển thị text
+    long lastScanTs = prefs.getLong("storage_scan_ts", 0);
+    TextView tvInfo = new TextView(this);
+    tvInfo.setTextColor(Color.parseColor("#9AA0A6")); tvInfo.setPadding(0,0,0,20);
+    tvInfo.setText(lastScanTs == 0 ? T("Chưa quét lần nào", "Chưa quét lần nào")
+            : T("Lần quét gần nhất: ", "Lần quét gần nhất: ") +
+            android.text.format.DateFormat.format("HH:mm dd/MM", lastScanTs));
+    ecoContainer.addView(tvInfo);
+    renderCachedStorageList();
+    
+} else if (ecoType == 4) {
+    // Không gian Record: Nút ghi âm đã chuyển xuống FAB, chỉ giữ text hướng dẫn
+    TextView tvNote = new TextView(this);
+    tvNote.setText("Ghi âm sẽ tự dừng nếu phát hiện Quay màn hình hoặc app khác đang dùng mic.\nFile lưu tại: Music/EdgeBar - mở bằng Files by Google.");
+    tvNote.setTextColor(Color.parseColor("#9AA0A6")); tvNote.setTextSize(12);
+    tvNote.setPadding(0,20,0,0);
+    ecoContainer.addView(tvNote);
+}
 }
     private String getActionLabel(String actionKey) {
         for (int i=0; i<ACT_KEYS.length; i++) {
@@ -1559,11 +1634,45 @@ private void renderCachedStorageList() {
         String json = prefs.getString("storage_scan_data", "");
         if (json.isEmpty()) return;
         org.json.JSONArray arr = new org.json.JSONArray(json);
-        for (int i=0; i<arr.length(); i++) {
+        
+        LinearLayout currentRow = null;
+        for (int i = 0; i < arr.length(); i++) {
+            if (i % 2 == 0) {
+                currentRow = new LinearLayout(this);
+                currentRow.setOrientation(LinearLayout.HORIZONTAL);
+                currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+                ecoContainer.addView(currentRow);
+            }
+            
             org.json.JSONObject o = arr.getJSONObject(i);
             String subtitle = StorageScanner.formatSize(o.getLong("bytes")) + (o.getBoolean("island") ? " [Island]" : "");
-            LinearLayout card = createEcoCard(o.getString("label"), subtitle, () -> {}); // không cần edit, chỉ hiển thị
-            ecoContainer.addView(card);
+            
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setBackground(getRounded("#202124", 20f));
+            card.setPadding(30, 24, 30, 24);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+            lp.setMargins(10, 10, 10, 10);
+            card.setLayoutParams(lp);
+            
+            TextView tvTitle = new TextView(this); 
+            tvTitle.setText(o.getString("label"));
+            tvTitle.setTextColor(Color.parseColor("#E8EAED")); 
+            tvTitle.setTextSize(13);
+            
+            TextView tvSub = new TextView(this); 
+            tvSub.setText(subtitle);
+            tvSub.setTextColor(Color.parseColor("#9AA0A6")); 
+            tvSub.setTextSize(11); tvSub.setPadding(0, 5, 0, 0);
+            
+            card.addView(tvTitle); card.addView(tvSub);
+            currentRow.addView(card);
+        }
+        
+        if (arr.length() % 2 != 0 && currentRow != null) { 
+            View dummy = new View(this);
+            dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+            currentRow.addView(dummy); 
         }
     } catch (Exception ignored) {}
 }
@@ -2797,6 +2906,15 @@ private void showPanelAppPicker() {
         sp.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.2f)); l.addView(tv); l.addView(sp); 
         return l; 
     }
+private Button createSystemBtn(String text, String bgHex, String textHex) {
+    Button b = new Button(this); b.setText(text);
+    b.setBackground(getRounded(bgHex, 20f));
+    b.setTextColor(Color.parseColor(textHex));
+    b.setTextSize(12);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+    lp.setMargins(6, 0, 6, 0); b.setLayoutParams(lp);
+    return b;
+}
     private Button createNavBtn(String t) { 
     Button b = new Button(this); 
     b.setText(t);
