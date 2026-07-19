@@ -276,45 +276,42 @@ private void updateFabVisibility() {
     main.setOrientation(LinearLayout.VERTICAL); main.setPadding(30,50,30,40);
 
     // Xây dựng Header theo bản vẽ tay image_95ae3d.jpg
-    LinearLayout headerRow = new LinearLayout(this);
-    headerRow.setOrientation(LinearLayout.HORIZONTAL);
-    headerRow.setPadding(0, 0, 0, 50);
+    // Xây dựng Header theo bản vẽ tay image_95ae3d.jpg
+LinearLayout headerRow = new LinearLayout(this);
+headerRow.setOrientation(LinearLayout.HORIZONTAL);
+headerRow.setPadding(0, 0, 0, 45);
+headerRow.setGravity(Gravity.CENTER_VERTICAL);
 
-    // Cột trái: Tên App và Version
-    LinearLayout leftCol = new LinearLayout(this);
-    leftCol.setOrientation(LinearLayout.VERTICAL);
-    leftCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    
-    TextView title = new TextView(this); 
-    title.setText("Edge Launcher\n" + CURRENT_VERSION); 
-    title.setTextColor(Color.parseColor("#E8EAED"));
-    title.setTextSize(18); title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    leftCol.addView(title);
+// Cột trái: Tên App và Version (Tăng lên 22sp cực to rõ, vượt trội so với Conditions/Ecosystem)
+LinearLayout leftCol = new LinearLayout(this);
+leftCol.setOrientation(LinearLayout.VERTICAL);
+leftCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+TextView title = new TextView(this);
+title.setText("Edge Launcher\n" + CURRENT_VERSION);
+title.setTextColor(Color.parseColor("#E8EAED"));
+title.setTextSize(22f); // Tăng từ 18f lên 22f cho chuẩn tỷ lệ thị giác
+title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+leftCol.addView(title);
 
-    // Cột phải: Backup/Restore và English
-    LinearLayout rightCol = new LinearLayout(this);
-    rightCol.setOrientation(LinearLayout.VERTICAL);
-    rightCol.setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
+// Cột phải: Backup/Restore và English (Nới rộng tỷ lệ weight 1.35f để không bao giờ bị nhảy dòng)
+LinearLayout rightCol = new LinearLayout(this);
+rightCol.setOrientation(LinearLayout.VERTICAL);
+rightCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.35f));
 
-    LinearLayout topBtns = new LinearLayout(this);
-    topBtns.setOrientation(LinearLayout.HORIZONTAL);
-    Button btnBackup = createSystemBtn("💾 BACKUP", "#202124", "#8AB4F8");
-    Button btnRestore = createSystemBtn("📁 RESTORE", "#202124", "#8AB4F8");
-    topBtns.addView(btnBackup); topBtns.addView(btnRestore);
+LinearLayout topBtns = new LinearLayout(this);
+topBtns.setOrientation(LinearLayout.HORIZONTAL);
+Button btnBackup = createSystemBtn("BACKUP", "#202124", "#8AB4F8");
+Button btnRestore = createSystemBtn("RESTORE", "#202124", "#8AB4F8");
+topBtns.addView(btnBackup); topBtns.addView(btnRestore);
 
-    Button btnLang = createSystemBtn(isVi ? "🇻🇳 TIẾNG VIỆT" : "🇺🇸 ENGLISH", "#202124", "#E8EAED");
-    LinearLayout.LayoutParams langLp = new LinearLayout.LayoutParams(-1, -2);
-    langLp.setMargins(6, 10, 6, 0);
-    btnLang.setLayoutParams(langLp);
+Button btnLang = createSystemBtn(isVi ? "TIẾNG VIỆT" : "ENGLISH", "#202124", "#E8EAED");
+LinearLayout.LayoutParams langLp = new LinearLayout.LayoutParams(-1, -2);
+langLp.setMargins(4, 10, 4, 0);
+btnLang.setLayoutParams(langLp);
 
-    btnBackup.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("text/plain"); i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup.txt"); startActivityForResult(i, 101); });
-    btnRestore.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, 102); });
-    btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
-
-    rightCol.addView(topBtns); rightCol.addView(btnLang);
-    headerRow.addView(leftCol); headerRow.addView(rightCol);
-    main.addView(headerRow);
-
+rightCol.addView(topBtns); rightCol.addView(btnLang);
+headerRow.addView(leftCol); headerRow.addView(rightCol);
+main.addView(headerRow);
     // Navigation Tab đẩy ra đầu dòng kèm icon
     navMain = new LinearLayout(this);
     navMain.setOrientation(LinearLayout.HORIZONTAL); navMain.setPadding(0, 0, 0, 40);
@@ -332,18 +329,25 @@ private void updateFabVisibility() {
         LinearLayout bottomBar = new LinearLayout(this); bottomBar.setOrientation(LinearLayout.HORIZONTAL); bottomBar.setGravity(Gravity.CENTER_VERTICAL); bottomBar.setBackground(getRounded("#1E1E1E", 100f)); bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
         Button btnUpdate = createCircleBtn("U", "#333333"); btnUpdate.setTextSize(20); btnUpdate.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
-        Button btnPremium = new Button(this); btnPremium.setText("PREMIUM"); btnPremium.setTextColor(Color.BLACK); btnPremium.setBackground(getRounded("#00E5FF", 100f)); btnPremium.setOnClickListener(v -> showPremiumDialog());
-        LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-2, -1); pLp.setMargins(10,0,10,0); btnPremium.setLayoutParams(pLp); btnPremium.setPadding(40,0,40,0);
-        View spacer = new View(this); spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
-        fab = new Button(this); fab.setText("+ NEW EB"); fab.setTextColor(Color.BLACK);
-    fab.setBackground(getRounded("#00E5FF", 100f)); fab.setTag("fab");
-    fab.setTextSize(16); // Không dùng in đậm
-    // Chiều cao được mở tối đa lên 150px và nới rộng padding ngang
-    LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, 150);
-    fLp.setMargins(10,0,10,0); fab.setLayoutParams(fLp); fab.setPadding(70,0,70,0);
-    // Tái sử dụng cùng một nút FAB cho toàn bộ app để tiết kiệm RAM, thay đổi chức
+        Button btnPremium = new Button(this); btnPremium.setText("PREMIUM");
+btnPremium.setTextColor(Color.BLACK);
+btnPremium.setTextSize(13.5f); // Chuẩn hóa kích thước mốc Premium
+btnPremium.setBackground(getRounded("#00E5FF", 100f));
+btnPremium.setOnClickListener(v -> showPremiumDialog());
+LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-2, -1);
+pLp.setMargins(10, 0, 10, 0); btnPremium.setLayoutParams(pLp);
+btnPremium.setPadding(35, 0, 35, 0);
+
+View spacer = new View(this); spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+
+fab = new Button(this); fab.setText("+ NEW EB"); fab.setTextColor(Color.BLACK);
+fab.setBackground(getRounded("#00E5FF", 100f)); fab.setTag("fab");
+fab.setTextSize(13.5f); // Giảm từ 16f về đúng 13.5f bằng với Premium!
+LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, 135);
+fLp.setMargins(10, 0, 10, 0); fab.setLayoutParams(fLp); fab.setPadding(55, 0, 55, 0);
+
 fab.setOnClickListener(v -> {
-    if (currentMainTab == 1) { // Đang ở Condition Space
+if (currentMainTab == 1) { // Đang ở Condition Space
         openRuleBuilderDialog(null, -1, -1, "");
     } else if (currentMainTab == 2) { // Đang ở Ecosystem Space
         String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
@@ -1100,47 +1104,50 @@ private void showActionCategoryPicker(String title, List<String[]> items,
     pageEcosystem.addView(wrapCard(secSys));
 
     // Gộp YTDL, Storage, Recorder vào cùng khu vực hệ thống cho gọn
-    addYTDLDesign(pageEcosystem);
+addYTDLDesign(pageEcosystem);
 
-    LinearLayout toolRow = new LinearLayout(this);
-    toolRow.setOrientation(LinearLayout.HORIZONTAL);
-    toolRow.setPadding(0, 0, 0, 40);
+LinearLayout toolRow = new LinearLayout(this);
+toolRow.setOrientation(LinearLayout.HORIZONTAL);
+toolRow.setPadding(0, 0, 0, 30); // Tối ưu khoảng cách dãn xuống dưới cho Pixel 2 XL
 
-    Button btnStorage = new Button(this); btnStorage.setText("STORAGE");
-    btnStorage.setBackground(getRounded("#795548", 40f));
-    btnStorage.setTextColor(Color.WHITE);
-    btnStorage.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+Button btnStorage = new Button(this); btnStorage.setText("STORAGE");
+btnStorage.setBackground(getRounded("#795548", 40f));
+btnStorage.setTextColor(Color.WHITE); btnStorage.setTextSize(13.5f); // Bằng Premium
+btnStorage.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
-    Button btnRecorder = new Button(this); btnRecorder.setText("GHI ÂM");
-    btnRecorder.setBackground(getRounded("#E91E63", 40f));
-    btnRecorder.setTextColor(Color.WHITE);
-    LinearLayout.LayoutParams lpRec = new LinearLayout.LayoutParams(0, -2, 1f);
-    lpRec.setMargins(15, 0, 0, 0);
-    btnRecorder.setLayoutParams(lpRec);
+Button btnRecorder = new Button(this); btnRecorder.setText("GHI ÂM");
+btnRecorder.setBackground(getRounded("#E91E63", 40f));
+btnRecorder.setTextColor(Color.WHITE); btnRecorder.setTextSize(13.5f); // Bằng Premium
+LinearLayout.LayoutParams lpRec = new LinearLayout.LayoutParams(0, -2, 1f);
+lpRec.setMargins(15, 0, 0, 0);
+btnRecorder.setLayoutParams(lpRec);
 
-    toolRow.addView(btnStorage); toolRow.addView(btnRecorder);
-    pageEcosystem.addView(toolRow);
+toolRow.addView(btnStorage); toolRow.addView(btnRecorder);
+pageEcosystem.addView(toolRow);
 
-    // Khu vực Intent / QS Tiles / Macros
-    LinearLayout ecoNav = new LinearLayout(this);
-    ecoNav.setOrientation(LinearLayout.HORIZONTAL); ecoNav.setPadding(0, 0, 0, 40);
-    
-    Button btnIntents = new Button(this); btnIntents.setText("INTENTS");
-    btnIntents.setBackground(getRounded("#D32F2F", 40f)); btnIntents.setTextColor(Color.WHITE);
-    
-    Button btnTiles = new Button(this); btnTiles.setText("QS TILES");
-    btnTiles.setBackground(getRounded("#4CAF50", 40f)); btnTiles.setTextColor(Color.WHITE);
-    
-    Button btnMacros = new Button(this); btnMacros.setText("MACROS");
-    btnMacros.setBackground(getRounded("#2196F3", 40f)); btnMacros.setTextColor(Color.WHITE);
-    
-    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, -2, 1f);
-    btnLp.setMargins(10,0,10,0);
-    btnIntents.setLayoutParams(btnLp); btnTiles.setLayoutParams(btnLp); btnMacros.setLayoutParams(btnLp);
+// Khu vực Intent / QS Tiles / Macros (Bảo đảm chiều rộng không bao giờ bị cắt chữ)
+LinearLayout ecoNav = new LinearLayout(this);
+ecoNav.setOrientation(LinearLayout.HORIZONTAL); 
+ecoNav.setPadding(0, 0, 0, 35);
 
-    ecoNav.addView(btnIntents); ecoNav.addView(btnTiles); ecoNav.addView(btnMacros);
-    pageEcosystem.addView(ecoNav);
+Button btnIntents = new Button(this); btnIntents.setText("INTENTS");
+btnIntents.setBackground(getRounded("#D32F2F", 40f));
+btnIntents.setTextColor(Color.WHITE); btnIntents.setTextSize(13.5f); // Bằng Premium
 
+Button btnTiles = new Button(this); btnTiles.setText("QS TILES");
+btnTiles.setBackground(getRounded("#4CAF50", 40f));
+btnTiles.setTextColor(Color.WHITE); btnTiles.setTextSize(13.5f); // Bằng Premium
+
+Button btnMacros = new Button(this); btnMacros.setText("MACROS");
+btnMacros.setBackground(getRounded("#2196F3", 40f));
+btnMacros.setTextColor(Color.WHITE); btnMacros.setTextSize(13.5f); // Bằng Premium
+
+LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, -2, 1f);
+btnLp.setMargins(6, 0, 6, 0); // Thu nhỏ margin ngang để nhường diện tích cho chữ
+btnIntents.setLayoutParams(btnLp); btnTiles.setLayoutParams(btnLp); btnMacros.setLayoutParams(btnLp);
+
+ecoNav.addView(btnIntents); ecoNav.addView(btnTiles); ecoNav.addView(btnMacros);
+pageEcosystem.addView(ecoNav);
     ecoContainer = new LinearLayout(this);
     ecoContainer.setOrientation(LinearLayout.VERTICAL);
     pageEcosystem.addView(ecoContainer);
@@ -2872,10 +2879,11 @@ private void showPanelAppPicker() {
 private Button createSystemBtn(String text, String bgHex, String textHex) {
     Button b = new Button(this); b.setText(text);
     b.setBackground(getRounded(bgHex, 20f));
-    b.setTextColor(Color.parseColor(textHex));
-    b.setTextSize(12);
+    b.setTextColor(Color.parseColor(textHex)); 
+    b.setTextSize(13.5f); // Tăng từ 12f lên 13.5f đồng bộ toàn hệ thống
+    b.setPadding(10, 0, 10, 0); // Kèm padding tối ưu để không bị chèn chữ
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-    lp.setMargins(6, 0, 6, 0); b.setLayoutParams(lp);
+    lp.setMargins(4, 0, 4, 0); b.setLayoutParams(lp);
     return b;
 }
     private Button createNavBtn(String t) {
