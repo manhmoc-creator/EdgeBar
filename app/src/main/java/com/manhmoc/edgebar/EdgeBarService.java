@@ -196,24 +196,38 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     }
 };
     private BroadcastReceiver ipcReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context c, Intent i) {
-            if ("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) {
-                String act = i.getStringExtra("act");
-                if ("LAUNCH_APP".equals(act)) {
-                    String pkg = i.getStringExtra("launch_pkg");
-                    if (pkg != null && !pkg.isEmpty()) {
-                        try {
-                            Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
-                            if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
-                        } catch (Exception ignored) {}
-                    }
-                    return;
+    @Override
+    public void onReceive(Context c, Intent i) {
+        if ("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) {
+            String act = i.getStringExtra("act");
+            if ("LAUNCH_APP".equals(act)) {
+                String pkg = i.getStringExtra("launch_pkg");
+                if (pkg != null && !pkg.isEmpty()) {
+                    try {
+                        Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
+                        if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
+                    } catch (Exception ignored) {}
                 }
-                exec(act);
+                return;
             }
+            if ("RUN_SHORTCUT".equals(act)) {
+                String scId = i.getStringExtra("shortcut_id");
+                if (scId != null && !scId.isEmpty()) {
+                    try {
+                        String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+                        if (!uri.isEmpty()) {
+                            Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
+                            scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(scIntent);
+                        }
+                    } catch (Exception ignored) {}
+                }
+                return;
+            }
+            exec(act);
         }
-    };
+    }
+};
     private class FlashView extends View {
         private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE"; int aStyle = 0; private float phaseFraction = 0f;
         public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setAntiAlias(true); setLayerType(LAYER_TYPE_SOFTWARE, p); updateStyle(); }
@@ -398,8 +412,25 @@ filter.addAction("com.manhmoc.edgebar.PANEL_TEST_TOGGLE");
         accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_SLEEP");
         accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_WAKE");
         registerReceiver(accHomeReceiver, accFilter);
-        if (AccessibleHomeService.isRunning) drawAccessibleHome();
-
+// FIX RACE CONDITION: không tin biến static isRunning sau khi process
+// vừa restart — đọc thẳng từ SharedPreferences (sống sót qua process death)
+// và tự khởi động lại AccessibleHomeService nếu prefs nói là "đang bật"
+// nhưng service thực tế chưa chạy (do broadcast ACC_HOME_DRAW bị rơi mất
+// lúc race giữa 2 service restart không cùng lúc).
+boolean wantAccHomeOn = prefs.getBoolean("shortcut_acc_home_on", false);
+if (wantAccHomeOn) {
+    if (AccessibleHomeService.isRunning) {
+        // Service đã sống — chỉ cần vẽ lại view (đề phòng view cũng mất theo process)
+        drawAccessibleHome();
+    } else {
+        // Service chưa kịp sống lại — tự khởi động, onStartCommand() của nó
+        // sẽ tự bắn ACC_HOME_DRAW sau khi khởi tạo xong, lúc này accHomeReceiver
+        // CHẮC CHẮN đã registerReceiver() ở trên rồi nên không còn bị rơi broadcast.
+        Intent accIntent = new Intent(this, AccessibleHomeService.class);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(accIntent);
+        else startService(accIntent);
+    }
+}
         createFloatingBars();
         panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ true); // EdgeBarService
 // V19.12.3.6.13: Set tường minh flag — một số ROM không parse đúng
@@ -705,7 +736,19 @@ case "OPEN_PANEL_1": case "OPEN_PANEL_2": case "OPEN_PANEL_3": {
             if (prefs.getBoolean(key+"_anim", true)) playAnim();
             String[] acts = action.split(",");
          for (String a : acts) {
-    if (a.trim().equals("LAUNCH_APP")) {
+    if (a.trim().equals("RUN_SHORTCUT")) {
+    String scId = prefs.getString(key + "_shortcut_id", "");
+    if (!scId.isEmpty()) {
+        try {
+            String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+            if (!uri.isEmpty()) {
+                Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
+                scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(scIntent);
+            }
+        } catch (Exception ignored) {}
+    }
+} else if (a.trim().equals("LAUNCH_APP")) {
         String pkg = prefs.getString(key + "_launch_pkg", "");
         if (!pkg.isEmpty()) {
             try {

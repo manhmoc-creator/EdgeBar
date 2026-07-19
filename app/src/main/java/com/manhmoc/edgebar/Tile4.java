@@ -60,34 +60,34 @@ public class Tile4 extends TileService {
     }
 
     private void updateTileUI() {
-        Tile t = getQsTile();
-        if (t == null) return;
-        SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        // Label động
-        String label = prefs.getString("tile_4_label", "Tile 4");
-        t.setLabel(label);
-        // Icon động — ZERO RAM: chỉ lưu resource ID
-        int iconIdx = prefs.getInt("tile_4_icon_idx", 0);
-        if (iconIdx < 0 || iconIdx >= ICON_POOL.length) iconIdx = 0;
-        t.setIcon(Icon.createWithResource(this, ICON_POOL[iconIdx]));
-        String action = prefs.getString("tile_4_act", "NONE");
-        t.setState(action.equals("NONE") ? Tile.STATE_INACTIVE : Tile.STATE_ACTIVE);
-        t.updateTile();
-    }
+    Tile t = getQsTile();
+    if (t == null) return;
+    SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+    // Label động
+    String label = prefs.getString("tile_4_label", "Tile 4");
+    t.setLabel(label);
+    // Icon động — ZERO RAM: chỉ lưu resource ID
+    int iconIdx = prefs.getInt("tile_4_icon_idx", 0);
+    if (iconIdx < 0 || iconIdx >= ICON_POOL.length) iconIdx = 0;
+    t.setIcon(Icon.createWithResource(this, ICON_POOL[iconIdx]));
+    String action = prefs.getString("tile_4_act", "NONE");
+    t.setState(action.equals("NONE") ? Tile.STATE_INACTIVE : Tile.STATE_ACTIVE);
+    t.updateTile();
+}
 
-    @Override public void onClick() {
-        super.onClick();
-        SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        String act = prefs.getString("tile_4_act", "NONE");
-        if (!act.equals("NONE")) {
-            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-            ipc.putExtra("act", act);
-            if (act.equals("LAUNCH_APP")) {
-                ipc.putExtra("launch_pkg", prefs.getString("tile_4_launch_pkg", ""));
-            }
-            sendBroadcast(ipc);
+@Override public void onClick() {
+    super.onClick();
+    SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+    String act = prefs.getString("tile_4_act", "NONE");
+    if (!act.equals("NONE")) {
+        Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+        ipc.putExtra("act", act);
+        if (act.equals("LAUNCH_APP")) {
+            ipc.putExtra("launch_pkg", prefs.getString("tile_4_launch_pkg", ""));
         }
-        Tile t = getQsTile();
-        if (t != null) { t.setState(Tile.STATE_INACTIVE); t.updateTile(); }
+        sendBroadcast(ipc);
     }
+    Tile t = getQsTile();
+    if (t != null) { t.setState(Tile.STATE_INACTIVE); t.updateTile(); }
+  }
 }

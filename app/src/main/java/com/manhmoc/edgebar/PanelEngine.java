@@ -487,6 +487,7 @@ private Path buildRoundedPentagon(int size) {
     }
 
     private String actEmoji(String key) {
+        if (key.startsWith("RUN_SHORTCUT_")) return "🔗";
         switch (key) {
             case "FLASH": return "🔦"; case "SCREEN_OFF": return "📴"; case "SCREENSHOT": return "📸";
             case "CAMERA": return "📷"; case "VOLUME": return "🔊"; case "NOTIFICATIONS": return "🔔";

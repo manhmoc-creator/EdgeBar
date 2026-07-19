@@ -1616,7 +1616,19 @@ if ((isMorseLockActive && !timeLocked) || isPreviewMorse || isUninstallGuardActi
             if (prefs.getBoolean(key + "_anim", true)) playAnim();
 String[] acts = action.split(",");
 for (String a : acts) {
-    if (a.trim().equals("LAUNCH_APP")) {
+    if (a.trim().equals("RUN_SHORTCUT")) {
+    String scId = prefs.getString(key + "_shortcut_id", "");
+    if (!scId.isEmpty()) {
+        try {
+            String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+            if (!uri.isEmpty()) {
+                Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
+                scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(scIntent);
+            }
+        } catch (Exception ignored) {}
+    }
+} else if (a.trim().equals("LAUNCH_APP")) {
         String pkg = prefs.getString(key + "_launch_pkg", "");
         if (!pkg.isEmpty()) {
             try {

@@ -180,12 +180,14 @@ private void handleSide(boolean isUp) {
             } catch (Exception ignored) {}
         }
         String act = action.split(",")[0].trim();
-        Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-        ipc.putExtra("act", act);
-        if (act.equals("LAUNCH_APP")) {
-            ipc.putExtra("launch_pkg", prefs.getString(key + "_launch_pkg", ""));
-        }
-        sendBroadcast(ipc);
+Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+if (act.startsWith("RUN_SHORTCUT_")) {
+    ipc.putExtra("act", "RUN_SHORTCUT");
+    ipc.putExtra("shortcut_id", act.substring("RUN_SHORTCUT_".length()));
+} else {
+    ipc.putExtra("act", act);
+}
+sendBroadcast(ipc);
     }
     private void startForegroundQuiet() {
         String cid = "eb_volkey";
