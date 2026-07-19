@@ -478,7 +478,8 @@ if (!action.equals("NONE")) {
     TextView tIcons = new TextView(this);
     tIcons.setText((prefs.getBoolean(key+"_vib", true) ? "📳\n" : "") +
                    (prefs.getBoolean(key+"_anim", true) ? "✨" : ""));
-    tIcons.setTextSize(14);
+    tIcons.setTextSize(16); // Tăng cỡ chữ lên 2 mức
+    tIcons.setTypeface(android.graphics.Typeface.DEFAULT); // Bỏ in đậm
     optCol.addView(tIcons);
 
     // Cột 2 (Giữa): Thông tin Component, Gesture, Action
@@ -519,7 +520,7 @@ if (!action.equals("NONE")) {
     
     infoCol.addView(tCond); infoCol.addView(tGest); infoCol.addView(tAct);
 
-    // Cột 3 (Phải cùng): Switch, Copy, Sửa
+    // Cột 3 (Phải cùng): Switch, Copy
     LinearLayout ctrlCol = new LinearLayout(this);
     ctrlCol.setOrientation(LinearLayout.VERTICAL);
     ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -531,25 +532,23 @@ if (!action.equals("NONE")) {
     
     final int finalC = c; final int finalG = g; final String finalActs = action;
     
+    // Nút COPY TO RÕ, Mở rộng height
     Button btnCopy = new Button(this); btnCopy.setText("COPY");
     btnCopy.setBackground(getRounded("#303134", 12f)); btnCopy.setTextColor(Color.WHITE);
-    btnCopy.setTextSize(9); btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    btnCopy.setTextSize(10); btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
     btnCopy.setPadding(0,0,0,0);
-    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(95, 65);
+    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(95, 120); // Gấp đôi chiều cao
     btnLp.setMargins(0, 0, 0, 5); btnCopy.setLayoutParams(btnLp);
     btnCopy.setOnClickListener(v -> openRuleBuilderDialog(null, finalC, finalG, finalActs));
     
-    Button btnEdit = new Button(this); btnEdit.setText("SỬA");
-    btnEdit.setBackground(getRounded("#303134", 12f)); btnEdit.setTextColor(Color.WHITE);
-    btnEdit.setTextSize(9); btnEdit.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    btnEdit.setPadding(0,0,0,0);
-    btnEdit.setLayoutParams(new LinearLayout.LayoutParams(95, 65));
-    btnEdit.setOnClickListener(v -> openRuleBuilderDialog(key, finalC, finalG, ""));
-
-    ctrlCol.addView(swOn); ctrlCol.addView(btnCopy); ctrlCol.addView(btnEdit);
+    ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
     
     card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
 
+    // CHẠM 1 LẦN -> MỞ EDIT DIALOG
+    card.setOnClickListener(v -> openRuleBuilderDialog(key, finalC, finalG, ""));
+
+    // CHẠM GIỮ -> XÓA
     card.setOnLongClickListener(v -> { 
         new AlertDialog.Builder(this).setTitle(T("Delete?", "Xóa?"))
             .setPositiveButton("XÓA", (d,w) -> {
@@ -561,7 +560,7 @@ if (!action.equals("NONE")) {
     });
 
     currentRow.addView(card); count++;
-               }
+}
             }
         }
         if(count % 2 != 0 && currentRow != null) { View dummy = new View(this); dummy.setLayoutParams(new LinearLayout.LayoutParams(0,1,1f)); currentRow.addView(dummy); }
@@ -1228,29 +1227,19 @@ private void removeDynamicId(String listKey, String id) {
         
         r1.addView(tvTitle); r1.addView(swOn);
 
-        // Hàng 2: Sửa và Copy ngang hàng nhau
+        // Hàng 2: Chỉ còn nút Copy to bự
         LinearLayout r2 = new LinearLayout(this);
         r2.setOrientation(LinearLayout.HORIZONTAL);
         r2.setPadding(0, 15, 0, 0);
         
         final String finalId = id; final int finalType = ecoType;
         
-        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, 70, 1f);
-        Button btnEdit = new Button(this); btnEdit.setText("SỬA");
-        btnEdit.setBackground(getRounded("#303134", 12f)); btnEdit.setTextColor(Color.WHITE);
-        btnEdit.setTextSize(9); btnEdit.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        btnEdit.setLayoutParams(btnLp);
-        btnEdit.setOnClickListener(v -> {
-            if (finalType == 0) openIntentEditorV2(finalId);
-            else if (finalType == 1) openTileEditorV2(finalId);
-            else openMacroEditorV2(finalId);
-        });
-        
+        // Nút COPY mở rộng toàn bộ width
         Button btnCopy = new Button(this); btnCopy.setText("COPY");
         btnCopy.setBackground(getRounded("#303134", 12f)); btnCopy.setTextColor(Color.WHITE);
-        btnCopy.setTextSize(9); btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(0, 70, 1f);
-        cpLp.setMargins(10, 0, 0, 0); btnCopy.setLayoutParams(cpLp);
+        btnCopy.setTextSize(11); btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(-1, 80);
+        cpLp.setMargins(0, 0, 0, 0); btnCopy.setLayoutParams(cpLp);
         btnCopy.setOnClickListener(v -> {
             String newId = addDynamicId(listKey);
             prefs.edit().putString(prefixBase+newId+"_name", name + " Copy").apply();
@@ -1259,9 +1248,17 @@ private void removeDynamicId(String listKey, String id) {
             else openMacroEditorV2(newId);
         });
 
-        r2.addView(btnEdit); r2.addView(btnCopy);
+        r2.addView(btnCopy);
         card.addView(r1); card.addView(r2);
 
+        // CHẠM 1 LẦN -> SỬA
+        card.setOnClickListener(v -> {
+            if (finalType == 0) openIntentEditorV2(finalId);
+            else if (finalType == 1) openTileEditorV2(finalId);
+            else openMacroEditorV2(finalId);
+        });
+
+        // CHẠM GIỮ -> XÓA
         card.setOnLongClickListener(v -> {
             new AlertDialog.Builder(this).setTitle(T("Delete?", "Xóa?"))
                 .setPositiveButton("XÓA", (d,w) -> {
