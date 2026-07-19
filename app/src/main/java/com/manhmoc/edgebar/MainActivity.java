@@ -229,7 +229,7 @@ private void updateFabVisibility() {
     } else if (currentMainTab == 2) { // Ecosystem Space
         fab.setVisibility(View.VISIBLE);
         if (ecoType == 0 || ecoType == 1 || ecoType == 2) {
-            fab.setText(ecoType == 0 ? "+ INTENT" : (ecoType == 1 ? "+ QS TILE" : "+ MACRO"));
+            fab.setText(ecoType == 0 ? "+INTENT" : (ecoType == 1 ? "QS TILE" : "+ MACRO+"));
             fab.setOnClickListener(v -> {
                 String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
                 String newId = addDynamicId(listKey);
@@ -238,11 +238,11 @@ private void updateFabVisibility() {
                 else openMacroEditorV2(newId);
             });
         } else if (ecoType == 3) {
-            fab.setText("🔍 DEEP SCAN");
+            fab.setText("+SOURCE");
             fab.setOnClickListener(v -> runDeepStorageScan());
         } else if (ecoType == 4) {
             boolean recOn = VoiceRecorderService.isRunning;
-            fab.setText(recOn ? "⏹ OFF RECORD" : "🎙 ON RECORD");
+            fab.setText(recOn ? " END 🎙 " : "+RECORD");
             fab.setOnClickListener(v -> {
                 if (android.content.pm.PackageManager.PERMISSION_GRANTED != checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)) {
                     requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 201);
@@ -273,123 +273,53 @@ private void updateFabVisibility() {
     scroll.setLayoutParams(rLp);
 
     LinearLayout main = new LinearLayout(this);
-    main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,60,40,40);
+    main.setOrientation(LinearLayout.VERTICAL); main.setPadding(30,50,30,40);
 
-    // Xây dựng Header 3 dòng siêu gọn + Dàn nút điều khiển trung tâm
+    // Xây dựng Header theo bản vẽ tay image_95ae3d.jpg
     LinearLayout headerRow = new LinearLayout(this);
-    headerRow.setOrientation(LinearLayout.VERTICAL);
+    headerRow.setOrientation(LinearLayout.HORIZONTAL);
     headerRow.setPadding(0, 0, 0, 50);
 
+    // Cột trái: Tên App và Version
+    LinearLayout leftCol = new LinearLayout(this);
+    leftCol.setOrientation(LinearLayout.VERTICAL);
+    leftCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    
     TextView title = new TextView(this); 
     title.setText("Edge Launcher\n" + CURRENT_VERSION); 
-    title.setTextColor(Color.parseColor("#E8EAED")); // Trắng xám chuẩn Material
-    title.setTextSize(22);
-    title.setPadding(0, 0, 0, 30);
-    headerRow.addView(title);
+    title.setTextColor(Color.parseColor("#E8EAED"));
+    title.setTextSize(18); title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    leftCol.addView(title);
 
-    LinearLayout actionRow = new LinearLayout(this);
-    actionRow.setOrientation(LinearLayout.HORIZONTAL);
-    
-    // Nút hệ thống tiệm cận Settings Pixel
+    // Cột phải: Backup/Restore và English
+    LinearLayout rightCol = new LinearLayout(this);
+    rightCol.setOrientation(LinearLayout.VERTICAL);
+    rightCol.setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
+
+    LinearLayout topBtns = new LinearLayout(this);
+    topBtns.setOrientation(LinearLayout.HORIZONTAL);
     Button btnBackup = createSystemBtn("BACKUP", "#202124", "#8AB4F8");
     Button btnRestore = createSystemBtn("RESTORE", "#202124", "#8AB4F8");
+    topBtns.addView(btnBackup); topBtns.addView(btnRestore);
+
     Button btnLang = createSystemBtn(isVi ? "TIẾNG VIỆT" : "ENGLISH", "#202124", "#E8EAED");
+    LinearLayout.LayoutParams langLp = new LinearLayout.LayoutParams(-1, -2);
+    langLp.setMargins(6, 10, 6, 0);
+    btnLang.setLayoutParams(langLp);
 
     btnBackup.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("text/plain"); i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup.txt"); startActivityForResult(i, 101); });
     btnRestore.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, 102); });
     btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
 
-    actionRow.addView(btnBackup); actionRow.addView(btnRestore); actionRow.addView(btnLang);
-    headerRow.addView(actionRow);
+    rightCol.addView(topBtns); rightCol.addView(btnLang);
+    headerRow.addView(leftCol); headerRow.addView(rightCol);
     main.addView(headerRow);
-        if (!Settings.canDrawOverlays(this)) { Button btnReq = new Button(this); btnReq.setText(T("⚠️ GRANT OVERLAY", "⚠️ CẤP QUYỀN LỚP PHỦ")); btnReq.setBackground(getRounded("#D32F2F", 25f)); btnReq.setTextColor(Color.WHITE); btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))); main.addView(btnReq); }
 
-// --- DO NOT DISTURB (DND) --- Xin quyền ghi đè âm lượng (Volume Mapper)
-android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-if (android.os.Build.VERSION.SDK_INT >= 23 && !nm.isNotificationPolicyAccessGranted()) {
-    Button btnDnd = new Button(this);
-    btnDnd.setText("⚠️ CẤP QUYỀN KHÔNG LÀM PHIỀN (DND)\nĐể gọi Screen Off/On bằng phím Âm lượng");
-    btnDnd.setBackground(getRounded("#FF9800", 25f));
-    btnDnd.setTextColor(Color.WHITE);
-    LinearLayout.LayoutParams dndLp = new LinearLayout.LayoutParams(-1, -2);
-    dndLp.setMargins(0, 10, 0, 0);
-    btnDnd.setLayoutParams(dndLp);
-    btnDnd.setOnClickListener(v -> startActivity(new Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)));
-    main.addView(btnDnd);
-}
-    android.os.PowerManager pmCheck = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
-if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
-        && !pmCheck.isIgnoringBatteryOptimizations(getPackageName())) {
-    Button btnBattery = new Button(this);
-    btnBattery.setText("⚠️ TẮT TỐI ƯU HÓA PIN\nGiúp Phím Âm Lượng ổn định hơn khi tắt màn hình");
-    btnBattery.setBackground(getRounded("#FF5722", 25f));
-    btnBattery.setTextColor(Color.WHITE);
-    LinearLayout.LayoutParams battLp = new LinearLayout.LayoutParams(-1, -2);
-    battLp.setMargins(0, 10, 0, 0);
-    btnBattery.setLayoutParams(battLp);
-    btnBattery.setOnClickListener(v -> {
-        try {
-            Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-            i.setData(Uri.parse("package:" + getPackageName()));
-            startActivity(i);
-        } catch (Exception e) {
-            startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
-        }
-    });
-    main.addView(btnBattery);
-}
-// --- DEVICE ADMIN ---
-android.app.admin.DevicePolicyManager dpm =
-(android.app.admin.DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
-        ComponentName adminComp = new ComponentName(this, EdgeAdminReceiver.class);
-        if (!dpm.isAdminActive(adminComp)) {
-            Button btnAdmin = new Button(this);
-            btnAdmin.setText("⚠️ CẤP QUYỀN ADMIN DEVICE (Bảo vệ lớp phủ Morse)");
-            btnAdmin.setBackground(getRounded("#D32F2F", 25f));
-            btnAdmin.setTextColor(Color.WHITE);
-            LinearLayout.LayoutParams adminLp = new LinearLayout.LayoutParams(-1, -2);
-            adminLp.setMargins(0, 10, 0, 0);
-            btnAdmin.setLayoutParams(adminLp);
-            btnAdmin.setOnClickListener(v -> {
-                Intent adminIntent = new Intent(
-                    android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
-                adminIntent.putExtra(
-                    android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComp);
-                adminIntent.putExtra(
-                    android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION,
-                    "Bảo vệ lớp phủ Morse khỏi bị gỡ và chống gỡ cài đặt nhanh từ Home.");
-                startActivity(adminIntent);
-            });
-            main.addView(btnAdmin);
-        }
-
-        // --- USAGE STATS ---
-        try {
-            android.app.AppOpsManager aom =
-                (android.app.AppOpsManager) getSystemService(APP_OPS_SERVICE);
-            int mode = aom.checkOpNoThrow(
-                android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
-                android.os.Process.myUid(), getPackageName());
-            if (mode != android.app.AppOpsManager.MODE_ALLOWED) {
-                Button btnUsage = new Button(this);
-                btnUsage.setText("⚠️ CẤP QUYỀN TRUY CẬP DỮ LIỆU SỬ DỤNG");
-                btnUsage.setBackground(getRounded("#D32F2F", 25f));
-                btnUsage.setTextColor(Color.WHITE);
-                LinearLayout.LayoutParams usageLp = new LinearLayout.LayoutParams(-1, -2);
-                usageLp.setMargins(0, 10, 0, 0);
-                btnUsage.setLayoutParams(usageLp);
-                btnUsage.setOnClickListener(v ->
-                    startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
-                main.addView(btnUsage);
-            }
-        } catch (Exception e) { /* bỏ qua nếu thiết bị không hỗ trợ */ }
-
-
-        // Tối ưu UI Pixel 2XL: Xếp dọc các tab không gian để tiết kiệm chiều ngang, giao diện gọn gàng hơn
-navMain = new LinearLayout(this);
-navMain.setOrientation(LinearLayout.VERTICAL); navMain.setPadding(0, 0, 0, 40);
-        Button btnNavCond = createNavBtn(T("CONDITIONS", "ĐIỀU KIỆN"));
-        Button btnNavEco = createNavBtn("ECOSYSTEM");
+    // Navigation Tab đẩy ra đầu dòng kèm icon
+    navMain = new LinearLayout(this);
+    navMain.setOrientation(LinearLayout.HORIZONTAL); navMain.setPadding(0, 0, 0, 40);
+        Button btnNavCond = createNavBtn(T("🎯 CONDITIONS", "ĐIỀU KIỆN"));
+        Button btnNavEco = createNavBtn(" 🎭ECOSYSTEM");
         navMain.addView(btnNavCond); navMain.addView(btnNavEco); main.addView(navMain);
 
         pageDesign = new LinearLayout(this); pageDesign.setOrientation(LinearLayout.VERTICAL); pageDesign.setVisibility(View.GONE); buildDesignSpace();
@@ -405,9 +335,14 @@ navMain.setOrientation(LinearLayout.VERTICAL); navMain.setPadding(0, 0, 0, 40);
         Button btnPremium = new Button(this); btnPremium.setText("PREMIUM"); btnPremium.setTextColor(Color.BLACK); btnPremium.setBackground(getRounded("#00E5FF", 100f)); btnPremium.setOnClickListener(v -> showPremiumDialog());
         LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-2, -1); pLp.setMargins(10,0,10,0); btnPremium.setLayoutParams(pLp); btnPremium.setPadding(40,0,40,0);
         View spacer = new View(this); spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
-        fab = new Button(this); fab.setText("+ NEW EB"); fab.setTextColor(Color.BLACK); fab.setBackground(getRounded("#00E5FF", 100f)); fab.setTag("fab");
-        LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, -1); fLp.setMargins(10,0,10,0); fab.setLayoutParams(fLp); fab.setPadding(40,0,40,0); 
-        // Tái sử dụng cùng một nút FAB cho toàn bộ app để tiết kiệm RAM, thay đổi chức năng theo ngữ cảnh
+        fab = new Button(this); fab.setText("+ NEW EB"); fab.setTextColor(Color.BLACK);
+    fab.setBackground(getRounded("#00E5FF", 100f)); fab.setTag("fab");
+    fab.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    fab.setTextSize(14); // Tăng cỡ chữ
+    // Set cứng height 130px thay vì MATCH_PARENT (-1) để tránh bị cắt, mở rộng padding
+    LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, 130);
+    fLp.setMargins(10,0,10,0); fab.setLayoutParams(fLp); fab.setPadding(60,0,60,0);
+    // Tái sử dụng cùng một nút FAB cho toàn bộ app để tiết kiệm RAM, thay đổi chức
 fab.setOnClickListener(v -> {
     if (currentMainTab == 1) { // Đang ở Condition Space
         openRuleBuilderDialog(null, -1, -1, "");
@@ -526,25 +461,40 @@ if (!action.equals("NONE")) {
         listRules.addView(currentRow); 
     }
     
-    // Thẻ Condition bọc ngoài, màu xám đậm Material
+    // Thẻ Condition bọc ngoài, thu bé lại một chút để nhét vừa 2 cột
     LinearLayout card = new LinearLayout(this);
     card.setOrientation(LinearLayout.HORIZONTAL);
     card.setBackground(getRounded("#202124", 24f)); 
-    card.setPadding(24, 24, 24, 24);
+    card.setPadding(15, 24, 10, 24);
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-    lp.setMargins(10, 10, 10, 10); 
+    lp.setMargins(8, 8, 8, 8); 
     card.setLayoutParams(lp);
 
-    // Cột trái: Hiển thị chữ
-    LinearLayout leftCol = new LinearLayout(this);
-    leftCol.setOrientation(LinearLayout.VERTICAL);
-    leftCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    // Cột 1 (Trái cùng): Icon Option (Rung/Animation)
+    LinearLayout optCol = new LinearLayout(this);
+    optCol.setOrientation(LinearLayout.VERTICAL);
+    optCol.setGravity(Gravity.CENTER);
+    optCol.setPadding(0, 0, 15, 0);
+    TextView tIcons = new TextView(this);
+    tIcons.setText((prefs.getBoolean(key+"_vib", true) ? "📳\n" : "") +
+                   (prefs.getBoolean(key+"_anim", true) ? "✨" : ""));
+    tIcons.setTextSize(14);
+    optCol.addView(tIcons);
+
+    // Cột 2 (Giữa): Thông tin Component, Gesture, Action
+    LinearLayout infoCol = new LinearLayout(this);
+    infoCol.setOrientation(LinearLayout.VERTICAL);
+    infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
     TextView tCond = new TextView(this); 
-    tCond.setText(compNamesUsed[c] + "\n" + gestureNamesUsed[g]); 
-    tCond.setTextColor(Color.parseColor("#9AA0A6")); // Màu text thứ cấp
-    tCond.setTextSize(11); 
-    leftCol.addView(tCond);
+    tCond.setText(compNamesUsed[c]); 
+    tCond.setTextColor(Color.parseColor("#E8EAED")); 
+    tCond.setTextSize(14); tCond.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    
+    TextView tGest = new TextView(this);
+    tGest.setText(gestureNamesUsed[g]);
+    tGest.setTextColor(Color.parseColor("#9AA0A6"));
+    tGest.setTextSize(12); tGest.setPadding(0, 5, 0, 5);
 
     TextView tAct = new TextView(this); 
     String[] acts = action.split(",");
@@ -564,37 +514,41 @@ if (!action.equals("NONE")) {
         }
     }
     tAct.setText(actName.toString().isEmpty() ? "Lỗi" : actName.toString());
-    tAct.setTextColor(Color.parseColor("#8AB4F8")); // Xanh Material thanh lịch
-    tAct.setTextSize(13); tAct.setPadding(0, 10, 0, 0);
-    leftCol.addView(tAct);
+    tAct.setTextColor(Color.parseColor("#8AB4F8")); 
+    tAct.setTextSize(15); tAct.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    
+    infoCol.addView(tCond); infoCol.addView(tGest); infoCol.addView(tAct);
 
-    // Cột phải: Các nút thu nhỏ (Switch, Copy xếp trên Sửa)
-    LinearLayout rightCol = new LinearLayout(this);
-    rightCol.setOrientation(LinearLayout.VERTICAL);
-    rightCol.setGravity(Gravity.CENTER_HORIZONTAL);
+    // Cột 3 (Phải cùng): Switch, Copy, Sửa
+    LinearLayout ctrlCol = new LinearLayout(this);
+    ctrlCol.setOrientation(LinearLayout.VERTICAL);
+    ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
 
     Switch swOn = new Switch(this);
     swOn.setChecked(prefs.getBoolean(key + "_on", true));
     swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(key + "_on", chk).apply());
+    swOn.setPadding(0,0,0,10);
     
     final int finalC = c; final int finalG = g; final String finalActs = action;
     
     Button btnCopy = new Button(this); btnCopy.setText("COPY");
     btnCopy.setBackground(getRounded("#303134", 12f)); btnCopy.setTextColor(Color.WHITE);
-    btnCopy.setTextSize(10); btnCopy.setPadding(0,0,0,0);
-    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(90, 60);
-    btnLp.setMargins(0, 10, 0, 5); btnCopy.setLayoutParams(btnLp);
+    btnCopy.setTextSize(9); btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    btnCopy.setPadding(0,0,0,0);
+    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(95, 65);
+    btnLp.setMargins(0, 0, 0, 5); btnCopy.setLayoutParams(btnLp);
     btnCopy.setOnClickListener(v -> openRuleBuilderDialog(null, finalC, finalG, finalActs));
-
+    
     Button btnEdit = new Button(this); btnEdit.setText("SỬA");
     btnEdit.setBackground(getRounded("#303134", 12f)); btnEdit.setTextColor(Color.WHITE);
-    btnEdit.setTextSize(10); btnEdit.setPadding(0,0,0,0);
-    btnEdit.setLayoutParams(new LinearLayout.LayoutParams(90, 60));
+    btnEdit.setTextSize(9); btnEdit.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    btnEdit.setPadding(0,0,0,0);
+    btnEdit.setLayoutParams(new LinearLayout.LayoutParams(95, 65));
     btnEdit.setOnClickListener(v -> openRuleBuilderDialog(key, finalC, finalG, ""));
 
-    rightCol.addView(swOn); rightCol.addView(btnCopy); rightCol.addView(btnEdit);
+    ctrlCol.addView(swOn); ctrlCol.addView(btnCopy); ctrlCol.addView(btnEdit);
     
-    card.addView(leftCol); card.addView(rightCol);
+    card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
 
     card.setOnLongClickListener(v -> { 
         new AlertDialog.Builder(this).setTitle(T("Delete?", "Xóa?"))
@@ -1234,7 +1188,8 @@ private void removeDynamicId(String listKey, String id) {
     int count = 0;
 
     for (String id : ids) {
-        if (count % 2 == 0) {
+        // Render 3 Card trên 1 hàng (3 cột)
+        if (count % 3 == 0) {
             currentRow = new LinearLayout(this);
             currentRow.setOrientation(LinearLayout.HORIZONTAL);
             currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
@@ -1246,38 +1201,56 @@ private void removeDynamicId(String listKey, String id) {
                     : prefs.getString(prefixBase+id+"_name", "Macro");
 
         LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setBackground(getRounded("#202124", 24f));
-        card.setPadding(24, 24, 24, 24);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(getRounded("#202124", 20f));
+        card.setPadding(15, 20, 15, 20);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-        lp.setMargins(10, 10, 10, 10);
+        lp.setMargins(6, 6, 6, 6);
         card.setLayoutParams(lp);
 
-        LinearLayout leftCol = new LinearLayout(this);
-        leftCol.setOrientation(LinearLayout.VERTICAL);
-        leftCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
+        // Hàng 1: Tên và Nút Switch
+        LinearLayout r1 = new LinearLayout(this);
+        r1.setOrientation(LinearLayout.HORIZONTAL);
+        r1.setGravity(Gravity.CENTER_VERTICAL);
+        
         TextView tvTitle = new TextView(this);
-        tvTitle.setText(name);
+        tvTitle.setText(name); 
         tvTitle.setTextColor(Color.parseColor("#E8EAED"));
-        tvTitle.setTextSize(13);
-        leftCol.addView(tvTitle);
-
-        LinearLayout rightCol = new LinearLayout(this);
-        rightCol.setOrientation(LinearLayout.VERTICAL);
-        rightCol.setGravity(Gravity.CENTER_HORIZONTAL);
-
+        tvTitle.setTextSize(13); 
+        tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        
         Switch swOn = new Switch(this);
         swOn.setChecked(prefs.getBoolean(prefixBase + id + "_en", true));
         swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(prefixBase + id + "_en", chk).apply());
+        // Thu nhỏ switch một chút để vừa vặn
+        swOn.setScaleX(0.85f); swOn.setScaleY(0.85f); 
+        
+        r1.addView(tvTitle); r1.addView(swOn);
 
+        // Hàng 2: Sửa và Copy ngang hàng nhau
+        LinearLayout r2 = new LinearLayout(this);
+        r2.setOrientation(LinearLayout.HORIZONTAL);
+        r2.setPadding(0, 15, 0, 0);
+        
         final String finalId = id; final int finalType = ecoType;
+        
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, 70, 1f);
+        Button btnEdit = new Button(this); btnEdit.setText("SỬA");
+        btnEdit.setBackground(getRounded("#303134", 12f)); btnEdit.setTextColor(Color.WHITE);
+        btnEdit.setTextSize(9); btnEdit.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        btnEdit.setLayoutParams(btnLp);
+        btnEdit.setOnClickListener(v -> {
+            if (finalType == 0) openIntentEditorV2(finalId);
+            else if (finalType == 1) openTileEditorV2(finalId);
+            else openMacroEditorV2(finalId);
+        });
         
         Button btnCopy = new Button(this); btnCopy.setText("COPY");
         btnCopy.setBackground(getRounded("#303134", 12f)); btnCopy.setTextColor(Color.WHITE);
-        btnCopy.setTextSize(10); btnCopy.setPadding(0,0,0,0);
-        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(90, 60);
-        btnLp.setMargins(0, 10, 0, 5); btnCopy.setLayoutParams(btnLp);
+        btnCopy.setTextSize(9); btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(0, 70, 1f);
+        cpLp.setMargins(10, 0, 0, 0); btnCopy.setLayoutParams(cpLp);
         btnCopy.setOnClickListener(v -> {
             String newId = addDynamicId(listKey);
             prefs.edit().putString(prefixBase+newId+"_name", name + " Copy").apply();
@@ -1286,18 +1259,8 @@ private void removeDynamicId(String listKey, String id) {
             else openMacroEditorV2(newId);
         });
 
-        Button btnEdit = new Button(this); btnEdit.setText("SỬA");
-        btnEdit.setBackground(getRounded("#303134", 12f)); btnEdit.setTextColor(Color.WHITE);
-        btnEdit.setTextSize(10); btnEdit.setPadding(0,0,0,0);
-        btnEdit.setLayoutParams(new LinearLayout.LayoutParams(90, 60));
-        btnEdit.setOnClickListener(v -> {
-            if (finalType == 0) openIntentEditorV2(finalId);
-            else if (finalType == 1) openTileEditorV2(finalId);
-            else openMacroEditorV2(finalId);
-        });
-
-        rightCol.addView(swOn); rightCol.addView(btnCopy); rightCol.addView(btnEdit);
-        card.addView(leftCol); card.addView(rightCol);
+        r2.addView(btnEdit); r2.addView(btnCopy);
+        card.addView(r1); card.addView(r2);
 
         card.setOnLongClickListener(v -> {
             new AlertDialog.Builder(this).setTitle(T("Delete?", "Xóa?"))
@@ -1311,10 +1274,12 @@ private void removeDynamicId(String listKey, String id) {
         currentRow.addView(card); count++;
     }
     
-    if (count % 2 != 0 && currentRow != null) { 
+    // Đệm thêm view rỗng nếu hàng cuối không đủ 3 thẻ
+    while (count % 3 != 0 && currentRow != null) {
         View dummy = new View(this);
         dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
-        currentRow.addView(dummy); 
+        currentRow.addView(dummy);
+        count++;
     }
 } else if (ecoType == 3) {
     // Không gian Storage: Nút Scan đã chuyển xuống FAB, chỉ giữ hiển thị text
@@ -2915,14 +2880,15 @@ private Button createSystemBtn(String text, String bgHex, String textHex) {
     lp.setMargins(6, 0, 6, 0); b.setLayoutParams(lp);
     return b;
 }
-    private Button createNavBtn(String t) { 
-    Button b = new Button(this); 
+    private Button createNavBtn(String t) {
+    Button b = new Button(this);
     b.setText(t);
-    // Đổi chiều ngang thành MATCH_PARENT (-1), bỏ weight 1f, thêm margin dưới
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-    lp.setMargins(0, 0, 0, 20);
-    b.setLayoutParams(lp); 
-    return b; 
+    b.setTextSize(14);
+    b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); // Chữ to và đậm
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+    lp.setMargins(5, 0, 5, 0);
+    b.setLayoutParams(lp);
+    return b;
 }
     private Button createTabBtn(String t) { Button b = new Button(this); b.setText(t); return b; }
     private TextView createSectionTitle(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.parseColor("#00E5FF")); tv.setPadding(0,10,0,20); return tv; }
