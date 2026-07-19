@@ -298,11 +298,11 @@ private void updateFabVisibility() {
 
     LinearLayout topBtns = new LinearLayout(this);
     topBtns.setOrientation(LinearLayout.HORIZONTAL);
-    Button btnBackup = createSystemBtn("BACKUP", "#202124", "#8AB4F8");
-    Button btnRestore = createSystemBtn("RESTORE", "#202124", "#8AB4F8");
+    Button btnBackup = createSystemBtn("💾 BACKUP", "#202124", "#8AB4F8");
+    Button btnRestore = createSystemBtn("📁 RESTORE", "#202124", "#8AB4F8");
     topBtns.addView(btnBackup); topBtns.addView(btnRestore);
 
-    Button btnLang = createSystemBtn(isVi ? "TIẾNG VIỆT" : "ENGLISH", "#202124", "#E8EAED");
+    Button btnLang = createSystemBtn(isVi ? "🇻🇳 TIẾNG VIỆT" : "🇺🇸 ENGLISH", "#202124", "#E8EAED");
     LinearLayout.LayoutParams langLp = new LinearLayout.LayoutParams(-1, -2);
     langLp.setMargins(6, 10, 6, 0);
     btnLang.setLayoutParams(langLp);
@@ -337,10 +337,10 @@ private void updateFabVisibility() {
         View spacer = new View(this); spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
         fab = new Button(this); fab.setText("+ NEW EB"); fab.setTextColor(Color.BLACK);
     fab.setBackground(getRounded("#00E5FF", 100f)); fab.setTag("fab");
-    fab.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    fab.setTextSize(14); // Tăng cỡ chữ
-    // Set cứng height 130px thay vì MATCH_PARENT (-1) để tránh bị cắt, mở rộng padding
-    LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, 130);
+    // Đã bỏ in đậm hoàn toàn
+    fab.setTextSize(16); // Đã tăng +2
+    // Nới lỏng chiều cao lên 145px để không bao giờ bị cắt viền chữ
+    LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, 145);
     fLp.setMargins(10,0,10,0); fab.setLayoutParams(fLp); fab.setPadding(60,0,60,0);
     // Tái sử dụng cùng một nút FAB cho toàn bộ app để tiết kiệm RAM, thay đổi chức
 fab.setOnClickListener(v -> {
@@ -487,11 +487,10 @@ if (!action.equals("NONE")) {
     infoCol.setOrientation(LinearLayout.VERTICAL);
     infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
-    TextView tCond = new TextView(this); 
-    tCond.setText(compNamesUsed[c]); 
-    tCond.setTextColor(Color.parseColor("#E8EAED")); 
-    tCond.setTextSize(14); tCond.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    
+    TextView tCond = new TextView(this);
+    tCond.setText(compNamesUsed[c]);
+    tCond.setTextColor(Color.parseColor("#E8EAED"));
+    tCond.setTextSize(16); // Đã tăng +2, bỏ in đậm
     TextView tGest = new TextView(this);
     tGest.setText(gestureNamesUsed[g]);
     tGest.setTextColor(Color.parseColor("#9AA0A6"));
@@ -514,12 +513,10 @@ if (!action.equals("NONE")) {
             } 
         }
     }
-    tAct.setText(actName.toString().isEmpty() ? "Lỗi" : actName.toString());
-    tAct.setTextColor(Color.parseColor("#8AB4F8")); 
-    tAct.setTextSize(15); tAct.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    
+    tAct.setText(actName.toString().isEmpty()? "Lỗi": actName.toString());
+    tAct.setTextColor(Color.parseColor("#8AB4F8"));
+    tAct.setTextSize(17); // Đã tăng +2, bỏ in đậm
     infoCol.addView(tCond); infoCol.addView(tGest); infoCol.addView(tAct);
-
     // Cột 3 (Phải cùng): Switch, Copy
     LinearLayout ctrlCol = new LinearLayout(this);
     ctrlCol.setOrientation(LinearLayout.VERTICAL);
@@ -532,24 +529,24 @@ if (!action.equals("NONE")) {
     
     final int finalC = c; final int finalG = g; final String finalActs = action;
     
-    // Nút COPY TO RÕ, Mở rộng height
     Button btnCopy = new Button(this); btnCopy.setText("COPY");
-    btnCopy.setBackground(getRounded("#303134", 12f)); btnCopy.setTextColor(Color.WHITE);
-    btnCopy.setTextSize(10); btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    btnCopy.setBackground(getRounded("#303134", 12f));
+    btnCopy.setTextColor(Color.WHITE);
+    btnCopy.setTextSize(11); // Tăng +2, bỏ in đậm
     btnCopy.setPadding(0,0,0,0);
-    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(95, 120); // Gấp đôi chiều cao
-    btnLp.setMargins(0, 0, 0, 5); btnCopy.setLayoutParams(btnLp);
+    // Nút copy mở rộng chiều ngang và cao để to rõ ràng, không bị cắt
+    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(120, 100);
+    btnLp.setMargins(0, 10, 0, 0); btnCopy.setLayoutParams(btnLp);
     btnCopy.setOnClickListener(v -> openRuleBuilderDialog(null, finalC, finalG, finalActs));
     
-    ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
-    
+    // Đã xóa hoàn toàn btnEdit
+    ctrlCol.addView(swOn); ctrlCol.addView(btnCopy); 
     card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
-
-    // CHẠM 1 LẦN -> MỞ EDIT DIALOG
+    
+    // Thuật toán UX mới: Chạm 1 lần vào vùng Card để SỬA
     card.setOnClickListener(v -> openRuleBuilderDialog(key, finalC, finalG, ""));
-
-    // CHẠM GIỮ -> XÓA
-    card.setOnLongClickListener(v -> { 
+    
+    card.setOnLongClickListener(v -> {
         new AlertDialog.Builder(this).setTitle(T("Delete?", "Xóa?"))
             .setPositiveButton("XÓA", (d,w) -> {
                 prefs.edit().putString(key, "NONE").apply(); 
@@ -1215,15 +1212,13 @@ private void removeDynamicId(String listKey, String id) {
         TextView tvTitle = new TextView(this);
         tvTitle.setText(name); 
         tvTitle.setTextColor(Color.parseColor("#E8EAED"));
-        tvTitle.setTextSize(13); 
-        tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        tvTitle.setTextSize(15); // Tăng +2, bỏ in đậm
         tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         
         Switch swOn = new Switch(this);
         swOn.setChecked(prefs.getBoolean(prefixBase + id + "_en", true));
         swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(prefixBase + id + "_en", chk).apply());
-        // Thu nhỏ switch một chút để vừa vặn
-        swOn.setScaleX(0.85f); swOn.setScaleY(0.85f); 
+        // Đã xóa lệnh setScaleX/Y khiến giao diện Switch bị lỗi mờ/cắt
         
         r1.addView(tvTitle); r1.addView(swOn);
 
@@ -1234,11 +1229,11 @@ private void removeDynamicId(String listKey, String id) {
         
         final String finalId = id; final int finalType = ecoType;
         
-        // Nút COPY mở rộng toàn bộ width
+        // Nút COPY mở rộng toàn bộ width (MATCH_PARENT) để dễ bấm
         Button btnCopy = new Button(this); btnCopy.setText("COPY");
         btnCopy.setBackground(getRounded("#303134", 12f)); btnCopy.setTextColor(Color.WHITE);
-        btnCopy.setTextSize(11); btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(-1, 80);
+        btnCopy.setTextSize(11); // Tăng +2, bỏ in đậm
+        LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(-1, 100); // Tăng height lên 100
         cpLp.setMargins(0, 0, 0, 0); btnCopy.setLayoutParams(cpLp);
         btnCopy.setOnClickListener(v -> {
             String newId = addDynamicId(listKey);
@@ -1248,16 +1243,22 @@ private void removeDynamicId(String listKey, String id) {
             else openMacroEditorV2(newId);
         });
 
+        // Đã xóa hoàn toàn btnEdit
         r2.addView(btnCopy);
         card.addView(r1); card.addView(r2);
 
+        // Thuật toán UX mới: Chạm 1 lần vào Card để SỬA thông tin
+        card.setOnClickListener(v -> {
+            if (finalType == 0) openIntentEditorV2(finalId);
+            else if (finalType == 1) openTileEditorV2(finalId);
+            else openMacroEditorV2(finalId);
+        });
         // CHẠM 1 LẦN -> SỬA
         card.setOnClickListener(v -> {
             if (finalType == 0) openIntentEditorV2(finalId);
             else if (finalType == 1) openTileEditorV2(finalId);
             else openMacroEditorV2(finalId);
         });
-
         // CHẠM GIỮ -> XÓA
         card.setOnLongClickListener(v -> {
             new AlertDialog.Builder(this).setTitle(T("Delete?", "Xóa?"))
@@ -2880,8 +2881,8 @@ private Button createSystemBtn(String text, String bgHex, String textHex) {
     private Button createNavBtn(String t) {
     Button b = new Button(this);
     b.setText(t);
-    b.setTextSize(14);
-    b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); // Chữ to và đậm
+    b.setTextSize(16); // Đã tăng +2
+    // Đã bỏ in đậm hoàn toàn
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
     lp.setMargins(5, 0, 5, 0);
     b.setLayoutParams(lp);
