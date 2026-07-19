@@ -337,11 +337,10 @@ private void updateFabVisibility() {
         View spacer = new View(this); spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
         fab = new Button(this); fab.setText("+ NEW EB"); fab.setTextColor(Color.BLACK);
     fab.setBackground(getRounded("#00E5FF", 100f)); fab.setTag("fab");
-    // Đã bỏ in đậm hoàn toàn
-    fab.setTextSize(16); // Đã tăng +2
-    // Nới lỏng chiều cao lên 145px để không bao giờ bị cắt viền chữ
-    LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, 145);
-    fLp.setMargins(10,0,10,0); fab.setLayoutParams(fLp); fab.setPadding(60,0,60,0);
+    fab.setTextSize(16); // Không dùng in đậm
+    // Chiều cao được mở tối đa lên 150px và nới rộng padding ngang
+    LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, 150);
+    fLp.setMargins(10,0,10,0); fab.setLayoutParams(fLp); fab.setPadding(70,0,70,0);
     // Tái sử dụng cùng một nút FAB cho toàn bộ app để tiết kiệm RAM, thay đổi chức
 fab.setOnClickListener(v -> {
     if (currentMainTab == 1) { // Đang ở Condition Space
@@ -466,11 +465,12 @@ if (!action.equals("NONE")) {
     card.setOrientation(LinearLayout.HORIZONTAL);
     card.setBackground(getRounded("#202124", 24f)); 
     card.setPadding(15, 24, 10, 24);
+    // Giảm Margin để có thêm diện tích vẽ chữ
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-    lp.setMargins(8, 8, 8, 8); 
+    lp.setMargins(6, 6, 6, 6); 
     card.setLayoutParams(lp);
 
-    // Cột 1 (Trái cùng): Icon Option (Rung/Animation)
+    // Cột 1 (Trái cùng): Icon Option (Rung/Animation) - Khôi phục và tăng size
     LinearLayout optCol = new LinearLayout(this);
     optCol.setOrientation(LinearLayout.VERTICAL);
     optCol.setGravity(Gravity.CENTER);
@@ -478,8 +478,7 @@ if (!action.equals("NONE")) {
     TextView tIcons = new TextView(this);
     tIcons.setText((prefs.getBoolean(key+"_vib", true) ? "📳\n" : "") +
                    (prefs.getBoolean(key+"_anim", true) ? "✨" : ""));
-    tIcons.setTextSize(16); // Tăng cỡ chữ lên 2 mức
-    tIcons.setTypeface(android.graphics.Typeface.DEFAULT); // Bỏ in đậm
+    tIcons.setTextSize(16); // Tăng cỡ chữ lên 2 mức, bỏ Typeface.BOLD
     optCol.addView(tIcons);
 
     // Cột 2 (Giữa): Thông tin Component, Gesture, Action
@@ -487,10 +486,11 @@ if (!action.equals("NONE")) {
     infoCol.setOrientation(LinearLayout.VERTICAL);
     infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
-    TextView tCond = new TextView(this);
-    tCond.setText(compNamesUsed[c]);
-    tCond.setTextColor(Color.parseColor("#E8EAED"));
-    tCond.setTextSize(16); // Đã tăng +2, bỏ in đậm
+    TextView tCond = new TextView(this); 
+    tCond.setText(compNamesUsed[c]); 
+    tCond.setTextColor(Color.parseColor("#E8EAED")); 
+    tCond.setTextSize(16); // Tăng lên 16, Font chữ thường
+    
     TextView tGest = new TextView(this);
     tGest.setText(gestureNamesUsed[g]);
     tGest.setTextColor(Color.parseColor("#9AA0A6"));
@@ -513,10 +513,12 @@ if (!action.equals("NONE")) {
             } 
         }
     }
-    tAct.setText(actName.toString().isEmpty()? "Lỗi": actName.toString());
-    tAct.setTextColor(Color.parseColor("#8AB4F8"));
-    tAct.setTextSize(17); // Đã tăng +2, bỏ in đậm
+    tAct.setText(actName.toString().isEmpty() ? "Lỗi" : actName.toString());
+    tAct.setTextColor(Color.parseColor("#8AB4F8")); 
+    tAct.setTextSize(17); // Tăng lên 17, Font chữ thường
+    
     infoCol.addView(tCond); infoCol.addView(tGest); infoCol.addView(tAct);
+
     // Cột 3 (Phải cùng): Switch, Copy
     LinearLayout ctrlCol = new LinearLayout(this);
     ctrlCol.setOrientation(LinearLayout.VERTICAL);
@@ -529,24 +531,25 @@ if (!action.equals("NONE")) {
     
     final int finalC = c; final int finalG = g; final String finalActs = action;
     
+    // Nút COPY TO RÕ, Mở rộng height & width
     Button btnCopy = new Button(this); btnCopy.setText("COPY");
-    btnCopy.setBackground(getRounded("#303134", 12f));
-    btnCopy.setTextColor(Color.WHITE);
-    btnCopy.setTextSize(11); // Tăng +2, bỏ in đậm
+    btnCopy.setBackground(getRounded("#303134", 12f)); btnCopy.setTextColor(Color.WHITE);
+    btnCopy.setTextSize(11); // Tăng font
     btnCopy.setPadding(0,0,0,0);
-    // Nút copy mở rộng chiều ngang và cao để to rõ ràng, không bị cắt
-    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(120, 100);
-    btnLp.setMargins(0, 10, 0, 0); btnCopy.setLayoutParams(btnLp);
+    // Kéo giãn nút COPY choang toàn bộ không gian còn lại của thẻ
+    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(120, 100); 
+    btnLp.setMargins(0, 5, 0, 0); btnCopy.setLayoutParams(btnLp);
     btnCopy.setOnClickListener(v -> openRuleBuilderDialog(null, finalC, finalG, finalActs));
     
-    // Đã xóa hoàn toàn btnEdit
-    ctrlCol.addView(swOn); ctrlCol.addView(btnCopy); 
+    ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
+    
     card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
-    
-    // Thuật toán UX mới: Chạm 1 lần vào vùng Card để SỬA
+
+    // THUẬT TOÁN UX: CHẠM 1 LẦN -> MỞ EDIT DIALOG
     card.setOnClickListener(v -> openRuleBuilderDialog(key, finalC, finalG, ""));
-    
-    card.setOnLongClickListener(v -> {
+
+    // CHẠM GIỮ -> XÓA
+    card.setOnLongClickListener(v -> { 
         new AlertDialog.Builder(this).setTitle(T("Delete?", "Xóa?"))
             .setPositiveButton("XÓA", (d,w) -> {
                 prefs.edit().putString(key, "NONE").apply(); 
@@ -1200,6 +1203,7 @@ private void removeDynamicId(String listKey, String id) {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(getRounded("#202124", 20f));
         card.setPadding(15, 20, 15, 20);
+        // Tối ưu margin cho 3 cột trên Pixel 2XL
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
         lp.setMargins(6, 6, 6, 6);
         card.setLayoutParams(lp);
@@ -1212,13 +1216,14 @@ private void removeDynamicId(String listKey, String id) {
         TextView tvTitle = new TextView(this);
         tvTitle.setText(name); 
         tvTitle.setTextColor(Color.parseColor("#E8EAED"));
-        tvTitle.setTextSize(15); // Tăng +2, bỏ in đậm
+        tvTitle.setTextSize(15); // Tăng lên 15, KHÔNG in đậm
         tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         
         Switch swOn = new Switch(this);
         swOn.setChecked(prefs.getBoolean(prefixBase + id + "_en", true));
         swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(prefixBase + id + "_en", chk).apply());
-        // Đã xóa lệnh setScaleX/Y khiến giao diện Switch bị lỗi mờ/cắt
+        // Cho switch thu nhỏ lại một chút để không lấn át tên
+        swOn.setScaleX(0.85f); swOn.setScaleY(0.85f); 
         
         r1.addView(tvTitle); r1.addView(swOn);
 
@@ -1232,8 +1237,8 @@ private void removeDynamicId(String listKey, String id) {
         // Nút COPY mở rộng toàn bộ width (MATCH_PARENT) để dễ bấm
         Button btnCopy = new Button(this); btnCopy.setText("COPY");
         btnCopy.setBackground(getRounded("#303134", 12f)); btnCopy.setTextColor(Color.WHITE);
-        btnCopy.setTextSize(11); // Tăng +2, bỏ in đậm
-        LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(-1, 100); // Tăng height lên 100
+        btnCopy.setTextSize(11); // Tăng +2, Font thường
+        LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(-1, 95); // Tăng height
         cpLp.setMargins(0, 0, 0, 0); btnCopy.setLayoutParams(cpLp);
         btnCopy.setOnClickListener(v -> {
             String newId = addDynamicId(listKey);
@@ -1243,22 +1248,17 @@ private void removeDynamicId(String listKey, String id) {
             else openMacroEditorV2(newId);
         });
 
-        // Đã xóa hoàn toàn btnEdit
+        // Xóa nút Sửa
         r2.addView(btnCopy);
         card.addView(r1); card.addView(r2);
 
-        // Thuật toán UX mới: Chạm 1 lần vào Card để SỬA thông tin
+        // THUẬT TOÁN UX: CHẠM 1 LẦN -> MỞ EDIT DIALOG
         card.setOnClickListener(v -> {
             if (finalType == 0) openIntentEditorV2(finalId);
             else if (finalType == 1) openTileEditorV2(finalId);
             else openMacroEditorV2(finalId);
         });
-        // CHẠM 1 LẦN -> SỬA
-        card.setOnClickListener(v -> {
-            if (finalType == 0) openIntentEditorV2(finalId);
-            else if (finalType == 1) openTileEditorV2(finalId);
-            else openMacroEditorV2(finalId);
-        });
+
         // CHẠM GIỮ -> XÓA
         card.setOnLongClickListener(v -> {
             new AlertDialog.Builder(this).setTitle(T("Delete?", "Xóa?"))
