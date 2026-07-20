@@ -1692,6 +1692,7 @@ for (String a : acts) {
                 case "NOTIFICATIONS":
                 case "TOGGLE_OVERLAY":
                 case "TOGGLE_ACC":
+                case "SPLIT_SCREEN": 
                     Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
                     ipc.putExtra("act", a);
                     sendBroadcast(ipc);

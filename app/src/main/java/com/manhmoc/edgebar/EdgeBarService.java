@@ -632,8 +632,12 @@ private void checkAndEngageMorseLock(String pkg, String locklist) {
                 case "BACK": performGlobalAction(GLOBAL_ACTION_BACK); break;
                 case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break;
                 case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break;
-                case "SCREEN_OFF": performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break;
-                case "SCREEN_ON":
+                case "SCREEN_OFF":
+performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break;
+case "SPLIT_SCREEN":
+performGlobalAction(GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN); break;
+case "SCREEN_ON":
+// Thuật toán WakeLock giải phóng RAM nhanh
                     // Thuật toán WakeLock giải phóng RAM nhanh
                     android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
                     if (pm != null && !pm.isInteractive()) {

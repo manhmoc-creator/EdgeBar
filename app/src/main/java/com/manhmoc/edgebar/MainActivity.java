@@ -33,7 +33,7 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs; private boolean isVi;
     private String T(String en, String vi) { return isVi ? vi : en; }
     
-    private String[] ACT_KEYS = new String[40]; private String[] ACT_LABS = new String[40];
+    private String[] ACT_KEYS = new String[41]; private String[] ACT_LABS = new String[41];
     private String[] BARS = {"r", "l", "t_r", "t_l", "t_c"}; private String[] BAR_NAMES; 
     private String[] CORNERS = {"br", "bl", "tr", "tl"}; private String[] CORNER_NAMES;
     private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; private String[] COLOR_NAMES;
@@ -113,15 +113,21 @@ private List<String[]> getAppListCached() {
     @Override protected void onResume() { super.onResume(); refreshPreview(); }
     @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).putBoolean("preview_panel", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
     private void reloadActionLabels() {
-String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD", "LAUNCH_APP", "OPEN_PANEL_1", "OPEN_PANEL_2", "OPEN_PANEL_3"};
-String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"), T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"), T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm"), T("Launch App", "Mở Ứng dụng"), T("Open Panel 1","Mở Panel 1"), T("Open Panel 2","Mở Panel 2"), T("Open Panel 3","Mở Panel 3")};
-// V19.12.3.6.10: bỏ SCREEN_ON khỏi danh sách chung — chỉ còn dùng riêng cho VOLKEY
-for(int i=0; i<20; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
-for(int i=1; i<=15; i++) { ACT_KEYS[19+i]="INTENT_"+i; ACT_LABS[19+i] = prefs.getString("intent_"+i+"_name", "Intent " + i); }
-for(int i=1; i<=5; i++) { ACT_KEYS[34+i]="MACRO_"+i; ACT_LABS[34+i] = prefs.getString("macro_"+i+"_name", "Macro " + i); }
+String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD", "LAUNCH_APP", "OPEN_PANEL_1", "OPEN_PANEL_2",
+"OPEN_PANEL_3", "SPLIT_SCREEN"};
+String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
+T("Recents", "Da nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
+T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm"), T("Launch App", "Mở Ứng dụng"), T("Open Panel 1","Mở Panel 1"), T("Open Panel 2", "Mở Panel 2"), T("Open Panel 3","Mở Panel 3"), T("Split Screen", "Chia đôi màn hình")};
+// V19.12.3.6.10: bỏ SCREEN_ON khỏi danh sách chung  chỉ còn dùng riêng cho
+VOLKEY
+for(int i = 0; i<21; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
+for(int i = 1; i <= 15; i++) { ACT_KEYS[20+i]="INTENT_"+i; ACT_LABS[20+i] =
+prefs.getString("intent_"+i+"_name", "Intent " + i); }
+for(int i = 1; i <= 5; i++) { ACT_KEYS[35+i]="MACRO_"+i; ACT_LABS[35+i] =
+prefs.getString("macro_"+i+"_name", "Macro " + i); }
 // V19.12.3.6.10: bỏ vol_on/vol_off khỏi component chung (đã có không gian VOLKEY riêng)
 ALL_COMP_NAMES = new String[]{T("Bottom Right", "Thanh Đáy Phải"), T("Bottom Left", "Thanh Đáy Trái"), T("Top Right", "Thanh Cạnh Phải"), T("Top Left", "Thanh Cạnh Trái"), T("Top Center", "Thanh Đỉnh Giữa"), T("Corner BR", "Góc Viền Đáy Phải"), T("Corner BL", "Góc Viền Đáy Trái"), T("Corner TR", "Góc Viền Đỉnh Phải"), T("Corner TL", "Góc Viền Đỉnh Trái"), T("Fingerprint", "Vân Tay"), T("Launch App", "Lắng nghe Mở Ứng dụng")};
-VOLKEY_COMP_NAMES = new String[]{T("Volume Up Button", "Nút Tăng Âm Lượng"), T("Volume Down Button", "Nút Giảm Âm Lượng")};
+VOLKEY_COMP_NAMES = new String[]{T("Button Up", "Phím Tăng Âm"), T("Button Down", "Phím Giảm Âm")};
 VOLKEY_GESTURE_NAMES = new String[]{T("Press Once", "Nhấn 1 Lần"), T("Press Twice", "Nhấn 2 Lần"), T("Hold", "Giữ (Long Press)")};
 M_BAR_NAMES = new String[]{T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"), T("Top Right", "Cạnh Phải"), T("Top Left", "Cạnh Trái"), T("Top Center", "Đỉnh giữa"), T("Bottom Center", "Đáy Giữa"), T("Top Half Center", "Trung Tâm Trên"), T("Bottom Half Center", "Trung Tâm Dưới")};
 C_GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ"), T("Diagonal", "Vuốt Chéo"), T("Diagonal + Hold", "Vuốt Chéo + Giữ")};
@@ -228,7 +234,7 @@ if (currentMainTab == 0) {
     fab.setVisibility(View.VISIBLE);
     if (designTabState == 6) {
         // Yêu cầu 1 & 3: Chỉ hiện FormatB / FormatC trong không gian "Cấu hình Design"
-        fab.setText(currentDesignCfgTab == 0 ? "+ FORMAT B" : "+ FORMAT C");
+        fab.setText(currentDesignCfgTab == 0 ? "FormatB" : "FormatC");
         fab.setOnClickListener(v -> {
             String listKey = currentDesignCfgTab == 0 ? "pack_bar_ids" : "pack_corner_ids";
             String newId = addDynamicId(listKey);
@@ -236,7 +242,7 @@ if (currentMainTab == 0) {
         });
     } else if (designTabState == 5) {
         // Yêu cầu 2 & 4: Viên thuốc riêng cho không gian Panel (Tạo Panel Data Pack)
-        fab.setText("+ FORMAT PANEL");
+        fab.setText("+ PANEL");
         fab.setOnClickListener(v -> {
             String newId = addDynamicId("pack_panel_ids");
             openDataPackEditor(2, newId); // type 2 = Panel Data Pack
@@ -687,12 +693,13 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
         final boolean isVolKeyMode = (currentGesTab == 3);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30, 120, 30, 30);
         
-        LinearLayout tabs = new LinearLayout(this); tabs.setOrientation(LinearLayout.HORIZONTAL);
-        Button bTrig = createTabBtn("TRIGGER"); Button bAct = createTabBtn("ACTION"); Button bOpt = createTabBtn("OPTIONS");
-        LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(0,-2,1f); tabLp.setMargins(10,0,10,0); 
-        bTrig.setLayoutParams(tabLp); bAct.setLayoutParams(tabLp); bOpt.setLayoutParams(tabLp);
-        tabs.addView(bTrig); tabs.addView(bAct); tabs.addView(bOpt); root.addView(tabs);
-
+        LinearLayout tabs = new LinearLayout(this);
+tabs.setOrientation (LinearLayout.HORIZONTAL);
+Button bTrig = createTabBtn("TRIGGER"); Button bAct = createTabBtn("ACTION");
+LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(0,-2,1f);
+tabLp.setMargins (10,0,10,0);
+bTrig.setLayoutParams(tabLp); bAct.setLayoutParams(tabLp);
+tabs.addView(bTrig); tabs.addView(bAct); root.addView(tabs);
         ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(0,40,0,0); scroll.addView(content); root.addView(scroll);
 
@@ -776,8 +783,7 @@ for (String sa : savedArray) {
 // --- [CODE MỚI THAY THẾ - TỐI ƯU PIXEL 2 XL] ---
 List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{
 "BACK","HOME", "RECENTS", "SCREEN_OFF","FLASH","POWER_DIALOG", "VOLUME",
-"SCREENSHOT", "CAMERA","NOTIFICATIONS","TOGGLE_ACC","TOGGLE_OVERLAY",
-"TOGGLE_MORSE", "VOICE_RECORD"
+"SCREENSHOT", "CAMERA","NOTIFICATIONS","SPLIT_SCREEN" 
 }, actKeysUsed, actLabsUsed);
 
 // YÊU CẦU 1: Tách riêng Launch App/Shortcut (chỉ cho Homeb sáng màn)
@@ -857,8 +863,7 @@ vAct.addView(buildActionCategoryCard("SYSTEM", "⚙️", SYS_ITEMS, selectedActs
             if (!isVolKeyMode) {
                 // Đã gom toàn bộ các action tiện ích vào khối UTILITIES để hiển thị đầy đủ cho không gian LOCK
                 List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{
-                        "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", 
-                        "YTDL_DOWNLOAD", "NOTIFICATIONS", "FLASH", "SCREENSHOT", "CAMERA"
+                        "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", "YTDL_DOWNLOAD", "OPEN_PANEL_1", "OPEN_PANEL_2", "OPEN_PANEL_3"
                 }, actKeysUsed, actLabsUsed);
                 List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", actKeysUsed,
                         actLabsUsed);
@@ -868,15 +873,25 @@ vAct.addView(buildActionCategoryCard("SYSTEM", "⚙️", SYS_ITEMS, selectedActs
     vAct.addView(buildActionCategoryCard("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
 }
 // --- [KẾT THÚC CODE MỚI] ---
-LinearLayout vOpt = new LinearLayout(this); vOpt.setOrientation(LinearLayout.VERTICAL); vOpt.setVisibility(View.GONE);
-        cbVib.setText(T("Haptic Feedback", "Bật Rung (Haptic Feedback)")); cbVib.setTextColor(Color.WHITE); cbVib.setChecked(editKey == null || prefs.getBoolean(editKey+"_vib", true)); vOpt.addView(cbVib);
-        cbAnim.setText(T("Show Animation", "Bật Hiệu ứng Ánh sáng (Animation)")); cbAnim.setTextColor(Color.WHITE); cbAnim.setChecked(editKey == null || prefs.getBoolean(editKey+"_anim", true));
-        if (!isVolKeyMode) vOpt.addView(cbAnim); else cbAnim.setChecked(false); // Màn tắt: không có overlay để chớp sáng
+cbVib.setText(T("Haptic Feedback", "Bật Rung (Haptic Feedback)"));
+cbVib.setTextColor(Color.WHITE); cbVib.setChecked(editKey == null ||
+prefs.getBoolean(editKey+"_vib", true)); vTrig.addView(cbVib);
+cbAnim.setText(T("Show Animation", "Bật Hiệu ứng Ánh sáng (Animation)"));
+cbAnim.setTextColor(Color.WHITE); cbAnim.setChecked(editKey == null ||
+prefs.getBoolean(editKey+"_anim", true));
+if (!isVolKeyMode) vTrig.addView(cbAnim); else cbAnim.setChecked(false);
 
-        content.addView(vTrig); content.addView(vAct); content.addView(vOpt);
-
-        View.OnClickListener tabClick = v -> { bTrig.setBackground(getRounded(v==bTrig?"#00E5FF":"#222222", 15f)); bTrig.setTextColor(v==bTrig?Color.BLACK:Color.WHITE); bAct.setBackground(getRounded(v==bAct?"#00E5FF":"#222222", 15f)); bAct.setTextColor(v==bAct?Color.BLACK:Color.WHITE); bOpt.setBackground(getRounded(v==bOpt?"#00E5FF":"#222222", 15f)); bOpt.setTextColor(v==bOpt?Color.BLACK:Color.WHITE); vTrig.setVisibility(v==bTrig?View.VISIBLE:View.GONE); vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE); vOpt.setVisibility(v==bOpt?View.VISIBLE:View.GONE); }; bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick); bOpt.setOnClickListener(tabClick); bTrig.performClick();
-
+content.addView(vTrig); content.addView(vAct);
+View.OnClickListener tabClick = v -> {
+bTrig.setBackground(getRounded(v==bTrig?"#00E5FF":"#222222", 15f));
+bTrig.setTextColor(v==bTrig?Color.BLACK:Color.WHITE);
+bAct.setBackground(getRounded(v==bAct?"#00E5FF":"#222222", 15f));
+bAct.setTextColor(v==bAct?Color.BLACK:Color.WHITE);
+vTrig.setVisibility(v==bTrig?View.VISIBLE:View.GONE);
+vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE);
+};
+bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick);
+bTrig.performClick();
         LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL);
         Button bCancel = new Button(this); bCancel.setText(T("CANCEL", "HỦY")); bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
         Button bSave = new Button(this); bSave.setText(T("SAVE RULE", "LƯU QUY TẮC")); bSave.setBackground(getRounded("#4CAF50", 20f)); bSave.setTextColor(Color.WHITE); LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0); bSave.setLayoutParams(slp);
@@ -993,12 +1008,13 @@ private List<String[]> buildItemsForPrefix(String prefix, String[] actKeysUsed, 
     return out;
 }
 
-private LinearLayout buildActionCategoryCard(String title, String emoji, List<String[]> items, java.util.LinkedHashSet<String> selectedSet, String colorHex) {
-    LinearLayout card = new LinearLayout(this);
-    card.setOrientation(LinearLayout.VERTICAL);
-    card.setBackground(getRounded(colorHex, 20f));
-    card.setPadding(30, 30, 30, 30);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+private LinearLayout buildActionCategoryCard(String title, String emoji, List<String[]>
+items, java.util.LinkedHashSet<String> selectedSet, String colorHex) {
+LinearLayout card = new LinearLayout(this);
+card.setOrientation (LinearLayout.VERTICAL);
+card.setBackground(getRounded("#202124", 20f));
+card.setPadding (30, 30, 30, 30);
+LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
     lp.setMargins(0, 0, 0, 20);
     card.setLayoutParams(lp);
 
@@ -1022,18 +1038,18 @@ private LinearLayout buildActionCategoryCard(String title, String emoji, List<St
         for (String[] it : items) if (selectedSet.contains(it[1])) cnt++;
         tvCount.setText(cnt == 0 ? T("(Not selected)", "(Chưa chọn)") : "⚡ " + cnt + " " + T("selected", "hành động đã chọn"));
     };
-    updateCount.run();
-    card.addView(tvCount);
-
-    Button btnPick = new Button(this);
-    btnPick.setText("⚡ " + T("CHOOSE ACTIONS", "CHỌN HÀNH ĐỘNG"));
-    btnPick.setBackground(getRounded("#00000066", 20f));
-    btnPick.setTextColor(Color.WHITE);
-    btnPick.setTextSize(13f); // xem lỗi thứ 2 bên dưới
-    btnPick.setOnClickListener(v -> showActionCategoryPicker(title, items, selectedSet, updateCount));
-    card.addView(btnPick);
-
-    return card;
+updateCount.run();
+card.addView(tvCount);
+Button btnPick = new Button(this);
+btnPick.setText("⚡ " + T("CHOOSE ACTIONS", "CHỌN HÀNH ĐỘNG"));
+btnPick.setBackground(getRounded(colorHex, 20f));
+btnPick.setTextColor(Color.WHITE);
+btnPick.setTextSize(13f);
+btnPick.setOnClickListener(v -> showActionCategoryPicker(title, items, selectedSet,
+updateCount));
+card.setOnClickListener(v -> btnPick.performClick());
+card.addView(btnPick);
+return card;
 }
 // Dialog picker DÙNG CHUNG cho cả 4 category — có ô tìm kiếm + multi-select,
 // y hệt pattern showPanelMultiPicker() đã có sẵn, để đồng bộ trải nghiệm.
@@ -1960,31 +1976,34 @@ btnEditHome.setOnClickListener(v -> { designTabState=1; refreshPreview(); update
 btnEditHomacc.setOnClickListener(v -> { designTabState=4; refreshPreview(); updateVisTabs(); renderSliders(); });
 btnEditMorse.setOnClickListener(v -> { designTabState=2; refreshPreview(); updateVisTabs(); renderSliders(); }); 
 btnEditAnim.setOnClickListener(v -> { designTabState=3; refreshPreview(); updateVisTabs(); renderSliders(); });
-toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addView(btnEditHomacc); toggleRow.addView(btnEditMorse); toggleRow.addView(btnEditAnim);
-        pageDesign.addView(toggleRow);
+toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome);
+toggleRow.addView(btnEditHomacc);
+pageDesign.addView(toggleRow);
 
-        // HÀNG 2 — chỉ có PANEL, đặt riêng hàng để dễ mở rộng thêm tab về sau
-        // --- [CODE MỚI THAY THẾ - TỐI ƯU PIXEL 2 XL] ---
-// HÀNG 2 - PANEL và CẤU HÌNH DESIGN (Chia đôi tỷ lệ 1:1 phẳng)
+// HÀNG 2 - MORSOS, ANIMA, PANEL và CẤU HÌNH DESIGN
 LinearLayout toggleRow2 = new LinearLayout(this);
-toggleRow2.setOrientation(LinearLayout.HORIZONTAL);
-toggleRow2.setPadding(0, 15, 0, 0);
+toggleRow2.setOrientation (LinearLayout. HORIZONTAL);
+toggleRow2.setPadding (0, 15, 0, 0);
+
+btnEditMorse.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+LinearLayout.LayoutParams mP2 = new LinearLayout.LayoutParams(0, -2, 1f);
+mP2.setMargins(5, 0, 5, 0);
+btnEditAnim.setLayoutParams(mP2);
 
 btnEditPanel = new Button(this); btnEditPanel.setText("PANEL");
-LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(0, -2, 1f);
-pLp.setMargins(0, 0, 5, 0);
-btnEditPanel.setLayoutParams(pLp);
-btnEditPanel.setOnClickListener(v -> { designTabState = 5; refreshPreview(); updateVisTabs(); renderSliders(); });
+btnEditPanel.setLayoutParams(mP2);
+btnEditPanel.setOnClickListener(v -> { designTabState = 5; refreshPreview();
+updateVisTabs(); renderSliders(); });
 
-// YÊU CẦU 3: Thêm nút thẻ không gian "Cấu hình Design"
 Button btnEditDesignConfig = new Button(this);
-btnEditDesignConfig.setText("CẤU HÌNH DESIGN");
+btnEditDesignConfig.setText("COMPONENT");
 btnEditDesignConfig.setTag("btnEditDesignConfig");
-LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, -2, 1f);
-cLp.setMargins(5, 0, 0, 0);
-btnEditDesignConfig.setLayoutParams(cLp);
-btnEditDesignConfig.setOnClickListener(v -> { designTabState = 6; refreshPreview(); updateVisTabs(); renderSliders(); });
+btnEditDesignConfig.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+btnEditDesignConfig.setOnClickListener(v -> { designTabState = 6; refreshPreview();
+updateVisTabs(); renderSliders(); });
 
+toggleRow2.addView(btnEditMorse);
+toggleRow2.addView(btnEditAnim);
 toggleRow2.addView(btnEditPanel);
 toggleRow2.addView(btnEditDesignConfig);
 pageDesign.addView(toggleRow2);
@@ -2602,26 +2621,45 @@ private void openDataPackEditor(int type, String id) {
     content.addView(etName);
     
     if (type == 0) {
-        // Yêu cầu 3: Xây riêng 5 thanh Bar và ô chọn tắt/bật Live Preview ngay trong nút FormatB
-        content.addView(createSectionTitle("👁️ BẬT TẮT 5 THANH BAR ĐỂ NGẮM & CHỈNH (LIVE PREVIEW)"));
-        String[] bKeys = {"r", "l", "t_r", "t_l", "t_c"};
-        String[] bNames = {"Đáy phải", "Đáy trái", "Cạnh Phải", "Cạnh Trái", "Đỉnh giữa"};
-        for (int i = 0; i < bKeys.length; i++) {
-            CheckBox cb = new CheckBox(this);
-            cb.setText("👁️ Hiện thử: " + bNames[i]);
-            cb.setTextColor(Color.parseColor("#00E5FF"));
-            cb.setTextSize(14f);
-            final String pKey = prefix + id + "_preview_" + bKeys[i];
-            cb.setChecked(prefs.getBoolean(pKey, false));
-            cb.setOnCheckedChangeListener((vw, c) -> {
-                prefs.edit().putBoolean(pKey, c).apply();
-                sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-            });
-            content.addView(cb);
+CheckBox cbEn = new CheckBox(this);
+cbEn.setText("Bật Data Pack này (Enable)");
+cbEn.setTextColor(Color.WHITE);
+cbEn.setChecked(prefs.getBoolean(prefix + id + "_en", false));
+cbEn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(prefix + id + "_en", c).apply());
+content.addView(cbEn);
+
+content.addView(createSectionTitle(" HIỆN THỬ TẠI VỊ TRÍ ĐANG CHỌN (LIVE PREVIEW)"));
+String[] bKeys = {"r", "l", "t_r", "t_l", "t_c"};
+CheckBox cbPreview = new CheckBox(this);
+cbPreview.setText("Bật xem trước (Live Preview)");
+cbPreview.setTextColor(Color.parseColor("#00E5FF"));
+cbPreview.setTextSize(14f);
+int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
+cbPreview.setChecked(prefs.getBoolean(prefix + id + "_preview_" + bKeys[currentLoc], false));
+
+content.addView(createSectionTitle("CẤU HÌNH BAR (FORMAT B)"));
+LinearLayout locDropdown = createComboDropdown("Chọn vị trí Bar chính", prefix + id + "_loc", BAR_NAMES, 0);
+Spinner locSpinner = (Spinner) locDropdown.getChildAt(1);
+
+cbPreview.setOnCheckedChangeListener((vw, c) -> {
+    int sel = locSpinner.getSelectedItemPosition();
+    for(int i=0; i<bKeys.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + bKeys[i], false).apply();
+    prefs.edit().putBoolean(prefix + id + "_preview_" + bKeys[sel], c).apply();
+    sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+});
+locSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+    public void onItemSelected(AdapterView<?> p, View v, int pos, long idx){
+        prefs.edit().putInt(prefix + id + "_loc", pos).apply();
+        for(int i=0; i<bKeys.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + bKeys[i], false).apply();
+        if(cbPreview.isChecked()) {
+            prefs.edit().putBoolean(prefix + id + "_preview_" + bKeys[pos], true).apply();
         }
-        
-        content.addView(createSectionTitle("CẤU HÌNH BAR (FORMAT B)"));
-        content.addView(createComboDropdown("Chọn vị trí Bar chính", prefix + id + "_loc", BAR_NAMES, 0));
+        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+    }
+    public void onNothingSelected(AdapterView<?> p){}
+});
+content.addView(cbPreview);
+content.addView(locDropdown);
         content.addView(createComboDropdown("Hiển thị", prefix + id + "_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
         content.addView(createComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode", new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
         content.addView(createSlider("Độ trong suốt", prefix + id + "_alpha", 255, 50));
@@ -2630,26 +2668,45 @@ private void openDataPackEditor(int type, String id) {
         content.addView(createSlider("Tọa độ X", prefix + id + "_x", 1000, 0));
         content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 2500, 0));
     } else if (type == 1) {
-        // Yêu cầu 3: Xây riêng 4 góc Corner và ô chọn tắt/bật Live Preview trong nút FormatC
-        content.addView(createSectionTitle("👁️ BẬT TẮT 4 CORNER ĐỂ NGẮM & CHỈNH (LIVE PREVIEW)"));
-        String[] cKeys = {"br", "bl", "tr", "tl"};
-        String[] cNames = {"Góc đáy phải", "Góc đáy trái", "Góc đỉnh phải", "Góc đỉnh trái"};
-        for (int i = 0; i < cKeys.length; i++) {
-            CheckBox cb = new CheckBox(this);
-            cb.setText("👁️ Hiện thử: " + cNames[i]);
-            cb.setTextColor(Color.parseColor("#00E5FF"));
-            cb.setTextSize(14f);
-            final String pKey = prefix + id + "_preview_" + cKeys[i];
-            cb.setChecked(prefs.getBoolean(pKey, false));
-            cb.setOnCheckedChangeListener((vw, c) -> {
-                prefs.edit().putBoolean(pKey, c).apply();
-                sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-            });
-            content.addView(cb);
+CheckBox cbEn = new CheckBox(this);
+cbEn.setText("Bật Data Pack này (Enable)");
+cbEn.setTextColor(Color.WHITE);
+cbEn.setChecked(prefs.getBoolean(prefix + id + "_en", false));
+cbEn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(prefix + id + "_en", c).apply());
+content.addView(cbEn);
+
+content.addView(createSectionTitle(" HIỆN THỬ TẠI VỊ TRÍ ĐANG CHỌN (LIVE PREVIEW)"));
+String[] cKeys = {"br", "bl", "tr", "tl"};
+CheckBox cbPreview = new CheckBox(this);
+cbPreview.setText("Bật xem trước (Live Preview)");
+cbPreview.setTextColor(Color.parseColor("#00E5FF"));
+cbPreview.setTextSize(14f);
+int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
+cbPreview.setChecked(prefs.getBoolean(prefix + id + "_preview_" + cKeys[currentLoc], false));
+
+content.addView(createSectionTitle("CẤU HÌNH CORNER (FORMAT C)"));
+LinearLayout locDropdown = createComboDropdown("Chọn vị trí Corner chính", prefix + id + "_loc", CORNER_NAMES, 0);
+Spinner locSpinner = (Spinner) locDropdown.getChildAt(1);
+
+cbPreview.setOnCheckedChangeListener((vw, c) -> {
+    int sel = locSpinner.getSelectedItemPosition();
+    for(int i=0; i<cKeys.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[i], false).apply();
+    prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[sel], c).apply();
+    sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+});
+locSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+    public void onItemSelected(AdapterView<?> p, View v, int pos, long idx){
+        prefs.edit().putInt(prefix + id + "_loc", pos).apply();
+        for(int i=0; i<cKeys.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[i], false).apply();
+        if(cbPreview.isChecked()) {
+            prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[pos], true).apply();
         }
-        
-        content.addView(createSectionTitle("CẤU HÌNH CORNER (FORMAT C)"));
-        content.addView(createComboDropdown("Chọn vị trí Corner chính", prefix + id + "_loc", CORNER_NAMES, 0));
+        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+    }
+    public void onNothingSelected(AdapterView<?> p){}
+});
+content.addView(cbPreview);
+content.addView(locDropdown);
         content.addView(createComboDropdown("Hiển thị", prefix + id + "_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
         content.addView(createComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode", new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
         content.addView(createComboDropdown("Hình dáng Góc", prefix + id + "_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0));
