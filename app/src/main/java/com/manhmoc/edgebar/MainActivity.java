@@ -222,15 +222,22 @@ private void openDesignSpace() { currentMainTab = 0; refreshPreview(); navMain.s
 // buildRuleEditor(), nên không cần ẩn cả nút.
 private void updateFabVisibility() {
         if (fab == null) return;
-        // Xử lý hiển thị FAB cho không gian Cấu hình Design (Data Packs)
-        if (currentMainTab == 0 && designTabState == 6) {
+        
+        if (currentMainTab == 0) { // Không gian Design
             fab.setVisibility(View.VISIBLE);
-            fab.setText(currentDesignCfgTab == 0 ? "+ FORMAT B" : "+ FORMAT C");
-            fab.setOnClickListener(v -> {
-                String listKey = currentDesignCfgTab == 0 ? "pack_bar_ids" : "pack_corner_ids";
-                String newId = addDynamicId(listKey);
-                openDataPackEditor(currentDesignCfgTab, newId);
-            });
+            if (designTabState == 6) { // Cấu hình Bar/Corner
+                fab.setText(currentDesignCfgTab == 0 ? "FormatB" : "FormatC");
+                fab.setOnClickListener(v -> {
+                    String listKey = currentDesignCfgTab == 0 ? "pack_bar_ids" : "pack_corner_ids";
+                    openDataPackEditor(currentDesignCfgTab, addDynamicId(listKey));
+                });
+            } else if (designTabState == 5) { // Không gian Panel
+                fab.setText("+ PANEL PACK");
+                fab.setOnClickListener(v -> openDataPackEditor(2, addDynamicId("pack_panel_ids")));
+            } else { // Lock, Homeb, Homacc, Morsos, Anima
+                fab.setText(" "); // Viên thuốc trống rỗng Zero-RAM
+                fab.setOnClickListener(v -> openDataPackEditor(-1, ""));
+            }
         } else if (currentMainTab == 1) { // Condition Space
         fab.setVisibility(View.VISIBLE);
         fab.setText("+NEW EB");
@@ -270,8 +277,7 @@ private void updateFabVisibility() {
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);syncVolumeService();updateFabVisibility();isVi = prefs.getBoolean("lang_vi", true); reloadActionLabels();
-        
+        super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);syncVolumeService();updateFabVisibility();isVi = prefs.getBoolean("lang_vi", true); reloadActionLabels();syncAllTileComponentsOnBoot();
         // Tối ưu OLED: Nền đen tuyệt đối #000000 tắt hoàn toàn bóng LED trên Pixel 2XL
     rootLayout = new RelativeLayout(this);
     rootLayout.setBackgroundColor(Color.parseColor("#000000"));
@@ -1247,19 +1253,24 @@ r1.addView(tvTitle); r1.addView(swOn);
                             }
                         }
 
-                        CheckBox cbShowTile = new CheckBox(this);
-                        cbShowTile.setText("Hiện QS");
-                        cbShowTile.setTextColor(Color.parseColor("#00E5FF"));
-                        cbShowTile.setTextSize(11.5f);
-                        // Liên kết trạng thái tick với data đã lưu
-                        cbShowTile.setChecked(prefs.getBoolean("tile_active_" + id, false));
-                        cbShowTile.setOnCheckedChangeListener((vw, chk) -> {
-                            prefs.edit().putBoolean("tile_active_" + id, chk).apply();
-                            Toast.makeText(this, chk ? "Đã ghim Tile lên QS" : "Đã ẩn khỏi QS", Toast.LENGTH_SHORT).show();
-                            // Cập nhật IPC ngay để service QS Tiles nhận diện lập tức
-                            sendBroadcast(new Intent("com.manhmoc.edgebar.TILE_CONFIG_CHANGED"));
-                        });
-
+                        final int finalBoundSlot = boundSlot;
+CheckBox cbShowTile = new CheckBox(this);
+cbShowTile.setText("Hiện QS");
+cbShowTile.setTextColor(Color.parseColor("#00E5FF"));
+cbShowTile.setTextSize(11.5f);
+cbShowTile.setEnabled(finalBoundSlot != -1); // Chưa gán Slot thì chưa cho bật
+cbShowTile.setChecked(finalBoundSlot != -1 && prefs.getBoolean("tile_active_" + id, false));
+cbShowTile.setOnCheckedChangeListener((vw, chk) -> {
+    if (finalBoundSlot == -1) {
+        Toast.makeText(this, "Hãy gán Data Pack vào 1 Slot trước!", Toast.LENGTH_SHORT).show();
+        cbShowTile.setChecked(false);
+        return;
+    }
+    prefs.edit().putBoolean("tile_active_" + id, chk).apply();
+    setTileComponentEnabled(finalBoundSlot, chk); // ← Cốt lõi: bật/tắt hẳn Component
+    Toast.makeText(this, chk ? "Đã ghim Tile lên QS" : "Đã ẩn khỏi QS", Toast.LENGTH_SHORT).show();
+    sendBroadcast(new Intent("com.manhmoc.edgebar.TILE_CONFIG_CHANGED"));
+});
                         TextView tvQsStatus = new TextView(this);
                         tvQsStatus.setTextSize(10.5f);
                         if (boundSlot != -1) {
@@ -1894,14 +1905,23 @@ private void openTileEditorV2(String id) {
         String labelText = etLabel.getText().toString().trim();
         int actionPos = sp.getSelectedItemPosition();
         if (labelText.isEmpty()) labelText = ACT_LABS[actionPos];
-        prefs.edit()
-            .putString("tilev2_"+id+"_label", labelText)
-            .putString("tilev2_"+id+"_act", ACT_KEYS[actionPos])
-            .putString("tilev2_"+id+"_launch_pkg", etTileApp.getText().toString())
-            .putString("tile_slot_"+chosenSlot+"_id", id)
-            .apply();
-        sendBroadcast(new Intent("com.manhmoc.edgebar.TILE_CONFIG_CHANGED"));
-        renderEcosystem(); d.dismiss();
+        // Nếu Data Pack này trước đó đang chiếm 1 slot khác -> giải phóng & tắt component cũ
+for (int s = 1; s <= 30; s++) {
+    if (prefs.getString("tile_slot_"+s+"_id", "").equals(id) && s != chosenSlot) {
+        prefs.edit().remove("tile_slot_"+s+"_id").apply();
+        setTileComponentEnabled(s, false);
+    }
+}
+prefs.edit()
+    .putString("tilev2_"+id+"_label", labelText)
+    .putString("tilev2_"+id+"_act", ACT_KEYS[actionPos])
+    .putString("tilev2_"+id+"_launch_pkg", etTileApp.getText().toString())
+    .putString("tile_slot_"+chosenSlot+"_id", id)
+    .apply();
+// Chỉ bật component slot mới nếu người dùng ĐANG bật "Hiện QS" cho Data Pack này
+setTileComponentEnabled(chosenSlot, prefs.getBoolean("tile_active_" + id, false));
+sendBroadcast(new Intent("com.manhmoc.edgebar.TILE_CONFIG_CHANGED"));
+renderEcosystem(); d.dismiss();
     });
     d.setContentView(root); d.show();
 }
@@ -2359,38 +2379,71 @@ designSliderContainer.addView(relockRow);
         } 
     }
  private void renderPanelDesign() {
-    LinearLayout tabRow = new LinearLayout(this); tabRow.setOrientation(LinearLayout.HORIZONTAL);
-    // MỚI:
-Button b1 = createTabBtn("PANEL 1"), b2 = createTabBtn("PANEL 2"), b3 = createTabBtn("PANEL 3");
-    LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0,-2,1f); tlp.setMargins(6,0,6,0);
-    b1.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); b2.setLayoutParams(tlp); b3.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+        designSliderContainer.removeAllViews();
+        LinearLayout cfgBody = new LinearLayout(this);
+        cfgBody.setOrientation(LinearLayout.VERTICAL);
+        designSliderContainer.addView(cfgBody);
 
-    // panelBody: container RIÊNG cho nội dung panel — rebuild container này
-    // thay vì gọi lại renderSliders() (nguyên nhân gây đệ quy vô hạn / ANR)
-    LinearLayout panelBody = new LinearLayout(this);
-    panelBody.setOrientation(LinearLayout.VERTICAL);
+        List<String> ids = getDynamicIds("pack_panel_ids");
+        if (ids.isEmpty()) {
+            TextView tvEmpty = new TextView(this);
+            tvEmpty.setText("Không gian Panel đang rỗng.\nChạm nút viên thuốc + PANEL PACK để tạo.");
+            tvEmpty.setTextColor(Color.parseColor("#777777"));
+            tvEmpty.setGravity(Gravity.CENTER);
+            tvEmpty.setPadding(0, 80, 0, 0);
+            cfgBody.addView(tvEmpty);
+        } else {
+            for (String id : ids) {
+                LinearLayout card = new LinearLayout(this);
+                card.setOrientation(LinearLayout.VERTICAL);
+                card.setBackground(getRounded("#202124", 20f));
+                card.setPadding(30, 30, 30, 30);
+                LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, -2);
+                cLp.setMargins(0, 0, 0, 15);
+                card.setLayoutParams(cLp);
 
-    View.OnClickListener pTab = v -> {
-        currentPanelIdx = (v==b1) ? 1 : (v==b2) ? 2 : 3;
-        stylePanelTabs(b1, b2, b3);
-        buildPanelBody(panelBody);   // ← CHỈ rebuild nội dung, KHÔNG đụng renderSliders()
-    };
-    b1.setOnClickListener(pTab); b2.setOnClickListener(pTab); b3.setOnClickListener(pTab);
-    tabRow.addView(b1); tabRow.addView(b2); tabRow.addView(b3);
-    designSliderContainer.addView(tabRow);
-    designSliderContainer.addView(panelBody);
+                LinearLayout row1 = new LinearLayout(this);
+                row1.setOrientation(LinearLayout.HORIZONTAL);
+                row1.setGravity(Gravity.CENTER_VERTICAL);
 
-    // Khởi tạo lần đầu: style tab + build nội dung, KHÔNG gọi onClick() giả lập
-    stylePanelTabs(b1, b2, b3);
-    buildPanelBody(panelBody);
- // --- [CODE MỚI THAY THẾ - TỐI ƯU PIXEL 2 XL] ---
-TextView tvSwipeHint = new TextView(this);
-tvSwipeHint.setText("" + T("Swipe panel to see more items", "Vuốt ngang panel để xem thêm ô") + "→");
-tvSwipeHint.setTextColor(Color.GRAY); tvSwipeHint.setTextSize(11f);
-tvSwipeHint.setGravity(Gravity.CENTER); tvSwipeHint.setPadding(0, 10, 0, 0);
-panelBody.addView(tvSwipeHint);
-}
+                TextView tvName = new TextView(this);
+                tvName.setText(prefs.getString("pack_panel_" + id + "_name", "Panel Pack Mới"));
+                tvName.setTextColor(Color.WHITE);
+                tvName.setTextSize(15f);
+                tvName.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
+                Switch swOn = new Switch(this);
+                swOn.setChecked(prefs.getBoolean("pack_panel_" + id + "_en", false));
+                swOn.setOnCheckedChangeListener((vw, chk) -> prefs.edit().putBoolean("pack_panel_" + id + "_en", chk).apply());
+
+                row1.addView(tvName); row1.addView(swOn);
+
+                Button btnCopy = new Button(this);
+                btnCopy.setText("COPY");
+                btnCopy.setBackground(getRounded("#303134", 14f));
+                btnCopy.setTextColor(Color.WHITE);
+                LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                btnLp.setMargins(0, 15, 0, 0);
+                btnCopy.setLayoutParams(btnLp);
+                btnCopy.setOnClickListener(btn -> {
+                    String newId = addDynamicId("pack_panel_ids");
+                    prefs.edit().putString("pack_panel_" + newId + "_name", prefs.getString("pack_panel_" + id + "_name", "") + " (Copy)").apply();
+                    openDataPackEditor(2, newId);
+                });
+
+                card.addView(row1); card.addView(btnCopy);
+                card.setOnClickListener(btn -> openDataPackEditor(2, id));
+                card.setOnLongClickListener(btn -> {
+                    new AlertDialog.Builder(this).setTitle("Xóa Panel Pack?").setPositiveButton("XÓA", (d,w) -> {
+                        removeDynamicId("pack_panel_ids", id);
+                        renderPanelDesign();
+                    }).setNegativeButton("HỦY", null).show();
+                    return true;
+                });
+                cfgBody.addView(card);
+            }
+        }
+    }
 // YÊU CẦU 3: Thuật toán quản lý không gian Cấu hình Design (Quản lý Data Pack)
     private int currentDesignCfgTab = 0; // 0 = cấu hình bar, 1 = cấu hình corner
 
@@ -2504,68 +2557,143 @@ private void openDataPackEditor(int type, String id) {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,80,40,40);
 
-        ScrollView scroll = new ScrollView(this); 
+        ScrollView scroll = new ScrollView(this);
         scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
         LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL); 
+        content.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(content);
         root.addView(scroll);
 
-        String prefix = type == 0 ? "pack_bar_" : "pack_corner_";
-        
-        EditText etName = createEcoInput("Tên Data Pack", prefs.getString(prefix + id + "_name", ""));
-        content.addView(etName);
-
-        if (type == 0) {
-            // FORMAT B (CẤU HÌNH BAR)
-            content.addView(createSectionTitle("CẤU HÌNH BAR (FORMAT B)"));
-            content.addView(createComboDropdown("Chọn vị trí Bar", prefix + id + "_loc", BAR_NAMES, 0));
-            content.addView(createComboDropdown("Hiển thị", prefix + id + "_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
-            content.addView(createComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode", new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
-            content.addView(createSlider("Độ trong suốt", prefix + id + "_alpha", 255, 50));
-            content.addView(createSlider("Chiều ngang", prefix + id + "_w", 3000, 300));
-            content.addView(createSlider("Chiều dọc", prefix + id + "_h", 3000, 60));
-            content.addView(createSlider("Tọa độ X", prefix + id + "_x", 1000, 0));
-            content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 2500, 0));
+        if (type == -1) {
+            // KHÔNG GIAN RỖNG (Cho Morsos/Anima/Lock...)
+            TextView tvEmpty = new TextView(this);
+            tvEmpty.setText("Không gian cấu hình phụ\n(Tạm thời để trống)");
+            tvEmpty.setTextColor(Color.GRAY);
+            tvEmpty.setGravity(Gravity.CENTER);
+            tvEmpty.setPadding(0, 100, 0, 0);
+            content.addView(tvEmpty);
         } else {
-            // FORMAT C (CẤU HÌNH CORNER)
-            content.addView(createSectionTitle("CẤU HÌNH CORNER (FORMAT C)"));
-            content.addView(createComboDropdown("Chọn vị trí Corner", prefix + id + "_loc", CORNER_NAMES, 0));
-            content.addView(createComboDropdown("Hiển thị", prefix + id + "_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
-            content.addView(createComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode", new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
-            content.addView(createComboDropdown("Hình dáng Góc", prefix + id + "_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0));
-            content.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix + id + "_w", 2500, 100));
-            content.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix + id + "_h", 2500, 100));
-            content.addView(createSlider("Di chuyển Ngang (X)", prefix + id + "_x", 2500, 0));
-            content.addView(createSlider("Di chuyển Dọc (Y)", prefix + id + "_y", 2500, 0));
-            content.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix + id + "_moon_w", 2500, 100));
-            content.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix + id + "_moon_h", 2500, 100));
-            content.addView(createSlider("Độ cong BO VIỀN", prefix + id + "_rad", 1000, 80));
-            content.addView(createSlider("Độ cong TRĂNG NON", prefix + id + "_moon_rad", 1000, 80));
+            String prefix = type == 0 ? "pack_bar_" : (type == 1 ? "pack_corner_" : "pack_panel_");
+            
+            EditText etName = createEcoInput("Tên Data Pack", prefs.getString(prefix + id + "_name", ""));
+            content.addView(etName);
+
+            CheckBox cbEn = new CheckBox(this);
+            cbEn.setText("Kích hoạt Pack này");
+            cbEn.setTextColor(Color.WHITE);
+            cbEn.setChecked(prefs.getBoolean(prefix + id + "_en", false));
+            cbEn.setOnCheckedChangeListener((vw, chk) -> prefs.edit().putBoolean(prefix + id + "_en", chk).apply());
+            content.addView(cbEn);
+
+            if (type == 0) {
+                // FORMAT B (CẤU HÌNH BAR)
+                content.addView(createSectionTitle("CẤU HÌNH BAR (FORMAT B)"));
+                content.addView(createComboDropdown("Chọn vị trí Bar", prefix + id + "_loc", BAR_NAMES, 0));
+                content.addView(createComboDropdown("Hiển thị", prefix + id + "_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
+                content.addView(createComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode", new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+                content.addView(createSlider("Độ trong suốt", prefix + id + "_alpha", 255, 50));
+                content.addView(createSlider("Chiều ngang", prefix + id + "_w", 3000, 300));
+                content.addView(createSlider("Chiều dọc", prefix + id + "_h", 3000, 60));
+                content.addView(createSlider("Tọa độ X", prefix + id + "_x", 1000, 0));
+                content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 2500, 0));
+            } else if (type == 1) {
+                // FORMAT C (CẤU HÌNH CORNER)
+                content.addView(createSectionTitle("CẤU HÌNH CORNER (FORMAT C)"));
+                content.addView(createComboDropdown("Chọn vị trí Corner", prefix + id + "_loc", CORNER_NAMES, 0));
+                content.addView(createComboDropdown("Hiển thị", prefix + id + "_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
+                content.addView(createComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode", new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+                content.addView(createComboDropdown("Hình dáng Góc", prefix + id + "_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0));
+                content.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix + id + "_w", 2500, 100));
+                content.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix + id + "_h", 2500, 100));
+                content.addView(createSlider("Di chuyển Ngang (X)", prefix + id + "_x", 2500, 0));
+                content.addView(createSlider("Di chuyển Dọc (Y)", prefix + id + "_y", 2500, 0));
+                content.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix + id + "_moon_w", 2500, 100));
+                content.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix + id + "_moon_h", 2500, 100));
+                content.addView(createSlider("Độ cong BO VIỀN", prefix + id + "_rad", 1000, 80));
+                content.addView(createSlider("Độ cong TRĂNG NON", prefix + id + "_moon_rad", 1000, 80));
+            } else if (type == 2) {
+                // FORMAT P (PANEL PACK) Bê nguyên từ renderPanelDesign cũ
+                content.addView(createSectionTitle("CẤU HÌNH PANEL"));
+                content.addView(createComboDropdown(T("Position", "Vị trí"), prefix + id + "_pos", PANEL_POS_NAMES, 0));
+                content.addView(createComboDropdown(T("Color", "Màu"), prefix + id + "_color_idx", PANEL_COLOR_NAMES, 0));
+                content.addView(createMiniSlider(T("Icon Size", "Kích thước Icon"), prefix + id + "_icon_size", 180, 110));
+                content.addView(createMiniSlider(T("Columns (1-9)", "Số cột"), prefix + id + "_cols", 9, 4));
+
+                LinearLayout pickRow1 = new LinearLayout(this);
+                pickRow1.setOrientation(LinearLayout.HORIZONTAL); pickRow1.setPadding(0, 15, 0, 10);
+                
+                Button btnApps = new Button(this); btnApps.setText("APP");
+                btnApps.setBackground(getRounded("#00E5FF", 20f)); btnApps.setTextColor(Color.BLACK);
+                btnApps.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+                btnApps.setOnClickListener(v -> showPanelMultiPicker(prefix + id + "_apps", true));
+
+                Button btnActs = new Button(this); btnActs.setText("ACTION");
+                btnActs.setBackground(getRounded("#E91E63", 20f)); btnActs.setTextColor(Color.WHITE);
+                LinearLayout.LayoutParams lpAct = new LinearLayout.LayoutParams(0, -2, 1f); lpAct.setMargins(15, 0, 0, 0);
+                btnActs.setLayoutParams(lpAct);
+                btnActs.setOnClickListener(v -> showPanelMultiPicker(prefix + id + "_acts", false));
+
+                pickRow1.addView(btnApps); pickRow1.addView(btnActs);
+                content.addView(pickRow1);
+
+                Button btnShortcuts = new Button(this); btnShortcuts.setText("COLLECT SHORTCUT");
+                btnShortcuts.setBackground(getRounded("#7C4DFF", 20f)); btnShortcuts.setTextColor(Color.WHITE);
+                btnShortcuts.setOnClickListener(v -> showPanelMultiPicker(prefix + id + "_shortcuts", false));
+                content.addView(btnShortcuts);
+
+                // Panel Config
+                LinearLayout colPanel = new LinearLayout(this); colPanel.setOrientation(LinearLayout.VERTICAL);
+                colPanel.addView(createCycleRow(T("Icon Style", "Kiểu Icon"), prefix + id + "_icon_shape", new String[]{"Tròn", "Google (bo vuông)", "Pebble", "Hệ thống"}));
+                colPanel.addView(createCycleRow(T("Show Name", "Hiện Tên"), prefix + id + "_show_name", new String[]{T("No", "Không"), T("Yes", "Có")}));
+                colPanel.addView(createMiniSlider(T("Opacity", "Độ trong suốt"), prefix + id + "_alpha", 255, 200));
+                colPanel.addView(createMiniSlider(T("Length", "Chiều dài"), prefix + id + "_panel_length", 3000, 700));
+                colPanel.addView(createMiniSlider(T("Width", "Bề dày"), prefix + id + "_size", 2500, 700));
+                colPanel.addView(createMiniSlider(T("Corner Radius", "Bo góc"), prefix + id + "_panel_radius", 60, 24));
+                content.addView(createDrawer("PANEL CONFIG", colPanel));
+
+                // Handle Config
+                LinearLayout colHandle = new LinearLayout(this); colHandle.setOrientation(LinearLayout.VERTICAL);
+                colHandle.addView(createCycleRow(T("Visibility", "Chế độ hiện Handle"), prefix + id + "_vis", new String[]{T("Local (Design only)", "Cục Bộ"), T("Global (Everywhere)", "Toàn Cục")}));
+                colHandle.addView(createMiniSlider(T("Opacity", "Độ trong suốt"), prefix + id + "_handle_alpha", 255, 255));
+                colHandle.addView(createMiniSlider(T("Length", "Chiều dài"), prefix + id + "_thick", 400, 200));
+                colHandle.addView(createMiniSlider(T("Width", "Độ dày"), prefix + id + "_handle_width", 200, 56));
+                colHandle.addView(createMiniSlider(T("Corner Radius", "Bo góc"), prefix + id + "_handle_radius", 100, 28));
+                content.addView(createDrawer("HANDLE CONFIG", colHandle));
+            }
         }
 
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
-        
         Button bCancel = new Button(this); bCancel.setText("HỦY");
-        bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE);
+        bCancel.setBackground(getRounded("#333333", 20f));
+        bCancel.setTextColor(Color.WHITE);
         bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         
         Button bSave = new Button(this); bSave.setText("LƯU RULE");
-        bSave.setBackground(getRounded("#4CAF50", 20f)); bSave.setTextColor(Color.WHITE);
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f); slp.setMargins(20, 0, 0, 0);
+        bSave.setBackground(getRounded("#4CAF50", 20f));
+        bSave.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f);
+        slp.setMargins(20, 0, 0, 0);
         bSave.setLayoutParams(slp);
-
+        
         footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
-
+        
         bCancel.setOnClickListener(v -> d.dismiss());
         bSave.setOnClickListener(v -> {
-            String name = etName.getText().toString();
-            prefs.edit().putString(prefix + id + "_name", name.isEmpty() ? "Data Pack" : name).apply();
-            renderDesignConfigSpace(); // Refresh lại danh sách
+            if (type != -1) {
+                String prefixSave = type == 0 ? "pack_bar_" : (type == 1 ? "pack_corner_" : "pack_panel_");
+                EditText etNameRef = (EditText) content.getChildAt(0); // View đầu tiên luôn là Tên Data Pack
+                String name = etNameRef.getText().toString();
+                prefs.edit().putString(prefixSave + id + "_name", name.isEmpty() ? "Data Pack" : name).apply();
+                
+                if (type == 2) {
+                    renderPanelDesign();
+                } else {
+                    renderDesignConfigSpace();
+                }
+            }
             d.dismiss();
         });
-
         d.setContentView(root); d.show();
     }
 private void stylePanelTabs(Button b1, Button b2, Button b3) {
@@ -2801,6 +2929,31 @@ private void showPanelMultiPicker(String prefKey, boolean isApp) {
         d.dismiss();
     });
     d.setContentView(root); d.show();
+}
+    // Bật/tắt hẳn Component Tile{N} khỏi Android — không phải chỉ ẩn bằng pref runtime.
+// DISABLED thì: (1) tự gỡ khỏi QS nếu đang ghim, (2) biến mất khỏi màn "+",
+// (3) Android KHÔNG bind Service đó nữa → tiết kiệm RAM/pin thật sự trên Pixel 2XL.
+private void setTileComponentEnabled(int slotNum, boolean enable) {
+    if (slotNum < 1 || slotNum > 30) return;
+    try {
+        ComponentName cn = new ComponentName(this, "com.manhmoc.edgebar.Tile" + slotNum);
+        getPackageManager().setComponentEnabledSetting(
+            cn,
+            enable ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                   : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP
+        );
+    } catch (Exception ignored) {}
+}
+
+// Gọi 1 lần lúc mở app — đồng bộ lại đúng trạng thái bật/tắt của cả 30 slot
+// (phòng trường hợp restore backup, hoặc lần đầu cài app).
+private void syncAllTileComponentsOnBoot() {
+    for (int s = 1; s <= 30; s++) {
+        String id = prefs.getString("tile_slot_" + s + "_id", "");
+        boolean shouldEnable = !id.isEmpty() && prefs.getBoolean("tile_active_" + id, false);
+        setTileComponentEnabled(s, shouldEnable);
+    }
 }
 // CODE MỚI — thay toàn bộ hàm bằng:
 private void syncPanelService() {
