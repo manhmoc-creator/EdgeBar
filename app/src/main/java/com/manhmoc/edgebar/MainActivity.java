@@ -224,7 +224,7 @@ private void updateFabVisibility() {
     if (fab == null) return;
     if (currentMainTab == 1) { // Condition Space
         fab.setVisibility(View.VISIBLE);
-        fab.setText("+ NEW EB");
+        fab.setText("+NEW EB");
         fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
     } else if (currentMainTab == 2) { // Ecosystem Space
         fab.setVisibility(View.VISIBLE);
@@ -750,34 +750,43 @@ for (String sa : savedArray) {
     String t = sa.trim();
     if (!t.equals("LAUNCH_APP") && !t.equals("RUN_SHORTCUT") && !t.isEmpty()) selectedActs.add(t);
 }
-
+// --- [CODE MỚI THAY THẾ - TỐI ƯU PIXEL 2 XL] ---
 List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{
-    "BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME",
-    "SCREENSHOT","CAMERA","NOTIFICATIONS","TOGGLE_ACC","TOGGLE_OVERLAY",
-    "TOGGLE_MORSE","VOICE_RECORD"
+"BACK","HOME", "RECENTS", "SCREEN_OFF","FLASH","POWER_DIALOG", "VOLUME",
+"SCREENSHOT", "CAMERA","NOTIFICATIONS","TOGGLE_ACC","TOGGLE_OVERLAY",
+"TOGGLE_MORSE", "VOICE_RECORD"
 }, actKeysUsed, actLabsUsed);
 
+// YÊU CẦU 1: Tách riêng Launch App/Shortcut (chỉ cho Homeb sáng màn)
+// Tiện ích/Intents/Macros được phép dùng trên cả HOMEB và LOCK SPACE
 if (!isLockSpace && !isVolKeyMode) {
-    // CHỈ SINH VIEW KHI Ở CHẾ ĐỘ EDGE BAR THÔNG THƯỜNG (Màn hình sáng)
-    // 1. HỘP LAUNCH APP
+    // 1. HỘP LAUNCH APP (Khóa trên màn Lock vì cần unlock OS)
     LinearLayout launchAppCard = new LinearLayout(this);
     launchAppCard.setOrientation(LinearLayout.VERTICAL);
-    launchAppCard.setBackground(getRounded("#1A2C3A", 20f)); launchAppCard.setPadding(30, 30, 30, 30);
-    LinearLayout.LayoutParams lacLp = new LinearLayout.LayoutParams(-1, -2); lacLp.setMargins(0, 0, 0, 20);
+    launchAppCard.setBackground(getRounded("#1A2C3A", 20f));
+    launchAppCard.setPadding(30, 30, 30, 30);
+    LinearLayout.LayoutParams lacLp = new LinearLayout.LayoutParams(-1, -2);
+    lacLp.setMargins(0, 0, 0, 20);
     launchAppCard.setLayoutParams(lacLp);
-
-    LinearLayout lacRow = new LinearLayout(this); lacRow.setOrientation(LinearLayout.HORIZONTAL); lacRow.setGravity(Gravity.CENTER_VERTICAL);
+    LinearLayout lacRow = new LinearLayout(this);
+    lacRow.setOrientation(LinearLayout.HORIZONTAL);
+    lacRow.setGravity(Gravity.CENTER_VERTICAL);
     TextView tvLacTitle = new TextView(this); tvLacTitle.setText("🚀 " + T("Launch App", "Mở Ứng Dụng"));
-    tvLacTitle.setTextColor(Color.WHITE); tvLacTitle.setTextSize(14.5f); tvLacTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    tvLacTitle.setTextColor(Color.WHITE); tvLacTitle.setTextSize(14.5f);
+    tvLacTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
     tvLacTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    Switch swLaunchApp = new Switch(this); swLaunchApp.setChecked(launchAppSelected[0]);
+    Switch swLaunchApp = new Switch(this);
+    swLaunchApp.setChecked(launchAppSelected[0]);
     swLaunchApp.setOnCheckedChangeListener((b, c) -> launchAppSelected[0] = c);
-    lacRow.addView(tvLacTitle); lacRow.addView(swLaunchApp); launchAppCard.addView(lacRow);
-
-    TextView tvChosenApp = new TextView(this); tvChosenApp.setTextColor(Color.parseColor("#00E5FF")); tvChosenApp.setPadding(0, 10, 0, 15);
-    tvChosenApp.setText(getAppLabelCached(launchAppPkg[0])); launchAppCard.addView(tvChosenApp);
-    Button btnPickLaunchApp = new Button(this); btnPickLaunchApp.setText("⚡ " + T("CHOOSE APP", "CHỌN APP"));
-    btnPickLaunchApp.setBackground(getRounded("#00E5FF", 20f)); btnPickLaunchApp.setTextColor(Color.BLACK); btnPickLaunchApp.setTextSize(13f);
+    lacRow.addView(tvLacTitle); lacRow.addView(swLaunchApp);
+    launchAppCard.addView(lacRow);
+    TextView tvChosenApp = new TextView(this);
+    tvChosenApp.setTextColor(Color.parseColor("#00E5FF")); tvChosenApp.setPadding(0, 10, 0, 15);
+    tvChosenApp.setText(getAppLabelCached(launchAppPkg[0]));
+    launchAppCard.addView(tvChosenApp);
+    Button btnPickLaunchApp = new Button(this); btnPickLaunchApp.setText("📱 " + T("CHOOSE APP", "CHỌN APP"));
+    btnPickLaunchApp.setBackground(getRounded("#00E5FF", 20f));
+    btnPickLaunchApp.setTextColor(Color.BLACK); btnPickLaunchApp.setTextSize(13f);
     btnPickLaunchApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> { launchAppPkg[0] = pkg; tvChosenApp.setText(getAppLabelCached(pkg)); swLaunchApp.setChecked(true); }));
     launchAppCard.addView(btnPickLaunchApp);
     vAct.addView(launchAppCard);
@@ -785,46 +794,52 @@ if (!isLockSpace && !isVolKeyMode) {
     // 2. HỘP RUN SHORTCUT
     LinearLayout shortcutCard = new LinearLayout(this);
     shortcutCard.setOrientation(LinearLayout.VERTICAL);
-    shortcutCard.setBackground(getRounded("#2A1A3A", 20f)); shortcutCard.setPadding(30, 30, 30, 30);
-    LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(-1, -2); scLp.setMargins(0, 0, 0, 20);
+    shortcutCard.setBackground(getRounded("#2A1A3A", 20f));
+    shortcutCard.setPadding(30, 30, 30, 30);
+    LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(-1, -2);
+    scLp.setMargins(0, 0, 0, 20);
     shortcutCard.setLayoutParams(scLp);
-
-    LinearLayout scRow = new LinearLayout(this); scRow.setOrientation(LinearLayout.HORIZONTAL); scRow.setGravity(Gravity.CENTER_VERTICAL);
+    LinearLayout scRow = new LinearLayout(this);
+    scRow.setOrientation(LinearLayout.HORIZONTAL);
+    scRow.setGravity(Gravity.CENTER_VERTICAL);
     TextView tvScTitle = new TextView(this); tvScTitle.setText("🔗 " + T("Run Shortcut", "Chạy Shortcut"));
-    tvScTitle.setTextColor(Color.WHITE); tvScTitle.setTextSize(14.5f); tvScTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    tvScTitle.setTextColor(Color.WHITE); tvScTitle.setTextSize(14.5f);
+    tvScTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
     tvScTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
     Switch swShortcut = new Switch(this); swShortcut.setChecked(shortcutSelected[0]);
     swShortcut.setOnCheckedChangeListener((b, c) -> shortcutSelected[0] = c);
-    scRow.addView(tvScTitle); scRow.addView(swShortcut); shortcutCard.addView(scRow);
-
-    TextView tvChosenSc = new TextView(this); tvChosenSc.setTextColor(Color.parseColor("#00E5FF")); tvChosenSc.setPadding(0, 10, 0, 15);
+    scRow.addView(tvScTitle); scRow.addView(swShortcut);
+    shortcutCard.addView(scRow);
+    TextView tvChosenSc = new TextView(this);
+    tvChosenSc.setTextColor(Color.parseColor("#00E5FF")); tvChosenSc.setPadding(0, 10, 0, 15);
     tvChosenSc.setText(shortcutId[0].isEmpty() ? T("(Not selected)", "(Chưa chọn)") : prefs.getString("shortcut_" + shortcutId[0] + "_name", "?"));
     shortcutCard.addView(tvChosenSc);
     Button btnPickShortcut = new Button(this); btnPickShortcut.setText("⚡ " + T("CHOOSE SHORTCUT", "CHỌN SHORTCUT"));
-    btnPickShortcut.setBackground(getRounded("#7C4DFF", 20f)); btnPickShortcut.setTextColor(Color.WHITE); btnPickShortcut.setTextSize(13f);
+    btnPickShortcut.setBackground(getRounded("#7C4DFF", 20f));
+    btnPickShortcut.setTextColor(Color.WHITE); btnPickShortcut.setTextSize(13f);
     btnPickShortcut.setOnClickListener(v -> showShortcutPickerDialog((id, name) -> { shortcutId[0] = id; tvChosenSc.setText(name); swShortcut.setChecked(true); }));
     shortcutCard.addView(btnPickShortcut);
     vAct.addView(shortcutCard);
-
-    // 3. CÁC MỤC TIỆN ÍCH / INTENTS / MACROS (Chỉ tải khi màn hình sáng)
-    // ĐÃ SỬA: KHÔNG khai báo lại selectedActs/SYS_ITEMS ở đây nữa —
-    // chỉ khai báo phần còn lại (UTIL/INTENT/MACRO) và dùng chung selectedActs từ ngoài.
-    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"YTDL_DOWNLOAD"}, actKeysUsed, actLabsUsed);
-    List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", actKeysUsed, actLabsUsed);
-    List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", actKeysUsed, actLabsUsed);
-    vAct.addView(buildActionCategoryCard("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
-    vAct.addView(buildActionCategoryCard("INTENTS", "🎯", INTENT_ITEMS, selectedActs, "#D32F2F"));
-    vAct.addView(buildActionCategoryCard("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
 } else {
-    // KHÔNG GIAN VOLKEY / LOCK: Khóa hoàn toàn, Zero-RAM cho 5 mục vô dụng
+    // Zero-RAM: Không tải 2 hộp App/Shortcut cho Lock và VolKey
     launchAppSelected[0] = false;
     shortcutSelected[0] = false;
 }
 
-// MỤC SYSTEM: Luôn hiển thị cho cả VolKey và Edge Bar
-// Giờ SYS_ITEMS và selectedActs đã ở scope ngoài, dùng được bình thường ở đây.
+// MỤC SYSTEM: Luôn hiển thị ở mọi không gian
 vAct.addView(buildActionCategoryCard("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
 
+// YÊU CẦU 1 (Cốt lõi): UTILITIES / INTENTS / MACROS mở khóa cho CẢ HOMEB và LOCK
+// Chỉ khóa với VolKey (phím cứng khi tắt màn không nên chạy Macro/Intent nặng)
+if (!isVolKeyMode) {
+    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"YTDL_DOWNLOAD"}, actKeysUsed, actLabsUsed);
+    List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", actKeysUsed, actLabsUsed);
+    List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", actKeysUsed, actLabsUsed);
+    vAct.addView(buildActionCategoryCard("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
+    vAct.addView(buildActionCategoryCard("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
+    vAct.addView(buildActionCategoryCard("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
+}
+// --- [KẾT THÚC CODE MỚI] ---
 LinearLayout vOpt = new LinearLayout(this); vOpt.setOrientation(LinearLayout.VERTICAL); vOpt.setVisibility(View.GONE);
         cbVib.setText(T("Haptic Feedback", "Bật Rung (Haptic Feedback)")); cbVib.setTextColor(Color.WHITE); cbVib.setChecked(editKey == null || prefs.getBoolean(editKey+"_vib", true)); vOpt.addView(cbVib);
         cbAnim.setText(T("Show Animation", "Bật Hiệu ứng Ánh sáng (Animation)")); cbAnim.setTextColor(Color.WHITE); cbAnim.setChecked(editKey == null || prefs.getBoolean(editKey+"_anim", true));
@@ -1188,39 +1203,65 @@ private void removeDynamicId(String listKey, String id) {
         r1.setOrientation(LinearLayout.HORIZONTAL);
         r1.setGravity(Gravity.CENTER_VERTICAL);
         
-        TextView tvTitle = new TextView(this);
-        tvTitle.setText(name);
-        tvTitle.setTextColor(Color.WHITE);
-        tvTitle.setTextSize(14f);
-        tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-        // Thuật toán kiểm soát hiển thị trên bảng Quick Settings của hệ thống
-        CheckBox cbShowTile = new CheckBox(this);
-        cbShowTile.setText("Hiện QS");
-        cbShowTile.setTextColor(Color.parseColor("#00E5FF"));
-        cbShowTile.setTextSize(12f);
-        boolean isTileActive = prefs.getBoolean("tile_active_" + id, false); // Mặc định KHÔNG tự nhảy lên bảng QS
-        cbShowTile.setChecked(isTileActive);
-        cbShowTile.setOnCheckedChangeListener((vw, chk) -> {
-            prefs.edit().putBoolean("tile_active_" + id, chk).apply();
-            Toast.makeText(this, chk ? "Đã bật Tile trên bảng QS" : "Đã ẩn khỏi bảng QS", Toast.LENGTH_SHORT).show();
-        });
-
-        Button btnConfig = new Button(this);
-        btnConfig.setText("⚙️");
-        btnConfig.setBackgroundColor(Color.TRANSPARENT);
-        btnConfig.setOnClickListener(v -> openTileEditorV2(id));
-
-        Switch swOn = new Switch(this);
-        swOn.setChecked(prefs.getBoolean(prefixBase + id + "_en", true));
-        swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(prefixBase + id + "_en", chk).apply());
-        // Cho switch thu nhỏ lại một chút để không lấn át tên
-        swOn.setScaleX(0.85f); swOn.setScaleY(0.85f); 
-        
-        tvTitle.setMaxLines(1);
+        // --- [CODE MỚI THAY THẾ - TỐI ƯU PIXEL 2 XL] ---
+TextView tvTitle = new TextView(this);
+tvTitle.setText(name);
+tvTitle.setTextColor(Color.WHITE);
+tvTitle.setTextSize(14f);
+tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+tvTitle.setMaxLines(1);
 tvTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+Switch swOn = new Switch(this);
+swOn.setChecked(prefs.getBoolean(prefixBase + id + "_en", true));
+swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(prefixBase + id + "_en", chk).apply());
+swOn.setScaleX(0.85f); swOn.setScaleY(0.85f);
+
 r1.addView(tvTitle); r1.addView(swOn);
 
+// YÊU CẦU 2: Thêm hàng giao diện quản lý Quick Settings Tile (Chỉ hiện khi ở tab QS TILES)
+if (ecoType == 1) {
+    LinearLayout qsRow = new LinearLayout(this);
+    qsRow.setOrientation(LinearLayout.HORIZONTAL);
+    qsRow.setGravity(Gravity.CENTER_VERTICAL);
+    qsRow.setPadding(0, 8, 0, 4);
+
+    // Kiểm tra Data Pack này đã được gán vào Slot QS nào chưa (Zero-I/O, quét từ cache)
+    int boundSlot = -1;
+    for (int s = 1; s <= 30; s++) {
+        if (prefs.getString("tile_slot_" + s + "_id", "").equals(id)) {
+            boundSlot = s;
+            break;
+        }
+    }
+
+    CheckBox cbShowTile = new CheckBox(this);
+    cbShowTile.setText("Hiện QS ");
+    cbShowTile.setTextColor(Color.parseColor("#00E5FF"));
+    cbShowTile.setTextSize(11.5f);
+    cbShowTile.setChecked(prefs.getBoolean("tile_active_" + id, false));
+    cbShowTile.setOnCheckedChangeListener((vw, chk) -> {
+        prefs.edit().putBoolean("tile_active_" + id, chk).apply();
+        Toast.makeText(this, chk ? "Đã ghim Tile lên Quick Settings" : "Đã ẩn khỏi Quick Settings", Toast.LENGTH_SHORT).show();
+    });
+
+    TextView tvQsStatus = new TextView(this);
+    tvQsStatus.setTextSize(10.5f);
+    if (boundSlot != -1) {
+        tvQsStatus.setText("★ [Đã đưa lên Slot " + boundSlot + "]");
+        tvQsStatus.setTextColor(Color.parseColor("#00E5FF")); // Màu Neon sáng rõ
+    } else {
+        tvQsStatus.setText("☆ [Chưa đưa lên QS]");
+        tvQsStatus.setTextColor(Color.parseColor("#777777")); // Màu xám tối đỡ tốn LED OLED
+    }
+    tvQsStatus.setGravity(Gravity.RIGHT);
+    tvQsStatus.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    qsRow.addView(cbShowTile);
+    qsRow.addView(tvQsStatus);
+    card.addView(qsRow, 1); // Chèn ngay dưới hàng tên (r1), trên nút Copy (r2)
+}
+// --- [KẾT THÚC CODE MỚI] ---
 // Hàng 2: Nút Copy chuẩn hóa chống lẹm cho màn hình 18:9
 LinearLayout r2 = new LinearLayout(this);
 r2.setOrientation(LinearLayout.HORIZONTAL);
@@ -1874,44 +1915,66 @@ toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome); toggleRow.addVie
         pageDesign.addView(toggleRow);
 
         // HÀNG 2 — chỉ có PANEL, đặt riêng hàng để dễ mở rộng thêm tab về sau
-        LinearLayout toggleRow2 = new LinearLayout(this); toggleRow2.setOrientation(LinearLayout.HORIZONTAL);
-        toggleRow2.setPadding(0, 15, 0, 0);
-        btnEditPanel = new Button(this); btnEditPanel.setText("PANEL");
-        btnEditPanel.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-        btnEditPanel.setOnClickListener(v -> { designTabState=5; refreshPreview(); updateVisTabs(); renderSliders(); });
-        toggleRow2.addView(btnEditPanel);
-        pageDesign.addView(toggleRow2);
+        // --- [CODE MỚI THAY THẾ - TỐI ƯU PIXEL 2 XL] ---
+// HÀNG 2 - PANEL và CẤU HÌNH DESIGN (Chia đôi tỷ lệ 1:1 phẳng)
+LinearLayout toggleRow2 = new LinearLayout(this);
+toggleRow2.setOrientation(LinearLayout.HORIZONTAL);
+toggleRow2.setPadding(0, 15, 0, 0);
 
-        pageDesign.addView(designSliderContainer);
-        btnEditHome.performClick();
+btnEditPanel = new Button(this); btnEditPanel.setText("PANEL");
+LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(0, -2, 1f);
+pLp.setMargins(0, 0, 5, 0);
+btnEditPanel.setLayoutParams(pLp);
+btnEditPanel.setOnClickListener(v -> { designTabState = 5; refreshPreview(); updateVisTabs(); renderSliders(); });
+
+// YÊU CẦU 3: Thêm nút thẻ không gian "Cấu hình Design"
+Button btnEditDesignConfig = new Button(this);
+btnEditDesignConfig.setText("CẤU HÌNH DESIGN");
+btnEditDesignConfig.setTag("btnEditDesignConfig");
+LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, -2, 1f);
+cLp.setMargins(5, 0, 0, 0);
+btnEditDesignConfig.setLayoutParams(cLp);
+btnEditDesignConfig.setOnClickListener(v -> { designTabState = 6; refreshPreview(); updateVisTabs(); renderSliders(); });
+
+toggleRow2.addView(btnEditPanel);
+toggleRow2.addView(btnEditDesignConfig);
+pageDesign.addView(toggleRow2);
+pageDesign.addView(designSliderContainer);
+btnEditHome.performClick();
+// --- [KẾT THÚC CODE MỚI] ---
     }
-
+// --- [CODE MỚI THAY THẾ - TỐI ƯU PIXEL 2 XL] ---
 private void updateVisTabs() {
-    btnEditLock.setBackground(getRounded(designTabState==0 ? "#00E5FF" : "#222222", 20f));
-    btnEditLock.setTextColor(designTabState==0 ? Color.BLACK : Color.WHITE);
-
-    btnEditHome.setBackground(getRounded(designTabState==1 ? "#00E5FF" : "#222222", 20f));
-    btnEditHome.setTextColor(designTabState==1 ? Color.BLACK : Color.WHITE);
-
-    // FIX BUG 1: setTextColor(Color.WHITE) tường minh — không dùng theme default
-    // vì dark theme Android có thể render text màu xám/nhạt
-    btnEditHomacc.setBackground(getRounded(designTabState==4 ? "#7C4DFF" : "#333333", 20f));
+    btnEditLock.setBackground(getRounded(designTabState == 0 ? "#00E5FF" : "#222222", 20f));
+    btnEditLock.setTextColor(designTabState == 0 ? Color.BLACK : Color.WHITE);
+    btnEditHome.setBackground(getRounded(designTabState == 1 ? "#00E5FF" : "#222222", 20f));
+    btnEditHome.setTextColor(designTabState == 1 ? Color.BLACK : Color.WHITE);
+    btnEditHomacc.setBackground(getRounded(designTabState == 4 ? "#7C4DFF" : "#333333", 20f));
     btnEditHomacc.setTextColor(Color.WHITE);
-
-    btnEditMorse.setBackground(getRounded(designTabState==2 ? "#00E5FF" : "#222222", 20f));
-    btnEditMorse.setTextColor(designTabState==2 ? Color.BLACK : Color.WHITE);
-
-    btnEditAnim.setBackground(getRounded(designTabState==3 ? "#00E5FF" : "#222222", 20f));
-    btnEditAnim.setTextColor(designTabState==3 ? Color.BLACK : Color.WHITE);
-    btnEditPanel.setBackground(getRounded(designTabState==5 ? "#00E5FF" : "#222222", 20f));
-    btnEditPanel.setTextColor(designTabState==5 ? Color.BLACK : Color.WHITE);   
+    btnEditMorse.setBackground(getRounded(designTabState == 2 ? "#00E5FF" : "#222222", 20f));
+    btnEditMorse.setTextColor(designTabState == 2 ? Color.BLACK : Color.WHITE);
+    btnEditAnim.setBackground(getRounded(designTabState == 3 ? "#00E5FF" : "#222222", 20f));
+    btnEditAnim.setTextColor(designTabState == 3 ? Color.BLACK : Color.WHITE);
+    btnEditPanel.setBackground(getRounded(designTabState == 5 ? "#00E5FF" : "#222222", 20f));
+    btnEditPanel.setTextColor(designTabState == 5 ? Color.BLACK : Color.WHITE);
+    
+    // YÊU CẦU 3: Cập nhật màu nút CẤU HÌNH DESIGN (designTabState == 6)
+    Button btnCfg = pageDesign.findViewWithTag("btnEditDesignConfig");
+    if (btnCfg != null) {
+        btnCfg.setBackground(getRounded(designTabState == 6 ? "#00E5FF" : "#222222", 20f));
+        btnCfg.setTextColor(designTabState == 6 ? Color.BLACK : Color.WHITE);
+    }
 }
 
-
-    private void renderSliders() { 
+private void renderSliders() {
     designSliderContainer.removeAllViews();
     if (designTabState == 5) { renderPanelDesign(); return; }
-
+    
+    // YÊU CẦU 3: Điều hướng sang không gian Cấu hình Design (Zero-RAM Overhead)
+    if (designTabState == 6) { renderDesignConfigSpace(); return; }
+    
+    // ===== TAB HOMACC (designTabState == 4)
+// --- [KẾT THÚC CODE MỚI] ---
     // ===== TAB HOMACC (designTabState == 4) =====
     if (designTabState == 4) {
         String prefix = "homacc_";
@@ -2303,9 +2366,87 @@ Button b1 = createTabBtn("PANEL 1"), b2 = createTabBtn("PANEL 2"), b3 = createTa
     // Khởi tạo lần đầu: style tab + build nội dung, KHÔNG gọi onClick() giả lập
     stylePanelTabs(b1, b2, b3);
     buildPanelBody(panelBody);
+ // --- [CODE MỚI THAY THẾ - TỐI ƯU PIXEL 2 XL] ---
+TextView tvSwipeHint = new TextView(this);
+tvSwipeHint.setText("" + T("Swipe panel to see more items", "Vuốt ngang panel để xem thêm ô") + "→");
+tvSwipeHint.setTextColor(Color.GRAY); tvSwipeHint.setTextSize(11f);
+tvSwipeHint.setGravity(Gravity.CENTER); tvSwipeHint.setPadding(0, 10, 0, 0);
+panelBody.addView(tvSwipeHint);
+}
+
+// YÊU CẦU 3: Thuật toán quản lý không gian Cấu hình Design (Quản lý Data Pack)
+private int currentDesignCfgTab = 0; // 0 = cấu hình bar, 1 = cấu hình corner
+private void renderDesignConfigSpace() {
+    designSliderContainer.removeAllViews();
+    
+    // Thẻ 2 nút ngang hàng nhau (cấu hình bar / cấu hình corner)
+    LinearLayout tabRow = new LinearLayout(this);
+    tabRow.setOrientation(LinearLayout.HORIZONTAL);
+    tabRow.setPadding(0, 10, 0, 25);
+    
+    Button btnCfgBar = createTabBtn("CẤU HÌNH BAR");
+    Button btnCfgCorner = createTabBtn("CẤU HÌNH CORNER");
+    
+    LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(0, -2, 1f);
+    tLp.setMargins(5, 0, 5, 0);
+    btnCfgBar.setLayoutParams(tLp);
+    btnCfgCorner.setLayoutParams(tLp);
+    
+    tabRow.addView(btnCfgBar);
+    tabRow.addView(btnCfgCorner);
+    designSliderContainer.addView(tabRow);
+    
+    // Container chứa nút Format viên thuốc và không gian data pack
+    LinearLayout cfgBody = new LinearLayout(this);
+    cfgBody.setOrientation(LinearLayout.VERTICAL);
+    designSliderContainer.addView(cfgBody);
+    
+    View.OnClickListener cfgClick = v -> {
+        currentDesignCfgTab = (v == btnCfgBar) ? 0 : 1;
+        btnCfgBar.setBackground(getRounded(currentDesignCfgTab == 0 ? "#00E5FF" : "#222222", 20f));
+        btnCfgBar.setTextColor(currentDesignCfgTab == 0 ? Color.BLACK : Color.WHITE);
+        btnCfgCorner.setBackground(getRounded(currentDesignCfgTab == 1 ? "#00E5FF" : "#222222", 20f));
+        btnCfgCorner.setTextColor(currentDesignCfgTab == 1 ? Color.BLACK : Color.WHITE);
+        
+        cfgBody.removeAllViews();
+        
+        // Tạo nút viên thuốc FormatB / FormatC (Y hệt dáng +NewEB, chuyên thêm vào vị trí trống)
+        Button btnFormat = new Button(this);
+        btnFormat.setText(currentDesignCfgTab == 0 ? "+ FORMAT B" : "+ FORMAT C");
+        btnFormat.setTextColor(Color.BLACK);
+        btnFormat.setBackground(getRounded("#00E5FF", 100f)); // Dáng viên thuốc 100f
+        btnFormat.setTextSize(13.5f);
+        
+        LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-1, 135);
+        fLp.setMargins(10, 10, 10, 20);
+        btnFormat.setLayoutParams(fLp);
+        btnFormat.setPadding(55, 0, 55, 0);
+        
+        btnFormat.setOnClickListener(btn -> {
+            Toast.makeText(this, "Đã khởi tạo vùng chứa " + (currentDesignCfgTab == 0 ? "Format B" : "Format C") + " (Chuẩn bị kết nối Data Pack)", Toast.LENGTH_SHORT).show();
+        });
+        
+        cfgBody.addView(btnFormat);
+        
+        // Không gian bên trong tạm thời để trống theo yêu cầu
+        TextView tvEmpty = new TextView(this);
+        tvEmpty.setText("📦 Không gian lưu trữ Data Pack (" + (currentDesignCfgTab == 0 ? "Bar" : "Corner") + ")\n[Tạm thời để trống cho lượt nâng cấp sau]");
+        tvEmpty.setTextColor(Color.parseColor("#777777"));
+        tvEmpty.setGravity(Gravity.CENTER);
+        tvEmpty.setPadding(0, 80, 0, 0);
+        cfgBody.addView(tvEmpty);
+    };
+    
+    btnCfgBar.setOnClickListener(cfgClick);
+    btnCfgCorner.setOnClickListener(cfgClick);
+    
+    // Kích hoạt mặc định vào tab đang chọn
+    if (currentDesignCfgTab == 0) btnCfgBar.performClick();
+    else btnCfgCorner.performClick();
 }
 
 private void stylePanelTabs(Button b1, Button b2, Button b3) {
+// --- [KẾT THÚC CODE MỚI] ---
     b1.setBackground(getRounded(currentPanelIdx==1?"#00E5FF":"#222222",15f)); b1.setTextColor(currentPanelIdx==1?Color.BLACK:Color.WHITE);
     b2.setBackground(getRounded(currentPanelIdx==2?"#00E5FF":"#222222",15f)); b2.setTextColor(currentPanelIdx==2?Color.BLACK:Color.WHITE);
     b3.setBackground(getRounded(currentPanelIdx==3?"#00E5FF":"#222222",15f)); b3.setTextColor(currentPanelIdx==3?Color.BLACK:Color.WHITE);
@@ -2403,12 +2544,7 @@ private void buildPanelBody(LinearLayout panelBody) {
     }
 
     btnDrawerHandle.setOnClickListener(v -> { isHandleDrawerOpen = !isHandleDrawerOpen; buildPanelBody(panelBody); });
-
-    TextView tvSwipeHint = new TextView(this);
-    tvSwipeHint.setText("" + T("Swipe panel to see more items", "Vuốt ngang panel để xem thêm ô") + " →");
-    tvSwipeHint.setTextColor(Color.GRAY); tvSwipeHint.setTextSize(11f); tvSwipeHint.setGravity(Gravity.CENTER); tvSwipeHint.setPadding(0, 10, 0, 0);
-    panelBody.addView(tvSwipeHint);
-}
+} // <-- THÊM dấu } này để đóng đúng hàm buildPanelBody()
 private LinearLayout newPanelColumn() {
     LinearLayout col = new LinearLayout(this);
     col.setOrientation(LinearLayout.VERTICAL);
