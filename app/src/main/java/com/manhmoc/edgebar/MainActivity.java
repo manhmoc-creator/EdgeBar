@@ -2701,22 +2701,83 @@ private void openDataPackEditor(int type, String id) {
         btnSc.setOnClickListener(v -> showPanelMultiPicker(prefix + id + "_shortcuts", false));
         content.addView(btnSc);
         
-        // --- MỤC 2: PANEL CONFIG ---
-        content.addView(createSectionTitle("2. PANEL CONFIG"));
-        content.addView(createCycleRow("Icon Style", prefix + id + "_icon_shape", new String[]{"Tròn", "Google (bo vuông)", "Pebble", "Hệ thống"}));
-        content.addView(createCycleRow("Show Name (Hiện tên)", prefix + id + "_show_name", new String[]{"Không", "Có"}));
-        content.addView(createSlider("Opacity (Độ trong suốt)", prefix + id + "_alpha", 255, 200));
-        content.addView(createSlider("Length (Chiều dài)", prefix + id + "_panel_length", 3000, 700));
-        content.addView(createSlider("Width (Bề dày)", prefix + id + "_size", 2500, 700));
-        content.addView(createSlider("Corner Radius (Bo góc)", prefix + id + "_panel_radius", 60, 24));
-        
-        // --- MỤC 3: HANDLE CONFIG ---
-        content.addView(createSectionTitle("3. HANDLE CONFIG"));
-        content.addView(createCycleRow("Visibility Handle", prefix + id + "_vis", new String[]{"Cục Bộ (chỉ Design)", "Toàn Cục (mọi nơi)"}));
-        content.addView(createSlider("Handle Opacity", prefix + id + "_handle_alpha", 255, 255));
-        content.addView(createSlider("Handle Length", prefix + id + "_thick", 400, 200));
-        content.addView(createSlider("Handle Width", prefix + id + "_handle_width", 200, 56));
-        content.addView(createSlider("Handle Radius", prefix + id + "_handle_radius", 100, 28));
+        // --- MỤC 2: PANEL CONFIG (NGĂN KÉO — Lazy Inflate, Zero-RAM khi đóng) ---
+LinearLayout panelCfgBody = new LinearLayout(this);
+panelCfgBody.setOrientation(LinearLayout.VERTICAL);
+panelCfgBody.setPadding(20, 10, 20, 20);
+panelCfgBody.setVisibility(View.GONE);
+
+TextView panelCfgHeader = new TextView(this);
+panelCfgHeader.setText("📁 PANEL CONFIG (Chạm để mở ▼)");
+panelCfgHeader.setTextColor(Color.parseColor("#00E5FF"));
+panelCfgHeader.setPadding(30, 30, 30, 30);
+panelCfgHeader.setTextSize(16);
+panelCfgHeader.setBackground(getRounded("#202124", 25f));
+
+LinearLayout panelCfgDrawer = new LinearLayout(this);
+panelCfgDrawer.setOrientation(LinearLayout.VERTICAL);
+LinearLayout.LayoutParams pcLp = new LinearLayout.LayoutParams(-1, -2);
+pcLp.setMargins(0, 15, 0, 5);
+panelCfgDrawer.setLayoutParams(pcLp);
+panelCfgDrawer.addView(panelCfgHeader);
+panelCfgDrawer.addView(panelCfgBody);
+content.addView(panelCfgDrawer);
+
+final boolean[] panelCfgInflated = {false};
+panelCfgHeader.setOnClickListener(v -> {
+    boolean willOpen = panelCfgBody.getVisibility() == View.GONE;
+    if (willOpen && !panelCfgInflated[0]) {
+        // Chỉ dựng View đúng 1 lần duy nhất, ngay khi user thực sự mở
+        panelCfgInflated[0] = true;
+        panelCfgBody.addView(createCycleRow("Icon Style", prefix + id + "_icon_shape", new String[]{"Tròn", "Google (bo vuông)", "Pebble", "Hệ thống"}));
+        panelCfgBody.addView(createCycleRow("Show Name (Hiện tên)", prefix + id + "_show_name", new String[]{"Không", "Có"}));
+        panelCfgBody.addView(createSlider("Opacity (Độ trong suốt)", prefix + id + "_alpha", 255, 200));
+        panelCfgBody.addView(createSlider("Length (Chiều dài)", prefix + id + "_panel_length", 3000, 700));
+        panelCfgBody.addView(createSlider("Width (Bề dày)", prefix + id + "_size", 2500, 700));
+        panelCfgBody.addView(createSlider("Corner Radius (Bo góc)", prefix + id + "_panel_radius", 60, 24));
+    }
+    panelCfgBody.setVisibility(willOpen ? View.VISIBLE : View.GONE);
+    panelCfgHeader.setText(willOpen ? "📂 PANEL CONFIG (Chạm để đóng ▲)" : "📁 PANEL CONFIG (Chạm để mở ▼)");
+    panelCfgHeader.setBackground(getRounded(willOpen ? "#333333" : "#202124", 25f));
+});
+
+// --- MỤC 3: HANDLE CONFIG (NGĂN KÉO — Lazy Inflate, Zero-RAM khi đóng) ---
+LinearLayout handleCfgBody = new LinearLayout(this);
+handleCfgBody.setOrientation(LinearLayout.VERTICAL);
+handleCfgBody.setPadding(20, 10, 20, 20);
+handleCfgBody.setVisibility(View.GONE);
+
+TextView handleCfgHeader = new TextView(this);
+handleCfgHeader.setText("📁 HANDLE CONFIG (Chạm để mở ▼)");
+handleCfgHeader.setTextColor(Color.parseColor("#FFC107"));
+handleCfgHeader.setPadding(30, 30, 30, 30);
+handleCfgHeader.setTextSize(16);
+handleCfgHeader.setBackground(getRounded("#202124", 25f));
+
+LinearLayout handleCfgDrawer = new LinearLayout(this);
+handleCfgDrawer.setOrientation(LinearLayout.VERTICAL);
+LinearLayout.LayoutParams hcLp2 = new LinearLayout.LayoutParams(-1, -2);
+hcLp2.setMargins(0, 10, 0, 15);
+handleCfgDrawer.setLayoutParams(hcLp2);
+handleCfgDrawer.addView(handleCfgHeader);
+handleCfgDrawer.addView(handleCfgBody);
+content.addView(handleCfgDrawer);
+
+final boolean[] handleCfgInflated = {false};
+handleCfgHeader.setOnClickListener(v -> {
+    boolean willOpen = handleCfgBody.getVisibility() == View.GONE;
+    if (willOpen && !handleCfgInflated[0]) {
+        handleCfgInflated[0] = true;
+        handleCfgBody.addView(createCycleRow("Visibility Handle", prefix + id + "_vis", new String[]{"Cục Bộ (chỉ Design)", "Toàn Cục (mọi nơi)"}));
+        handleCfgBody.addView(createSlider("Handle Opacity", prefix + id + "_handle_alpha", 255, 255));
+        handleCfgBody.addView(createSlider("Handle Length", prefix + id + "_thick", 400, 200));
+        handleCfgBody.addView(createSlider("Handle Width", prefix + id + "_handle_width", 200, 56));
+        handleCfgBody.addView(createSlider("Handle Radius", prefix + id + "_handle_radius", 100, 28));
+    }
+    handleCfgBody.setVisibility(willOpen ? View.VISIBLE : View.GONE);
+    handleCfgHeader.setText(willOpen ? "📂 HANDLE CONFIG (Chạm để đóng ▲)" : "📁 HANDLE CONFIG (Chạm để mở ▼)");
+    handleCfgHeader.setBackground(getRounded(willOpen ? "#333333" : "#202124", 25f));
+});
     }
     
     LinearLayout footer = new LinearLayout(this);
