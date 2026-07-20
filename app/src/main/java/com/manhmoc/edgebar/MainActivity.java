@@ -232,30 +232,37 @@ private void updateFabVisibility() {
 if (currentMainTab == 0) {
     fab.setVisibility(View.VISIBLE);
     if (designTabState == 6) {
-        // Yêu cầu 1 & 3: Chỉ hiện FormatB / FormatC trong không gian "Cấu hình Design"
-        fab.setText(currentDesignCfgTab == 0 ? "FormatB" : "FormatC");
-        fab.setOnClickListener(v -> {
-            String listKey = currentDesignCfgTab == 0 ? "pack_bar_ids" : "pack_corner_ids";
-            String newId = addDynamicId(listKey);
-            openDataPackEditor(currentDesignCfgTab, newId);
-        });
-    } else if (designTabState == 5) {
-        // Yêu cầu 2 & 4: Viên thuốc riêng cho không gian Panel (Tạo Panel Data Pack)
-        fab.setText("+ PANEL");
-        fab.setOnClickListener(v -> {
-            String newId = addDynamicId("pack_panel_ids");
-            openDataPackEditor(2, newId); // type 2 = Panel Data Pack
-        });
-    } else {
-        // Yêu cầu 1: Ở các không gian khác (lock/homeb/homacc/anima/morsos), viên thuốc rỗng ruột
-        fab.setText("   "); // Trống không ghi gì
-        fab.setOnClickListener(v -> openEmptyPillDialog()); // Ruột rỗng chỉ có Cancel/Save
-    }
+fab.setText(currentDesignCfgTab == 0 ? "FormatB": "FormatC");
+fab.setOnClickListener(v -> {
+String listKey = currentDesignCfgTab == 0 ? "pack_bar_ids": "pack_corner_ids";
+String newId = addDynamicId(listKey); openDataPackEditor(currentDesignCfgTab, newId);
+});
+} else if (designTabState == 5) {
+fab.setText("+ PANEL");
+fab.setOnClickListener(v -> { String newId = addDynamicId("pack_panel_ids"); openDataPackEditor(2, newId); });
+} else if (designTabState == 7) {
+fab.setText("PATTERN");
+fab.setOnClickListener(v -> { String newId = addDynamicId("pack_trigger_p_ids"); openTriggerPBuilderDialog(newId); });
+} else if (designTabState == 0 || designTabState == 1 || designTabState == 4) {
+fab.setText("PATTERN");
+fab.setOnClickListener(v -> openPatternSelectionDialog(designTabState));
+} else {
+fab.setText(" ");
+fab.setOnClickListener(v -> openEmptyPillDialog());
+}
 } else if (currentMainTab == 1) { // Condition Space
-            fab.setVisibility(View.VISIBLE);
-        fab.setText("+NEW EB");
-        fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
-    } else if (currentMainTab == 2) { // Ecosystem Space
+fab.setVisibility(View.VISIBLE);
+fab.setText("+NEW EB");
+fab.setOnClickListener(v -> {
+    if (currentGesTab == 4 || currentGesTab == 5) {
+        String listKey = currentGesTab == 4 ? "pack_texture_ids" : "pack_frontier_ids";
+        String newId = addDynamicId(listKey);
+        openTextureFrontierEditor(listKey, newId);
+    } else {
+        openRuleBuilderDialog(null, -1, -1, "");
+    }
+});
+} else if (currentMainTab == 2) { // Ecosystem Space
         fab.setVisibility(View.VISIBLE);
         if (ecoType == 0 || ecoType == 1 || ecoType == 2) {
             fab.setText(ecoType == 0 ? "+INTENT" : (ecoType == 1 ? "QS TILE" : "+ MACRO"));
@@ -403,7 +410,7 @@ if (currentMainTab == 1) { // Đang ở Condition Space
     }
 });
         Button btnDesign = createCircleBtn("⚙️", "#333333"); btnDesign.setTag("btnDesign");
-        btnDesign.setOnClickListener(v -> { if(pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); btnDesign.setText("⚙️"); btnDesign.setBackground(getRounded("#333333", 100f)); } else { openDesignSpace(); btnDesign.setText("⬅"); btnDesign.setBackground(getRounded("#D32F2F", 100f)); } });
+        btnDesign.setOnClickListener(v -> { if(pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); btnDesign.setText("⚙️"); btnDesign.setBackground(getRounded("#333333", 100f)); } else { openDesignSpace(); btnDesign.setText("🔙"); btnDesign.setBackground(getRounded("#333333", 100f)); } });
         bottomBar.addView(btnUpdate); bottomBar.addView(btnPremium); bottomBar.addView(spacer); bottomBar.addView(fab); bottomBar.addView(btnDesign);
         rootLayout.addView(bottomBar);
 btnNavCond.setOnClickListener(v -> switchMainTab(1, btnNavCond, btnNavEco));
@@ -427,27 +434,42 @@ private void switchMainTab(int idx, Button b1, Button b2) {
     LinearLayout tabContainer = new LinearLayout(this);
     tabContainer.setOrientation(LinearLayout.HORIZONTAL);
     tabContainer.setPadding(0, 0, 0, 20);
-btnLock = createTabBtn("LOCK");
-btnHomacc = createTabBtn("HOMACC");
-btnHome = createTabBtn("HOMEB");
-btnVolKey = createTabBtn("VOLKEY");
+LinearLayout row1 = new LinearLayout(this); row1.setOrientation(LinearLayout.HORIZONTAL); row1.setPadding(0,0,0,10);
+LinearLayout row2 = new LinearLayout(this); row2.setOrientation(LinearLayout.HORIZONTAL);
+btnLock = createTabBtn("LOCK"); btnHomacc = createTabBtn("HOMACC"); btnHome = createTabBtn("HOMEB");
+btnVolKey = createTabBtn("VOLKEY"); 
+Button btnTexture = createTabBtn("TEXTURE"); Button btnFrontier = createTabBtn("FRONTIER");
 
-LinearLayout.LayoutParams pMargR = new LinearLayout.LayoutParams(0, -2, 1f);
-pMargR.setMargins(0, 0, 10, 0);
-btnLock.setLayoutParams(pMargR);
-LinearLayout.LayoutParams pMargR2 = new LinearLayout.LayoutParams(0, -2, 1f);
-pMargR2.setMargins(0, 0, 10, 0);
-btnHomacc.setLayoutParams(pMargR2);
-LinearLayout.LayoutParams pMargR3 = new LinearLayout.LayoutParams(0, -2, 1f);
-pMargR3.setMargins(0, 0, 10, 0);
-btnHome.setLayoutParams(pMargR3);
-btnVolKey.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(0, -2, 1f); pLp.setMargins(0, 0, 10, 0);
+btnLock.setLayoutParams(pLp); btnHomacc.setLayoutParams(pLp); btnHome.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+btnVolKey.setLayoutParams(pLp); btnTexture.setLayoutParams(pLp); btnFrontier.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
-tabContainer.addView(btnLock);
-tabContainer.addView(btnHomacc);
-tabContainer.addView(btnHome);
-tabContainer.addView(btnVolKey);
+row1.addView(btnLock); row1.addView(btnHomacc); row1.addView(btnHome);
+row2.addView(btnVolKey); row2.addView(btnTexture); row2.addView(btnFrontier);
+tabContainer.addView(row1); tabContainer.addView(row2);
 pageConditions.addView(tabContainer);
+
+btnTexture.setOnClickListener(v -> {
+    currentGesTab = 4; refreshPreview();
+    btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE);
+    btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
+    btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE);
+    btnVolKey.setBackground(getRounded("#222222", 20f)); btnVolKey.setTextColor(Color.WHITE);
+    btnTexture.setBackground(getRounded("#E91E63", 20f)); btnTexture.setTextColor(Color.WHITE);
+    btnFrontier.setBackground(getRounded("#222222", 20f)); btnFrontier.setTextColor(Color.WHITE);
+    updateFabVisibility(); renderRulesList();
+});
+btnFrontier.setOnClickListener(v -> {
+    currentGesTab = 5; refreshPreview();
+    btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE);
+    btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
+    btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE);
+    btnVolKey.setBackground(getRounded("#222222", 20f)); btnVolKey.setTextColor(Color.WHITE);
+    btnTexture.setBackground(getRounded("#222222", 20f)); btnTexture.setTextColor(Color.WHITE);
+    btnFrontier.setBackground(getRounded("#9C27B0", 20f)); btnFrontier.setTextColor(Color.WHITE);
+    updateFabVisibility(); renderRulesList();
+});
+// Thêm lệnh reset màu cho btnTexture/Frontier khi bấm vào Lock/Home/Homacc/Volkey:
     listRules = new LinearLayout(this);
     listRules.setOrientation(LinearLayout.VERTICAL);
     pageConditions.addView(listRules);
@@ -487,9 +509,14 @@ btnHome.performClick();
 }
 
     private void renderRulesList() {
-    listRules.removeAllViews();
-    final boolean isVolKeyMode = (currentGesTab == 3);
-    String prefix = isVolKeyMode ? "volkey_" : (currentGesTab == 0 ? "lock_" : (currentGesTab == 1 ? "homacc_" : "home_"));
+listRules.removeAllViews();
+if (currentGesTab == 4 || currentGesTab == 5) {
+    renderTextureFrontierList();
+    return;
+}
+final boolean isVolKeyMode = (currentGesTab == 3);
+String prefix = isVolKeyMode? "volkey_": (currentGesTab == 0? "lock_":
+(currentGesTab == 1 ? "homacc_" : "home_"));
     String[] compsUsed = isVolKeyMode ? VOLKEY_COMPS : ALL_COMP_KEYS;
     String[] compNamesUsed = isVolKeyMode ? VOLKEY_COMP_NAMES : ALL_COMP_NAMES;
     String[] gesturesUsed = isVolKeyMode ? VOLKEY_GESTURES : C_GESTURES;
@@ -1993,18 +2020,24 @@ btnEditPanel = new Button(this); btnEditPanel.setText("PANEL");
 btnEditPanel.setLayoutParams(mP2);
 btnEditPanel.setOnClickListener(v -> { designTabState = 5; refreshPreview();
 updateVisTabs(); renderSliders(); });
-
 Button btnEditDesignConfig = new Button(this);
-btnEditDesignConfig.setText("COMPONENT");
+btnEditDesignConfig.setText("COMPON");
 btnEditDesignConfig.setTag("btnEditDesignConfig");
-btnEditDesignConfig.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-btnEditDesignConfig.setOnClickListener(v -> { designTabState = 6; refreshPreview();
-updateVisTabs(); renderSliders(); });
+LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, -2, 1f);
+cLp.setMargins(5, 0, 5, 0);
+btnEditDesignConfig.setLayoutParams(cLp);
+btnEditDesignConfig.setOnClickListener(v -> { designTabState = 6; refreshPreview(); updateVisTabs(); renderSliders(); });
 
+Button btnEditTriggerP = new Button(this);
+btnEditTriggerP.setText("TRIGGER P");
+btnEditTriggerP.setTag("btnEditTriggerP");
+btnEditTriggerP.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+btnEditTriggerP.setOnClickListener(v -> { designTabState = 7; refreshPreview(); updateVisTabs(); renderSliders(); });
 toggleRow2.addView(btnEditMorse);
 toggleRow2.addView(btnEditAnim);
 toggleRow2.addView(btnEditPanel);
 toggleRow2.addView(btnEditDesignConfig);
+toggleRow2.addView(btnEditTriggerP);
 pageDesign.addView(toggleRow2);
 pageDesign.addView(designSliderContainer);
 btnEditHome.performClick();
@@ -2027,24 +2060,27 @@ private void updateVisTabs() {
     btnEditPanel.setBackground(getRounded(designTabState == 5 ? "#00E5FF" : "#222222", 20f));
     btnEditPanel.setTextColor(designTabState == 5 ? Color.BLACK : Color.WHITE);
     
-    // YÊU CẦU 3: Cập nhật màu nút CẤU HÌNH DESIGN (designTabState == 6)
     Button btnCfg = pageDesign.findViewWithTag("btnEditDesignConfig");
-    if (btnCfg != null) {
-        btnCfg.setBackground(getRounded(designTabState == 6 ? "#00E5FF" : "#222222", 20f));
-        btnCfg.setTextColor(designTabState == 6 ? Color.BLACK : Color.WHITE);
-    }
+if (btnCfg != null) {
+btnCfg.setBackground(getRounded(designTabState == 6? "#00E5FF": "#222222", 20f));
+btnCfg.setTextColor(designTabState == 6? Color.BLACK: Color.WHITE);
 }
-
+Button btnTrig = pageDesign.findViewWithTag("btnEditTriggerP");
+if (btnTrig != null) {
+btnTrig.setBackground(getRounded(designTabState == 7? "#00E5FF": "#222222", 20f));
+btnTrig.setTextColor(designTabState == 7? Color.BLACK: Color.WHITE);
+}
+}
 private void renderSliders() {
-    designSliderContainer.removeAllViews();
-    if (designTabState == 5) { renderPanelDesign(); return; }
-    
-    // YÊU CẦU 3: Điều hướng sang không gian Cấu hình Design (Zero-RAM Overhead)
-    if (designTabState == 6) { renderDesignConfigSpace(); return; }
-    
-    // ===== TAB HOMACC (designTabState == 4)
-// --- [KẾT THÚC CODE MỚI] ---
-    // ===== TAB HOMACC (designTabState == 4) =====
+designSliderContainer.removeAllViews();
+if (designTabState == 5) { renderPanelDesign(); return; }
+if (designTabState == 6) { renderDesignConfigSpace(); return; }
+if (designTabState == 7) { renderTriggerPSpace(); return; }
+if (designTabState == 0 || designTabState == 1 || designTabState == 4) {
+    renderDesignDynamicList(designTabState);
+    return;
+}
+// ===== TAB HOMACC (designTabState == 4)
     if (designTabState == 4) {
         String prefix = "homacc_";
         designSliderContainer.addView(createSectionTitle("🟣 HOMACC - OVERLAY TRỢ NĂNG HOME"));
@@ -3074,6 +3110,171 @@ private void syncAllTileComponentsOnBoot() {
 // CODE MỚI — thay toàn bộ hàm bằng:
 private void syncPanelService() {
     sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
+}
+    private void renderTextureFrontierList() {
+    String listKey = currentGesTab == 4 ? "pack_texture_ids" : "pack_frontier_ids";
+    String prefix = currentGesTab == 4 ? "texture_" : "frontier_";
+    List<String> ids = getDynamicIds(listKey);
+    if (ids.isEmpty()) {
+        TextView empty = new TextView(this); empty.setText("Chưa có pack nào.\nBấm + NEW EB để tạo.");
+        empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0);
+        listRules.addView(empty); return;
+    }
+    for(String id : ids) {
+         LinearLayout card = new LinearLayout(this);
+         card.setOrientation(LinearLayout.HORIZONTAL);
+         card.setBackground(getRounded("#202124", 20f)); card.setPadding(30,30,30,30);
+         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,15); card.setLayoutParams(lp);
+
+         TextView tvName = new TextView(this);
+         tvName.setText(prefs.getString(prefix + id + "_name", "Data Pack"));
+         tvName.setTextColor(Color.WHITE); tvName.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+         Switch swEn = new Switch(this);
+         swEn.setChecked(prefs.getBoolean(prefix + id + "_en", true));
+         swEn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(prefix + id + "_en", c).apply());
+
+         card.addView(tvName); card.addView(swEn);
+
+         card.setOnClickListener(v -> openTextureFrontierEditor(listKey, id));
+         card.setOnLongClickListener(v -> {
+             removeDynamicId(listKey, id); renderRulesList(); return true;
+         });
+         listRules.addView(card);
+    }
+}
+private void openTextureFrontierEditor(String listKey, String id) {
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,80,40,40);
+    String prefix = listKey.equals("pack_texture_ids") ? "texture_" : "frontier_";
+    EditText etName = createEcoInput("Tên Pack", prefs.getString(prefix + id + "_name", "")); root.addView(etName);
+    Button bSave = new Button(this); bSave.setText("LƯU"); bSave.setBackground(getRounded("#4CAF50", 20f));
+    bSave.setOnClickListener(v -> { prefs.edit().putString(prefix + id + "_name", etName.getText().toString()).apply(); renderRulesList(); d.dismiss(); });
+    root.addView(bSave); d.setContentView(root); d.show();
+}
+
+private void openPatternSelectionDialog(int dState) {
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40, 80, 40, 40);
+
+    TextView tvTitle = new TextView(this); tvTitle.setText("CHỌN COMPONENT TỪ KHO"); tvTitle.setTextColor(Color.parseColor("#00E5FF")); root.addView(tvTitle);
+
+    ScrollView scroll = new ScrollView(this); LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); scroll.addView(content);
+    root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+    List<String> bars = getDynamicIds("pack_bar_ids"); List<String> corners = getDynamicIds("pack_corner_ids");
+    ArrayList<CheckBox> cbs = new ArrayList<>(); ArrayList<String> ids = new ArrayList<>(); ArrayList<String> names = new ArrayList<>();
+
+    for(String b : bars) { CheckBox cb = new CheckBox(this); String name = prefs.getString("pack_bar_" + b + "_name", "Bar " + b); cb.setText("[Bar] " + name); cb.setTextColor(Color.WHITE); content.addView(cb); cbs.add(cb); ids.add(b); names.add(name); }
+    for(String c : corners) { CheckBox cb = new CheckBox(this); String name = prefs.getString("pack_corner_" + c + "_name", "Corner " + c); cb.setText("[Corner] " + name); cb.setTextColor(Color.WHITE); content.addView(cb); cbs.add(cb); ids.add(c); names.add(name); }
+
+    LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL);
+    Button bCancel = new Button(this); bCancel.setText("CANCEL"); bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Button bSave = new Button(this); bSave.setText("SAVE RULE"); bSave.setBackground(getRounded("#4CAF50", 20f)); bSave.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f); slp.setMargins(20, 0, 0, 0); bSave.setLayoutParams(slp);
+    footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
+
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave.setOnClickListener(v -> {
+        String targetKey = dState == 0 ? "design_pack_lock_ids" : (dState == 1 ? "design_pack_homeb_ids" : "design_pack_homacc_ids");
+        List<String> existing = getDynamicIds(targetKey);
+        for(int i=0; i<cbs.size(); i++) {
+            if(cbs.get(i).isChecked() && !existing.contains(ids.get(i))) {
+                existing.add(ids.get(i)); prefs.edit().putString(targetKey + "_" + ids.get(i) + "_name", names.get(i)).apply();
+            }
+        }
+        prefs.edit().putString(targetKey, TextUtils.join(",", existing)).apply();
+        renderSliders(); d.dismiss();
+    });
+    d.setContentView(root); d.show();
+}
+
+private void renderDesignDynamicList(int dState) {
+    String targetKey = dState == 0 ? "design_pack_lock_ids" : (dState == 1 ? "design_pack_homeb_ids" : "design_pack_homacc_ids");
+    List<String> ids = getDynamicIds(targetKey);
+    if (ids.isEmpty()) {
+        TextView empty = new TextView(this); empty.setText("Chưa có pack nào được sao chép.\nNhấn PATTERN để thêm.");
+        empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,80,0,0);
+        designSliderContainer.addView(empty); return;
+    }
+    for(String id : ids) {
+        LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.HORIZONTAL); card.setBackground(getRounded("#202124", 20f)); card.setPadding(30, 30, 30, 30);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.setMargins(0, 0, 0, 15); card.setLayoutParams(lp);
+        TextView tvName = new TextView(this); tvName.setText(prefs.getString(targetKey + "_" + id + "_name", "Data Pack")); tvName.setTextColor(Color.WHITE); tvName.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        Switch swEn = new Switch(this); swEn.setChecked(prefs.getBoolean(targetKey + "_" + id + "_en", true));
+        swEn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(targetKey + "_" + id + "_en", c).apply());
+        card.addView(tvName); card.addView(swEn);
+        card.setOnClickListener(v -> openTriggerPEmptyDrawer());
+        card.setOnLongClickListener(v -> {
+            new AlertDialog.Builder(this).setTitle("Xóa Pack?").setPositiveButton("XÓA", (dialog, w) -> { removeDynamicId(targetKey, id); renderSliders(); }).setNegativeButton("HỦY", null).show(); return true;
+        });
+        designSliderContainer.addView(card);
+    }
+}
+
+private void openTriggerPEmptyDrawer() {
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40, 80, 40, 40);
+    TextView tv = new TextView(this); tv.setText("NGĂN KÉO GỌI TRIGGER P (TRỐNG)"); tv.setTextColor(Color.GRAY); root.addView(tv, new LinearLayout.LayoutParams(-1,0,1f));
+    Button btn = new Button(this); btn.setText("ĐÓNG"); btn.setBackground(getRounded("#333333", 20f)); btn.setTextColor(Color.WHITE); btn.setOnClickListener(v -> d.dismiss());
+    root.addView(btn); d.setContentView(root); d.show();
+}
+
+private void renderTriggerPSpace() {
+    designSliderContainer.addView(createSectionTitle("KHO LƯU BIẾN TRIGGER P"));
+    List<String> ids = getDynamicIds("pack_trigger_p_ids");
+    if(ids.isEmpty()){
+         TextView empty = new TextView(this); empty.setText("Chưa có pack nào. Nhấn PATTERN để tạo.");
+         empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,80,0,0);
+         designSliderContainer.addView(empty); return;
+    }
+    for(String id : ids) {
+         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#202124", 20f)); card.setPadding(30, 30, 30, 30);
+         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.setMargins(0, 0, 0, 15); card.setLayoutParams(lp);
+         TextView tvName = new TextView(this); tvName.setText(prefs.getString("trigger_p_" + id + "_name", "Trigger Pack")); tvName.setTextColor(Color.WHITE); card.addView(tvName);
+         LinearLayout r2 = new LinearLayout(this); r2.setOrientation(LinearLayout.HORIZONTAL); r2.setPadding(0,15,0,0);
+         Button btnCopy = new Button(this); btnCopy.setText("COPY"); btnCopy.setBackground(getRounded("#303134", 14f)); btnCopy.setTextColor(Color.WHITE);
+         btnCopy.setOnClickListener(v -> {
+             String newId = addDynamicId("pack_trigger_p_ids");
+             prefs.edit().putString("trigger_p_" + newId + "_name", prefs.getString("trigger_p_" + id + "_name", "Pack") + " (Copy)").apply();
+             openTriggerPBuilderDialog(newId);
+         });
+         r2.addView(btnCopy); card.addView(r2);
+         card.setOnClickListener(v -> openTriggerPBuilderDialog(id));
+         card.setOnLongClickListener(v -> {
+             new AlertDialog.Builder(this).setTitle("Xóa?").setPositiveButton("XÓA", (dialog, w) -> { removeDynamicId("pack_trigger_p_ids", id); renderSliders(); }).setNegativeButton("HỦY", null).show(); return true;
+         });
+         designSliderContainer.addView(card);
+    }
+}
+
+private void openTriggerPBuilderDialog(String id) {
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30, 80, 30, 30);
+    EditText etName = createEcoInput("Tên Pack", prefs.getString("trigger_p_" + id + "_name", "")); root.addView(etName);
+    ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
+    LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); scroll.addView(content); root.addView(scroll);
+    
+    TextView tvG = new TextView(this); tvG.setText("\nCẤU HÌNH GESTURES & ACTIONS"); tvG.setTextColor(Color.parseColor("#E91E63")); content.addView(tvG);
+    
+    for (int i=0; i<C_GESTURES.length; i++) {
+        CheckBox cb = new CheckBox(this); cb.setText(C_GESTURE_NAMES[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0,20,0,20);
+        cb.setChecked(prefs.getBoolean("trigger_p_" + id + "_ges_" + i, false));
+        final int fIdx = i; cb.setOnCheckedChangeListener((vw,chk)-> prefs.edit().putBoolean("trigger_p_" + id + "_ges_" + fIdx, chk).apply());
+        content.addView(cb);
+    }
+    
+    Button bAct = new Button(this); bAct.setText("CHỌN ACTION (Chưa hoàn thiện UI, sẽ phát triển sau)"); bAct.setBackground(getRounded("#202124", 20f)); bAct.setTextColor(Color.WHITE);
+    content.addView(bAct);
+    
+    LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL);
+    Button bCancel = new Button(this); bCancel.setText("CANCEL"); bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Button bSave = new Button(this); bSave.setText("LƯU"); bSave.setBackground(getRounded("#4CAF50", 20f)); bSave.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f); slp.setMargins(20, 0, 0, 0); bSave.setLayoutParams(slp);
+    footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave.setOnClickListener(v -> { prefs.edit().putString("trigger_p_" + id + "_name", etName.getText().toString()).apply(); renderSliders(); d.dismiss(); });
+    d.setContentView(root); d.show();
 }
     // ==================== CÁC HÀM PHỤ TRỢ CHUNG ====================
     private void showAppPickerDialog() {
