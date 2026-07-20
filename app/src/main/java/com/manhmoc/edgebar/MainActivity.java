@@ -118,8 +118,7 @@ String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
 T("Recents", "Da nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
 T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm"), T("Launch App", "Mở Ứng dụng"), T("Open Panel 1","Mở Panel 1"), T("Open Panel 2", "Mở Panel 2"), T("Open Panel 3","Mở Panel 3"), T("Split Screen", "Chia đôi màn hình")};
-// V19.12.3.6.10: bỏ SCREEN_ON khỏi danh sách chung  chỉ còn dùng riêng cho
-VOLKEY
+// V19.12.3.6.10: bỏ SCREEN_ON khỏi danh sách chung  chỉ còn dùng riêng cho VOLKEY
 for(int i = 0; i<21; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 for(int i = 1; i <= 15; i++) { ACT_KEYS[20+i]="INTENT_"+i; ACT_LABS[20+i] =
 prefs.getString("intent_"+i+"_name", "Intent " + i); }
