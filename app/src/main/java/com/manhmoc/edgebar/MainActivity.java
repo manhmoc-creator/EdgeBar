@@ -468,13 +468,25 @@ btnHomacc = createTabBtn("HOMACC");
         tabContainer.addView(btnFrontier);
         
         btnTexture.setOnClickListener(v -> {
-            currentGesTab = 4; refreshPreview();
-            updateFabVisibility(); renderRulesList();
-        });
-        btnFrontier.setOnClickListener(v -> {
-            currentGesTab = 5; refreshPreview();
-            updateFabVisibility(); renderRulesList();
-        });
+    currentGesTab = 4; refreshPreview();
+    btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE);
+    btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
+    btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE);
+    btnVolKey.setBackground(getRounded("#222222", 20f)); btnVolKey.setTextColor(Color.WHITE);
+    btnTexture.setBackground(getRounded("#4CAF50", 20f)); btnTexture.setTextColor(Color.BLACK);
+    btnFrontier.setBackground(getRounded("#222222", 20f)); btnFrontier.setTextColor(Color.WHITE);
+    updateFabVisibility(); renderRulesList();
+});
+btnFrontier.setOnClickListener(v -> {
+    currentGesTab = 5; refreshPreview();
+    btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE);
+    btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
+    btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE);
+    btnVolKey.setBackground(getRounded("#222222", 20f)); btnVolKey.setTextColor(Color.WHITE);
+    btnTexture.setBackground(getRounded("#222222", 20f)); btnTexture.setTextColor(Color.WHITE);
+    btnFrontier.setBackground(getRounded("#E91E63", 20f)); btnFrontier.setTextColor(Color.WHITE);
+    updateFabVisibility(); renderRulesList();
+});
 pageConditions.addView(tabContainer);
     listRules = new LinearLayout(this);
     listRules.setOrientation(LinearLayout.VERTICAL);
@@ -827,6 +839,8 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
             .putInt(cornerKey + "y", prefs.getInt(src + "y", 0))
             .putInt(cornerKey + "moon_w", prefs.getInt(src + "moon_w", 100))
             .putInt(cornerKey + "moon_h", prefs.getInt(src + "moon_h", 100))
+            .putInt(cornerKey + "moon_x", prefs.getInt(src + "moon_x", 1250))
+            .putInt(cornerKey + "moon_y", prefs.getInt(src + "moon_y", 1250))
             .putInt(cornerKey + "rad", prefs.getInt(src + "rad", 80))
             .putInt(cornerKey + "moon_rad", prefs.getInt(src + "moon_rad", 80))
             .putInt(targetPrefix + "corner_hide_dur", prefs.getInt(src + "hide_dur", 2500))
@@ -2884,30 +2898,22 @@ private void renderDataPackList(LinearLayout container, int type) {
         cLp.setMargins(0, 0, 0, 15);
         card.setLayoutParams(cLp);
 
-        TextView tvName = new TextView(this);
-        tvName.setText(prefs.getString(namePrefix + id + "_name", "Data Pack Mới"));
-        tvName.setTextColor(Color.WHITE);
-        tvName.setTextSize(15f);
-        card.addView(tvName);
-
-        LinearLayout row2 = new LinearLayout(this);
-        row2.setOrientation(LinearLayout.HORIZONTAL);
-        row2.setPadding(0, 15, 0, 0);
-        Button btnCopy = new Button(this);
-        btnCopy.setText("COPY");
-        btnCopy.setBackground(getRounded("#303134", 14f));
-        btnCopy.setTextColor(Color.WHITE);
-        btnCopy.setPadding(20, 0, 20, 0);
-        final int fType = type;
-        btnCopy.setOnClickListener(btn -> {
-            String newId = addDynamicId(listKey);
-            String copyName = prefs.getString(namePrefix + id + "_name", "Data Pack") + " (Copy)";
-            prefs.edit().putString(namePrefix + newId + "_name", copyName).apply();
-            openDataPackEditor(fType, newId);
-        });
-        row2.addView(btnCopy);
-        card.addView(row2);
-
+        LinearLayout row1 = new LinearLayout(this);
+row1.setOrientation(LinearLayout.HORIZONTAL);
+row1.setGravity(Gravity.CENTER_VERTICAL);
+TextView tvName = new TextView(this);
+tvName.setText(prefs.getString(namePrefix + id + "_name", "Data Pack Mới"));
+tvName.setTextColor(Color.WHITE);
+tvName.setTextSize(15f);
+tvName.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+tvName.setMaxLines(1); tvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+Switch swEn = new Switch(this);
+swEn.setChecked(prefs.getBoolean(namePrefix + id + "_en", false));
+swEn.setOnCheckedChangeListener((sw, chk) ->
+    prefs.edit().putBoolean(namePrefix + id + "_en", chk).apply());
+row1.addView(tvName); row1.addView(swEn);
+card.addView(row1);
+final int fType = type;
         final int fType2 = type;
         card.setOnClickListener(btn -> openDataPackEditor(fType2, id));
         card.setOnLongClickListener(btn -> {
@@ -2935,12 +2941,28 @@ private void openDataPackEditor(int type, String id) {
     scroll.addView(content);
     root.addView(scroll);
     
-    // type 0: Bar, type 1: Corner, type 2: Panel
     String prefix = type == 0 ? "pack_bar_" : (type == 1 ? "pack_corner_" : "pack_panel_");
-    EditText etName = createEcoInput("Tên Data Pack", prefs.getString(prefix + id + "_name", ""));
-    content.addView(etName);
-    
-    if (type == 0) {
+EditText etName = createEcoInput("Tên Data Pack", prefs.getString(prefix + id + "_name", ""));
+content.addView(etName);
+
+// [MỤC 3] Hàng nút rỗng — chờ nối Drawer gọi Trigg Pack (kho biến trigg_ids ở
+// không gian Design > TRIGG). Zero-RAM: chỉ 1 Button rỗng, không load list ngay.
+LinearLayout triggRow = new LinearLayout(this);
+triggRow.setOrientation(LinearLayout.HORIZONTAL);
+triggRow.setPadding(0, 10, 0, 20);
+Button btnTriggDrawer = new Button(this);
+btnTriggDrawer.setText("🎯 GẮN PATTERN (TRIGG)");
+btnTriggDrawer.setBackground(getRounded("#202124", 20f));
+btnTriggDrawer.setTextColor(Color.parseColor("#777777"));
+btnTriggDrawer.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+btnTriggDrawer.setOnClickListener(v -> {
+    // TODO: mở Drawer liệt kê trigg_ids (giống openPatternDrawerDialog),
+    // ghi trigg id đã chọn vào prefix+id+"_trigg_id".
+});
+triggRow.addView(btnTriggDrawer);
+content.addView(triggRow);
+
+if (type == 0) {
 CheckBox cbEn = new CheckBox(this);
 cbEn.setText("Bật Data Pack này (Enable)");
 cbEn.setTextColor(Color.WHITE);
@@ -3035,8 +3057,10 @@ content.addView(locDropdown);
         content.addView(createSlider("Di chuyển Ngang (X)", prefix + id + "_x", 2500, 0));
         content.addView(createSlider("Di chuyển Dọc (Y)", prefix + id + "_y", 2500, 0));
         content.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix + id + "_moon_w", 2500, 100));
-        content.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix + id + "_moon_h", 2500, 100));
-        content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 80));
+content.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix + id + "_moon_h", 2500, 100));
+content.addView(createSlider("Di chuyển Trăng Non Ngang (X) (1250=Giữa)", prefix + id + "_moon_x", 2500, 1250));
+content.addView(createSlider("Di chuyển Trăng Non Dọc (Y) (1250=Giữa)", prefix + id + "_moon_y", 2500, 1250));
+content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 80));
             content.addView(createSlider("Độ cong TRĂNG NON", prefix + id + "_moon_rad", 1000, 80));
             
             // Yêu cầu 7: Bổ sung 4 thanh kéo (slider) chung vào FormatC
