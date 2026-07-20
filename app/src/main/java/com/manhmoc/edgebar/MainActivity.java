@@ -464,7 +464,6 @@ btnHomacc = createTabBtn("HOMACC");
         tabContainer.addView(btnTexture);
         tabContainer.addView(btnFrontier);
         
-        // Setup OnClickListener cho Texture và Frontier (currentGesTab = 4 và 5)
         btnTexture.setOnClickListener(v -> {
             currentGesTab = 4; refreshPreview();
             updateFabVisibility(); renderRulesList();
@@ -473,8 +472,6 @@ btnHomacc = createTabBtn("HOMACC");
             currentGesTab = 5; refreshPreview();
             updateFabVisibility(); renderRulesList();
         });
-tabContainer.addView(btnHome);
-tabContainer.addView(btnVolKey);
 pageConditions.addView(tabContainer);
     listRules = new LinearLayout(this);
     listRules.setOrientation(LinearLayout.VERTICAL);
@@ -715,6 +712,16 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
 }
     private void openRuleBuilderDialog(String editKey, int preComp, int preGes, String copyActs) { Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen); d.setContentView(buildRuleEditor(d, editKey, preComp, preGes, copyActs)); d.show(); }
 
+    // [FIX BUILD] Bổ sung 2 hàm bị thiếu định nghĩa gây lỗi compile
+    private void openPatternDrawerDialog(int tabState) {
+        openRuleBuilderDialog(null, -1, -1, "");
+    }
+
+    private void openRuleBuilderDialogNoComp(String copyActs) {
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        d.setContentView(buildRuleEditor(d, null, -1, -1, copyActs));
+        d.show();
+    }
     private View buildRuleEditor(Dialog dialog, String editKey, int preComp, int preGes, String copyActs) {
         reloadActionLabels();
         final boolean isVolKeyMode = (currentGesTab == 3);
