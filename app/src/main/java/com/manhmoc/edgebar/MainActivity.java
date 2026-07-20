@@ -221,8 +221,17 @@ private void openDesignSpace() { currentMainTab = 0; refreshPreview(); navMain.s
 // riêng option vân tay đã bị loại khỏi component list của LOCK ngay trong
 // buildRuleEditor(), nên không cần ẩn cả nút.
 private void updateFabVisibility() {
-    if (fab == null) return;
-    if (currentMainTab == 1) { // Condition Space
+        if (fab == null) return;
+        // Xử lý hiển thị FAB cho không gian Cấu hình Design (Data Packs)
+        if (currentMainTab == 0 && designTabState == 6) {
+            fab.setVisibility(View.VISIBLE);
+            fab.setText(currentDesignCfgTab == 0 ? "+ FORMAT B" : "+ FORMAT C");
+            fab.setOnClickListener(v -> {
+                String listKey = currentDesignCfgTab == 0 ? "pack_bar_ids" : "pack_corner_ids";
+                String newId = addDynamicId(listKey);
+                openDataPackEditor(currentDesignCfgTab, newId);
+            });
+        } else if (currentMainTab == 1) { // Condition Space
         fab.setVisibility(View.VISIBLE);
         fab.setText("+NEW EB");
         fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
@@ -829,12 +838,17 @@ if (!isLockSpace && !isVolKeyMode) {
 // MỤC SYSTEM: Luôn hiển thị ở mọi không gian
 vAct.addView(buildActionCategoryCard("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
 
-// YÊU CẦU 1 (Cốt lõi): UTILITIES / INTENTS / MACROS mở khóa cho CẢ HOMEB và LOCK
-// Chỉ khóa với VolKey (phím cứng khi tắt màn không nên chạy Macro/Intent nặng)
-if (!isVolKeyMode) {
-    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"YTDL_DOWNLOAD"}, actKeysUsed, actLabsUsed);
-    List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", actKeysUsed, actLabsUsed);
-    List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", actKeysUsed, actLabsUsed);
+// YÊU CẦU 1 (Cốt lõi): UTILITIES / INTENTS/MACROS mở khóa cho CẢ HOMEB và LOCK
+            // Chỉ khóa với VolKey (phím cứng khi tắt màn không nên chạy Macro/Intent nặng)
+            if (!isVolKeyMode) {
+                // Đã gom toàn bộ các action tiện ích vào khối UTILITIES để hiển thị đầy đủ cho không gian LOCK
+                List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{
+                        "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", 
+                        "YTDL_DOWNLOAD", "NOTIFICATIONS", "FLASH", "SCREENSHOT", "CAMERA"
+                }, actKeysUsed, actLabsUsed);
+                List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", actKeysUsed,
+                        actLabsUsed);
+                List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", actKeysUsed, actLabsUsed);
     vAct.addView(buildActionCategoryCard("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
     vAct.addView(buildActionCategoryCard("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
     vAct.addView(buildActionCategoryCard("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
@@ -1219,48 +1233,51 @@ swOn.setScaleX(0.85f); swOn.setScaleY(0.85f);
 
 r1.addView(tvTitle); r1.addView(swOn);
 
-// YÊU CẦU 2: Thêm hàng giao diện quản lý Quick Settings Tile (Chỉ hiện khi ở tab QS TILES)
-if (ecoType == 1) {
-    LinearLayout qsRow = new LinearLayout(this);
-    qsRow.setOrientation(LinearLayout.HORIZONTAL);
-    qsRow.setGravity(Gravity.CENTER_VERTICAL);
-    qsRow.setPadding(0, 8, 0, 4);
+// YÊU CẦU 2: Ô chọn CÓ/KHÔNG hiện QS Tile, báo cáo Data Pack Status & Tối ưu RAM
+                    if (ecoType == 1) {
+                        LinearLayout qsRow = new LinearLayout(this);
+                        qsRow.setOrientation(LinearLayout.HORIZONTAL);
+                        qsRow.setGravity(Gravity.CENTER_VERTICAL);
+                        qsRow.setPadding(0, 8, 0, 4);
 
-    // Kiểm tra Data Pack này đã được gán vào Slot QS nào chưa (Zero-I/O, quét từ cache)
-    int boundSlot = -1;
-    for (int s = 1; s <= 30; s++) {
-        if (prefs.getString("tile_slot_" + s + "_id", "").equals(id)) {
-            boundSlot = s;
-            break;
-        }
-    }
+                        int boundSlot = -1;
+                        for (int s = 1; s <= 30; s++) {
+                            if (prefs.getString("tile_slot_" + s + "_id", "").equals(id)) {
+                                boundSlot = s; break;
+                            }
+                        }
 
-    CheckBox cbShowTile = new CheckBox(this);
-    cbShowTile.setText("Hiện QS ");
-    cbShowTile.setTextColor(Color.parseColor("#00E5FF"));
-    cbShowTile.setTextSize(11.5f);
-    cbShowTile.setChecked(prefs.getBoolean("tile_active_" + id, false));
-    cbShowTile.setOnCheckedChangeListener((vw, chk) -> {
-        prefs.edit().putBoolean("tile_active_" + id, chk).apply();
-        Toast.makeText(this, chk ? "Đã ghim Tile lên Quick Settings" : "Đã ẩn khỏi Quick Settings", Toast.LENGTH_SHORT).show();
-    });
+                        CheckBox cbShowTile = new CheckBox(this);
+                        cbShowTile.setText("Hiện QS");
+                        cbShowTile.setTextColor(Color.parseColor("#00E5FF"));
+                        cbShowTile.setTextSize(11.5f);
+                        // Liên kết trạng thái tick với data đã lưu
+                        cbShowTile.setChecked(prefs.getBoolean("tile_active_" + id, false));
+                        cbShowTile.setOnCheckedChangeListener((vw, chk) -> {
+                            prefs.edit().putBoolean("tile_active_" + id, chk).apply();
+                            Toast.makeText(this, chk ? "Đã ghim Tile lên QS" : "Đã ẩn khỏi QS", Toast.LENGTH_SHORT).show();
+                            // Cập nhật IPC ngay để service QS Tiles nhận diện lập tức
+                            sendBroadcast(new Intent("com.manhmoc.edgebar.TILE_CONFIG_CHANGED"));
+                        });
 
-    TextView tvQsStatus = new TextView(this);
-    tvQsStatus.setTextSize(10.5f);
-    if (boundSlot != -1) {
-        tvQsStatus.setText("★ [Đã đưa lên Slot " + boundSlot + "]");
-        tvQsStatus.setTextColor(Color.parseColor("#00E5FF")); // Màu Neon sáng rõ
-    } else {
-        tvQsStatus.setText("☆ [Chưa đưa lên QS]");
-        tvQsStatus.setTextColor(Color.parseColor("#777777")); // Màu xám tối đỡ tốn LED OLED
-    }
-    tvQsStatus.setGravity(Gravity.RIGHT);
-    tvQsStatus.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+                        TextView tvQsStatus = new TextView(this);
+                        tvQsStatus.setTextSize(10.5f);
+                        if (boundSlot != -1) {
+                            // Ghi chú Data Pack đã có slot
+                            tvQsStatus.setText(" [SLOT " + boundSlot + "]");
+                            tvQsStatus.setTextColor(Color.parseColor("#00E5FF")); 
+                        } else {
+                            // Cảnh báo Data Pack trống
+                            tvQsStatus.setText(" [CHƯA GÁN SLOT]");
+                            tvQsStatus.setTextColor(Color.parseColor("#D32F2F")); 
+                        }
+                        tvQsStatus.setGravity(Gravity.RIGHT);
+                        tvQsStatus.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
-    qsRow.addView(cbShowTile);
-    qsRow.addView(tvQsStatus);
-    card.addView(qsRow, 1); // Chèn ngay dưới hàng tên (r1), trên nút Copy (r2)
-}
+                        qsRow.addView(cbShowTile);
+                        qsRow.addView(tvQsStatus);
+                        card.addView(qsRow, 1); 
+                    }
 // --- [KẾT THÚC CODE MỚI] ---
 // Hàng 2: Nút Copy chuẩn hóa chống lẹm cho màn hình 18:9
 LinearLayout r2 = new LinearLayout(this);
@@ -2375,76 +2392,182 @@ panelBody.addView(tvSwipeHint);
 }
 
 // YÊU CẦU 3: Thuật toán quản lý không gian Cấu hình Design (Quản lý Data Pack)
-private int currentDesignCfgTab = 0; // 0 = cấu hình bar, 1 = cấu hình corner
-private void renderDesignConfigSpace() {
-    designSliderContainer.removeAllViews();
-    
-    // Thẻ 2 nút ngang hàng nhau (cấu hình bar / cấu hình corner)
-    LinearLayout tabRow = new LinearLayout(this);
-    tabRow.setOrientation(LinearLayout.HORIZONTAL);
-    tabRow.setPadding(0, 10, 0, 25);
-    
-    Button btnCfgBar = createTabBtn("CẤU HÌNH BAR");
-    Button btnCfgCorner = createTabBtn("CẤU HÌNH CORNER");
-    
-    LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(0, -2, 1f);
-    tLp.setMargins(5, 0, 5, 0);
-    btnCfgBar.setLayoutParams(tLp);
-    btnCfgCorner.setLayoutParams(tLp);
-    
-    tabRow.addView(btnCfgBar);
-    tabRow.addView(btnCfgCorner);
-    designSliderContainer.addView(tabRow);
-    
-    // Container chứa nút Format viên thuốc và không gian data pack
-    LinearLayout cfgBody = new LinearLayout(this);
-    cfgBody.setOrientation(LinearLayout.VERTICAL);
-    designSliderContainer.addView(cfgBody);
-    
-    View.OnClickListener cfgClick = v -> {
-        currentDesignCfgTab = (v == btnCfgBar) ? 0 : 1;
-        btnCfgBar.setBackground(getRounded(currentDesignCfgTab == 0 ? "#00E5FF" : "#222222", 20f));
-        btnCfgBar.setTextColor(currentDesignCfgTab == 0 ? Color.BLACK : Color.WHITE);
-        btnCfgCorner.setBackground(getRounded(currentDesignCfgTab == 1 ? "#00E5FF" : "#222222", 20f));
-        btnCfgCorner.setTextColor(currentDesignCfgTab == 1 ? Color.BLACK : Color.WHITE);
-        
-        cfgBody.removeAllViews();
-        
-        // Tạo nút viên thuốc FormatB / FormatC (Y hệt dáng +NewEB, chuyên thêm vào vị trí trống)
-        Button btnFormat = new Button(this);
-        btnFormat.setText(currentDesignCfgTab == 0 ? "+ FORMAT B" : "+ FORMAT C");
-        btnFormat.setTextColor(Color.BLACK);
-        btnFormat.setBackground(getRounded("#00E5FF", 100f)); // Dáng viên thuốc 100f
-        btnFormat.setTextSize(13.5f);
-        
-        LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-1, 135);
-        fLp.setMargins(10, 10, 10, 20);
-        btnFormat.setLayoutParams(fLp);
-        btnFormat.setPadding(55, 0, 55, 0);
-        
-        btnFormat.setOnClickListener(btn -> {
-            Toast.makeText(this, "Đã khởi tạo vùng chứa " + (currentDesignCfgTab == 0 ? "Format B" : "Format C") + " (Chuẩn bị kết nối Data Pack)", Toast.LENGTH_SHORT).show();
-        });
-        
-        cfgBody.addView(btnFormat);
-        
-        // Không gian bên trong tạm thời để trống theo yêu cầu
-        TextView tvEmpty = new TextView(this);
-        tvEmpty.setText("📦 Không gian lưu trữ Data Pack (" + (currentDesignCfgTab == 0 ? "Bar" : "Corner") + ")\n[Tạm thời để trống cho lượt nâng cấp sau]");
-        tvEmpty.setTextColor(Color.parseColor("#777777"));
-        tvEmpty.setGravity(Gravity.CENTER);
-        tvEmpty.setPadding(0, 80, 0, 0);
-        cfgBody.addView(tvEmpty);
-    };
-    
-    btnCfgBar.setOnClickListener(cfgClick);
-    btnCfgCorner.setOnClickListener(cfgClick);
-    
-    // Kích hoạt mặc định vào tab đang chọn
-    if (currentDesignCfgTab == 0) btnCfgBar.performClick();
-    else btnCfgCorner.performClick();
-}
+    private int currentDesignCfgTab = 0; // 0 = cấu hình bar, 1 = cấu hình corner
 
+    private void renderDesignConfigSpace() {
+        designSliderContainer.removeAllViews();
+
+        LinearLayout tabRow = new LinearLayout(this);
+        tabRow.setOrientation(LinearLayout.HORIZONTAL);
+        tabRow.setPadding(0, 10, 0, 25);
+
+        Button btnCfgBar = createTabBtn("CẤU HÌNH BAR");
+        Button btnCfgCorner = createTabBtn("CẤU HÌNH CORNER");
+        LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        tLp.setMargins(5, 0, 5, 0);
+        btnCfgBar.setLayoutParams(tLp);
+        btnCfgCorner.setLayoutParams(tLp);
+        tabRow.addView(btnCfgBar);
+        tabRow.addView(btnCfgCorner);
+        designSliderContainer.addView(tabRow);
+
+        LinearLayout cfgBody = new LinearLayout(this);
+        cfgBody.setOrientation(LinearLayout.VERTICAL);
+        designSliderContainer.addView(cfgBody);
+
+        View.OnClickListener cfgClick = v -> {
+            currentDesignCfgTab = (v == btnCfgBar) ? 0 : 1;
+            btnCfgBar.setBackground(getRounded(currentDesignCfgTab == 0 ? "#00E5FF" : "#222222", 20f));
+            btnCfgBar.setTextColor(currentDesignCfgTab == 0 ? Color.BLACK : Color.WHITE);
+            btnCfgCorner.setBackground(getRounded(currentDesignCfgTab == 1 ? "#00E5FF" : "#222222", 20f));
+            btnCfgCorner.setTextColor(currentDesignCfgTab == 1 ? Color.BLACK : Color.WHITE);
+            updateFabVisibility(); // Gọi cập nhật nút FAB mũi tên đỏ thành +FormatB/+FormatC
+            
+            cfgBody.removeAllViews();
+            String listKey = currentDesignCfgTab == 0 ? "pack_bar_ids" : "pack_corner_ids";
+            String prefix = currentDesignCfgTab == 0 ? "pack_bar_" : "pack_corner_";
+            List<String> ids = getDynamicIds(listKey);
+            
+            if (ids.isEmpty()) {
+                TextView tvEmpty = new TextView(this);
+                tvEmpty.setText("Không gian Data Pack đang rỗng.\nChạm nút xanh ở góc dưới để tạo.");
+                tvEmpty.setTextColor(Color.parseColor("#777777"));
+                tvEmpty.setGravity(Gravity.CENTER);
+                tvEmpty.setPadding(0, 80, 0, 0);
+                cfgBody.addView(tvEmpty);
+            } else {
+                for (String id : ids) {
+                    LinearLayout card = new LinearLayout(this);
+                    card.setOrientation(LinearLayout.VERTICAL);
+                    card.setBackground(getRounded("#202124", 20f));
+                    card.setPadding(30, 30, 30, 30);
+                    LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, -2);
+                    cLp.setMargins(0, 0, 0, 15);
+                    card.setLayoutParams(cLp);
+
+                    LinearLayout row1 = new LinearLayout(this);
+                    row1.setOrientation(LinearLayout.HORIZONTAL);
+                    row1.setGravity(Gravity.CENTER_VERTICAL);
+
+                    TextView tvName = new TextView(this);
+                    tvName.setText(prefs.getString(prefix + id + "_name", "Data Pack Mới"));
+                    tvName.setTextColor(Color.WHITE);
+                    tvName.setTextSize(15f);
+                    tvName.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+                    Switch swOn = new Switch(this);
+                    swOn.setChecked(prefs.getBoolean(prefix + id + "_en", false));
+                    swOn.setOnCheckedChangeListener((vw, chk) -> prefs.edit().putBoolean(prefix + id + "_en", chk).apply());
+
+                    row1.addView(tvName); row1.addView(swOn);
+
+                    LinearLayout row2 = new LinearLayout(this);
+                    row2.setOrientation(LinearLayout.HORIZONTAL);
+                    row2.setPadding(0, 15, 0, 0);
+
+                    Button btnCopy = new Button(this);
+                    btnCopy.setText("COPY");
+                    btnCopy.setBackground(getRounded("#303134", 14f));
+                    btnCopy.setTextColor(Color.WHITE);
+                    btnCopy.setPadding(20, 0, 20, 0);
+                    btnCopy.setOnClickListener(btn -> {
+                        String newId = addDynamicId(listKey);
+                        String copyName = prefs.getString(prefix + id + "_name", "Data Pack") + " (Copy)";
+                        prefs.edit().putString(prefix + newId + "_name", copyName).apply();
+                        openDataPackEditor(currentDesignCfgTab, newId);
+                    });
+
+                    row2.addView(btnCopy);
+                    card.addView(row1); card.addView(row2);
+
+                    card.setOnClickListener(btn -> openDataPackEditor(currentDesignCfgTab, id));
+                    card.setOnLongClickListener(btn -> {
+                        new AlertDialog.Builder(this).setTitle("Xóa Data Pack?").setPositiveButton("XÓA", (d,w) -> {
+                            removeDynamicId(listKey, id);
+                            renderDesignConfigSpace();
+                        }).setNegativeButton("HỦY", null).show();
+                        return true;
+                    });
+                    cfgBody.addView(card);
+                }
+            }
+        };
+
+        btnCfgBar.setOnClickListener(cfgClick);
+        btnCfgCorner.setOnClickListener(cfgClick);
+        if (currentDesignCfgTab == 0) btnCfgBar.performClick();
+        else btnCfgCorner.performClick();
+    }
+private void openDataPackEditor(int type, String id) {
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,80,40,40);
+
+        ScrollView scroll = new ScrollView(this); 
+        scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL); 
+        scroll.addView(content);
+        root.addView(scroll);
+
+        String prefix = type == 0 ? "pack_bar_" : "pack_corner_";
+        
+        EditText etName = createEcoInput("Tên Data Pack", prefs.getString(prefix + id + "_name", ""));
+        content.addView(etName);
+
+        if (type == 0) {
+            // FORMAT B (CẤU HÌNH BAR)
+            content.addView(createSectionTitle("CẤU HÌNH BAR (FORMAT B)"));
+            content.addView(createComboDropdown("Chọn vị trí Bar", prefix + id + "_loc", BAR_NAMES, 0));
+            content.addView(createComboDropdown("Hiển thị", prefix + id + "_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
+            content.addView(createComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode", new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+            content.addView(createSlider("Độ trong suốt", prefix + id + "_alpha", 255, 50));
+            content.addView(createSlider("Chiều ngang", prefix + id + "_w", 3000, 300));
+            content.addView(createSlider("Chiều dọc", prefix + id + "_h", 3000, 60));
+            content.addView(createSlider("Tọa độ X", prefix + id + "_x", 1000, 0));
+            content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 2500, 0));
+        } else {
+            // FORMAT C (CẤU HÌNH CORNER)
+            content.addView(createSectionTitle("CẤU HÌNH CORNER (FORMAT C)"));
+            content.addView(createComboDropdown("Chọn vị trí Corner", prefix + id + "_loc", CORNER_NAMES, 0));
+            content.addView(createComboDropdown("Hiển thị", prefix + id + "_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
+            content.addView(createComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode", new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+            content.addView(createComboDropdown("Hình dáng Góc", prefix + id + "_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0));
+            content.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix + id + "_w", 2500, 100));
+            content.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix + id + "_h", 2500, 100));
+            content.addView(createSlider("Di chuyển Ngang (X)", prefix + id + "_x", 2500, 0));
+            content.addView(createSlider("Di chuyển Dọc (Y)", prefix + id + "_y", 2500, 0));
+            content.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix + id + "_moon_w", 2500, 100));
+            content.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix + id + "_moon_h", 2500, 100));
+            content.addView(createSlider("Độ cong BO VIỀN", prefix + id + "_rad", 1000, 80));
+            content.addView(createSlider("Độ cong TRĂNG NON", prefix + id + "_moon_rad", 1000, 80));
+        }
+
+        LinearLayout footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
+        
+        Button bCancel = new Button(this); bCancel.setText("HỦY");
+        bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE);
+        bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        
+        Button bSave = new Button(this); bSave.setText("LƯU RULE");
+        bSave.setBackground(getRounded("#4CAF50", 20f)); bSave.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f); slp.setMargins(20, 0, 0, 0);
+        bSave.setLayoutParams(slp);
+
+        footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
+
+        bCancel.setOnClickListener(v -> d.dismiss());
+        bSave.setOnClickListener(v -> {
+            String name = etName.getText().toString();
+            prefs.edit().putString(prefix + id + "_name", name.isEmpty() ? "Data Pack" : name).apply();
+            renderDesignConfigSpace(); // Refresh lại danh sách
+            d.dismiss();
+        });
+
+        d.setContentView(root); d.show();
+    }
 private void stylePanelTabs(Button b1, Button b2, Button b3) {
 // --- [KẾT THÚC CODE MỚI] ---
     b1.setBackground(getRounded(currentPanelIdx==1?"#00E5FF":"#222222",15f)); b1.setTextColor(currentPanelIdx==1?Color.BLACK:Color.WHITE);
