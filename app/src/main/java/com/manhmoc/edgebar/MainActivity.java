@@ -3047,28 +3047,19 @@ private void renderPanelDesign() {
             return;
         }
 
-        LinearLayout currentRow = null;
-        int count = 0;
-        String[] iconShapes = {"Tròn", "Google", "Pebble", "Hệ thống"};
+        String[] POS_ABBR = {"BC", "BL", "BR", "LT", "LC", "LB", "RT", "RC", "RB"};
 
         for (String id : ids) {
-            // Khôi phục logic 2 cột (2 pack / hàng)
-            if (count % 2 == 0) {
-                currentRow = new LinearLayout(this);
-                currentRow.setOrientation(LinearLayout.HORIZONTAL);
-                currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-                designSliderContainer.addView(currentRow);
-            }
-
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.HORIZONTAL);
             card.setBackground(getRounded("#202124", 24f));
             card.setPadding(15, 24, 10, 24);
-            LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, -2, 1f);
-            cLp.setMargins(6, 6, 6, 6);
+            // Thẻ kéo dài toàn màn hình (bỏ grid 2 cột)
+            LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, -2);
+            cLp.setMargins(0, 0, 0, 15);
             card.setLayoutParams(cLp);
 
-            // Cột 1 (Trái cùng): Icon Cấu hình (Visibility, Icon Shape, Show Name)
+            // Cột 1 (Trái cùng): Icon Config (Visibility, Icon Shape, Show Name)
             LinearLayout optCol = new LinearLayout(this);
             optCol.setOrientation(LinearLayout.VERTICAL);
             optCol.setGravity(Gravity.CENTER);
@@ -3078,27 +3069,28 @@ private void renderPanelDesign() {
             int showName = prefs.getInt("pack_panel_" + id + "_show_name", 0);
             int visMode = prefs.getInt("pack_panel_" + id + "_vis", 0);
             
-            String strVis = visMode == 1 ? "🌍" : "🏠"; // Toàn cục / Cục bộ
-            String strShape = iconShape == 0 ? "🔵" : (iconShape == 1 ? "🟦" : "💠");
-            String strName = showName == 1 ? "🔤" : "🚫";
+            String strVis = visMode == 1 ? "🌍" : "📌"; // Toàn cục / Cục bộ
+            String strShape = iconShape == 0 ? "💿 : (iconShape == 1 ? "🎲" : (iconShape == 2 ? "🪨" : (iconShape == 3 ? "⚙️" ));
+            String strName = showName == 1 ? "⭕" : "❌";
             
             TextView tIcons = new TextView(this);
             tIcons.setText(strVis + "\n" + strShape + "\n" + strName);
-            tIcons.setTextSize(14);
+            tIcons.setTextSize(18);
+            tIcons.setLineSpacing(0, 1.3f);
             optCol.addView(tIcons);
 
-            // Cột 2 (Giữa): Info (Tên, Thống kê số lượng, Cấu hình text)
+            // Cột 2 (Giữa): Info (Tên [Viết tắt vị trí], Thống kê dạng dọc)
             LinearLayout infoCol = new LinearLayout(this);
             infoCol.setOrientation(LinearLayout.VERTICAL);
             infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
             
             TextView tName = new TextView(this);
             int posIdx = prefs.getInt("pack_panel_" + id + "_pos", 0);
-            String posName = posIdx < PANEL_POS_NAMES.length ? PANEL_POS_NAMES[posIdx] : "";
+            String posName = posIdx < POS_ABBR.length ? POS_ABBR[posIdx] : "";
             tName.setText("[" + posName + "] " + prefs.getString("pack_panel_" + id + "_name", "Panel Pack Mới"));
             tName.setTextColor(Color.parseColor("#E8EAED"));
             tName.setTextSize(16);
-            tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tName.setMaxLines(2); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
             
             String apps = prefs.getString("pack_panel_" + id + "_apps", "");
             String acts = prefs.getString("pack_panel_" + id + "_acts", "");
@@ -3108,21 +3100,13 @@ private void renderPanelDesign() {
             int scC = scs.isEmpty() ? 0 : scs.split(",").length;
 
             TextView tCount = new TextView(this);
-            tCount.setText(appC + " Apps | " + actC + " Acts | " + scC + " SCs");
+            tCount.setText("Apps: " + appC + "\nActs: " + actC + "\nSCs: " + scC);
             tCount.setTextColor(Color.parseColor("#9AA0A6"));
-            tCount.setTextSize(12); tCount.setPadding(0, 5, 0, 5);
-            tCount.setMaxLines(1); tCount.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tCount.setTextSize(12); 
+            tCount.setPadding(0, 5, 0, 5);
+            tCount.setLineSpacing(0, 1.2f); // Giãn dòng cho dọc
             
-            TextView tConfig = new TextView(this);
-            String cfgStr = (iconShape < iconShapes.length ? iconShapes[iconShape] : "") + 
-                            " | Tên: " + (showName == 1 ? "Có" : "Không") + 
-                            " | " + (visMode == 1 ? "Toàn cục" : "Cục bộ");
-            tConfig.setText(cfgStr);
-            tConfig.setTextColor(Color.parseColor("#8AB4F8"));
-            tConfig.setTextSize(13f);
-            tConfig.setMaxLines(1); tConfig.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            
-            infoCol.addView(tName); infoCol.addView(tCount); infoCol.addView(tConfig);
+            infoCol.addView(tName); infoCol.addView(tCount);
 
             // Cột 3 (Phải cùng): Switch, Copy
             LinearLayout ctrlCol = new LinearLayout(this);
@@ -3167,13 +3151,7 @@ private void renderPanelDesign() {
                 return true;
             });
 
-            currentRow.addView(card);
-            count++;
-        }
-        if (count % 2 != 0 && currentRow != null) {
-            View dummy = new View(this);
-            dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
-            currentRow.addView(dummy);
+            designSliderContainer.addView(card);
         }
     }
 private void renderTriggSpace() {
@@ -3189,22 +3167,14 @@ private void renderTriggSpace() {
             return;
         }
 
-        LinearLayout currentRow = null;
-        int count = 0;
         for (String id : ids) {
-            if (count % 2 == 0) {
-                currentRow = new LinearLayout(this);
-                currentRow.setOrientation(LinearLayout.HORIZONTAL);
-                currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-                designSliderContainer.addView(currentRow);
-            }
-
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.HORIZONTAL);
             card.setBackground(getRounded("#202124", 24f));
             card.setPadding(15, 24, 10, 24);
-            LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, -2, 1f);
-            cLp.setMargins(6, 6, 6, 6);
+            // Kéo ngang toàn màn hình giống Panel
+            LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, -2);
+            cLp.setMargins(0, 0, 0, 15);
             card.setLayoutParams(cLp);
 
             // Cột 1 (Trái cùng): Icon Option (Rung/Animation)
@@ -3218,7 +3188,7 @@ private void renderTriggSpace() {
             tIcons.setTextSize(16);
             optCol.addView(tIcons);
 
-            // Cột 2 (Giữa): Tên Pattern (thay cho Component), Gesture, Action
+            // Cột 2 (Giữa): Tên Pattern, Gesture, Action
             LinearLayout infoCol = new LinearLayout(this);
             infoCol.setOrientation(LinearLayout.VERTICAL);
             infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
@@ -3227,7 +3197,7 @@ private void renderTriggSpace() {
             tName.setText(prefs.getString("trigg_" + id + "_name", "Pattern Mới"));
             tName.setTextColor(Color.parseColor("#E8EAED"));
             tName.setTextSize(16);
-            tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tName.setMaxLines(2); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
             
             TextView tGest = new TextView(this);
             tGest.setText(prefs.getString("trigg_" + id + "_gestures", "Chưa có cử chỉ"));
@@ -3239,8 +3209,8 @@ private void renderTriggSpace() {
             String acts = prefs.getString("trigg_" + id + "_acts", "");
             tAct.setText(acts.isEmpty() ? "Chưa có hành động" : acts.replace("LAUNCH_APP", "Mở App").replace("RUN_SHORTCUT", "Shortcut"));
             tAct.setTextColor(Color.parseColor("#8AB4F8"));
-            tAct.setTextSize(16f);
-            tAct.setMaxLines(1); tAct.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tAct.setTextSize(14f);
+            tAct.setMaxLines(2); tAct.setEllipsize(android.text.TextUtils.TruncateAt.END);
             
             infoCol.addView(tName); infoCol.addView(tGest); infoCol.addView(tAct);
 
@@ -3294,13 +3264,7 @@ private void renderTriggSpace() {
                 return true;
             });
 
-            currentRow.addView(card);
-            count++;
-        }
-        if (count % 2 != 0 && currentRow != null) {
-            View dummy = new View(this);
-            dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
-            currentRow.addView(dummy);
+            designSliderContainer.addView(card);
         }
     }
 private void openTriggPackEditor(String id) {
@@ -3681,35 +3645,19 @@ private void openDataPackEditor(int type, String id) {
     root.addView(scroll);
     
     String prefix = type == 0 ? "pack_bar_" : (type == 1 ? "pack_corner_" : "pack_panel_");
-EditText etName = createEcoInput("Tên Data Pack", prefs.getString(prefix + id + "_name", ""));
-content.addView(etName);
+        EditText etName = createEcoInput("Tên Data Pack", prefs.getString(prefix + id + "_name", ""));
+        content.addView(etName);
 
-// [MỤC 3] Hàng nút rỗng — chờ nối Drawer gọi Trigg Pack (kho biến trigg_ids ở
-// không gian Design > TRIGG). Zero-RAM: chỉ 1 Button rỗng, không load list ngay.
-LinearLayout triggRow = new LinearLayout(this);
-triggRow.setOrientation(LinearLayout.HORIZONTAL);
-triggRow.setPadding(0, 10, 0, 20);
-Button btnTriggDrawer = new Button(this);
-btnTriggDrawer.setText("🎯 GẮN PATTERN (TRIGG)");
-btnTriggDrawer.setBackground(getRounded("#202124", 20f));
-btnTriggDrawer.setTextColor(Color.parseColor("#777777"));
-btnTriggDrawer.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-btnTriggDrawer.setOnClickListener(v -> {
-    // TODO: mở Drawer liệt kê trigg_ids (giống openPatternDrawerDialog),
-    // ghi trigg id đã chọn vào prefix+id+"_trigg_id".
-});
-triggRow.addView(btnTriggDrawer);
-content.addView(triggRow);
-
+        // [TỐI ƯU PIXEL 2XL] Đưa nút Enable lên trên cùng cho cả 3 không gian, xóa nút gắn Pattern thừa thãi
+        CheckBox cbEnGlobal = new CheckBox(this);
+        cbEnGlobal.setText("Bật Data Pack này (Enable)");
+        cbEnGlobal.setTextColor(Color.parseColor("#4CAF50"));
+        cbEnGlobal.setChecked(prefs.getBoolean(prefix + id + "_en", false));
+        cbEnGlobal.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(prefix + id + "_en", c).apply());
+        cbEnGlobal.setPadding(10, 10, 10, 30);
+        content.addView(cbEnGlobal);
 if (type == 0) {
-CheckBox cbEn = new CheckBox(this);
-cbEn.setText("Bật Data Pack này (Enable)");
-cbEn.setTextColor(Color.WHITE);
-cbEn.setChecked(prefs.getBoolean(prefix + id + "_en", false));
-cbEn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(prefix + id + "_en", c).apply());
-content.addView(cbEn);
-
-content.addView(createSectionTitle(" HIỆN THỬ TẠI VỊ TRÍ ĐANG CHỌN (LIVE PREVIEW)"));
+            content.addView(createSectionTitle(" HIỆN THỬ TẠI VỊ TRÍ ĐANG CHỌN (LIVE PREVIEW)"));
 String[] bKeys = {"r", "l", "t_r", "t_l", "t_c"};
 CheckBox cbPreview = new CheckBox(this);
 cbPreview.setText("Bật xem trước (Live Preview)");
@@ -3749,14 +3697,7 @@ content.addView(locDropdown);
         content.addView(createSlider("Tọa độ X", prefix + id + "_x", 1000, 0));
         content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 2500, 0));
     } else if (type == 1) {
-CheckBox cbEn = new CheckBox(this);
-cbEn.setText("Bật Data Pack này (Enable)");
-cbEn.setTextColor(Color.WHITE);
-cbEn.setChecked(prefs.getBoolean(prefix + id + "_en", false));
-cbEn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(prefix + id + "_en", c).apply());
-content.addView(cbEn);
-
-content.addView(createSectionTitle(" HIỆN THỬ TẠI VỊ TRÍ ĐANG CHỌN (LIVE PREVIEW)"));
+            content.addView(createSectionTitle(" HIỆN THỬ TẠI VỊ TRÍ ĐANG CHỌN (LIVE PREVIEW)"));
 String[] cKeys = {"br", "bl", "tr", "tl"};
 CheckBox cbPreview = new CheckBox(this);
 cbPreview.setText("Bật xem trước (Live Preview)");
@@ -3811,13 +3752,7 @@ content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 
             // Yêu cầu 2 & 4: BÊ NGUYÊN VẸN MỌI THỨ TỪ 3 MỤC Common/Panel Config/Handle Config vào ruột viên thuốc Panel
             content.addView(createSectionTitle("📦 DATA PACK PANEL (CORE CONFIG)"));
             content.addView(createComboDropdown("POSITION (Vị trí Panel)", prefix + id + "_pos", PANEL_POS_NAMES, 0));
-            CheckBox cbEn = new CheckBox(this);
-            cbEn.setText("Enable Panel Pack này");
-            cbEn.setTextColor(Color.WHITE);
-            cbEn.setChecked(prefs.getBoolean(prefix + id + "_en", false));
-            cbEn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(prefix + id + "_en", c).apply());
-            content.addView(cbEn);
-
+            
             // --- MỤC 1: COMMON & COLLECTIONS ---
             content.addView(createSectionTitle("1. COMMON & COLLECTIONS"));
             content.addView(createComboDropdown("Color (Màu)", prefix + id + "_color_idx", PANEL_COLOR_NAMES, 0));
