@@ -751,33 +751,43 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
         if (appliedPacks.isEmpty()) return;
         designSliderContainer.addView(createSectionTitle(" PACK ĐÃ GỌI TỪ PIECE"));
 
+        LinearLayout currentRow = null;
+        int count = 0;
         for (String itemKey : appliedPacks) {
+            if (count % 2 == 0) {
+                currentRow = new LinearLayout(this);
+                currentRow.setOrientation(LinearLayout.HORIZONTAL);
+                currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT));
+                designSliderContainer.addView(currentRow);
+            }
             boolean isBar = itemKey.startsWith("bar_");
             String id = itemKey.replace(isBar ? "bar_" : "corner_", "");
             String packPrefix = isBar ? "pack_bar_" : "pack_corner_";
-
+            
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
-            card.setBackground(getRounded("#202124", 20f));
-            card.setPadding(30, 30, 30, 30);
-            LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, -2);
-            cLp.setMargins(0, 0, 0, 15);
+            card.setBackground(getRounded("#202124", 24f));
+            card.setPadding(20, 24, 20, 24);
+            LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            cLp.setMargins(8, 8, 8, 8);
             card.setLayoutParams(cLp);
-
+            
             LinearLayout row1 = new LinearLayout(this);
             row1.setOrientation(LinearLayout.HORIZONTAL);
             row1.setGravity(Gravity.CENTER_VERTICAL);
-
+            
             TextView tvName = new TextView(this);
             tvName.setText((isBar ? "[Bar] " : "[Corner] ") + prefs.getString(packPrefix + id + "_name", "Data Pack"));
             tvName.setTextColor(Color.WHITE);
-            tvName.setTextSize(15f);
-            tvName.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-            tvName.setMaxLines(1);
+            tvName.setTextSize(14.5f);
+            tvName.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            // Tự động giãn dòng nếu thông tin nhiều, không cắt cụt
+            tvName.setMaxLines(3);
             tvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-
+            
             Switch swEn = new Switch(this);
             swEn.setChecked(prefs.getBoolean(prefix + itemKey + "_en", false));
+            swEn.setScaleX(0.85f); swEn.setScaleY(0.85f);
             swEn.setOnCheckedChangeListener((sw, chk) -> {
                 prefs.edit().putBoolean(prefix + itemKey + "_en", chk).apply();
                 if (chk) {
@@ -786,23 +796,28 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
                     Toast.makeText(this, "Đã áp dụng cấu hình pack!", Toast.LENGTH_SHORT).show();
                 }
             });
+            
             row1.addView(tvName);
             row1.addView(swEn);
             card.addView(row1);
-
-            // [TỐI ƯU PIXEL 2XL] Bấm 1 lần mở Không gian lưu biến Rule cho Pack (Đẹp như mục Conditions - 2 cột)
+            
             card.setOnClickListener(btn -> openPackRuleSpace(itemKey, tabState));
-
             card.setOnLongClickListener(btn -> {
                 new AlertDialog.Builder(this).setTitle("Gỡ Pack này khỏi không gian?")
-                    .setPositiveButton("GỠ", (d, w) -> {
-                        appliedPacks.remove(itemKey);
-                        prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
-                        renderSliders();
-                    }).setNegativeButton("HỦY", null).show();
+                        .setPositiveButton("GỠ", (d, w) -> {
+                            appliedPacks.remove(itemKey);
+                            prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
+                            renderSliders();
+                        }).setNegativeButton("HỦY", null).show();
                 return true;
             });
-            designSliderContainer.addView(card);
+            currentRow.addView(card);
+            count++;
+        }
+        if (count % 2 != 0 && currentRow != null) {
+            View dummy = new View(this);
+            dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+            currentRow.addView(dummy);
         }
     }
 
@@ -1117,7 +1132,7 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
         Button bCancel = new Button(this); bCancel.setText("HỦY");
         bCancel.setBackground(getRounded("#333333", 20f));
         bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        Button bSave = new Button(this); bSave.setText("LƯU RULE");
+        Button bSave = new Button(this); bSave.setText("SAVE RULE");
         bSave.setBackground(getRounded("#4CAF50", 20f));
         bSave.setTextColor(Color.WHITE);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f);
@@ -3082,45 +3097,63 @@ private void renderTriggSpace() {
         designSliderContainer.addView(tvEmpty);
         return;
     }
-    for (String id : ids) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(getRounded("#202124", 20f));
-        card.setPadding(30, 30, 30, 30);
-        LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, -2);
-        cLp.setMargins(0, 0, 0, 15);
-        card.setLayoutParams(cLp);
-
-        LinearLayout row1 = new LinearLayout(this);
-        row1.setOrientation(LinearLayout.HORIZONTAL);
-        row1.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView tvName = new TextView(this);
-        tvName.setText(prefs.getString("trigg_" + id + "_name", "Pattern Mới"));
-        tvName.setTextColor(Color.WHITE);
-        tvName.setTextSize(15f);
-        tvName.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-        Switch swOn = new Switch(this);
-        swOn.setChecked(prefs.getBoolean("trigg_" + id + "_en", false));
-        swOn.setOnCheckedChangeListener((vw, chk) ->
-            prefs.edit().putBoolean("trigg_" + id + "_en", chk).apply());
-
-        row1.addView(tvName); row1.addView(swOn);
-        card.addView(row1);
-
-        card.setOnClickListener(btn -> openTriggPackEditor(id));
-        card.setOnLongClickListener(btn -> {
-            new AlertDialog.Builder(this).setTitle("Xóa Pattern?")
-                .setPositiveButton("XÓA", (d, w) -> {
-                    removeDynamicId("trigg_ids", id);
-                    designSliderContainer.removeAllViews();
-                    renderTriggSpace();
-                }).setNegativeButton("HỦY", null).show();
-            return true;
-        });
-        designSliderContainer.addView(card);
-    }
+    LinearLayout currentRow = null;
+        int count = 0;
+        for (String id : ids) {
+            if (count % 2 == 0) {
+                currentRow = new LinearLayout(this);
+                currentRow.setOrientation(LinearLayout.HORIZONTAL);
+                currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT));
+                designSliderContainer.addView(currentRow);
+            }
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setBackground(getRounded("#202124", 24f));
+            card.setPadding(20, 24, 20, 24);
+            LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            cLp.setMargins(8, 8, 8, 8);
+            card.setLayoutParams(cLp);
+            
+            LinearLayout row1 = new LinearLayout(this);
+            row1.setOrientation(LinearLayout.HORIZONTAL);
+            row1.setGravity(Gravity.CENTER_VERTICAL);
+            
+            TextView tvName = new TextView(this);
+            tvName.setText(prefs.getString("trigg_" + id + "_name", "Pattern Mới"));
+            tvName.setTextColor(Color.WHITE);
+            tvName.setTextSize(14.5f);
+            tvName.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            tvName.setMaxLines(3);
+            tvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            
+            Switch swOn = new Switch(this);
+            swOn.setChecked(prefs.getBoolean("trigg_" + id + "_en", false));
+            swOn.setScaleX(0.85f); swOn.setScaleY(0.85f);
+            swOn.setOnCheckedChangeListener((vw, chk) ->
+                    prefs.edit().putBoolean("trigg_" + id + "_en", chk).apply());
+            
+            row1.addView(tvName);
+            row1.addView(swOn);
+            card.addView(row1);
+            
+            card.setOnClickListener(btn -> openTriggPackEditor(id));
+            card.setOnLongClickListener(btn -> {
+                new AlertDialog.Builder(this).setTitle("Xóa Pattern?")
+                        .setPositiveButton("XÓA", (d, w) -> {
+                            removeDynamicId("trigg_ids", id);
+                            designSliderContainer.removeAllViews();
+                            renderTriggSpace();
+                        }).setNegativeButton("HỦY", null).show();
+                return true;
+            });
+            currentRow.addView(card);
+            count++;
+        }
+        if (count % 2 != 0 && currentRow != null) {
+            View dummy = new View(this);
+            dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+            currentRow.addView(dummy);
+        }
 }
 
 private void openTriggPackEditor(String id) {
@@ -3293,43 +3326,63 @@ private void renderDataPackList(LinearLayout container, int type) {
         return;
     }
 
-    for (String id : ids) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(getRounded("#202124", 20f));
-        card.setPadding(30, 30, 30, 30);
-        LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, -2);
-        cLp.setMargins(0, 0, 0, 15);
-        card.setLayoutParams(cLp);
-
-        LinearLayout row1 = new LinearLayout(this);
-row1.setOrientation(LinearLayout.HORIZONTAL);
-row1.setGravity(Gravity.CENTER_VERTICAL);
-TextView tvName = new TextView(this);
-tvName.setText(prefs.getString(namePrefix + id + "_name", "Data Pack Mới"));
-tvName.setTextColor(Color.WHITE);
-tvName.setTextSize(15f);
-tvName.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-tvName.setMaxLines(1); tvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-Switch swEn = new Switch(this);
-swEn.setChecked(prefs.getBoolean(namePrefix + id + "_en", false));
-swEn.setOnCheckedChangeListener((sw, chk) ->
-    prefs.edit().putBoolean(namePrefix + id + "_en", chk).apply());
-row1.addView(tvName); row1.addView(swEn);
-card.addView(row1);
-final int fType = type;
-        final int fType2 = type;
-        card.setOnClickListener(btn -> openDataPackEditor(fType2, id));
-        card.setOnLongClickListener(btn -> {
-            new AlertDialog.Builder(this).setTitle("Xóa Data Pack?")
-                .setPositiveButton("XÓA", (d, w) -> {
-                    removeDynamicId(listKey, id);
-                    renderDataPackList(container, fType2);
-                }).setNegativeButton("HỦY", null).show();
-            return true;
-        });
-        container.addView(card);
-    }
+    LinearLayout currentRow = null;
+        int count = 0;
+        for (String id : ids) {
+            if (count % 2 == 0) {
+                currentRow = new LinearLayout(this);
+                currentRow.setOrientation(LinearLayout.HORIZONTAL);
+                currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT));
+                container.addView(currentRow);
+            }
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setBackground(getRounded("#202124", 24f));
+            card.setPadding(20, 24, 20, 24);
+            LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            cLp.setMargins(8, 8, 8, 8);
+            card.setLayoutParams(cLp);
+            
+            LinearLayout row1 = new LinearLayout(this);
+            row1.setOrientation(LinearLayout.HORIZONTAL);
+            row1.setGravity(Gravity.CENTER_VERTICAL);
+            
+            TextView tvName = new TextView(this);
+            tvName.setText(prefs.getString(namePrefix + id + "_name", "Data Pack Mới"));
+            tvName.setTextColor(Color.WHITE);
+            tvName.setTextSize(14.5f);
+            tvName.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            tvName.setMaxLines(3);
+            tvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            
+            Switch swEn = new Switch(this);
+            swEn.setChecked(prefs.getBoolean(namePrefix + id + "_en", false));
+            swEn.setScaleX(0.85f); swEn.setScaleY(0.85f);
+            swEn.setOnCheckedChangeListener((sw, chk) ->
+                    prefs.edit().putBoolean(namePrefix + id + "_en", chk).apply());
+            
+            row1.addView(tvName);
+            row1.addView(swEn);
+            card.addView(row1);
+            
+            final int fType2 = type;
+            card.setOnClickListener(btn -> openDataPackEditor(fType2, id));
+            card.setOnLongClickListener(btn -> {
+                new AlertDialog.Builder(this).setTitle("Xóa Data Pack?")
+                        .setPositiveButton("XÓA", (d, w) -> {
+                            removeDynamicId(listKey, id);
+                            renderDataPackList(container, fType2);
+                        }).setNegativeButton("HỦY", null).show();
+                return true;
+            });
+            currentRow.addView(card);
+            count++;
+        }
+        if (count % 2 != 0 && currentRow != null) {
+            View dummy = new View(this);
+            dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+            currentRow.addView(dummy);
+        }
 }
 private void openDataPackEditor(int type, String id) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);

@@ -378,7 +378,7 @@ filter.addAction("com.manhmoc.edgebar.PANEL_TEST_TOGGLE");
             registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"));
 
         String cid = "eb_19_acc";
-        NotificationChannel c = new NotificationChannel(cid, "Edge Bar đang chạy nền", NotificationManager.IMPORTANCE_LOW);
+        NotificationChannel c = new NotificationChannel(cid, "Edge Bar", NotificationManager.IMPORTANCE_LOW);
         getSystemService(NotificationManager.class).createNotificationChannel(c);
         Notification n = new Notification.Builder(this, cid).setContentTitle("Edge Bar").setSmallIcon(android.R.drawable.ic_lock_idle_lock).setOngoing(true).build();
         startForeground(1, n);
