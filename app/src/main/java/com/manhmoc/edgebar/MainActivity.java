@@ -273,7 +273,7 @@ if (currentMainTab == 0) {
     fab.setText("NEW EB");
     fab.setOnClickListener(v -> showCallPTDropdownFrontier());
 } else {
-                fab.setText("PATTE");
+                fab.setText("NEW EB");
                 fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
             }
         } else if (currentMainTab == 2) { // Ecosystem Space
@@ -3052,6 +3052,7 @@ private void renderPanelDesign() {
         String[] iconShapes = {"Tròn", "Google", "Pebble", "Hệ thống"};
 
         for (String id : ids) {
+            // Khôi phục logic 2 cột (2 pack / hàng)
             if (count % 2 == 0) {
                 currentRow = new LinearLayout(this);
                 currentRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -3067,17 +3068,26 @@ private void renderPanelDesign() {
             cLp.setMargins(6, 6, 6, 6);
             card.setLayoutParams(cLp);
 
-            // Cột 1 (Trái cùng): Icon Panel
+            // Cột 1 (Trái cùng): Icon Cấu hình (Visibility, Icon Shape, Show Name)
             LinearLayout optCol = new LinearLayout(this);
             optCol.setOrientation(LinearLayout.VERTICAL);
             optCol.setGravity(Gravity.CENTER);
             optCol.setPadding(0, 0, 15, 0);
+            
+            int iconShape = prefs.getInt("pack_panel_" + id + "_icon_shape", 0);
+            int showName = prefs.getInt("pack_panel_" + id + "_show_name", 0);
+            int visMode = prefs.getInt("pack_panel_" + id + "_vis", 0);
+            
+            String strVis = visMode == 1 ? "🌍" : "🏠"; // Toàn cục / Cục bộ
+            String strShape = iconShape == 0 ? "🔵" : (iconShape == 1 ? "🟦" : "💠");
+            String strName = showName == 1 ? "🔤" : "🚫";
+            
             TextView tIcons = new TextView(this);
-            tIcons.setText("📱\n✨");
-            tIcons.setTextSize(16);
+            tIcons.setText(strVis + "\n" + strShape + "\n" + strName);
+            tIcons.setTextSize(14);
             optCol.addView(tIcons);
 
-            // Cột 2 (Giữa): Info (Tên, Thống kê, Cấu hình)
+            // Cột 2 (Giữa): Info (Tên, Thống kê số lượng, Cấu hình text)
             LinearLayout infoCol = new LinearLayout(this);
             infoCol.setOrientation(LinearLayout.VERTICAL);
             infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
@@ -3090,7 +3100,6 @@ private void renderPanelDesign() {
             tName.setTextSize(16);
             tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
             
-            // Tính số lượng apps/acts/scs
             String apps = prefs.getString("pack_panel_" + id + "_apps", "");
             String acts = prefs.getString("pack_panel_" + id + "_acts", "");
             String scs = prefs.getString("pack_panel_" + id + "_shortcuts", "");
@@ -3105,9 +3114,6 @@ private void renderPanelDesign() {
             tCount.setMaxLines(1); tCount.setEllipsize(android.text.TextUtils.TruncateAt.END);
             
             TextView tConfig = new TextView(this);
-            int iconShape = prefs.getInt("pack_panel_" + id + "_icon_shape", 0);
-            int showName = prefs.getInt("pack_panel_" + id + "_show_name", 0);
-            int visMode = prefs.getInt("pack_panel_" + id + "_vis", 0);
             String cfgStr = (iconShape < iconShapes.length ? iconShapes[iconShape] : "") + 
                             " | Tên: " + (showName == 1 ? "Có" : "Không") + 
                             " | " + (visMode == 1 ? "Toàn cục" : "Cục bộ");
@@ -3327,7 +3333,8 @@ private void openTriggPackEditor(String id) {
         EditText etName = createEcoInput("Tên gợi nhớ (VD: Setup Zalo)", prefs.getString("trigg_" + id + "_name", ""));
         vTrig.addView(etName);
 
-        TextView tvG = new TextView(this); tvG.setText(T("\nCHỌN CỬ CHỈ (OR logic)", "\nCHỌN CỬ CHỈ (Được chọn nhiều - Lệnh OR)"));
+        // Đánh số 1 cho Cử chỉ
+        TextView tvG = new TextView(this); tvG.setText(T("\n1. CHOOSE GESTURES (OR logic)", "\n1. CHỌN CỬ CHỈ (Được chọn nhiều - Lệnh OR)"));
         tvG.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvG);
 
         ArrayList<CheckBox> gestureBoxes = new ArrayList<>();
@@ -3342,6 +3349,10 @@ private void openTriggPackEditor(String id) {
             vTrig.addView(cb);
         }
 
+        // Đánh số 2 cho Tùy chọn (Vib/Anim)
+        TextView tvOpt = new TextView(this); tvOpt.setText(T("\n2. CHOOSE OPTIONS", "\n2. CHỌN TÙY CHỌN"));
+        tvOpt.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvOpt);
+
         CheckBox cbVib = new CheckBox(this);
         cbVib.setText("Bật Rung (Haptic Feedback)");
         cbVib.setTextColor(Color.WHITE);
@@ -3353,7 +3364,6 @@ private void openTriggPackEditor(String id) {
         cbAnim.setTextColor(Color.WHITE);
         cbAnim.setChecked(prefs.getBoolean("trigg_" + id + "_anim", true));
         vTrig.addView(cbAnim);
-
         // ==== TAB 2: ACTION ====
         LinearLayout vAct = new LinearLayout(this);
         vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
@@ -3798,46 +3808,58 @@ content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 
             content.addView(createSlider("Độ mờ VIÊN GÓC", prefix + id + "_stroke_alpha", 255, 200));
             content.addView(createSlider("Độ đậm viền", prefix + id + "_thick", 50, 8));
         } else if (type == 2) {
-        // Yêu cầu 2 & 4: BÊ NGUYÊN VẸN MỌI THỨ TỪ 3 MỤC Common/Panel Config/Handle Config vào ruột viên thuốc Panel
-        content.addView(createSectionTitle("📦 DATA PACK PANEL (CORE CONFIG)"));
-        content.addView(createComboDropdown("POSITION (Vị trí Panel)", prefix + id + "_pos", PANEL_POS_NAMES, 0));
-        
-        CheckBox cbEn = new CheckBox(this);
-        cbEn.setText("Enable Panel Pack này");
-        cbEn.setTextColor(Color.WHITE);
-        cbEn.setChecked(prefs.getBoolean(prefix + id + "_en", false));
-        cbEn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(prefix + id + "_en", c).apply());
-        content.addView(cbEn);
-        
-        // --- MỤC 1: COMMON & COLLECTIONS ---
-        content.addView(createSectionTitle("1. COMMON & COLLECTIONS"));
-        content.addView(createComboDropdown("Color (Màu)", prefix + id + "_color_idx", PANEL_COLOR_NAMES, 0));
-        content.addView(createSlider("Icon Size (Kích thước)", prefix + id + "_icon_size", 180, 110));
-        content.addView(createSlider("Columns (Số cột 1-9)", prefix + id + "_cols", 9, 4));
-        
-        LinearLayout pickRow = new LinearLayout(this);
-        pickRow.setOrientation(LinearLayout.HORIZONTAL);
-        pickRow.setPadding(0, 15, 0, 10);
-        Button btnApps = new Button(this); btnApps.setText("CHỌN APP");
-        btnApps.setBackground(getRounded("#00E5FF", 20f)); btnApps.setTextColor(Color.BLACK);
-        btnApps.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        btnApps.setOnClickListener(v -> showPanelMultiPicker(prefix + id + "_apps", true));
-        
-        Button btnActs = new Button(this); btnActs.setText("CHỌN ACTION");
-        btnActs.setBackground(getRounded("#E91E63", 20f)); btnActs.setTextColor(Color.WHITE);
-        LinearLayout.LayoutParams lpAct = new LinearLayout.LayoutParams(0, -2, 1f);
-        lpAct.setMargins(15, 0, 0, 0); btnActs.setLayoutParams(lpAct);
-        btnActs.setOnClickListener(v -> showPanelMultiPicker(prefix + id + "_acts", false));
-        pickRow.addView(btnApps); pickRow.addView(btnActs);
-        content.addView(pickRow);
-        
-        Button btnSc = new Button(this); btnSc.setText("COLLECT SHORTCUTS");
-        btnSc.setBackground(getRounded("#7C4DFF", 20f)); btnSc.setTextColor(Color.WHITE);
-        btnSc.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-        btnSc.setOnClickListener(v -> showPanelMultiPicker(prefix + id + "_shortcuts", false));
-        content.addView(btnSc);
-        
-        // --- MỤC 2: PANEL CONFIG (NGĂN KÉO — Lazy Inflate, Zero-RAM khi đóng) ---
+            // Yêu cầu 2 & 4: BÊ NGUYÊN VẸN MỌI THỨ TỪ 3 MỤC Common/Panel Config/Handle Config vào ruột viên thuốc Panel
+            content.addView(createSectionTitle("📦 DATA PACK PANEL (CORE CONFIG)"));
+            content.addView(createComboDropdown("POSITION (Vị trí Panel)", prefix + id + "_pos", PANEL_POS_NAMES, 0));
+            CheckBox cbEn = new CheckBox(this);
+            cbEn.setText("Enable Panel Pack này");
+            cbEn.setTextColor(Color.WHITE);
+            cbEn.setChecked(prefs.getBoolean(prefix + id + "_en", false));
+            cbEn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(prefix + id + "_en", c).apply());
+            content.addView(cbEn);
+
+            // --- MỤC 1: COMMON & COLLECTIONS ---
+            content.addView(createSectionTitle("1. COMMON & COLLECTIONS"));
+            content.addView(createComboDropdown("Color (Màu)", prefix + id + "_color_idx", PANEL_COLOR_NAMES, 0));
+            content.addView(createSlider("Icon Size (Kích thước)", prefix + id + "_icon_size", 180, 110));
+            content.addView(createSlider("Columns (Số cột 1-9)", prefix + id + "_cols", 9, 4));
+
+            LinearLayout pickRow = new LinearLayout(this);
+            pickRow.setOrientation(LinearLayout.HORIZONTAL);
+            pickRow.setPadding(0, 15, 0, 10);
+            
+            // Tính số lượng cho UI
+            String appsStr = prefs.getString(prefix + id + "_apps", "");
+            String actsStr = prefs.getString(prefix + id + "_acts", "");
+            String scsStr = prefs.getString(prefix + id + "_shortcuts", "");
+            int appCount = appsStr.isEmpty() ? 0 : appsStr.split(",").length;
+            int actCount = actsStr.isEmpty() ? 0 : actsStr.split(",").length;
+            int scCount = scsStr.isEmpty() ? 0 : scsStr.split(",").length;
+
+            Button btnApps = new Button(this); btnApps.setText("CHỌN APP (" + appCount + ")");
+            btnApps.setBackground(getRounded("#00E5FF", 20f));
+            btnApps.setTextColor(Color.BLACK);
+            btnApps.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            btnApps.setOnClickListener(v -> showPanelMultiPicker(prefix + id + "_apps", true));
+
+            Button btnActs = new Button(this); btnActs.setText("CHỌN ACTION (" + actCount + ")");
+            btnActs.setBackground(getRounded("#E91E63", 20f));
+            btnActs.setTextColor(Color.WHITE);
+            LinearLayout.LayoutParams lpAct = new LinearLayout.LayoutParams(0, -2, 1f);
+            lpAct.setMargins(15, 0, 0, 0); btnActs.setLayoutParams(lpAct);
+            btnActs.setOnClickListener(v -> showPanelMultiPicker(prefix + id + "_acts", false));
+
+            pickRow.addView(btnApps); pickRow.addView(btnActs);
+            content.addView(pickRow);
+
+            Button btnSc = new Button(this); btnSc.setText("COLLECT SHORTCUTS (" + scCount + ")");
+            btnSc.setBackground(getRounded("#7C4DFF", 20f));
+            btnSc.setTextColor(Color.WHITE);
+            btnSc.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+            btnSc.setOnClickListener(v -> showPanelMultiPicker(prefix + id + "_shortcuts", false));
+            content.addView(btnSc);
+
+            // --- MỤC 2: PANEL CONFIG (NGĂN KÉO — Lazy Inflate, Zero-RAM khi đóng) ---
 LinearLayout panelCfgBody = new LinearLayout(this);
 panelCfgBody.setOrientation(LinearLayout.VERTICAL);
 panelCfgBody.setPadding(20, 10, 20, 20);
