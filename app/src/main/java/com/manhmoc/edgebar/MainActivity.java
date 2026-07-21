@@ -254,7 +254,7 @@ if (currentMainTab == 0) {
         });
         } else if (designTabState == 0 || designTabState == 1 || designTabState == 4) {
         // [TỐI ƯU PIXEL 2XL] Nút Pattern kiểu mới đặc biệt siêu chất nghệ thuật thế giới: Xổ ra tùy chọn Data Pack từ Piece
-        fab.setText("Pattern");
+        fab.setText("PATTERN");
         fab.setOnClickListener(v -> showCallPTDropdown(designTabState));
     } else if (designTabState == 7) {
         // Yêu cầu 1: Không gian Trigg viên thuốc "Pattern" tạo Pattern Pack mới
@@ -270,10 +270,10 @@ if (currentMainTab == 0) {
     } else if (currentMainTab == 1) { // Condition Space
             fab.setVisibility(View.VISIBLE);
             if (currentGesTab == 5) { // FRONTIER — nút Pattern gọi Data Pack từ PIECE
-    fab.setText("Pattern");
+    fab.setText("NEW EB");
     fab.setOnClickListener(v -> showCallPTDropdownFrontier());
 } else {
-                fab.setText("NEW EB");
+                fab.setText("PATTERN");
                 fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
             }
         } else if (currentMainTab == 2) { // Ecosystem Space
@@ -1434,6 +1434,10 @@ tabs.addView(bTrig); tabs.addView(bAct); root.addView(tabs);
 
         final int[] selectedComp = {preComp != -1 ? preComp : 0}; 
         ArrayList<CheckBox> gestureBoxes = new ArrayList<>(); ArrayList<CheckBox> actionBoxes = new ArrayList<>();
+        // V19.12.3.6.23: lưu key gesture thực tế song song với gestureBoxes —
+        // bắt buộc vì Texture giờ KHÔNG tạo đủ 13 checkbox nữa nên không thể
+        // suy ra gesture qua index cứng như trước.
+        ArrayList<String> gestureKeys = new ArrayList<>();
         CheckBox cbVib = new CheckBox(this); CheckBox cbAnim = new CheckBox(this);
 
         LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
@@ -1466,7 +1470,10 @@ tabs.addView(bTrig); tabs.addView(bAct); root.addView(tabs);
 spComp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
     public void onItemSelected(AdapterView<?> p, View v, int pos, long id){
         selectedComp[0] = visibleIdx.get(pos);
-        updateGestureVisibilityForFingerprint(selectedComp[0], gestureBoxes);
+        // Texture đã filter checkbox từ lúc tạo — không gọi lại hàm này
+        // để tránh lệch index (function cũ đọc C_GESTURES[i] theo vị trí
+        // trong gestureBoxes, sai hoàn toàn khi list đã bị rút gọn)
+        if (!isTextureMode) updateGestureVisibilityForFingerprint(selectedComp[0], gestureBoxes);
     }
     public void onNothingSelected(AdapterView<?> p){}
 });
@@ -1474,11 +1481,30 @@ spComp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
         vTrig.addView(spComp);
 
         TextView tvG = new TextView(this); tvG.setText(T("\n2. CHOOSE GESTURES (OR logic)", "\n2. CHỌN CỬ CHỈ (Được chọn nhiều - Lệnh OR)")); tvG.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvG);
+        final boolean isTextureMode = (currentGesTab == 4);
         final String[] gesturesShown = isVolKeyMode ? VOLKEY_GESTURES : C_GESTURES;
         final String[] gestureNamesShown = isVolKeyMode ? VOLKEY_GESTURE_NAMES : C_GESTURE_NAMES;
-        for (int i=0; i<gesturesShown.length; i++) { CheckBox cb = new CheckBox(this); cb.setText(gestureNamesShown[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0,20,0,20); if(preGes != -1 && i == preGes) cb.setChecked(true); gestureBoxes.add(cb); vTrig.addView(cb); }
-        // Gọi ngay sau khi tạo xong gestureBoxes để áp dụng đúng trạng thái ban đầu
-updateGestureVisibilityForFingerprint(selectedComp[0], gestureBoxes);
+        // V19.12.3.6.23: Texture (vân tay) chỉ hỗ trợ 4 hướng vuốt — phần cứng
+        // KHÔNG BAO GIỜ gửi lên tap/dtap/long/hold/diag. Thay vì tạo đủ 13
+        // CheckBox rồi ẩn (updateGestureVisibilityForFingerprint cũ), giờ
+        // KHÔNG allocate các CheckBox thừa ngay từ đầu — tiết kiệm RAM/CPU
+        // inflate mỗi lần dialog này được mở trên Pixel 2XL.
+        for (int i=0; i<gesturesShown.length; i++) {
+            if (isTextureMode) {
+                String gCheck = gesturesShown[i];
+                boolean allowed = gCheck.equals("up") || gCheck.equals("down") || gCheck.equals("left") || gCheck.equals("right");
+                if (!allowed) continue;
+            }
+            CheckBox cb = new CheckBox(this); cb.setText(gestureNamesShown[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0,20,0,20); if(preGes != -1 && i == preGes) cb.setChecked(true); gestureBoxes.add(cb); gestureKeys.add(gesturesShown[i]); vTrig.addView(cb);
+        }
+        // Texture đã lọc sẵn ở trên nên bỏ qua — tránh gọi hàm này với danh sách
+        // đã bị rút gọn (nếu không sẽ ẩn/tick nhầm checkbox do lệch index)
+        if (!isTextureMode) updateGestureVisibilityForFingerprint(selectedComp[0], gestureBoxes);
+
+        // [MỤC 3] Nhãn "3. CHỌN TÙY CHỌN" — đồng bộ style với mục 2 phía trên,
+        // trước đây thiếu dòng tiêu đề này ở mọi tab khác (Lock/Home/Homacc...).
+        TextView tvOpt = new TextView(this); tvOpt.setText(T("\n3. CHOOSE OPTIONS", "\n3. CHỌN TÙY CHỌN")); tvOpt.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvOpt);
+
         LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
         TextView tvA = new TextView(this); tvA.setText(T("CHOOSE ACTIONS (Multi-select)", "CHỌN HÀNH ĐỘNG THỰC THI (Được chọn nhiều)")); tvA.setTextColor(Color.parseColor("#00E5FF")); tvA.setPadding(0,0,0,20); vAct.addView(tvA);
         
@@ -1643,12 +1669,13 @@ if (launchAppSelected[0]) {
             String joinedActions = TextUtils.join(",", acts); 
             String prefix = getSpacePrefix();
 String compKey = isVolKeyMode ? VOLKEY_COMPS[selectedComp[0]] : ALL_COMP_KEYS[selectedComp[0]];
-String[] gesturesUsedSave = isVolKeyMode ? VOLKEY_GESTURES : C_GESTURES;
 boolean hasChecked = false;
             if(editKey != null && preGes != -1) prefs.edit().putString(editKey, "NONE").apply();
             for(int i=0; i<gestureBoxes.size(); i++) {
                if(gestureBoxes.get(i).isChecked()) {
-hasChecked = true; String finalKey = prefix + compKey + "_" + gesturesUsedSave[i];
+// V19.12.3.6.23: dùng gestureKeys.get(i) thay vì gesturesUsedSave[i] —
+// bắt buộc vì Texture không còn tạo đủ 13 checkbox theo đúng thứ tự C_GESTURES nữa
+hasChecked = true; String finalKey = prefix + compKey + "_" + gestureKeys.get(i);
 prefs.edit()
      .putString(finalKey, joinedActions)
      .putBoolean(finalKey+"_vib", cbVib.isChecked())
