@@ -2592,7 +2592,7 @@ VIÊN", globalDrawer));
 }
 addPatternDrawerToSpace(designTabState); // Thêm Drawer Pattern ngay bên dưới cho Lock/Homeb
 }
-private void renderPanel Design() {
+private void renderPanelDesign() {
     // Yêu cầu 2 & 4: Chuyển không gian Panel thành kho Data Pack lưu biến tối ưu RAM Pixel 2 XL
     designSliderContainer.removeAllViews();
     
