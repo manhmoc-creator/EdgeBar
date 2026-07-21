@@ -57,7 +57,7 @@ private Button btnLock, btnHomacc, btnHome, btnVolKey, btnEditLock, btnEditHome,
 private int currentPanelIdx = 1; // 1-3, panel nào đang được chỉnh trong tab PANEL
 private Button fab;
     private int designTabState = 0;
-    private int currentMainTab = 1; private int currentGesTab = 0; 
+    private int currentMainTab = 1; private int currentGesTab = 0; private int frontierSubTab = 0;
     private final String CURRENT_VERSION = "V19.12.3.6.21"; 
     private RelativeLayout rootLayout;
 
