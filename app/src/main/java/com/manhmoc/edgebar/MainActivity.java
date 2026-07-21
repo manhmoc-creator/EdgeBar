@@ -52,8 +52,7 @@ private String[] PANEL_COLOR_KEYS = {"SLATE","STEEL","MIST","GRAPHITE","INDIGO_M
 private String[] PANEL_COLOR_HEX  = {"#607D8B","#78909C","#90A4AE","#455A64","#5C6BC0","#4DB6AC","#B0BEC5","#37474F"};
 private String[] PANEL_COLOR_NAMES; // set trong reloadActionLabels()
 private String[] PANEL_POS_NAMES;   // 9 vị trí, set trong reloadActionLabels()
-
-private Button btnLock, btnHomacc, btnHome, btnVolKey, btnEditLock, btnEditHome, btnEditHomacc, btnEditMorse, btnEditAnim, btnEditPanel;
+private Button btnLock, btnHomacc, btnHome, btnVolKey, btnEditMorse, btnEditAnim, btnEditPanel;
 private int currentPanelIdx = 1; // 1-3, panel nào đang được chỉnh trong tab PANEL
 private Button fab;
     private int designTabState = 0;
@@ -2692,33 +2691,22 @@ renderEcosystem(); d.dismiss();
     // ==================== KHÔNG GIAN THIẾT KẾ ====================
     private void buildDesignSpace() {
     pageDesign.addView(createSectionTitle(T("CORE DESIGN (COLOR/SIZE)", "THIẾT KẾ CỐT LÕI (MÀU/KÍCH THƯỚC)")));
-    LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL);
-    btnEditLock = new Button(this); btnEditLock.setText("LOCK"); btnEditLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); 
-btnEditHome = new Button(this); btnEditHome.setText("HOMEB"); LinearLayout.LayoutParams mP = new LinearLayout.LayoutParams(0, -2, 1f); mP.setMargins(10,0,10,0); btnEditHome.setLayoutParams(mP); 
-btnEditHomacc = new Button(this); btnEditHomacc.setText("HOMACC"); btnEditHomacc.setLayoutParams(mP);
-btnEditMorse = new Button(this); btnEditMorse.setText("MOROS"); btnEditMorse.setLayoutParams(mP); 
-btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA"); btnEditAnim.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-        designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
-        
-        btnEditLock.setOnClickListener(v -> { designTabState=0; refreshPreview(); updateVisTabs(); renderSliders(); }); 
-btnEditHome.setOnClickListener(v -> { designTabState=1; refreshPreview(); updateVisTabs(); renderSliders(); }); 
-btnEditHomacc.setOnClickListener(v -> { designTabState=4; refreshPreview(); updateVisTabs(); renderSliders(); });
-btnEditMorse.setOnClickListener(v -> { designTabState=2; refreshPreview(); updateVisTabs(); renderSliders(); }); 
-btnEditAnim.setOnClickListener(v -> { designTabState=3; refreshPreview(); updateVisTabs(); renderSliders(); });
-toggleRow.addView(btnEditLock); toggleRow.addView(btnEditHome);
-toggleRow.addView(btnEditHomacc);
-pageDesign.addView(toggleRow);
+    designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
 
-// HÀNG 2 - MORSOS, ANIMA, PANEL và CẤU HÌNH DESIGN
-LinearLayout toggleRow2 = new LinearLayout(this);
-toggleRow2.setOrientation (LinearLayout. HORIZONTAL);
-toggleRow2.setPadding (0, 15, 0, 0);
+    // HÀNG 1 (duy nhất) - MORSE, ANIMA, PANEL và CẤU HÌNH DESIGN
+    LinearLayout toggleRow2 = new LinearLayout(this);
+    toggleRow2.setOrientation(LinearLayout.HORIZONTAL);
+    toggleRow2.setPadding(0, 0, 0, 0);
 
-btnEditMorse.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-LinearLayout.LayoutParams mP2 = new LinearLayout.LayoutParams(0, -2, 1f);
-mP2.setMargins(5, 0, 5, 0);
-btnEditAnim.setLayoutParams(mP2);
+    btnEditMorse = new Button(this); btnEditMorse.setText("MOROS");
+    btnEditMorse.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA");
+    LinearLayout.LayoutParams mP2 = new LinearLayout.LayoutParams(0, -2, 1f);
+    mP2.setMargins(5, 0, 5, 0);
+    btnEditAnim.setLayoutParams(mP2);
 
+    btnEditMorse.setOnClickListener(v -> { designTabState=2; refreshPreview(); updateVisTabs(); renderSliders(); });
+    btnEditAnim.setOnClickListener(v -> { designTabState=3; refreshPreview(); updateVisTabs(); renderSliders(); });
 btnEditPanel = new Button(this); btnEditPanel.setText("PANEL");
 btnEditPanel.setLayoutParams(mP2);
 btnEditPanel.setOnClickListener(v -> { designTabState = 5; refreshPreview();
@@ -2732,30 +2720,29 @@ btnEditDesignConfig.setOnClickListener(v -> { designTabState = 6; refreshPreview
 updateVisTabs(); renderSliders(); });
 
 toggleRow2.addView(btnEditMorse);
-toggleRow2.addView(btnEditAnim);
         toggleRow2.addView(btnEditPanel);
         toggleRow2.addView(btnEditDesignConfig);
         
-        // Yêu cầu 1: Thêm nút "Trigg" (designTabState = 7)
+        // Nút "Trigg" (designTabState = 7)
         Button btnTrigg = new Button(this); btnTrigg.setText("TRIGG");
         btnTrigg.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         btnTrigg.setTag("btnEditTrigg");
         btnTrigg.setOnClickListener(v -> { designTabState = 7; refreshPreview(); updateVisTabs(); renderSliders(); });
         toggleRow2.addView(btnTrigg);
+
+        // ANIMA chuyển ra ngoài cùng bên phải — CHỈ đổi thứ tự addView(),
+        // không đổi designTabState (vẫn giữ = 3) và không đổi bất kỳ
+        // listener/logic nào khác. Đây là lệnh dựng UI 1 LẦN DUY NHẤT lúc
+        // onCreate() Activity, nên đổi thứ tự addView() không tốn thêm bất
+        // kỳ CPU cycle hay RAM nào so với trước — Zero-Cost Reordering.
+        toggleRow2.addView(btnEditAnim);
         
         pageDesign.addView(toggleRow2);
         pageDesign.addView(designSliderContainer);
-        btnEditHome.performClick();
+        btnEditMorse.performClick();
     }
-
     private void updateVisTabs() {
         updateFabVisibility(); 
-        btnEditLock.setBackground(getRounded(designTabState == 0 ? "#00E5FF" : "#222222", 20f));
-        btnEditLock.setTextColor(designTabState == 0 ? Color.BLACK : Color.WHITE);
-        btnEditHome.setBackground(getRounded(designTabState == 1 ? "#00E5FF" : "#222222", 20f));
-        btnEditHome.setTextColor(designTabState == 1 ? Color.BLACK : Color.WHITE);
-        btnEditHomacc.setBackground(getRounded(designTabState == 4 ? "#7C4DFF" : "#333333", 20f));
-        btnEditHomacc.setTextColor(Color.WHITE);
         btnEditMorse.setBackground(getRounded(designTabState == 2 ? "#00E5FF" : "#222222", 20f));
         btnEditMorse.setTextColor(designTabState == 2 ? Color.BLACK : Color.WHITE);
         btnEditAnim.setBackground(getRounded(designTabState == 3 ? "#00E5FF" : "#222222", 20f));
@@ -2782,207 +2769,54 @@ private void renderSliders() {
     if (designTabState == 5) { renderPanelDesign(); return; }
     // YÊU CẦU 3: Điều hướng sang không gian Cấu hình Design (Zero-RAM Overhead)
     if (designTabState == 6) { renderDesignConfigSpace(); return; }
-    
-    // ===== TAB HOMACC (designTabState == 4)
-// --- [KẾT THÚC CODE MỚI] ---
-    // ===== TAB HOMACC (designTabState == 4) =====
-    if (designTabState == 4) {
-        String prefix = "homacc_";
-        designSliderContainer.addView(createSectionTitle("🟣 HOMACC - OVERLAY TRỢ NĂNG HOME"));
-
-        // [THÊM] thay bằng nút kết nối QsAccHomeTile thật sự:
-LinearLayout homaccCtrlRow = new LinearLayout(this);
-homaccCtrlRow.setOrientation(LinearLayout.HORIZONTAL);
-LinearLayout.LayoutParams hcLp = new LinearLayout.LayoutParams(-1,-2);
-hcLp.setMargins(0,0,0,20);
-homaccCtrlRow.setLayoutParams(hcLp);
-
-Button btnToggleHomacc = new Button(this);
-// Hiển thị trạng thái thực tế của AccHome
-boolean accHomeOn = AccessibleHomeService.isRunning;
-btnToggleHomacc.setText(accHomeOn ? "🟣 TẮT HOMACC" : "🟣 BẬT HOMACC");
-btnToggleHomacc.setBackground(getRounded(accHomeOn ? "#7C4DFF" : "#333333", 20f));
-btnToggleHomacc.setTextColor(Color.WHITE);
-btnToggleHomacc.setPadding(0,30,0,30);
-btnToggleHomacc.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-
-btnToggleHomacc.setOnClickListener(v -> {
-    // Kết nối trực tiếp với logic QsAccHomeTile — KHÔNG qua SYNC_STATE
-    if (!AccessibleHomeService.isRunning) {
-        // Kiểm tra Accessibility đã bật chưa
-        String accSvcs = android.provider.Settings.Secure.getString(
-            getContentResolver(),
-            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        boolean accOn = accSvcs != null && accSvcs.contains(
-            getPackageName() + "/" + EdgeBarService.class.getName());
-        if (!accOn) {
-            Toast.makeText(this,
-                "Cần bật Trợ Năng trước!", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        prefs.edit()
-            .putBoolean("shortcut_acc_home_on", true)
-            .putBoolean("shortcut_home_on", false)
-            .apply();
-        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-        Intent accIntent = new Intent(this, AccessibleHomeService.class);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(accIntent);
-        else startService(accIntent);
-        btnToggleHomacc.setText("🟣 TẮT HOMACC");
-        btnToggleHomacc.setBackground(getRounded("#7C4DFF", 20f));
-    } else {
-        prefs.edit()
-            .putBoolean("shortcut_acc_home_on", false)
-            .apply();
-        sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC_HOME_OFF"));
-        stopService(new Intent(this, AccessibleHomeService.class));
-        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-        btnToggleHomacc.setText("🟣 BẬT HOMACC");
-        btnToggleHomacc.setBackground(getRounded("#333333", 20f));
-    }
-});
-
-Button btnRefreshHomacc = new Button(this);
-btnRefreshHomacc.setText("🔄 REFRESH");
-btnRefreshHomacc.setBackground(getRounded("#455A64", 20f));
-btnRefreshHomacc.setTextColor(Color.WHITE);
-btnRefreshHomacc.setPadding(0,30,0,30);
-LinearLayout.LayoutParams rfLp = new LinearLayout.LayoutParams(0,-2,0.6f);
-rfLp.setMargins(10,0,0,0);
-btnRefreshHomacc.setLayoutParams(rfLp);
-btnRefreshHomacc.setOnClickListener(v -> {
-    // Vẽ lại Homacc overlay nếu Accessibility đang bật
-    sendBroadcast(new Intent("com.manhmoc.edgebar.ACC_HOME_DRAW"));
-    Toast.makeText(this, "Đã vẽ lại Homacc overlay!", Toast.LENGTH_SHORT).show();
-});
-
-homaccCtrlRow.addView(btnToggleHomacc);
-homaccCtrlRow.addView(btnRefreshHomacc);
-designSliderContainer.addView(homaccCtrlRow);
-
-// SAU:
-TextView tvHomaccLockNote = new TextView(this);
-tvHomaccLockNote.setText("🔒 Homacc tự động tắt hoàn toàn khi khoá máy (cố định, không thể tuỳ chỉnh)");
-tvHomaccLockNote.setTextColor(Color.parseColor("#777777"));
-tvHomaccLockNote.setTextSize(12);
-tvHomaccLockNote.setPadding(0, 0, 0, 20);
-designSliderContainer.addView(tvHomaccLockNote);
-        // EDGE BARS - copy y chang tab HOME nhưng dùng prefix "homacc_"
-        designSliderContainer.addView(createSectionTitle("EDGE BARS HOMACC (5 THANH)"));
-        String[] bKeys = {"r", "l", "t_r", "t_l", "t_c"};
-        String[] bNames = {"Đáy phải", "Đáy trái", "Cạnh Phải", "Cạnh Trái", "Đỉnh giữa"};
-        for (int i = 0; i < bKeys.length; i++) {
-            LinearLayout drawerContent = new LinearLayout(this);
-            drawerContent.setOrientation(LinearLayout.VERTICAL);
-            drawerContent.setPadding(30,10,30,30);
-            CheckBox cb = new CheckBox(this);
-            cb.setText("BẬT: " + bNames[i]);
-            cb.setTextColor(Color.parseColor("#7C4DFF"));
-            cb.setChecked(prefs.getBoolean(prefix+bKeys[i]+"_en", false));
-            final int idx = i;
-            final String[] bKeysF = bKeys;
-            cb.setOnCheckedChangeListener((vv,c) -> prefs.edit().putBoolean(prefix+bKeysF[idx]+"_en", c).apply());
-            drawerContent.addView(cb);
-            drawerContent.addView(createComboDropdown("Hiển thị", prefix+bKeys[i]+"_vis_mode",
-    new String[]{"Hiện hoàn toàn", "Tàng hình (Nháy sáng)", "Ẩn hoàn toàn (Vô hình)"}, 0));
-drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+bKeys[i]+"_pri_mode",
-    new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0));
-drawerContent.addView(createSlider("Độ trong suốt", prefix+bKeys[i]+"_alpha", 255, 50));
-            drawerContent.addView(createSlider("Chiều ngang", prefix+bKeys[i]+"_w", 3000, 300));
-            drawerContent.addView(createSlider("Chiều dọc", prefix+bKeys[i]+"_h", 3000, 60));
-            drawerContent.addView(createSlider("Toạ độ X", prefix+bKeys[i]+"_x", 1000, 0));
-            drawerContent.addView(createSlider("Toạ độ Y", prefix+bKeys[i]+"_y", 2500, 0));
-            designSliderContainer.addView(createDrawer(bNames[i], drawerContent));
-        }
-
-        // 4 CORNERS - copy y chang tab HOME nhưng dùng prefix "homacc_"
-        designSliderContainer.addView(createSectionTitle("4 FRAME CORNERS HOMACC"));
-        String[] cKeys = {"br", "bl", "tr", "tl"};
-        String[] cNames = {"Góc đáy phải", "Góc đáy trái", "Góc đỉnh phải", "Góc đỉnh trái"};
-        for (int i = 0; i < cKeys.length; i++) {
-            LinearLayout drawerContent = new LinearLayout(this);
-            drawerContent.setOrientation(LinearLayout.VERTICAL);
-            drawerContent.setPadding(30,10,30,30);
-            CheckBox cbEn = new CheckBox(this);
-            cbEn.setText("BẬT: " + cNames[i]);
-            cbEn.setTextColor(Color.parseColor("#7C4DFF"));
-            cbEn.setChecked(prefs.getBoolean(prefix+"corner_"+cKeys[i]+"_en", false));
-            final int idx = i;
-            final String[] cKeysF = cKeys;
-            cbEn.setOnCheckedChangeListener((vv,c) -> prefs.edit().putBoolean(prefix+"corner_"+cKeysF[idx]+"_en", c).apply());
-            drawerContent.addView(cbEn);
-            drawerContent.addView(createComboDropdown("Hiển thị", prefix+"corner_"+cKeys[i]+"_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình (Nháy sáng)", "Ẩn hoàn toàn (Vô hình)"}, 0));
-            drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+"corner_"+cKeys[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0));
-            drawerContent.addView(createComboDropdown("Hình dáng Góc", prefix+"corner_"+cKeys[i]+"_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0));
-            drawerContent.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix+"corner_"+cKeys[i]+"_w", 2500, 100));
-            drawerContent.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix+"corner_"+cKeys[i]+"_h", 2500, 100));
-            drawerContent.addView(createSlider("Di chuyển Ngang (X)", prefix+"corner_"+cKeys[i]+"_x", 2500, 0));
-            drawerContent.addView(createSlider("Di chuyển Dọc (Y)", prefix+"corner_"+cKeys[i]+"_y", 2500, 0));
-            drawerContent.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix+"corner_"+cKeys[i]+"_moon_w", 2500, 100));
-            drawerContent.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix+"corner_"+cKeys[i]+"_moon_h", 2500, 100));
-            drawerContent.addView(createSlider("Di chuyển Trăng Non Ngang (X) (1250=Giữa)", prefix+"corner_"+cKeys[i]+"_moon_x", 2500, 1250));
-            drawerContent.addView(createSlider("Di chuyển Trăng Non Dọc (Y) (1250=Giữa)", prefix+"corner_"+cKeys[i]+"_moon_y", 2500, 1250));
-            drawerContent.addView(createSlider("Độ cong BO VIỀN (Vỏ) (1000=Thẳng)", prefix+"corner_"+cKeys[i]+"_rad", 1000, 80));
-            drawerContent.addView(createSlider("Độ cong TRĂNG NON (Lõi) (1000=Thẳng)", prefix+"corner_"+cKeys[i]+"_moon_rad", 1000, 80));
-            designSliderContainer.addView(createDrawer(cNames[i], drawerContent));
-        }
-        LinearLayout globalDrawerAcc = new LinearLayout(this);
-        globalDrawerAcc.setOrientation(LinearLayout.VERTICAL);
-        globalDrawerAcc.setPadding(30,10,30,30);
-        globalDrawerAcc.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500));
-        globalDrawerAcc.addView(createSlider("Độ mờ vùng TRĂNG NON", prefix+"corner_moon_alpha", 255, 100));
-        globalDrawerAcc.addView(createSlider("Độ mờ VIỀN GÓC", prefix+"corner_stroke_alpha", 255, 200));
-        globalDrawerAcc.addView(createSlider("Độ đậm viền", prefix+"corner_thick", 50, 8));
-    designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIÊN", globalDrawerAcc));
-    renderAppliedPacksForSpace(4); // [TỐI ƯU PIXEL 2XL] Render các pack gọi từ PIECE
-    return; // Thoát sớm, không chạy code tab khác
-    }
-    // ===== KẾT THÚC TAB HOMACC =====
-
     if(designTabState == 3) {
             Button btnTest = new Button(this); btnTest.setText("▶ THỬ NGAY HIỆU ỨNG"); btnTest.setBackground(getRounded("#FFC107", 20f)); btnTest.setTextColor(Color.BLACK); btnTest.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(-1,-2); testLp.setMargins(0,0,0,20); btnTest.setLayoutParams(testLp); btnTest.setOnClickListener(v -> { Intent i = new Intent("com.manhmoc.edgebar.TEST_ANIM"); i.setPackage(getPackageName()); sendBroadcast(i); Toast.makeText(this, "Playing Animation...", Toast.LENGTH_SHORT).show(); }); designSliderContainer.addView(btnTest);
             LinearLayout lC = new LinearLayout(this); lC.setOrientation(LinearLayout.HORIZONTAL); lC.setPadding(0,10,0,10); TextView tC = new TextView(this); tC.setText("Chủ đề:"); tC.setTextColor(Color.WHITE); tC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sC = createSpinner(); sC.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, COLOR_NAMES)); String curC = prefs.getString("anim_color", "WHITE"); for(int i=0;i<COLOR_KEYS.length;i++) if(COLOR_KEYS[i].equals(curC)) sC.setSelection(i); sC.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putString("anim_color",COLOR_KEYS[pos]).apply();}public void onNothingSelected(AdapterView<?> p){}}); sC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lC.addView(tC); lC.addView(sC); designSliderContainer.addView(lC); 
             LinearLayout lS = new LinearLayout(this); lS.setOrientation(LinearLayout.HORIZONTAL); lS.setPadding(0,10,0,10); TextView tS = new TextView(this); tS.setText("Kiểu chạy:"); tS.setTextColor(Color.WHITE); tS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sS = createSpinner(); sS.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Nhấp Nháy", "1 Tia sáng nối đuôi", "2 Tia sáng đối xứng", "3 Tia sáng đều nhau"})); sS.setSelection(prefs.getInt("anim_style", 0)); sS.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt("anim_style", pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lS.addView(tS); lS.addView(sS); designSliderContainer.addView(lS); 
             designSliderContainer.addView(createSlider("Chiều ngang Hiệu ứng (0=Full)", "anim_w", 2000, 0)); designSliderContainer.addView(createSlider("Chiều dọc Hiệu ứng (0=Full)", "anim_h", 3500, 0)); designSliderContainer.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255)); designSliderContainer.addView(createSlider("Độ dày viền", "anim_thick", 50, 12)); designSliderContainer.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500)); designSliderContainer.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600)); designSliderContainer.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30)); 
         } else { 
-            String prefix = designTabState == 0 ? "lock_" : (designTabState == 1 ? "home_" : "morse_"); 
-            String[] bKeys = designTabState == 2 ? M_BARS : BARS;
-            String[] bNames = designTabState == 2 ? M_BAR_NAMES : BAR_NAMES;
-            if(designTabState == 2) {
+            // Nhánh này giờ CHỈ còn phục vụ MORSE (designTabState == 2) —
+            // Lock (0) và Home (1) đã chuyển hẳn sang FRONTIER, hai giá trị này
+            // không còn con đường UI nào dẫn tới đây nữa (không có nút nào set
+            // designTabState = 0 hoặc 1 trong buildDesignSpace() sau khi dọn).
+            // => Bỏ hẳn 2 phép so sánh 3 ngôi (ternary) và điều kiện if bọc ngoài,
+            //    trình biên dịch/JIT không còn phải re-evaluate 2 nhánh rẽ chết
+            //    mỗi lần renderSliders() chạy lại (mỗi 400-500ms khi kéo slider debounce)
+            //    => giảm nhẹ chu kỳ CPU trên Adreno 540/Snapdragon 835.
+            String prefix = "morse_"; 
+            String[] bKeys = M_BARS;
+            String[] bNames = M_BAR_NAMES;
+            {
                 LinearLayout mRow = new LinearLayout(this); mRow.setOrientation(LinearLayout.HORIZONTAL);
-                // [THÊM] nút kết nối QsMorseTile logic:
-boolean morseCurrentOn = prefs.getBoolean("morse_mode_en", false);
-Button btnTestM = new Button(this);
-btnTestM.setText(morseCurrentOn ? "🔐 TẮT MORSE OS" : "🔐 BẬT MORSE OS");
-btnTestM.setBackground(getRounded(morseCurrentOn ? "#E91E63" : "#FFC107", 20f));
-btnTestM.setTextColor(morseCurrentOn ? Color.WHITE : Color.BLACK);
-LinearLayout.LayoutParams tm = new LinearLayout.LayoutParams(0,-2,1f);
-tm.setMargins(0,0,10,20);
-btnTestM.setLayoutParams(tm);
-btnTestM.setOnClickListener(v -> {
-    // Kiểm tra Accessibility — đồng bộ điều kiện với QsMorseTile
-    String accSvcs = android.provider.Settings.Secure.getString(
-        getContentResolver(),
-        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-    boolean accOn = accSvcs != null && accSvcs.contains(
-        getPackageName() + "/" + EdgeBarService.class.getName());
-    if (!accOn) {
-        Toast.makeText(this,
-            "MorseLock cần Trợ Năng đang bật!", Toast.LENGTH_SHORT).show();
-        return;
-    }
-    // Toggle — cùng logic với QsMorseTile.onClick()
-    boolean newState = !prefs.getBoolean("morse_mode_en", false);
-    prefs.edit().putBoolean("morse_mode_en", newState).apply();
-    sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"));
-    btnTestM.setText(newState ? "🔐 TẮT MORSE OS" : "🔐 BẬT MORSE OS");
-    btnTestM.setBackground(getRounded(newState ? "#E91E63" : "#FFC107", 20f));
-    btnTestM.setTextColor(newState ? Color.WHITE : Color.BLACK);
-    Toast.makeText(this,
-        newState ? "Đã bật MorseLock OS" : "Đã tắt MorseLock OS",
-        Toast.LENGTH_SHORT).show();
-});
-
+                boolean morseCurrentOn = prefs.getBoolean("morse_mode_en", false);
+                Button btnTestM = new Button(this);
+                btnTestM.setText(morseCurrentOn ? "🔐 TẮT MORSE OS" : "🔐 BẬT MORSE OS");
+                btnTestM.setBackground(getRounded(morseCurrentOn ? "#E91E63" : "#FFC107", 20f));
+                btnTestM.setTextColor(morseCurrentOn ? Color.WHITE : Color.BLACK);
+                LinearLayout.LayoutParams tm = new LinearLayout.LayoutParams(0,-2,1f);
+                tm.setMargins(0,0,10,20);
+                btnTestM.setLayoutParams(tm);
+                btnTestM.setOnClickListener(v -> {
+                    String accSvcs = android.provider.Settings.Secure.getString(
+                        getContentResolver(),
+                        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+                    boolean accOn = accSvcs != null && accSvcs.contains(
+                        getPackageName() + "/" + EdgeBarService.class.getName());
+                    if (!accOn) {
+                        Toast.makeText(this,
+                            "MorseLock cần Trợ Năng đang bật!", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    boolean newState = !prefs.getBoolean("morse_mode_en", false);
+                    prefs.edit().putBoolean("morse_mode_en", newState).apply();
+                    sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_MORSE"));
+                    btnTestM.setText(newState ? "🔐 TẮT MORSE OS" : "🔐 BẬT MORSE OS");
+                    btnTestM.setBackground(getRounded(newState ? "#E91E63" : "#FFC107", 20f));
+                    btnTestM.setTextColor(newState ? Color.WHITE : Color.BLACK);
+                    Toast.makeText(this,
+                        newState ? "Đã bật MorseLock OS" : "Đã tắt MorseLock OS",
+                        Toast.LENGTH_SHORT).show();
+                });
 
                 Button btnMap = new Button(this); btnMap.setText("🔢 MAP KEYS"); btnMap.setBackground(getRounded("#E91E63", 20f)); btnMap.setTextColor(Color.WHITE); LinearLayout.LayoutParams mk = new LinearLayout.LayoutParams(0,-2,1f); mk.setMargins(10,0,0,20); btnMap.setLayoutParams(mk);
                 btnMap.setOnClickListener(v -> openMorseMapDialog());
@@ -3052,7 +2886,6 @@ btnTestM.setOnClickListener(v -> {
                 sliderDrawerContent.addView(createSlider("Thời gian khoá sau 3 lần sai (giây)", "morse_lock3_seconds", 1800, 10));
                 sliderDrawerContent.addView(createSlider("Thời gian khoá sau 4 lần sai (giây)", "morse_lock4_seconds", 1800, 30));
 
-
 LinearLayout relockRow = new LinearLayout(this);
 relockRow.setOrientation(LinearLayout.VERTICAL);
 relockRow.setPadding(0, 10, 0, 10);
@@ -3083,7 +2916,7 @@ sbRelock.setProgress(curRelockMs / 1000);
 sbRelock.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 sbRelock.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
     public void onProgressChanged(SeekBar s, int p, boolean b) {
-        int ms = Math.max(1000, p * 1000); // tối thiểu 1 giây
+        int ms = Math.max(1000, p * 1000);
         prefs.edit().putInt("morse_relock_ms", ms).apply();
         tvRelock.setText("Relock sau khi thoát app: " + formatRelockTime(ms));
     }
@@ -3119,9 +2952,9 @@ designSliderContainer.addView(relockRow);
             for(int i=0; i < bKeys.length; i++) { 
                 LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); 
                 CheckBox cb = new CheckBox(this); cb.setText("BẬT: " + bNames[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+bKeys[i]+"_en", false)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+bKeys[idx]+"_en", c).apply()); drawerContent.addView(cb); 
-                if (designTabState == 2) {
-                    drawerContent.addView(createComboDropdown("Hiển thị", prefix+bKeys[i]+"_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình (Nháy sáng)", "Ẩn hoàn toàn (Vô hình)"}, 0));
-                }
+                // Không còn cần "if (designTabState == 2)" bọc ngoài — nhánh này CHỈ
+                // chạy cho Morse rồi, thêm luôn mà không tốn 1 phép so sánh mỗi vòng lặp.
+                drawerContent.addView(createComboDropdown("Hiển thị", prefix+bKeys[i]+"_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình (Nháy sáng)", "Ẩn hoàn toàn (Vô hình)"}, 0));
                 drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+bKeys[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0));
                 drawerContent.addView(createSlider("Độ trong suốt", prefix+bKeys[i]+"_alpha", 255, 50));
                 drawerContent.addView(createSlider("Chiều ngang", prefix+bKeys[i]+"_w", 3000, 300));
@@ -3152,7 +2985,7 @@ designSliderContainer.addView(relockRow);
             LinearLayout globalDrawer = new LinearLayout(this); globalDrawer.setOrientation(LinearLayout.VERTICAL); globalDrawer.setPadding(30,10,30,30); globalDrawer.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500)); globalDrawer.addView(createSlider("Độ mờ vùng TRĂNG NON (Đậm/Nhạt)", prefix+"corner_moon_alpha", 255, 100)); globalDrawer.addView(createSlider("Độ mờ VIỀN GÓC (Đậm/Nhạt)", prefix+"corner_stroke_alpha", 255, 200)); globalDrawer.addView(createSlider("Độ đậm viền (Dày/Mỏng)", prefix+"corner_thick", 50, 8));
     designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIÊN", globalDrawer));
     }
-    renderAppliedPacksForSpace(designTabState); // [TỐI ƯU PIXEL 2XL] Render các pack gọi từ PIECE
+    renderAppliedPacksForSpace(designTabState); // Vẫn giữ — Morse/Panel vẫn có thể gọi PIECE
     }
 private void renderPanelDesign() {
     // Yêu cầu 2 & 4: Chuyển không gian Panel thành kho Data Pack lưu biến tối ưu RAM Pixel 2 XL
