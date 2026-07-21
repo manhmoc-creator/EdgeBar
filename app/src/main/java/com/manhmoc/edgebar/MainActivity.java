@@ -239,7 +239,7 @@ if (currentMainTab == 0) {
     fab.setVisibility(View.VISIBLE);
     if (designTabState == 6) {
         // Yêu cầu 1 & 3: Chỉ hiện FormatB / FormatC trong không gian "Cấu hình Design"
-        fab.setText(currentDesignCfgTab == 0 ? "FormatB" : "FormatC");
+        fab.setText(currentDesignCfgTab == 0 ? "FORMAT" : "FORMAT.");
         fab.setOnClickListener(v -> {
             String listKey = currentDesignCfgTab == 0 ? "pack_bar_ids" : "pack_corner_ids";
             String newId = addDynamicId(listKey);
@@ -247,7 +247,7 @@ if (currentMainTab == 0) {
         });
     } else if (designTabState == 5) {
         // Yêu cầu 2 & 4: Viên thuốc riêng cho không gian Panel (Tạo Panel Data Pack)
-        fab.setText("+ PANEL");
+        fab.setText("FORMAT");
         fab.setOnClickListener(v -> {
             String newId = addDynamicId("pack_panel_ids");
             openDataPackEditor(2, newId); // type 2 = Panel Data Pack
@@ -1052,12 +1052,17 @@ private void ensureHomeServiceForPreview() {
                 infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
                 
                 TextView tGest = new TextView(this);
-                tGest.setText(prefs.getString("prule_" + rId + "_gestures", "Tap"));
-                tGest.setTextColor(Color.parseColor("#9AA0A6"));
-                tGest.setTextSize(12);
-                tGest.setPadding(0, 5, 0, 5);
-                tGest.setMaxLines(1); tGest.setEllipsize(android.text.TextUtils.TruncateAt.END);
-
+        String rawGest = prefs.getString("prule_" + rld + "_gestures", "Tap");
+        // code thuật toán tối ưu tiết kiệm pin/RAM cho pixel 2xl: xử lý string in-place
+        if (rawGest.length() > 0) {
+            rawGest = rawGest.substring(0, 1).toUpperCase() + rawGest.substring(1);
+        }
+        tGest.setText(rawGest);
+        tGest.setTextColor(Color.parseColor("#9AA0A6"));
+        tGest.setTextSize(12);
+        tGest.setPadding(0, 5, 0, 5);
+        tGest.setMaxLines(1);
+        tGest.setEllipsize(android.text.TextUtils.TruncateAt.END);
                 TextView tAct = new TextView(this);
                 String acts = prefs.getString("prule_" + rId + "_acts", "NONE");
                 String displayAct = acts.replace("LAUNCH_APP", "Mở App").replace("RUN_SHORTCUT", "Shortcut");
@@ -3069,9 +3074,9 @@ private void renderPanelDesign() {
             int showName = prefs.getInt("pack_panel_" + id + "_show_name", 0);
             int visMode = prefs.getInt("pack_panel_" + id + "_vis", 0);
             
-            String strVis = visMode == 1 ? "🌍" : "📌"; // Toàn cục / Cục bộ
-            String strShape = iconShape == 0 ? "💿" : (iconShape == 1 ? "🎲" : (iconShape == 2 ? "🪨" : "⚙️"));
-            String strName = showName == 1 ? "⭕" : "❌";
+            String strVis = visMode == 1 ? "🌍" : "🫆"; // Toàn cục / Cục bộ
+            String strShape = iconShape == 0 ? "🛞" : (iconShape == 1 ? "🎲" : (iconShape == 2 ? "☄️" : "❄️"));
+            String strName = showName == 1 ? "🌕" : "🌑";
             
             TextView tIcons = new TextView(this);
             tIcons.setText(strVis + "\n" + strShape + "\n" + strName);
@@ -3588,30 +3593,48 @@ private void renderDataPackList(LinearLayout container, int type) {
             LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
             cLp.setMargins(8, 8, 8, 8);
             card.setLayoutParams(cLp);
-            
-            LinearLayout row1 = new LinearLayout(this);
-            row1.setOrientation(LinearLayout.HORIZONTAL);
-            row1.setGravity(Gravity.CENTER_VERTICAL);
-            
-            TextView tvName = new TextView(this);
-            tvName.setText(prefs.getString(namePrefix + id + "_name", "Data Pack Mới"));
-            tvName.setTextColor(Color.WHITE);
-            tvName.setTextSize(14.5f);
-            tvName.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-            tvName.setMaxLines(3);
-            tvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            
-            Switch swEn = new Switch(this);
-            swEn.setChecked(prefs.getBoolean(namePrefix + id + "_en", false));
-            swEn.setScaleX(0.85f); swEn.setScaleY(0.85f);
-            swEn.setOnCheckedChangeListener((sw, chk) ->
-                    prefs.edit().putBoolean(namePrefix + id + "_en", chk).apply());
-            
-            row1.addView(tvName);
-            row1.addView(swEn);
-            card.addView(row1);
-            
-            final int fType2 = type;
+LinearLayout row1 = new LinearLayout(this);
+row1.setOrientation(LinearLayout.HORIZONTAL);
+row1.setGravity(Gravity.CENTER_VERTICAL);
+TextView tvName = new TextView(this);
+tvName.setText(prefs.getString(namePrefix + id + "_name", "Data Pack Mới"));
+tvName.setTextColor(Color.WHITE);
+tvName.setTextSize(14.5f);
+tvName.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+tvName.setMaxLines(3);
+tvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+Switch swEn = new Switch(this);
+swEn.setChecked(prefs.getBoolean(namePrefix + id + "_en", false));
+swEn.setScaleX(0.85f); swEn.setScaleY(0.85f);
+swEn.setOnCheckedChangeListener((sw, chk) -> prefs.edit().putBoolean(namePrefix + id + "_en", chk).apply());
+row1.addView(tvName);
+row1.addView(swEn);
+card.addView(row1);
+
+// [TỐI ƯU PIXEL 2XL] Dòng phụ đề: vị trí + hiển thị + cảm ứng, style
+// giống Image 1 (Top Right / Double Tap / Flashlight). Dùng 3 mảng
+// String tĩnh sẵn có (BAR_NAMES/CORNER_NAMES) — KHÔNG tạo mảng mới mỗi
+// lần render, chỉ đọc 3 giá trị int từ prefs (rẻ hơn nhiều so với đọc
+// String), rồi build 1 TextView duy nhất — không thêm object nặng nào.
+String[] posNames = type == 0 ? BAR_NAMES : CORNER_NAMES;
+String[] visNames = {"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"};
+String[] priNames = {"Ưu tiên", "Nhường OS"};
+int locIdx = prefs.getInt(namePrefix + id + "_loc", 0);
+int visIdx = prefs.getInt(namePrefix + id + "_vis_mode", 0);
+int priIdx = prefs.getInt(namePrefix + id + "_pri_mode", 0);
+String posText = (locIdx >= 0 && locIdx < posNames.length) ? posNames[locIdx] : "?";
+String visText = (visIdx >= 0 && visIdx < visNames.length) ? visNames[visIdx] : "?";
+String priText = (priIdx >= 0 && priIdx < priNames.length) ? priNames[priIdx] : "?";
+TextView tvSub = new TextView(this);
+tvSub.setText(posText + " • " + visText + " • " + priText);
+tvSub.setTextColor(Color.parseColor("#8A8A8A"));
+tvSub.setTextSize(11.5f);
+tvSub.setMaxLines(2);
+tvSub.setEllipsize(android.text.TextUtils.TruncateAt.END);
+tvSub.setPadding(0, 6, 0, 0);
+card.addView(tvSub);
+
+final int fType2 = type;
             card.setOnClickListener(btn -> openDataPackEditor(fType2, id));
             card.setOnLongClickListener(btn -> {
                 new AlertDialog.Builder(this).setTitle("Xóa Data Pack?")
@@ -3657,7 +3680,8 @@ private void openDataPackEditor(int type, String id) {
         cbEnGlobal.setPadding(10, 10, 10, 30);
         content.addView(cbEnGlobal);
 if (type == 0) {
-            content.addView(createSectionTitle(" HIỆN THỬ TẠI VỊ TRÍ ĐANG CHỌN (LIVE PREVIEW)"));
+            // Bỏ dòng tiêu đề "LIVE PREVIEW" thừa — checkbox cbPreview bên dưới
+// đã tự nói rõ chức năng này rồi, không cần công bố 2 lần.
 String[] bKeys = {"r", "l", "t_r", "t_l", "t_c"};
 CheckBox cbPreview = new CheckBox(this);
 cbPreview.setText("Bật xem trước (Live Preview)");
@@ -3665,7 +3689,6 @@ cbPreview.setTextColor(Color.parseColor("#00E5FF"));
 cbPreview.setTextSize(14f);
 int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
 cbPreview.setChecked(prefs.getBoolean(prefix + id + "_preview_" + bKeys[currentLoc], false));
-
 content.addView(createSectionTitle("CẤU HÌNH BAR (FORMAT B)"));
 LinearLayout locDropdown = createComboDropdown("Chọn vị trí Bar chính", prefix + id + "_loc", BAR_NAMES, 0);
 Spinner locSpinner = (Spinner) locDropdown.getChildAt(1);
@@ -3697,15 +3720,13 @@ content.addView(locDropdown);
         content.addView(createSlider("Tọa độ X", prefix + id + "_x", 1000, 0));
         content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 2500, 0));
     } else if (type == 1) {
-            content.addView(createSectionTitle(" HIỆN THỬ TẠI VỊ TRÍ ĐANG CHỌN (LIVE PREVIEW)"));
-String[] cKeys = {"br", "bl", "tr", "tl"};
+            String[] cKeys = {"br", "bl", "tr", "tl"};
 CheckBox cbPreview = new CheckBox(this);
 cbPreview.setText("Bật xem trước (Live Preview)");
 cbPreview.setTextColor(Color.parseColor("#00E5FF"));
 cbPreview.setTextSize(14f);
 int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
 cbPreview.setChecked(prefs.getBoolean(prefix + id + "_preview_" + cKeys[currentLoc], false));
-
 content.addView(createSectionTitle("CẤU HÌNH CORNER (FORMAT C)"));
 LinearLayout locDropdown = createComboDropdown("Chọn vị trí Corner chính", prefix + id + "_loc", CORNER_NAMES, 0);
 Spinner locSpinner = (Spinner) locDropdown.getChildAt(1);
