@@ -47,6 +47,11 @@ private android.view.View[] accHomeBars = new android.view.View[5];
 private android.view.View[] accHomeCorners = new android.view.View[4];
 private android.content.BroadcastReceiver accHomeReceiver;
 private boolean isHomaccDrawn = false; // Guard chặn vẽ lại khi đã có view
+// THÊM MỚI — cache trạng thái preview để tránh gọi drawAccessibleHome()/removeAccessibleHome()
+// lặp lại mỗi lần updateVisibility() chạy (event này bắn khá thường xuyên).
+// So sánh giá trị cache TRƯỚC khi đụng vào WindowManager — đây là nguyên tắc
+// "chỉ IPC khi giá trị thực sự đổi" đã áp dụng xuyên suốt codebase (giống homaccDebounce).
+private boolean lastPreviewHomaccState = false;
 private FingerprintGestureController fpController;
 private FingerprintGestureController.FingerprintGestureCallback fpCallback;
 private boolean fpRegistered = false;
@@ -146,19 +151,20 @@ if (k != null && k.contains("fingerprint_")) {
     // TẦNG 3: homacc_ → debounce DÀI 1000ms, chỉ gọi updateHomaccLive() sau khi dừng
     // Guard kép: isRunning + isHomaccDrawn tránh IPC vô nghĩa
     if (k != null && k.startsWith("homacc_")) {
-        if (!AccessibleHomeService.isRunning || !isHomaccDrawn) return;
-        if (homaccDebounceRunnable != null)
-            homaccDebounceHandler.removeCallbacks(homaccDebounceRunnable);
-        homaccDebounceRunnable = () -> {
-            // Double-check trước khi gọi IPC: service vẫn còn chạy không?
-            if (!AccessibleHomeService.isRunning || !isHomaccDrawn) return;
-            lastHomaccUpdateMs = System.currentTimeMillis();
-            updateHomaccLive();
-        };
-        homaccDebounceHandler.postDelayed(homaccDebounceRunnable, HOMACC_DEBOUNCE_MS);
-        return;
-    }
-
+    boolean previewOn = prefs.getBoolean("preview_homacc", false);
+    // Cho phép cập nhật live nếu ĐANG preview (Frontier) HOẶC Homacc thật đang chạy
+    if ((!AccessibleHomeService.isRunning && !previewOn) || !isHomaccDrawn) return;
+    if (homaccDebounceRunnable != null)
+        homaccDebounceHandler.removeCallbacks(homaccDebounceRunnable);
+    homaccDebounceRunnable = () -> {
+        boolean stillPreview = prefs.getBoolean("preview_homacc", false);
+        if ((!AccessibleHomeService.isRunning && !stillPreview) || !isHomaccDrawn) return;
+        lastHomaccUpdateMs = System.currentTimeMillis();
+        updateHomaccLive();
+    };
+    homaccDebounceHandler.postDelayed(homaccDebounceRunnable, HOMACC_DEBOUNCE_MS);
+    return;
+}
     // TẦNG 4: lock bars → debounce 400ms như cũ
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> updateVisibility();
@@ -843,9 +849,26 @@ private void refreshFingerprintRegistration() {
         }
         updateVisibility();
     }
-
+    /**
+ * Đồng bộ preview Homacc cho không gian Frontier — KHÔNG đụng tới
+ * AccessibleHomeService thật. Zero cost khi trạng thái không đổi
+ * (so sánh cache trước, chỉ gọi WM khi thay đổi thực sự).
+ */
+private void syncHomaccPreviewState() {
+    boolean wantPreview = prefs.getBoolean("preview_homacc", false);
+    if (wantPreview == lastPreviewHomaccState) return; // không đổi → zero IPC
+    lastPreviewHomaccState = wantPreview;
+    if (wantPreview) {
+        if (!isHomaccDrawn) drawAccessibleHome();
+    } else {
+        // CHỈ gỡ nếu Homacc THẬT (AccessibleHomeService) không đang chạy —
+        // tránh gỡ nhầm overlay thật khi thoát Frontier giữa lúc Homacc đang bật
+        if (!AccessibleHomeService.isRunning && isHomaccDrawn) removeAccessibleHome();
+    }
+}
     private void updateVisibility() {
-        boolean isPreview = prefs.getBoolean("preview_lock", false);
+    syncHomaccPreviewState(); // THÊM DÒNG NÀY — đồng bộ preview Homacc, zero cost nếu không đổi
+    boolean isPreview = prefs.getBoolean("preview_lock", false);
         boolean isLocked = km.isKeyguardLocked() || isPreview;
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hide = (avoidKbd && isKbd) || isBl;

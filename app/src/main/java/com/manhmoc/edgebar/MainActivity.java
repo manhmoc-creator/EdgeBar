@@ -104,14 +104,19 @@ private List<String[]> getAppListCached() {
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     
     private void refreshPreview() { 
-    boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0) || (currentMainTab==1 && currentGesTab==0); 
+    boolean inFrontierLock = currentMainTab==1 && currentGesTab==5 && frontierSubTab==0;
+    boolean inFrontierHomacc = currentMainTab==1 && currentGesTab==5 && frontierSubTab==2;
+    boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0)
+        || (currentMainTab==1 && currentGesTab==0) || inFrontierLock; 
     boolean pMorse = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==2);
     boolean pPanel = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==5);
-    prefs.edit().putBoolean("preview_lock", pLock).putBoolean("preview_morse", pMorse).putBoolean("preview_panel", pPanel).apply(); 
+    boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4) || inFrontierHomacc;
+    prefs.edit().putBoolean("preview_lock", pLock).putBoolean("preview_morse", pMorse)
+        .putBoolean("preview_panel", pPanel).putBoolean("preview_homacc", pHomacc).apply(); 
     Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); 
 }
     @Override protected void onResume() { super.onResume(); refreshPreview(); }
-    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).putBoolean("preview_panel", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
+    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).putBoolean("preview_panel", false).putBoolean("preview_homacc", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
     private void reloadActionLabels() {
 String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD", "LAUNCH_APP", "OPEN_PANEL_1", "OPEN_PANEL_2",
 "OPEN_PANEL_3", "SPLIT_SCREEN"};
