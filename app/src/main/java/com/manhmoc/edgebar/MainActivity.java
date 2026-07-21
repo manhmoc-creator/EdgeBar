@@ -2370,7 +2370,6 @@ drawerContent.addView(createSlider("Độ trong suốt", prefix+bKeys[i]+"_alpha
 8));
 designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN",
 globalDrawerAcc));
-}
 addPatternDrawerToSpace(4); // Thêm Drawer Pattern ngay bên dưới cho Homacc
 return; // Thoát sớm, không chạy code tab khác
     }
