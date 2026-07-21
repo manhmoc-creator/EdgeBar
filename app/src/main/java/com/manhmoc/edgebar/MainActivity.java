@@ -1438,8 +1438,12 @@ tabs.addView(bTrig); tabs.addView(bAct); root.addView(tabs);
         // bắt buộc vì Texture giờ KHÔNG tạo đủ 13 checkbox nữa nên không thể
         // suy ra gesture qua index cứng như trước.
         ArrayList<String> gestureKeys = new ArrayList<>();
+        // V19.12.3.6.23 FIX: chuyển khai báo isTextureMode lên ĐÂY — biến này
+        // được dùng bên trong spComp.setOnItemSelectedListener() phía dưới,
+        // nên phải khai báo trước điểm sử dụng đầu tiên (Java yêu cầu forward
+        // reference hợp lệ cho local variable, kể cả khi dùng trong anonymous class).
+        final boolean isTextureMode = (currentGesTab == 4);
         CheckBox cbVib = new CheckBox(this); CheckBox cbAnim = new CheckBox(this);
-
         LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
         TextView tvC = new TextView(this); tvC.setText(T("1. CHOOSE COMPONENT", "1. CHỌN VÙNG (COMPONENT)")); tvC.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvC);
 
@@ -1481,7 +1485,6 @@ spComp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
         vTrig.addView(spComp);
 
         TextView tvG = new TextView(this); tvG.setText(T("\n2. CHOOSE GESTURES (OR logic)", "\n2. CHỌN CỬ CHỈ (Được chọn nhiều - Lệnh OR)")); tvG.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvG);
-        final boolean isTextureMode = (currentGesTab == 4);
         final String[] gesturesShown = isVolKeyMode ? VOLKEY_GESTURES : C_GESTURES;
         final String[] gestureNamesShown = isVolKeyMode ? VOLKEY_GESTURE_NAMES : C_GESTURE_NAMES;
         // V19.12.3.6.23: Texture (vân tay) chỉ hỗ trợ 4 hướng vuốt — phần cứng
