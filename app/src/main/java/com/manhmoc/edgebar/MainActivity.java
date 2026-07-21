@@ -574,14 +574,14 @@ private String getSpacePrefix() {
 }
     private void renderRulesList() {
     listRules.removeAllViews();
-    if (currentGes Tab == 5) { renderFrontierSpace(); return; } // THÊM
-    final boolean is VolKeyMode = (currentGes Tab == 3);
-    final boolean isTextureMode = (currentGes Tab == 4);
+    if (currentGesTab == 5) { renderFrontierSpace(); return; } // THÊM
+    final boolean isVolKeyMode = (currentGesTab == 3);
+    final boolean isTextureMode = (currentGesTab == 4);
     String prefix = getSpacePrefix();
-    String[] compsUsed = is VolKeyMode ? VOLKEY_COMPS : (isTextureMode ? new String[]{"fingerprint"} : ALL_COMP_KEYS);
-    String[] compNamesUsed = is VolKeyMode ? VOLKEY_COMP_NAMES : (isTextureMode ? new String[]{T("Fingerprint", "Vân Tay")} : ALL_COMP_NAMES);
-    String[] gestures Used = is VolKeyMode? VOLKEY_GESTURES: C_GESTURES;
-    String[] gestureNamesUsed = is VolKeyMode ? VOLKEY_GESTURE_NAMES: C_GESTURE_NAMES;
+    String[] compsUsed = isVolKeyMode ? VOLKEY_COMPS : (isTextureMode ? new String[]{"fingerprint"} : ALL_COMP_KEYS);
+    String[] compNamesUsed = isVolKeyMode ? VOLKEY_COMP_NAMES : (isTextureMode ? new String[]{T("Fingerprint", "Vân Tay")} : ALL_COMP_NAMES);
+    String[] gesturesUsed = isVolKeyMode ? VOLKEY_GESTURES : C_GESTURES;
+    String[] gestureNamesUsed = isVolKeyMode ? VOLKEY_GESTURE_NAMES : C_GESTURE_NAMES;
     String[] actKeysUsed = isVolKeyMode ? getVolKeyActKeys() : ACT_KEYS;
     String[] actLabsUsed = isVolKeyMode ? getVolKeyActLabs() : ACT_LABS;
     LinearLayout currentRow = null; int count = 0;
@@ -1444,12 +1444,12 @@ tabs.addView(bTrig); tabs.addView(bAct); root.addView(tabs);
         final java.util.ArrayList<Integer> visibleIdx = new java.util.ArrayList<>();
         final String[] compNamesShown;
         if (isVolKeyMode) {
-    compNames Shown = VOLKEY_COMP_NAMES;
+    compNamesShown = VOLKEY_COMP_NAMES;
 } else {
     for (int ci=0; ci<ALL_COMP_KEYS.length; ci++) {
         if (ALL_COMP_KEYS[ci].equals("fingerprint") && currentGesTab == 0) continue; // Lock: bỏ vân tay
         if (currentGesTab == 4 && !ALL_COMP_KEYS[ci].equals("fingerprint")) continue; // Texture: Xóa tất cả, chỉ giữ lại vân tay
-        visibleldx.add(ci);
+        visibleIdx.add(ci);
     }
     compNamesShown = new String[visibleIdx.size()];
             for (int vi=0; vi<visibleIdx.size(); vi++) compNamesShown[vi] = ALL_COMP_NAMES[visibleIdx.get(vi)];
