@@ -247,10 +247,10 @@ if (currentMainTab == 0) {
             openDataPackEditor(2, newId); // type 2 = Panel Data Pack
         });
         } else if (designTabState == 0 || designTabState == 1 || designTabState == 4) {
-            // Yêu cầu 4: Đổi tên thành Pattern, nhấn vào ra dạng ngăn kéo Drawer để chọn Bar/Corner
-            fab.setText("PATTERN"); 
-            fab.setOnClickListener(v -> openPatternDrawerDialog(designTabState));
-        } else if (designTabState == 7) {
+// Yêu cầu 1: Làm rỗng viên thuốc Pattern để nhường chỗ cho Drawer Pattern bên dưới (Zero-RAM Overhead)
+fab.setText(" ");
+fab.setOnClickListener(v -> openEmptyPillDialog());
+} else if (designTabState == 7) {
             // Yêu cầu 1: Không gian Trigg — viên thuốc "Pattern" tạo Pattern Pack mới
             fab.setText("PATTERN");
             fab.setOnClickListener(v -> {
@@ -263,7 +263,7 @@ if (currentMainTab == 0) {
         }
     } else if (currentMainTab == 1) { // Condition Space
             fab.setVisibility(View.VISIBLE);
-        fab.setText("+NEW EB");
+        fab.setText("NEW EB");
         fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
     } else if (currentMainTab == 2) { // Ecosystem Space
         fab.setVisibility(View.VISIBLE);
@@ -403,7 +403,7 @@ fLp.setMargins(10, 0, 10, 0); fab.setLayoutParams(fLp); fab.setPadding(55, 0, 55
 
 fab.setOnClickListener(v -> {
 if (currentMainTab == 1) { // Đang ở Condition Space
-        openRuleBuilderDialog(null, -1, -1, "");
+        openRuleBuilderDialog(null, -1, -1, ""); 
     } else if (currentMainTab == 2) { // Đang ở Ecosystem Space
         String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
         String newId = addDynamicId(listKey);
@@ -737,75 +737,72 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
 }
     private void openRuleBuilderDialog(String editKey, int preComp, int preGes, String copyActs) { Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen); d.setContentView(buildRuleEditor(d, editKey, preComp, preGes, copyActs)); d.show(); }
 
-    private void openPatternDrawerDialog(int tabState) {
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.parseColor("#121212"));
-        root.setPadding(30, 80, 30, 30);
+    private void addPatternDrawerToSpace(int tabState) {
+    LinearLayout content = new LinearLayout(this);
+    content.setOrientation(LinearLayout.VERTICAL);
+    content.setPadding(20, 10, 20, 20);
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(content);
-        root.addView(scroll);
-
-        content.addView(createSectionTitle("FORMAT BAR"));
-        List<String> barIds = getDynamicIds("pack_bar_ids");
-        ArrayList<CheckBox> barBoxes = new ArrayList<>();
-        for (String id : barIds) {
-            CheckBox cb = new CheckBox(this);
-            cb.setText(prefs.getString("pack_bar_" + id + "_name", "Data Pack"));
-            cb.setTextColor(Color.WHITE); cb.setPadding(0, 15, 0, 15);
-            cb.setTag(id);
-            barBoxes.add(cb); content.addView(cb);
-        }
-        if (barIds.isEmpty()) {
-            TextView tv = new TextView(this); tv.setText("(Chưa có Data Pack Bar nào)");
-            tv.setTextColor(Color.parseColor("#777777")); content.addView(tv);
-        }
-
-        content.addView(createSectionTitle("FORMAT CORNER"));
-        List<String> cornerIds = getDynamicIds("pack_corner_ids");
-        ArrayList<CheckBox> cornerBoxes = new ArrayList<>();
-        for (String id : cornerIds) {
-            CheckBox cb = new CheckBox(this);
-            cb.setText(prefs.getString("pack_corner_" + id + "_name", "Data Pack"));
-            cb.setTextColor(Color.WHITE); cb.setPadding(0, 15, 0, 15);
-            cb.setTag(id);
-            cornerBoxes.add(cb); content.addView(cb);
-        }
-        if (cornerIds.isEmpty()) {
-            TextView tv = new TextView(this); tv.setText("(Chưa có Data Pack Corner nào)");
-            tv.setTextColor(Color.parseColor("#777777")); content.addView(tv);
-        }
-
-        LinearLayout footer = new LinearLayout(this);
-        footer.setOrientation(LinearLayout.HORIZONTAL);
-        footer.setPadding(0, 20, 0, 0);
-        Button bCancel = new Button(this); bCancel.setText("HỦY");
-        bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE);
-        bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        Button bSave = new Button(this); bSave.setText("LƯU QUY TẮC");
-        bSave.setBackground(getRounded("#4CAF50", 20f)); bSave.setTextColor(Color.WHITE);
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f);
-        slp.setMargins(20, 0, 0, 0); bSave.setLayoutParams(slp);
-        footer.addView(bCancel); footer.addView(bSave);
-        root.addView(footer);
-
-        bCancel.setOnClickListener(v -> d.dismiss());
-        bSave.setOnClickListener(v -> {
-            String targetPrefix = tabState == 0 ? "lock_" : (tabState == 4 ? "homacc_" : "home_");
-            for (CheckBox cb : barBoxes) if (cb.isChecked()) applyBarPackToSpace((String) cb.getTag(), targetPrefix);
-            for (CheckBox cb : cornerBoxes) if (cb.isChecked()) applyCornerPackToSpace((String) cb.getTag(), targetPrefix);
-            renderSliders();
-            Toast.makeText(this, "Đã áp dụng Pattern!", Toast.LENGTH_SHORT).show();
-            d.dismiss();
-        });
-        d.setContentView(root); d.show();
+    content.addView(createSectionTitle("FORMAT BAR (Chọn cấu hình Bar)"));
+    java.util.List<String> barIds = getDynamiclds("pack_bar_ids");
+    java.util.ArrayList<CheckBox> barBoxes = new java.util.ArrayList<>();
+    for (String id : barIds) {
+        CheckBox cb = new CheckBox(this);
+        cb.setText(prefs.getString("pack_bar_" + id + "_name", "Data Pack"));
+        cb.setTextColor(Color.WHITE); 
+        cb.setPadding(0, 15, 0, 15);
+        cb.setTag(id);
+        barBoxes.add(cb); 
+        content.addView(cb);
+    }
+    if (barIds.isEmpty()) {
+        TextView tv = new TextView(this); 
+        tv.setText("(Chưa có Data Pack Bar nào, tạo tại PIECE)");
+        tv.setTextColor(Color.parseColor("#777777")); 
+        content.addView(tv);
     }
 
+    content.addView(createSectionTitle("FORMAT CORNER (Chọn cấu hình Góc)"));
+    java.util.List<String> cornerIds = getDynamiclds("pack_corner_ids");
+    java.util.ArrayList<CheckBox> cornerBoxes = new java.util.ArrayList<>();
+    for (String id : cornerIds) {
+        CheckBox cb = new CheckBox(this);
+        cb.setText(prefs.getString("pack_corner_" + id + "_name", "Data Pack"));
+        cb.setTextColor(Color.WHITE); 
+        cb.setPadding(0, 15, 0, 15);
+        cb.setTag(id);
+        cornerBoxes.add(cb); 
+        content.addView(cb);
+    }
+    if (cornerIds.isEmpty()) {
+        TextView tv = new TextView(this); 
+        tv.setText("(Chưa có Data Pack Corner nào, tạo tại PIECE)");
+        tv.setTextColor(Color.parseColor("#777777")); 
+        content.addView(tv);
+    }
+
+    Button bSave = new Button(this); 
+    bSave.setText("ÁP DỤNG PATTERN NÀY");
+    bSave.setBackground(getRounded("#4CAF50", 20f));
+    bSave.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, -2);
+    slp.setMargins(0, 20, 0, 0); 
+    bSave.setLayoutParams(slp);
+    content.addView(bSave);
+
+    bSave.setOnClickListener(v -> {
+        String targetPrefix = tabState == 0 ? "lock_" : (tabState == 4 ? "homacc_" : "home_");
+        for (CheckBox cb : barBoxes) {
+            if (cb.isChecked()) applyBarPackToSpace((String) cb.getTag(), targetPrefix);
+        }
+        for (CheckBox cb : cornerBoxes) {
+            if (cb.isChecked()) applyCornerPackToSpace((String) cb.getTag(), targetPrefix);
+        }
+        renderSliders();
+        Toast.makeText(this, "Đã chép biến Pattern vào không gian hiện tại!", Toast.LENGTH_SHORT).show();
+    });
+
+    designSliderContainer.addView(createDrawer("📦 PATTERN TỪ PIECE (DATA PACKS)", content));
+}
     private void applyBarPackToSpace(String id, String targetPrefix) {
         String src = "pack_bar_" + id + "_";
         int loc = prefs.getInt(src + "loc", 0);
@@ -2369,9 +2366,13 @@ drawerContent.addView(createSlider("Độ trong suốt", prefix+bKeys[i]+"_alpha
         globalDrawerAcc.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500));
         globalDrawerAcc.addView(createSlider("Độ mờ vùng TRĂNG NON", prefix+"corner_moon_alpha", 255, 100));
         globalDrawerAcc.addView(createSlider("Độ mờ VIỀN GÓC", prefix+"corner_stroke_alpha", 255, 200));
-        globalDrawerAcc.addView(createSlider("Độ đậm viền", prefix+"corner_thick", 50, 8));
-        designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", globalDrawerAcc));
-        return; // Thoát sớm, không chạy code tab khác
+        globalDrawerAcc.addView(createSlider ("Độ đậm viền", prefix+"corner_thick", 50,
+8));
+designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN",
+globalDrawerAcc));
+}
+addPatternDrawerToSpace(4); // Thêm Drawer Pattern ngay bên dưới cho Homacc
+return; // Thoát sớm, không chạy code tab khác
     }
     // ===== KẾT THÚC TAB HOMACC =====
 
@@ -2585,10 +2586,13 @@ designSliderContainer.addView(relockRow);
                 drawerContent.addView(createSlider("Độ cong TRĂNG NON (Lõi) (1000=Thẳng)", prefix+"corner_"+CORNERS[i]+"_moon_rad", 1000, 80));
                 designSliderContainer.addView(createDrawer(CORNER_NAMES[i], drawerContent));
             }
-            LinearLayout globalDrawer = new LinearLayout(this); globalDrawer.setOrientation(LinearLayout.VERTICAL); globalDrawer.setPadding(30,10,30,30); globalDrawer.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500)); globalDrawer.addView(createSlider("Độ mờ vùng TRĂNG NON (Đậm/Nhạt)", prefix+"corner_moon_alpha", 255, 100)); globalDrawer.addView(createSlider("Độ mờ VIỀN GÓC (Đậm/Nhạt)", prefix+"corner_stroke_alpha", 255, 200)); globalDrawer.addView(createSlider("Độ đậm viền (Dày/Mỏng)", prefix+"corner_thick", 50, 8)); designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", globalDrawer));
-        } 
-    }
- private void renderPanelDesign() {
+            LinearLayout globalDrawer = new LinearLayout(this); globalDrawer.setOrientation(LinearLayout.VERTICAL); globalDrawer.setPadding(30,10,30,30); globalDrawer.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500)); globalDrawer.addView(createSlider("Độ mờ vùng TRĂNG NON (Đậm/Nhạt)", prefix+"corner_moon_alpha", 255, 100)); globalDrawer.addView(createSlider("Độ mờ VIỀN GÓC (Đậm/Nhạt)", prefix+"corner_stroke_alpha", 255, 200)); globalDrawer.addView(createSlider("Độ đậm viền (Dày/Mỏng)", prefix+"corner_thick",
+50, 8)); designSliderContainer.addView(createDrawer ("TÙY CHỈNH CHUNG GÓC
+VIÊN", globalDrawer));
+}
+addPatternDrawerToSpace(designTabState); // Thêm Drawer Pattern ngay bên dưới cho Lock/Homeb
+}
+private void renderPanel Design() {
     // Yêu cầu 2 & 4: Chuyển không gian Panel thành kho Data Pack lưu biến tối ưu RAM Pixel 2 XL
     designSliderContainer.removeAllViews();
     
