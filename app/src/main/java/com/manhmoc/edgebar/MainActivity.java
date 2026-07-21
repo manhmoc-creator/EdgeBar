@@ -105,6 +105,7 @@ private List<String[]> getAppListCached() {
     
     private void refreshPreview() { 
     boolean inFrontierLock = currentMainTab==1 && currentGesTab==5 && frontierSubTab==0;
+    boolean inFrontierHome = currentMainTab==1 && currentGesTab==5 && frontierSubTab==1;
     boolean inFrontierHomacc = currentMainTab==1 && currentGesTab==5 && frontierSubTab==2;
     boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0)
         || (currentMainTab==1 && currentGesTab==0) || inFrontierLock; 
@@ -112,11 +113,12 @@ private List<String[]> getAppListCached() {
     boolean pPanel = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==5);
     boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4) || inFrontierHomacc;
     prefs.edit().putBoolean("preview_lock", pLock).putBoolean("preview_morse", pMorse)
-        .putBoolean("preview_panel", pPanel).putBoolean("preview_homacc", pHomacc).apply(); 
+        .putBoolean("preview_panel", pPanel).putBoolean("preview_homacc", pHomacc)
+        .putBoolean("preview_home", inFrontierHome).apply(); 
     Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); 
 }
     @Override protected void onResume() { super.onResume(); refreshPreview(); }
-    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).putBoolean("preview_panel", false).putBoolean("preview_homacc", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
+    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).putBoolean("preview_panel", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
     private void reloadActionLabels() {
 String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD", "LAUNCH_APP", "OPEN_PANEL_1", "OPEN_PANEL_2",
 "OPEN_PANEL_3", "SPLIT_SCREEN"};
@@ -268,10 +270,10 @@ if (currentMainTab == 0) {
     }
     } else if (currentMainTab == 1) { // Condition Space
             fab.setVisibility(View.VISIBLE);
-            if (currentGesTab == 5) { // [TỐI ƯU PIXEL 2XL] Không gian FRONTIER
-                fab.setText(" "); // Nút rỗng (Zero-RAM Overhead)
-                fab.setOnClickListener(v -> openEmptyPillDialog());
-            } else {
+            if (currentGesTab == 5) { // FRONTIER — nút Pattern gọi Data Pack từ PIECE
+    fab.setText("Pattern");
+    fab.setOnClickListener(v -> showCallPTDropdownFrontier());
+} else {
                 fab.setText("NEW EB");
                 fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
             }
@@ -306,6 +308,31 @@ if (currentMainTab == 0) {
     } else {
         fab.setVisibility(View.GONE);
     }
+}
+    private void showCallPTDropdownFrontier() {
+    java.util.List<String> barIds = getDynamicIds("pack_bar_ids");
+    java.util.List<String> cornerIds = getDynamicIds("pack_corner_ids");
+    java.util.List<String> combined = new java.util.ArrayList<>();
+    java.util.List<String> combinedNames = new java.util.ArrayList<>();
+    for (String id : barIds) { combined.add("bar_" + id); combinedNames.add("[Bar] " + prefs.getString("pack_bar_"+id+"_name","Data Pack")); }
+    for (String id : cornerIds) { combined.add("corner_" + id); combinedNames.add("[Corner] " + prefs.getString("pack_corner_"+id+"_name","Data Pack")); }
+    if (combined.isEmpty()) { Toast.makeText(this, "Chưa có Data Pack nào ở PIECE!", Toast.LENGTH_SHORT).show(); return; }
+    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle("Gọi Pack từ PIECE")
+        .setItems(combinedNames.toArray(new String[0]), (d, which) -> {
+            String selectedKey = combined.get(which);
+            String prefix = frontierSubTab==0 ? "lock_" : frontierSubTab==1 ? "home_" : "homacc_";
+            String listKey = prefix + "applied_packs";
+            java.util.List<String> currentPacks = getDynamicIds(listKey);
+            if (!currentPacks.contains(selectedKey)) {
+                currentPacks.add(selectedKey);
+                prefs.edit().putString(listKey, TextUtils.join(",", currentPacks)).apply();
+                renderRulesList(); // vẽ lại toàn Frontier — tần suất bấm thấp nên đủ nhẹ
+                Toast.makeText(this, "Đã gọi Pack thành công!", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "Pack này đã tồn tại trong không gian!", Toast.LENGTH_SHORT).show();
+            }
+        }).show();
 }
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
@@ -548,6 +575,7 @@ private String getSpacePrefix() {
 }
     private void renderRulesList() {
     listRules.removeAllViews();
+    if (currentGesTab == 5) { renderFrontierSpace(); return; } // ← THÊM
     final boolean isVolKeyMode = (currentGesTab == 3);
     String prefix = getSpacePrefix();
     String[] compsUsed = isVolKeyMode ? VOLKEY_COMPS : ALL_COMP_KEYS;
@@ -676,6 +704,70 @@ ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
         if(count % 2 != 0 && currentRow != null) { View dummy = new View(this); dummy.setLayoutParams(new LinearLayout.LayoutParams(0,1,1f)); currentRow.addView(dummy); }
         if(count == 0) { TextView empty = new TextView(this); empty.setText(T("No rules yet.\nPress + NEW EB to create.", "Chưa có quy tắc nào.\nBấm + NEW EB để tạo.")); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); listRules.addView(empty); }
     }
+// Hàm dùng chung cho Frontier — KHÔNG động vào code Design (giữ nguyên để xoá sau).
+// Battery/RAM Pixel 2XL: mỗi lần đổi subtab chỉ removeAllViews() 1 container nhỏ,
+// KHÔNG đụng tới toàn bộ pageDesign — tránh re-inflate hàng loạt CheckBox/Slider
+// không liên quan khi người dùng chỉ đang ở Frontier.
+private void renderBarsCornersEditor(LinearLayout container, String prefix,
+        String[] bKeys, String[] bNames, boolean isHomaccStyle) {
+    String colorAccent = isHomaccStyle ? "#7C4DFF" : "#4CAF50";
+    container.addView(createSectionTitle("EDGE BARS (" + bKeys.length + " THANH)"));
+    for (int i = 0; i < bKeys.length; i++) {
+        LinearLayout dc = new LinearLayout(this);
+        dc.setOrientation(LinearLayout.VERTICAL); dc.setPadding(30,10,30,30);
+        CheckBox cb = new CheckBox(this);
+        cb.setText("BẬT: " + bNames[i]); cb.setTextColor(Color.parseColor(colorAccent));
+        cb.setChecked(prefs.getBoolean(prefix+bKeys[i]+"_en", false));
+        final int idx = i;
+        cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+bKeys[idx]+"_en", c).apply());
+        dc.addView(cb);
+        dc.addView(createComboDropdown("Hiển thị", prefix+bKeys[i]+"_vis_mode",
+            new String[]{"Hiện hoàn toàn","Tàng hình (Nháy sáng)","Ẩn hoàn toàn (Vô hình)"}, 0));
+        dc.addView(createComboDropdown("Chế độ Cảm ứng", prefix+bKeys[i]+"_pri_mode",
+            new String[]{"Ưu tiên Edge Bar (Khoá cứng)","Nhường OS (Xuyên thấu)"}, 0));
+        dc.addView(createSlider("Độ trong suốt", prefix+bKeys[i]+"_alpha", 255, 50));
+        dc.addView(createSlider("Chiều ngang", prefix+bKeys[i]+"_w", 3000, 300));
+        dc.addView(createSlider("Chiều dọc", prefix+bKeys[i]+"_h", 3000, 60));
+        dc.addView(createSlider("Toạ độ X", prefix+bKeys[i]+"_x", 1000, 0));
+        dc.addView(createSlider("Toạ độ Y", prefix+bKeys[i]+"_y", 2500, 0));
+        container.addView(createDrawer(bNames[i], dc));
+    }
+    container.addView(createSectionTitle("4 FRAME CORNERS"));
+    for (int i = 0; i < 4; i++) {
+        LinearLayout dc = new LinearLayout(this);
+        dc.setOrientation(LinearLayout.VERTICAL); dc.setPadding(30,10,30,30);
+        CheckBox cbEn = new CheckBox(this);
+        cbEn.setText("BẬT: " + CORNER_NAMES[i]); cbEn.setTextColor(Color.parseColor(colorAccent));
+        cbEn.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_en", false));
+        final int idx = i;
+        cbEn.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idx]+"_en", c).apply());
+        dc.addView(cbEn);
+        dc.addView(createComboDropdown("Hiển thị", prefix+"corner_"+CORNERS[i]+"_vis_mode",
+            new String[]{"Hiện hoàn toàn","Tàng hình (Nháy sáng)","Ẩn hoàn toàn (Vô hình)"}, 0));
+        dc.addView(createComboDropdown("Chế độ Cảm ứng", prefix+"corner_"+CORNERS[i]+"_pri_mode",
+            new String[]{"Ưu tiên Edge Bar (Khoá cứng)","Nhường OS (Xuyên thấu)"}, 0));
+        dc.addView(createComboDropdown("Hình dáng Góc", prefix+"corner_"+CORNERS[i]+"_shape",
+            new String[]{"Bo Cong","Thẳng Ngang","Thẳng Dọc"}, 0));
+        dc.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix+"corner_"+CORNERS[i]+"_w", 2500, 100));
+        dc.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix+"corner_"+CORNERS[i]+"_h", 2500, 100));
+        dc.addView(createSlider("Di chuyển Ngang (X)", prefix+"corner_"+CORNERS[i]+"_x", 2500, 0));
+        dc.addView(createSlider("Di chuyển Dọc (Y)", prefix+"corner_"+CORNERS[i]+"_y", 2500, 0));
+        dc.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix+"corner_"+CORNERS[i]+"_moon_w", 2500, 100));
+        dc.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix+"corner_"+CORNERS[i]+"_moon_h", 2500, 100));
+        dc.addView(createSlider("Di chuyển Trăng Non Ngang (X)", prefix+"corner_"+CORNERS[i]+"_moon_x", 2500, 1250));
+        dc.addView(createSlider("Di chuyển Trăng Non Dọc (Y)", prefix+"corner_"+CORNERS[i]+"_moon_y", 2500, 1250));
+        dc.addView(createSlider("Độ cong BO VIỀN", prefix+"corner_"+CORNERS[i]+"_rad", 1000, 80));
+        dc.addView(createSlider("Độ cong TRĂNG NON", prefix+"corner_"+CORNERS[i]+"_moon_rad", 1000, 80));
+        container.addView(createDrawer(CORNER_NAMES[i], dc));
+    }
+    LinearLayout gd = new LinearLayout(this);
+    gd.setOrientation(LinearLayout.VERTICAL); gd.setPadding(30,10,30,30);
+    gd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500));
+    gd.addView(createSlider("Độ mờ vùng TRĂNG NON", prefix+"corner_moon_alpha", 255, 100));
+    gd.addView(createSlider("Độ mờ VIỀN GÓC", prefix+"corner_stroke_alpha", 255, 200));
+    gd.addView(createSlider("Độ đậm viền", prefix+"corner_thick", 50, 8));
+    container.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", gd));
+}
 private void renderVolKeyRules() {
     listRules.removeAllViews();
     String[] vKeys  = {"up_tap","down_tap","up_long","down_long"};
@@ -749,13 +841,18 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
 
     // [TỐI ƯU PIXEL 2XL] Thuật toán hiển thị các pack PIECE đã lưu vào không gian
     private void renderAppliedPacksForSpace(int tabState) {
-        String prefix = tabState == 0 ? "lock_" : (tabState == 1 ? "home_" : "homacc_");
-        String listKey = prefix + "applied_packs";
-        java.util.List<String> appliedPacks = getDynamicIds(listKey);
+    String prefix = tabState == 0 ? "lock_" : (tabState == 1 ? "home_" : "homacc_");
+    renderAppliedPacksForSpaceInto(designSliderContainer, prefix, tabState);
+}
 
-        if (appliedPacks.isEmpty()) return;
-        designSliderContainer.addView(createSectionTitle(" PACK ĐÃ GỌI TỪ PIECE"));
-
+private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState) {
+    String listKey = prefix + "applied_packs";
+    java.util.List<String> appliedPacks = getDynamicIds(listKey);
+    if (appliedPacks.isEmpty()) return;
+    container.addView(createSectionTitle(" PACK ĐÃ GỌI TỪ PIECE"));
+    // ← Toàn bộ thân hàm cũ giữ nguyên 100%, chỉ đổi "designSliderContainer.addView"
+    //   thành "container.addView" và "renderSliders()" (trong onLongClick GỠ pack)
+    //   thành callback linh hoạt — xem bước 4 bên dưới.
         LinearLayout currentRow = null;
         int count = 0;
         for (String itemKey : appliedPacks) {
@@ -763,7 +860,7 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
                 currentRow = new LinearLayout(this);
                 currentRow.setOrientation(LinearLayout.HORIZONTAL);
                 currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT));
-                designSliderContainer.addView(currentRow);
+                container.addView(currentRow);
             }
             boolean isBar = itemKey.startsWith("bar_");
             String id = itemKey.replace(isBar ? "bar_" : "corner_", "");
@@ -800,22 +897,21 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
                     else applyCornerPackToSpace(id, prefix);
                     Toast.makeText(this, "Đã áp dụng cấu hình pack!", Toast.LENGTH_SHORT).show();
                 }
-            });
-            
+            });           
             row1.addView(tvName);
             row1.addView(swEn);
-            card.addView(row1);
-            
+            card.addView(row1);           
             card.setOnClickListener(btn -> openPackRuleSpace(itemKey, tabState));
             card.setOnLongClickListener(btn -> {
-                new AlertDialog.Builder(this).setTitle("Gỡ Pack này khỏi không gian?")
-                        .setPositiveButton("GỠ", (d, w) -> {
-                            appliedPacks.remove(itemKey);
-                            prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
-                            renderSliders();
-                        }).setNegativeButton("HỦY", null).show();
-                return true;
-            });
+    new AlertDialog.Builder(this).setTitle("Gỡ Pack này khỏi không gian?")
+            .setPositiveButton("GỠ", (d, w) -> {
+                appliedPacks.remove(itemKey);
+                prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
+                if (currentMainTab == 1 && currentGesTab == 5) renderRulesList();
+                else renderSliders();
+            }).setNegativeButton("HỦY", null).show();
+    return true;
+});
             currentRow.addView(card);
             count++;
         }
@@ -825,7 +921,53 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
             currentRow.addView(dummy);
         }
     }
+    private void renderFrontierSpace() {
+    LinearLayout subTab = new LinearLayout(this);
+    subTab.setOrientation(LinearLayout.HORIZONTAL);
+    subTab.setPadding(0,0,0,20);
+    Button b1 = createTabBtn("LOCK"), b2 = createTabBtn("HOMEB"), b3 = createTabBtn("HOMACC");
+    LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0,-2,1f); lp1.setMargins(0,0,10,0);
+    LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(0,-2,1f); lp2.setMargins(0,0,10,0);
+    b1.setLayoutParams(lp1); b2.setLayoutParams(lp2); b3.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+    subTab.addView(b1); subTab.addView(b2); subTab.addView(b3);
+    listRules.addView(subTab);
 
+    LinearLayout body = new LinearLayout(this);
+    body.setOrientation(LinearLayout.VERTICAL);
+    listRules.addView(body);
+
+    Runnable styleTabs = () -> {
+        b1.setBackground(getRounded(frontierSubTab==0?"#00E5FF":"#222222",20f)); b1.setTextColor(frontierSubTab==0?Color.BLACK:Color.WHITE);
+        b2.setBackground(getRounded(frontierSubTab==1?"#00E5FF":"#222222",20f)); b2.setTextColor(frontierSubTab==1?Color.BLACK:Color.WHITE);
+        b3.setBackground(getRounded(frontierSubTab==2?"#7C4DFF":"#333333",20f)); b3.setTextColor(Color.WHITE);
+    };
+
+    b1.setOnClickListener(v -> { frontierSubTab=0; refreshPreview(); styleTabs.run(); redrawFrontierBody(body); updateFabVisibility(); });
+    b2.setOnClickListener(v -> { frontierSubTab=1; ensureHomeServiceForPreview(); refreshPreview(); styleTabs.run(); redrawFrontierBody(body); updateFabVisibility(); });
+    b3.setOnClickListener(v -> { frontierSubTab=2; refreshPreview(); styleTabs.run(); redrawFrontierBody(body); updateFabVisibility(); });
+
+    if (frontierSubTab == 1) ensureHomeServiceForPreview();
+    styleTabs.run();
+    redrawFrontierBody(body);
+}
+
+private void redrawFrontierBody(LinearLayout body) {
+    body.removeAllViews();
+    String prefix = frontierSubTab==0 ? "lock_" : frontierSubTab==1 ? "home_" : "homacc_";
+    renderBarsCornersEditor(body, prefix, BARS, BAR_NAMES, frontierSubTab==2);
+    int packTabState = frontierSubTab==0 ? 0 : frontierSubTab==1 ? 1 : 4;
+    renderAppliedPacksForSpaceInto(body, prefix, packTabState);
+}
+
+// Chỉ khởi động HomescreenService khi thực sự cần xem trước Homeb —
+// nếu service đã sống sẵn (do Morse hoặc Homeb thật đang bật) thì không làm
+// gì thêm, tránh gọi startForegroundService() thừa (mỗi lần gọi = 1 IPC tốn pin).
+private void ensureHomeServiceForPreview() {
+    if (!HomescreenService.isRunning) {
+        Intent i = new Intent(this, HomescreenService.class);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+    }
+}
     // [TỐI ƯU PIXEL 2XL] Không gian lưu Rule động cho Pack (Hiển thị 2 cột, 2 data pack 1 hàng)
     private void openPackRuleSpace(String appliedItemKey, int tabState) {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);

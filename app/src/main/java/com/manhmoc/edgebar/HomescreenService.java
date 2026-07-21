@@ -752,12 +752,13 @@ isCountingDown = false;
      * Nếu cả hai đều OFF → tự dừng để giải phóng RAM (Pixel 2XL opt).
      */
     private void checkSelfStop() {
-        boolean morseOn = prefs.getBoolean("morse_mode_en", false);
-        boolean oldHomeOn = prefs.getBoolean("shortcut_home_on", false);
-        if (!morseOn && !oldHomeOn && !isMorseLockActive) {
-            stopSelf();
-        }
+    boolean morseOn = prefs.getBoolean("morse_mode_en", false);
+    boolean oldHomeOn = prefs.getBoolean("shortcut_home_on", false);
+    boolean previewHomeOn = prefs.getBoolean("preview_home", false);
+    if (!morseOn && !oldHomeOn && !isMorseLockActive && !previewHomeOn) {
+        stopSelf();
     }
+}
     private void sendSyncState() { Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
 
     @Override
@@ -1396,8 +1397,8 @@ if (panelEngine != null) panelEngine.rebuildAll();
 // → tiết kiệm tuyệt đối RAM/GPU Adreno 540 trên Pixel 2XL
 boolean accHomeRunning = AccessibleHomeService.isRunning;
 boolean oldHomeEnabled = HomescreenService.isRunning && prefs.getBoolean("shortcut_home_on", false);
-// Nếu AccHome đang chạy → ép tắt toàn bộ bars cũ khỏi vùng nhớ GPU
-boolean shouldRenderOldHome = isUnlocked && !hideNormal && !accHomeRunning && oldHomeEnabled;
+boolean previewHomeOn = prefs.getBoolean("preview_home", false);
+boolean shouldRenderOldHome = isUnlocked && !hideNormal && !accHomeRunning && (oldHomeEnabled || previewHomeOn);
 // Pixel 2XL: giải phóng SurfaceFlinger layer khi overlay tắt
 if (accHomeRunning) {
     for (int i = 0; i < 5; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
@@ -1509,7 +1510,8 @@ if ((isMorseLockActive && !timeLocked) || isPreviewMorse || isUninstallGuardActi
                    boolean en = prefs.getBoolean("home_" + BARS[i] + "_en", false);
                    bars[i].setVisibility((en && shouldRenderOldHome) ? View.VISIBLE : View.GONE); 
                     if (en && shouldRenderOldHome) { 
-                    int alpha = isPreviewLock ? 0 : prefs.getInt("home_" + BARS[i] + "_alpha", 50);
+                    int moonAlpha = (isPreviewLock && !previewHomeOn) ? 0 : prefs.getInt("home_corner_moon_alpha", 100);
+int strokeAlpha = (isPreviewLock && !previewHomeOn) ? 0 : prefs.getInt("home_corner_stroke_alpha", 200);
                     int w = prefs.getInt("home_" + BARS[i] + "_w", 300);
                     int h = prefs.getInt("home_" + BARS[i] + "_h", 60);
                     int x = prefs.getInt("home_" + BARS[i] + "_x", 0);
