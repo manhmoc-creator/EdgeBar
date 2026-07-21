@@ -857,15 +857,15 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
     renderAppliedPacksForSpaceInto(designSliderContainer, "morse_", tabState);
 }
 private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState) {
-    String listKey = prefix + "applied_packs";
-    java.util.List<String> appliedPacks = getDynamicIds(listKey);
-    if (appliedPacks.isEmpty()) return;
-    container.addView(createSectionTitle(" PACK ĐÃ GỌI TỪ PIECE"));
-    // ← Toàn bộ thân hàm cũ giữ nguyên 100%, chỉ đổi "designSliderContainer.addView"
-    //   thành "container.addView" và "renderSliders()" (trong onLongClick GỠ pack)
-    //   thành callback linh hoạt — xem bước 4 bên dưới.
+        String listKey = prefix + "applied_packs";
+        java.util.List<String> appliedPacks = getDynamicIds(listKey);
+        if (appliedPacks.isEmpty()) return;
+
+        container.addView(createSectionTitle(" PACK ĐÃ GỌI TỪ PIECE"));
+
         LinearLayout currentRow = null;
         int count = 0;
+
         for (String itemKey : appliedPacks) {
             if (count % 2 == 0) {
                 currentRow = new LinearLayout(this);
@@ -873,31 +873,46 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
                 currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT));
                 container.addView(currentRow);
             }
+
             boolean isBar = itemKey.startsWith("bar_");
             String id = itemKey.replace(isBar ? "bar_" : "corner_", "");
             String packPrefix = isBar ? "pack_bar_" : "pack_corner_";
-            
+
             LinearLayout card = new LinearLayout(this);
-            card.setOrientation(LinearLayout.VERTICAL);
+            card.setOrientation(LinearLayout.HORIZONTAL);
             card.setBackground(getRounded("#202124", 24f));
-            card.setPadding(20, 24, 20, 24);
+            card.setPadding(15, 24, 10, 24);
             LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            cLp.setMargins(8, 8, 8, 8);
+            cLp.setMargins(6, 6, 6, 6);
             card.setLayoutParams(cLp);
-            
-            LinearLayout row1 = new LinearLayout(this);
-            row1.setOrientation(LinearLayout.HORIZONTAL);
-            row1.setGravity(Gravity.CENTER_VERTICAL);
-            
-            TextView tvName = new TextView(this);
-            tvName.setText((isBar ? "[Bar] " : "[Corner] ") + prefs.getString(packPrefix + id + "_name", "Data Pack"));
-            tvName.setTextColor(Color.WHITE);
-            tvName.setTextSize(14.5f);
-            tvName.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-            // Tự động giãn dòng nếu thông tin nhiều, không cắt cụt
-            tvName.setMaxLines(3);
-            tvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            
+
+            LinearLayout infoCol = new LinearLayout(this);
+            infoCol.setOrientation(LinearLayout.VERTICAL);
+            infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+            TextView tName = new TextView(this);
+            tName.setText((isBar ? "[Bar] " : "[Corner] ") + prefs.getString(packPrefix + id + "_name", "Data Pack"));
+            tName.setTextColor(Color.parseColor("#E8EAED"));
+            tName.setTextSize(16f);
+            tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+            TextView tSub = new TextView(this);
+            tSub.setText("Gọi từ PIECE");
+            tSub.setTextColor(Color.parseColor("#9AA0A6"));
+            tSub.setTextSize(12f);
+            tSub.setPadding(0, 5, 0, 5);
+
+            TextView tAct = new TextView(this);
+            tAct.setText(isBar ? "Edge Bar" : "Frame Corner");
+            tAct.setTextColor(Color.parseColor("#8AB4F8"));
+            tAct.setTextSize(16f);
+
+            infoCol.addView(tName); infoCol.addView(tSub); infoCol.addView(tAct);
+
+            LinearLayout ctrlCol = new LinearLayout(this);
+            ctrlCol.setOrientation(LinearLayout.VERTICAL);
+            ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
+
             Switch swEn = new Switch(this);
             swEn.setChecked(prefs.getBoolean(prefix + itemKey + "_en", false));
             swEn.setScaleX(0.85f); swEn.setScaleY(0.85f);
@@ -908,24 +923,46 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
                     else applyCornerPackToSpace(id, prefix);
                     Toast.makeText(this, "Đã áp dụng cấu hình pack!", Toast.LENGTH_SHORT).show();
                 }
-            });           
-            row1.addView(tvName);
-            row1.addView(swEn);
-            card.addView(row1);           
-            card.setOnClickListener(btn -> openPackRuleSpace(itemKey, tabState));
-            card.setOnLongClickListener(btn -> {
-    new AlertDialog.Builder(this).setTitle("Gỡ Pack này khỏi không gian?")
-            .setPositiveButton("GỠ", (d, w) -> {
-                appliedPacks.remove(itemKey);
+            });
+            swEn.setPadding(0, 0, 0, 10);
+
+            Button btnCopy = new Button(this); btnCopy.setText("COPY");
+            btnCopy.setBackground(getRounded("#303134", 14f));
+            btnCopy.setTextColor(Color.WHITE);
+            btnCopy.setTextSize(12.5f);
+            btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            btnCopy.setPadding(12, 10, 12, 10);
+            LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-2, -2);
+            btnLp.setMargins(0, 8, 0, 0); btnCopy.setLayoutParams(btnLp);
+            btnCopy.setMinimumHeight(88);
+
+            btnCopy.setOnClickListener(v -> {
+                appliedPacks.add(itemKey);
                 prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
                 if (currentMainTab == 1 && currentGesTab == 5) renderRulesList();
                 else renderSliders();
-            }).setNegativeButton("HỦY", null).show();
-    return true;
-});
+                Toast.makeText(this, "Đã nhân bản Pack!", Toast.LENGTH_SHORT).show();
+            });
+
+            ctrlCol.addView(swEn); ctrlCol.addView(btnCopy);
+            card.addView(infoCol); card.addView(ctrlCol);
+
+            card.setOnClickListener(btn -> openPackRuleSpace(itemKey, tabState));
+            card.setOnLongClickListener(btn -> {
+                new AlertDialog.Builder(this).setTitle("Gỡ Pack này khỏi không gian?")
+                    .setPositiveButton("GỠ", (d, w) -> {
+                        appliedPacks.remove(itemKey);
+                        prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
+                        if (currentMainTab == 1 && currentGesTab == 5) renderRulesList();
+                        else renderSliders();
+                    }).setNegativeButton("HỦY", null).show();
+                return true;
+            });
+
             currentRow.addView(card);
             count++;
         }
+
         if (count % 2 != 0 && currentRow != null) {
             View dummy = new View(this);
             dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
@@ -3578,25 +3615,26 @@ private void renderDesignConfigSpace() {
 }
 
 private void renderDataPackList(LinearLayout container, int type) {
-    container.removeAllViews();
-    String listKey = type == 0 ? "pack_bar_ids" : "pack_corner_ids";
-    String namePrefix = type == 0 ? "pack_bar_" : "pack_corner_";
+        container.removeAllViews();
+        String listKey = type == 0 ? "pack_bar_ids" : "pack_corner_ids";
+        String namePrefix = type == 0 ? "pack_bar_" : "pack_corner_";
+        List<String> ids = getDynamicIds(listKey);
 
-    List<String> ids = getDynamicIds(listKey);
-    if (ids.isEmpty()) {
-        TextView tvEmpty = new TextView(this);
-        tvEmpty.setText(type == 0
-            ? "Kho biến Bar đang rỗng.\nChạm nút viên thuốc '+ FORMAT B' góc dưới để tạo mới."
-            : "Kho biến Corner đang rỗng.\nChạm nút viên thuốc '+ FORMAT C' góc dưới để tạo mới.");
-        tvEmpty.setTextColor(Color.parseColor("#777777"));
-        tvEmpty.setGravity(Gravity.CENTER);
-        tvEmpty.setPadding(0, 80, 0, 0);
-        container.addView(tvEmpty);
-        return;
-    }
+        if (ids.isEmpty()) {
+            TextView tvEmpty = new TextView(this);
+            tvEmpty.setText(type == 0
+                    ? "Kho biến Bar đang rỗng.\nChạm nút viên thuốc '+ FORMAT B' góc dưới để tạo mới."
+                    : "Kho biến Corner đang rỗng.\nChạm nút viên thuốc '+ FORMAT C' góc dưới để tạo mới.");
+            tvEmpty.setTextColor(Color.parseColor("#777777"));
+            tvEmpty.setGravity(Gravity.CENTER);
+            tvEmpty.setPadding(0, 80, 0, 0);
+            container.addView(tvEmpty);
+            return;
+        }
 
-    LinearLayout currentRow = null;
+        LinearLayout currentRow = null;
         int count = 0;
+
         for (String id : ids) {
             if (count % 2 == 0) {
                 currentRow = new LinearLayout(this);
@@ -3604,73 +3642,126 @@ private void renderDataPackList(LinearLayout container, int type) {
                 currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT));
                 container.addView(currentRow);
             }
+
             LinearLayout card = new LinearLayout(this);
-            card.setOrientation(LinearLayout.VERTICAL);
+            card.setOrientation(LinearLayout.HORIZONTAL);
             card.setBackground(getRounded("#202124", 24f));
-            card.setPadding(20, 24, 20, 24);
+            card.setPadding(15, 24, 10, 24);
             LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            cLp.setMargins(8, 8, 8, 8);
+            cLp.setMargins(6, 6, 6, 6);
             card.setLayoutParams(cLp);
-LinearLayout row1 = new LinearLayout(this);
-row1.setOrientation(LinearLayout.HORIZONTAL);
-row1.setGravity(Gravity.CENTER_VERTICAL);
-TextView tvName = new TextView(this);
-tvName.setText(prefs.getString(namePrefix + id + "_name", "Data Pack Mới"));
-tvName.setTextColor(Color.WHITE);
-tvName.setTextSize(14.5f);
-tvName.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-tvName.setMaxLines(3);
-tvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-Switch swEn = new Switch(this);
-swEn.setChecked(prefs.getBoolean(namePrefix + id + "_en", false));
-swEn.setScaleX(0.85f); swEn.setScaleY(0.85f);
-swEn.setOnCheckedChangeListener((sw, chk) -> prefs.edit().putBoolean(namePrefix + id + "_en", chk).apply());
-row1.addView(tvName);
-row1.addView(swEn);
-card.addView(row1);
 
-// [TỐI ƯU PIXEL 2XL] Dòng phụ đề: vị trí + hiển thị + cảm ứng, style
-// giống Image 1 (Top Right / Double Tap / Flashlight). Dùng 3 mảng
-// String tĩnh sẵn có (BAR_NAMES/CORNER_NAMES) — KHÔNG tạo mảng mới mỗi
-// lần render, chỉ đọc 3 giá trị int từ prefs (rẻ hơn nhiều so với đọc
-// String), rồi build 1 TextView duy nhất — không thêm object nặng nào.
-String[] posNames = type == 0 ? BAR_NAMES : CORNER_NAMES;
-String[] visNames = {"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"};
-String[] priNames = {"Ưu tiên", "Nhường OS"};
-int locIdx = prefs.getInt(namePrefix + id + "_loc", 0);
-int visIdx = prefs.getInt(namePrefix + id + "_vis_mode", 0);
-int priIdx = prefs.getInt(namePrefix + id + "_pri_mode", 0);
-String posText = (locIdx >= 0 && locIdx < posNames.length) ? posNames[locIdx] : "?";
-String visText = (visIdx >= 0 && visIdx < visNames.length) ? visNames[visIdx] : "?";
-String priText = (priIdx >= 0 && priIdx < priNames.length) ? priNames[priIdx] : "?";
-TextView tvSub = new TextView(this);
-tvSub.setText(posText + " • " + visText + " • " + priText);
-tvSub.setTextColor(Color.parseColor("#8A8A8A"));
-tvSub.setTextSize(11.5f);
-tvSub.setMaxLines(2);
-tvSub.setEllipsize(android.text.TextUtils.TruncateAt.END);
-tvSub.setPadding(0, 6, 0, 0);
-card.addView(tvSub);
+            LinearLayout infoCol = new LinearLayout(this);
+            infoCol.setOrientation(LinearLayout.VERTICAL);
+            infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
-final int fType2 = type;
+            TextView tName = new TextView(this);
+            tName.setText(prefs.getString(namePrefix + id + "_name", "Data Pack Mới"));
+            tName.setTextColor(Color.parseColor("#E8EAED"));
+            tName.setTextSize(16f);
+            tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+            String[] posNames = type == 0 ? BAR_NAMES : CORNER_NAMES;
+            String[] visNames = {"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"};
+            String[] priNames = {"Ưu tiên (Khóa)", "Nhường OS"};
+            int locIdx = prefs.getInt(namePrefix + id + "_loc", 0);
+            int visIdx = prefs.getInt(namePrefix + id + "_vis_mode", 0);
+            int priIdx = prefs.getInt(namePrefix + id + "_pri_mode", 0);
+            String posText = (locIdx >= 0 && locIdx < posNames.length) ? posNames[locIdx] : "?";
+            String visText = (visIdx >= 0 && visIdx < visNames.length) ? visNames[visIdx] : "?";
+            String priText = (priIdx >= 0 && priIdx < priNames.length) ? priNames[priIdx] : "?";
+
+            TextView tSub = new TextView(this);
+            tSub.setText(posText + " • " + visText);
+            tSub.setTextColor(Color.parseColor("#9AA0A6"));
+            tSub.setTextSize(12f);
+            tSub.setPadding(0, 5, 0, 5);
+            tSub.setMaxLines(1); tSub.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+            TextView tPri = new TextView(this);
+            tPri.setText(priText);
+            tPri.setTextColor(Color.parseColor("#8AB4F8"));
+            tPri.setTextSize(16f);
+            tPri.setMaxLines(1); tPri.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+            infoCol.addView(tName); infoCol.addView(tSub); infoCol.addView(tPri);
+
+            LinearLayout ctrlCol = new LinearLayout(this);
+            ctrlCol.setOrientation(LinearLayout.VERTICAL);
+            ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
+
+            Switch swEn = new Switch(this);
+            swEn.setChecked(prefs.getBoolean(namePrefix + id + "_en", false));
+            swEn.setScaleX(0.85f); swEn.setScaleY(0.85f);
+            swEn.setOnCheckedChangeListener((sw, chk) -> prefs.edit().putBoolean(namePrefix + id + "_en", chk).apply());
+            swEn.setPadding(0, 0, 0, 10);
+
+            Button btnCopy = new Button(this); btnCopy.setText("COPY");
+            btnCopy.setBackground(getRounded("#303134", 14f));
+            btnCopy.setTextColor(Color.WHITE);
+            btnCopy.setTextSize(12.5f);
+            btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            btnCopy.setPadding(12, 10, 12, 10);
+            LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-2, -2);
+            btnLp.setMargins(0, 8, 0, 0); btnCopy.setLayoutParams(btnLp);
+            btnCopy.setMinimumHeight(88);
+
+            final int fType2 = type;
+            btnCopy.setOnClickListener(v -> {
+                String copyId = addDynamicId(listKey);
+                SharedPreferences.Editor ed = prefs.edit();
+                ed.putString(namePrefix + copyId + "_name", prefs.getString(namePrefix + id + "_name", "Pack") + " (Copy)");
+                ed.putInt(namePrefix + copyId + "_loc", locIdx);
+                ed.putInt(namePrefix + copyId + "_vis_mode", visIdx);
+                ed.putInt(namePrefix + copyId + "_pri_mode", priIdx);
+                ed.putBoolean(namePrefix + copyId + "_en", false);
+                if (fType2 == 0) {
+                    ed.putInt(namePrefix + copyId + "_alpha", prefs.getInt(namePrefix + id + "_alpha", 50));
+                    ed.putInt(namePrefix + copyId + "_w", prefs.getInt(namePrefix + id + "_w", 300));
+                    ed.putInt(namePrefix + copyId + "_h", prefs.getInt(namePrefix + id + "_h", 60));
+                    ed.putInt(namePrefix + copyId + "_x", prefs.getInt(namePrefix + id + "_x", 0));
+                    ed.putInt(namePrefix + copyId + "_y", prefs.getInt(namePrefix + id + "_y", 0));
+                } else {
+                    ed.putInt(namePrefix + copyId + "_shape", prefs.getInt(namePrefix + id + "_shape", 0));
+                    ed.putInt(namePrefix + copyId + "_w", prefs.getInt(namePrefix + id + "_w", 100));
+                    ed.putInt(namePrefix + copyId + "_h", prefs.getInt(namePrefix + id + "_h", 100));
+                    ed.putInt(namePrefix + copyId + "_x", prefs.getInt(namePrefix + id + "_x", 0));
+                    ed.putInt(namePrefix + copyId + "_y", prefs.getInt(namePrefix + id + "_y", 0));
+                    ed.putInt(namePrefix + copyId + "_moon_w", prefs.getInt(namePrefix + id + "_moon_w", 100));
+                    ed.putInt(namePrefix + copyId + "_moon_h", prefs.getInt(namePrefix + id + "_moon_h", 100));
+                    ed.putInt(namePrefix + copyId + "_moon_x", prefs.getInt(namePrefix + id + "_moon_x", 1250));
+                    ed.putInt(namePrefix + copyId + "_moon_y", prefs.getInt(namePrefix + id + "_moon_y", 1250));
+                    ed.putInt(namePrefix + copyId + "_rad", prefs.getInt(namePrefix + id + "_rad", 80));
+                    ed.putInt(namePrefix + copyId + "_moon_rad", prefs.getInt(namePrefix + id + "_moon_rad", 80));
+                }
+                ed.apply();
+                renderDataPackList(container, fType2);
+                Toast.makeText(this, "Đã nhân bản Data Pack!", Toast.LENGTH_SHORT).show();
+            });
+
+            ctrlCol.addView(swEn); ctrlCol.addView(btnCopy);
+            card.addView(infoCol); card.addView(ctrlCol);
+
             card.setOnClickListener(btn -> openDataPackEditor(fType2, id));
             card.setOnLongClickListener(btn -> {
                 new AlertDialog.Builder(this).setTitle("Xóa Data Pack?")
-                        .setPositiveButton("XÓA", (d, w) -> {
-                            removeDynamicId(listKey, id);
-                            renderDataPackList(container, fType2);
-                        }).setNegativeButton("HỦY", null).show();
+                    .setPositiveButton("XÓA", (d, w) -> {
+                        removeDynamicId(listKey, id);
+                        renderDataPackList(container, fType2);
+                    }).setNegativeButton("HỦY", null).show();
                 return true;
             });
+
             currentRow.addView(card);
             count++;
         }
+
         if (count % 2 != 0 && currentRow != null) {
             View dummy = new View(this);
             dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
             currentRow.addView(dummy);
         }
-}
+    }
 private void openDataPackEditor(int type, String id) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
