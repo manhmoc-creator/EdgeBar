@@ -1510,8 +1510,7 @@ if ((isMorseLockActive && !timeLocked) || isPreviewMorse || isUninstallGuardActi
                    boolean en = prefs.getBoolean("home_" + BARS[i] + "_en", false);
                    bars[i].setVisibility((en && shouldRenderOldHome) ? View.VISIBLE : View.GONE); 
                     if (en && shouldRenderOldHome) { 
-                    int moonAlpha = (isPreviewLock && !previewHomeOn) ? 0 : prefs.getInt("home_corner_moon_alpha", 100);
-int strokeAlpha = (isPreviewLock && !previewHomeOn) ? 0 : prefs.getInt("home_corner_stroke_alpha", 200);
+                    int alpha = (isPreviewLock && !previewHomeOn) ? 0 : prefs.getInt("home_" + BARS[i] + "_alpha", 50);
                     int w = prefs.getInt("home_" + BARS[i] + "_w", 300);
                     int h = prefs.getInt("home_" + BARS[i] + "_h", 60);
                     int x = prefs.getInt("home_" + BARS[i] + "_x", 0);
