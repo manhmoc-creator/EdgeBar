@@ -247,8 +247,8 @@ if (currentMainTab == 0) {
             openDataPackEditor(2, newId); // type 2 = Panel Data Pack
         });
         } else if (designTabState == 0 || designTabState == 1 || designTabState == 4) {
-        // [TỐI ƯU PIXEL 2XL] Nút Call P T: Xổ ra tùy chọn Data Pack từ Piece
-        fab.setText("Call P T");
+        // [TỐI ƯU PIXEL 2XL] Nút Pattern kiểu mới đặc biệt siêu chất nghệ thuật thế giới: Xổ ra tùy chọn Data Pack từ Piece
+        fab.setText("Pattern");
         fab.setOnClickListener(v -> showCallPTDropdown(designTabState));
     } else if (designTabState == 7) {
         // Yêu cầu 1: Không gian Trigg viên thuốc "Pattern" tạo Pattern Pack mới
@@ -263,9 +263,14 @@ if (currentMainTab == 0) {
     }
     } else if (currentMainTab == 1) { // Condition Space
             fab.setVisibility(View.VISIBLE);
-        fab.setText("NEW EB");
-        fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
-    } else if (currentMainTab == 2) { // Ecosystem Space
+            if (currentGesTab == 5) { // [TỐI ƯU PIXEL 2XL] Không gian FRONTIER
+                fab.setText(" "); // Nút rỗng (Zero-RAM Overhead)
+                fab.setOnClickListener(v -> openEmptyPillDialog());
+            } else {
+                fab.setText("NEW EB");
+                fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
+            }
+        } else if (currentMainTab == 2) { // Ecosystem Space
         fab.setVisibility(View.VISIBLE);
         if (ecoType == 0 || ecoType == 1 || ecoType == 2) {
             fab.setText(ecoType == 0 ? "+INTENT" : (ecoType == 1 ? "QS TILE" : "+ MACRO"));
@@ -786,6 +791,9 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
             row1.addView(swEn);
             card.addView(row1);
 
+            // [TỐI ƯU PIXEL 2XL] Bấm 1 lần mở Không gian lưu biến gọi từ TRIGG
+            card.setOnClickListener(btn -> openTriggSpaceForPack(itemKey, tabState));
+
             card.setOnLongClickListener(btn -> {
                 new AlertDialog.Builder(this).setTitle("Gỡ Pack này khỏi không gian?")
                     .setPositiveButton("GỠ", (d, w) -> {
@@ -799,6 +807,153 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
         }
     }
 
+    // [TỐI ƯU PIXEL 2XL] Không gian lưu Data Pack gọi từ TRIGG (Pattern)
+    private void openTriggSpaceForPack(String appliedItemKey, int tabState) {
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        RelativeLayout rootLayout = new RelativeLayout(this);
+        rootLayout.setBackgroundColor(Color.parseColor("#000000"));
+
+        ScrollView scroll = new ScrollView(this);
+        RelativeLayout.LayoutParams rLp = new RelativeLayout.LayoutParams(-1, -1);
+        rLp.bottomMargin = 240; // Tránh chèn lên thanh Bottom Bar
+        scroll.setLayoutParams(rLp);
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(30, 50, 30, 40);
+
+        content.addView(createSectionTitle("KHO BIẾN TRIGG CHO PACK: " + appliedItemKey));
+
+        LinearLayout listContainer = new LinearLayout(this);
+        listContainer.setOrientation(LinearLayout.VERTICAL);
+        content.addView(listContainer);
+
+        Runnable renderTriggs = () -> {
+            listContainer.removeAllViews();
+            String listKey = appliedItemKey + "_applied_triggs";
+            java.util.List<String> triggs = getDynamicIds(listKey);
+            if (triggs.isEmpty()) {
+                TextView empty = new TextView(this);
+                empty.setText("Chưa có TRIGG nào được gắn.\nBấm nút 'Call TRIGG' góc dưới để thêm.");
+                empty.setTextColor(Color.GRAY);
+                empty.setGravity(Gravity.CENTER);
+                empty.setPadding(0, 100, 0, 0);
+                listContainer.addView(empty);
+            } else {
+                for (String tId : triggs) {
+                    LinearLayout card = new LinearLayout(this);
+                    card.setOrientation(LinearLayout.VERTICAL);
+                    card.setBackground(getRounded("#202124", 20f));
+                    card.setPadding(30, 30, 30, 30);
+                    LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, -2);
+                    cLp.setMargins(0, 0, 0, 15);
+                    card.setLayoutParams(cLp);
+
+                    TextView tvName = new TextView(this);
+                    tvName.setText("[Trigg] " + prefs.getString("trigg_" + tId + "_name", "Pattern"));
+                    tvName.setTextColor(Color.WHITE);
+                    tvName.setTextSize(15f);
+                    card.addView(tvName);
+
+                    card.setOnLongClickListener(v -> {
+                        new AlertDialog.Builder(this).setTitle("Xoá Trigg này?")
+                            .setPositiveButton("XOÁ", (dialog, w) -> {
+                                triggs.remove(tId);
+                                prefs.edit().putString(listKey, android.text.TextUtils.join(",", triggs)).apply();
+                                Toast.makeText(this, "Đã xoá Trigg!", Toast.LENGTH_SHORT).show();
+                                d.dismiss();
+                                openTriggSpaceForPack(appliedItemKey, tabState); // Re-render
+                            }).setNegativeButton("HUỶ", null).show();
+                        return true;
+                    });
+                    listContainer.addView(card);
+                }
+            }
+        };
+        renderTriggs.run();
+
+        scroll.addView(content);
+        rootLayout.addView(scroll);
+
+        // [UI BUILDER] Tạo thanh Bottom Bar chính xác như hình ảnh minh họa
+        LinearLayout bottomBar = new LinearLayout(this);
+        bottomBar.setOrientation(LinearLayout.HORIZONTAL);
+        bottomBar.setGravity(Gravity.CENTER_VERTICAL);
+        bottomBar.setBackground(getRounded("#1A1A1A", 100f));
+        bottomBar.setPadding(20, 20, 20, 20);
+        RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2);
+        bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+        bLp.setMargins(40, 0, 40, 60);
+        bottomBar.setLayoutParams(bLp);
+
+        Button btnUpdate = createCircleBtn("U", "#333333");
+        btnUpdate.setTextSize(20);
+
+        Button btnPremium = new Button(this);
+        btnPremium.setText("PREMIUM");
+        btnPremium.setTextColor(Color.BLACK);
+        btnPremium.setTextSize(13.5f);
+        btnPremium.setBackground(getRounded("#00E5FF", 100f));
+        LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-2, -1);
+        pLp.setMargins(10, 0, 10, 0);
+        btnPremium.setLayoutParams(pLp);
+        btnPremium.setPadding(35, 0, 35, 0);
+
+        View spacer = new View(this);
+        spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+
+        Button fabTrigg = new Button(this);
+        fabTrigg.setText("Call TRIGG");
+        fabTrigg.setTextColor(Color.BLACK);
+        fabTrigg.setBackground(getRounded("#00E5FF", 100f));
+        fabTrigg.setTextSize(13.5f);
+        LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, 135);
+        fLp.setMargins(10, 0, 10, 0);
+        fabTrigg.setLayoutParams(fLp);
+        fabTrigg.setPadding(55, 0, 55, 0);
+
+        fabTrigg.setOnClickListener(v -> {
+            java.util.List<String> allTriggs = getDynamicIds("trigg_ids");
+            if (allTriggs.isEmpty()) {
+                Toast.makeText(this, "Chưa có Pattern Pack nào ở TRIGG!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            String[] names = new String[allTriggs.size()];
+            for (int i = 0; i < allTriggs.size(); i++) {
+                names[i] = "[Trigg] " + prefs.getString("trigg_" + allTriggs.get(i) + "_name", "Pattern");
+            }
+            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Gọi Pack từ TRIGG")
+                .setItems(names, (dialog, which) -> {
+                    String selId = allTriggs.get(which);
+                    String listKey = appliedItemKey + "_applied_triggs";
+                    java.util.List<String> curTriggs = getDynamicIds(listKey);
+                    if (!curTriggs.contains(selId)) {
+                        curTriggs.add(selId);
+                        prefs.edit().putString(listKey, android.text.TextUtils.join(",", curTriggs)).apply();
+                        d.dismiss();
+                        openTriggSpaceForPack(appliedItemKey, tabState); // Update layout
+                        Toast.makeText(this, "Đã gọi Trigg!", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(this, "Trigg này đã tồn tại!", Toast.LENGTH_SHORT).show();
+                    }
+                }).show();
+        });
+
+        Button btnBack = createCircleBtn("<", "#333333");
+        btnBack.setOnClickListener(v -> d.dismiss());
+
+        bottomBar.addView(btnUpdate);
+        bottomBar.addView(btnPremium);
+        bottomBar.addView(spacer);
+        bottomBar.addView(fabTrigg);
+        bottomBar.addView(btnBack);
+
+        rootLayout.addView(bottomBar);
+
+        d.setContentView(rootLayout);
+        d.show();
+    }
     // [TỐI ƯU PIXEL 2XL] Viên thuốc Call P T: Gọi Data Pack từ PIECE dưới dạng Dialog xổ ra siêu nhẹ
     private void showCallPTDropdown(int tabState) {
         java.util.List<String> barIds = getDynamicIds("pack_bar_ids");
