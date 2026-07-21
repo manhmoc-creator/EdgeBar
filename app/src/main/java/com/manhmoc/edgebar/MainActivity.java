@@ -3070,7 +3070,7 @@ private void renderPanelDesign() {
             int visMode = prefs.getInt("pack_panel_" + id + "_vis", 0);
             
             String strVis = visMode == 1 ? "🌍" : "📌"; // Toàn cục / Cục bộ
-            String strShape = iconShape == 0 ? "💿 : (iconShape == 1 ? "🎲" : (iconShape == 2 ? "🪨" : (iconShape == 3 ? "⚙️")));
+            String strShape = iconShape == 0 ? "💿 : (iconShape == 1 ? "🎲" : (iconShape == 2 ? "🪨" : "⚙️"));
             String strName = showName == 1 ? "⭕" : "❌";
             
             TextView tIcons = new TextView(this);
