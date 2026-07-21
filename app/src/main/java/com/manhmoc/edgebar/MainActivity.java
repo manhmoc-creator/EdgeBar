@@ -1052,7 +1052,7 @@ private void ensureHomeServiceForPreview() {
                 infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
                 
                 TextView tGest = new TextView(this);
-        String rawGest = prefs.getString("prule_" + rld + "_gestures", "Tap");
+        String rawGest = prefs.getString("prule_" + rId + "_gestures", "Tap");
         // code thuật toán tối ưu tiết kiệm pin/RAM cho pixel 2xl: xử lý string in-place
         if (rawGest.length() > 0) {
             rawGest = rawGest.substring(0, 1).toUpperCase() + rawGest.substring(1);
