@@ -777,14 +777,13 @@ case "OPEN_PANEL_1": case "OPEN_PANEL_2": case "OPEN_PANEL_3": {
 // KHÔNG đăng ký — tránh giữ sensor driver ở trạng thái lắng nghe vô ích.
 private boolean hasFingerprintRule() {
     String[] gestures = {"up","down","left","right","up_hold","down_hold","left_hold","right_hold"};
-    for (String prefix : new String[]{"home_fingerprint_", "homacc_fingerprint_"}) {
+    for (String prefix : new String[]{"home_fingerprint_", "homacc_fingerprint_", "texture_fingerprint_"}) {
         for (String g : gestures) {
             if (!prefs.getString(prefix + g, "NONE").equals("NONE")) return true;
         }
     }
     return false;
 }
-
 private void refreshFingerprintRegistration() {
     if (Build.VERSION.SDK_INT < 26) return;
     boolean needed = hasFingerprintRule();
@@ -806,11 +805,12 @@ private void refreshFingerprintRegistration() {
                             case FingerprintGestureController.FINGERPRINT_GESTURE_SWIPE_LEFT: dir = "left"; break;
                             case FingerprintGestureController.FINGERPRINT_GESTURE_SWIPE_RIGHT: dir = "right"; break;
                             default: return;
-                        }
-                        String prefix = AccessibleHomeService.isRunning ? "homacc_fingerprint_" : "home_fingerprint_";
-                        handleAction(prefix + dir);
-                    }
-                    @Override public void onGestureDetectionAvailabilityChanged(boolean available) {
+        }
+        String prefix = AccessibleHomeService.isRunning ? "homacc_fingerprint_" : "home_fingerprint_";
+        handleAction(prefix + dir);
+        handleAction("texture_fingerprint_" + dir);
+    }
+    @Override public void onGestureDetectionAvailabilityChanged(boolean available) {
     // V19.12.3.6.13: log chẩn đoán THẬT — nếu "available" không bao giờ
     // in ra true, nghĩa là cảm biến chưa từng ở gesture-mode khả dụng.
     // Chạy: adb logcat -s EdgeBar_FP  để kiểm tra trong lúc test vuốt.
