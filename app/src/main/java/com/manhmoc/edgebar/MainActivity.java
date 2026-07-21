@@ -247,20 +247,20 @@ if (currentMainTab == 0) {
             openDataPackEditor(2, newId); // type 2 = Panel Data Pack
         });
         } else if (designTabState == 0 || designTabState == 1 || designTabState == 4) {
-// Yêu cầu 1: Làm rỗng viên thuốc Pattern để nhường chỗ cho Drawer Pattern bên dưới (Zero-RAM Overhead)
-fab.setText(" ");
-fab.setOnClickListener(v -> openEmptyPillDialog());
-} else if (designTabState == 7) {
-            // Yêu cầu 1: Không gian Trigg — viên thuốc "Pattern" tạo Pattern Pack mới
-            fab.setText("PATTERN");
-            fab.setOnClickListener(v -> {
-                String newId = addDynamicId("trigg_ids");
-                openTriggPackEditor(newId);
-            });
-        } else {
-            fab.setText(" "); // Trống không ghi gì cho anima/morsos
-            fab.setOnClickListener(v -> openEmptyPillDialog()); 
-        }
+        // [TỐI ƯU PIXEL 2XL] Nút Call P T: Xổ ra tùy chọn Data Pack từ Piece
+        fab.setText("Call P T");
+        fab.setOnClickListener(v -> showCallPTDropdown(designTabState));
+    } else if (designTabState == 7) {
+        // Yêu cầu 1: Không gian Trigg viên thuốc "Pattern" tạo Pattern Pack mới
+        fab.setText("PATTERN");
+        fab.setOnClickListener(v -> {
+            String newId = addDynamicId("trigg_ids");
+            openTriggPackEditor(newId);
+        });
+    } else {
+        fab.setText(" "); // Trống không ghi gì cho anima/morsos
+        fab.setOnClickListener(v -> openEmptyPillDialog());
+    }
     } else if (currentMainTab == 1) { // Condition Space
             fab.setVisibility(View.VISIBLE);
         fab.setText("NEW EB");
@@ -737,72 +737,107 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
 }
     private void openRuleBuilderDialog(String editKey, int preComp, int preGes, String copyActs) { Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen); d.setContentView(buildRuleEditor(d, editKey, preComp, preGes, copyActs)); d.show(); }
 
-    private void addPatternDrawerToSpace(int tabState) {
-    LinearLayout content = new LinearLayout(this);
-    content.setOrientation(LinearLayout.VERTICAL);
-    content.setPadding(20, 10, 20, 20);
+    // [TỐI ƯU PIXEL 2XL] Thuật toán hiển thị các pack PIECE đã lưu vào không gian
+    private void renderAppliedPacksForSpace(int tabState) {
+        String prefix = tabState == 0 ? "lock_" : (tabState == 1 ? "home_" : "homacc_");
+        String listKey = prefix + "applied_packs";
+        java.util.List<String> appliedPacks = getDynamicIds(listKey);
 
-    content.addView(createSectionTitle("FORMAT BAR (Chọn cấu hình Bar)"));
-    java.util.List<String> barIds = getDynamicIds("pack_bar_ids");
-    java.util.ArrayList<CheckBox> barBoxes = new java.util.ArrayList<>();
-    for (String id : barIds) {
-        CheckBox cb = new CheckBox(this);
-        cb.setText(prefs.getString("pack_bar_" + id + "_name", "Data Pack"));
-        cb.setTextColor(Color.WHITE); 
-        cb.setPadding(0, 15, 0, 15);
-        cb.setTag(id);
-        barBoxes.add(cb); 
-        content.addView(cb);
-    }
-    if (barIds.isEmpty()) {
-        TextView tv = new TextView(this); 
-        tv.setText("(Chưa có Data Pack Bar nào, tạo tại PIECE)");
-        tv.setTextColor(Color.parseColor("#777777")); 
-        content.addView(tv);
-    }
+        if (appliedPacks.isEmpty()) return;
+        designSliderContainer.addView(createSectionTitle(" PACK ĐÃ GỌI TỪ PIECE"));
 
-    content.addView(createSectionTitle("FORMAT CORNER (Chọn cấu hình Góc)"));
-    java.util.List<String> cornerIds = getDynamicIds("pack_corner_ids");
-    java.util.ArrayList<CheckBox> cornerBoxes = new java.util.ArrayList<>();
-    for (String id : cornerIds) {
-        CheckBox cb = new CheckBox(this);
-        cb.setText(prefs.getString("pack_corner_" + id + "_name", "Data Pack"));
-        cb.setTextColor(Color.WHITE); 
-        cb.setPadding(0, 15, 0, 15);
-        cb.setTag(id);
-        cornerBoxes.add(cb); 
-        content.addView(cb);
-    }
-    if (cornerIds.isEmpty()) {
-        TextView tv = new TextView(this); 
-        tv.setText("(Chưa có Data Pack Corner nào, tạo tại PIECE)");
-        tv.setTextColor(Color.parseColor("#777777")); 
-        content.addView(tv);
-    }
+        for (String itemKey : appliedPacks) {
+            boolean isBar = itemKey.startsWith("bar_");
+            String id = itemKey.replace(isBar ? "bar_" : "corner_", "");
+            String packPrefix = isBar ? "pack_bar_" : "pack_corner_";
 
-    Button bSave = new Button(this); 
-    bSave.setText("ÁP DỤNG PATTERN NÀY");
-    bSave.setBackground(getRounded("#4CAF50", 20f));
-    bSave.setTextColor(Color.WHITE);
-    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, -2);
-    slp.setMargins(0, 20, 0, 0); 
-    bSave.setLayoutParams(slp);
-    content.addView(bSave);
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setBackground(getRounded("#202124", 20f));
+            card.setPadding(30, 30, 30, 30);
+            LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, -2);
+            cLp.setMargins(0, 0, 0, 15);
+            card.setLayoutParams(cLp);
 
-    bSave.setOnClickListener(v -> {
-        String targetPrefix = tabState == 0 ? "lock_" : (tabState == 4 ? "homacc_" : "home_");
-        for (CheckBox cb : barBoxes) {
-            if (cb.isChecked()) applyBarPackToSpace((String) cb.getTag(), targetPrefix);
+            LinearLayout row1 = new LinearLayout(this);
+            row1.setOrientation(LinearLayout.HORIZONTAL);
+            row1.setGravity(Gravity.CENTER_VERTICAL);
+
+            TextView tvName = new TextView(this);
+            tvName.setText((isBar ? "[Bar] " : "[Corner] ") + prefs.getString(packPrefix + id + "_name", "Data Pack"));
+            tvName.setTextColor(Color.WHITE);
+            tvName.setTextSize(15f);
+            tvName.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            tvName.setMaxLines(1);
+            tvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+            Switch swEn = new Switch(this);
+            swEn.setChecked(prefs.getBoolean(prefix + itemKey + "_en", false));
+            swEn.setOnCheckedChangeListener((sw, chk) -> {
+                prefs.edit().putBoolean(prefix + itemKey + "_en", chk).apply();
+                if (chk) {
+                    if (isBar) applyBarPackToSpace(id, prefix);
+                    else applyCornerPackToSpace(id, prefix);
+                    Toast.makeText(this, "Đã áp dụng cấu hình pack!", Toast.LENGTH_SHORT).show();
+                }
+            });
+
+            row1.addView(tvName);
+            row1.addView(swEn);
+            card.addView(row1);
+
+            card.setOnLongClickListener(btn -> {
+                new AlertDialog.Builder(this).setTitle("Gỡ Pack này khỏi không gian?")
+                    .setPositiveButton("GỠ", (d, w) -> {
+                        appliedPacks.remove(itemKey);
+                        prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
+                        renderSliders();
+                    }).setNegativeButton("HỦY", null).show();
+                return true;
+            });
+            designSliderContainer.addView(card);
         }
-        for (CheckBox cb : cornerBoxes) {
-            if (cb.isChecked()) applyCornerPackToSpace((String) cb.getTag(), targetPrefix);
-        }
-        renderSliders();
-        Toast.makeText(this, "Đã chép biến Pattern vào không gian hiện tại!", Toast.LENGTH_SHORT).show();
-    });
+    }
 
-    designSliderContainer.addView(createDrawer("📦 PATTERN TỪ PIECE (DATA PACKS)", content));
-}
+    // [TỐI ƯU PIXEL 2XL] Viên thuốc Call P T: Gọi Data Pack từ PIECE dưới dạng Dialog xổ ra siêu nhẹ
+    private void showCallPTDropdown(int tabState) {
+        java.util.List<String> barIds = getDynamicIds("pack_bar_ids");
+        java.util.List<String> cornerIds = getDynamicIds("pack_corner_ids");
+        java.util.List<String> combined = new java.util.ArrayList<>();
+        java.util.List<String> combinedNames = new java.util.ArrayList<>();
+
+        for (String id : barIds) {
+            combined.add("bar_" + id);
+            combinedNames.add("[Bar] " + prefs.getString("pack_bar_" + id + "_name", "Data Pack"));
+        }
+        for (String id : cornerIds) {
+            combined.add("corner_" + id);
+            combinedNames.add("[Corner] " + prefs.getString("pack_corner_" + id + "_name", "Data Pack"));
+        }
+
+        if (combined.isEmpty()) {
+            Toast.makeText(this, "Chưa có Data Pack nào ở PIECE!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Gọi Pack từ PIECE")
+            .setItems(combinedNames.toArray(new String[0]), (d, which) -> {
+                String selectedKey = combined.get(which);
+                String prefix = tabState == 0 ? "lock_" : (tabState == 1 ? "home_" : "homacc_");
+                String listKey = prefix + "applied_packs";
+                java.util.List<String> currentPacks = getDynamicIds(listKey);
+                
+                if (!currentPacks.contains(selectedKey)) {
+                    currentPacks.add(selectedKey);
+                    prefs.edit().putString(listKey, android.text.TextUtils.join(",", currentPacks)).apply();
+                    renderSliders();
+                    Toast.makeText(this, "Đã gọi Pack thành công!", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this, "Pack này đã tồn tại trong không gian!", Toast.LENGTH_SHORT).show();
+                }
+            }).show();
+    }
     private void applyBarPackToSpace(String id, String targetPrefix) {
         String src = "pack_bar_" + id + "_";
         int loc = prefs.getInt(src + "loc", 0);
@@ -2366,12 +2401,10 @@ drawerContent.addView(createSlider("Độ trong suốt", prefix+bKeys[i]+"_alpha
         globalDrawerAcc.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500));
         globalDrawerAcc.addView(createSlider("Độ mờ vùng TRĂNG NON", prefix+"corner_moon_alpha", 255, 100));
         globalDrawerAcc.addView(createSlider("Độ mờ VIỀN GÓC", prefix+"corner_stroke_alpha", 255, 200));
-        globalDrawerAcc.addView(createSlider ("Độ đậm viền", prefix+"corner_thick", 50,
-8));
-designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN",
-globalDrawerAcc));
-addPatternDrawerToSpace(4); // Thêm Drawer Pattern ngay bên dưới cho Homacc
-return; // Thoát sớm, không chạy code tab khác
+        globalDrawerAcc.addView(createSlider("Độ đậm viền", prefix+"corner_thick", 50, 8));
+    designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIÊN", globalDrawerAcc));
+    renderAppliedPacksForSpace(4); // [TỐI ƯU PIXEL 2XL] Render các pack gọi từ PIECE
+    return; // Thoát sớm, không chạy code tab khác
     }
     // ===== KẾT THÚC TAB HOMACC =====
 
@@ -2586,10 +2619,10 @@ designSliderContainer.addView(relockRow);
                 designSliderContainer.addView(createDrawer(CORNER_NAMES[i], drawerContent));
             }
             LinearLayout globalDrawer = new LinearLayout(this); globalDrawer.setOrientation(LinearLayout.VERTICAL); globalDrawer.setPadding(30,10,30,30); globalDrawer.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500)); globalDrawer.addView(createSlider("Độ mờ vùng TRĂNG NON (Đậm/Nhạt)", prefix+"corner_moon_alpha", 255, 100)); globalDrawer.addView(createSlider("Độ mờ VIỀN GÓC (Đậm/Nhạt)", prefix+"corner_stroke_alpha", 255, 200)); globalDrawer.addView(createSlider("Độ đậm viền (Dày/Mỏng)", prefix+"corner_thick", 50, 8));
-designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", globalDrawer));
-}
-addPatternDrawerToSpace(designTabState); // Thêm Drawer Pattern ngay bên dưới cho Lock/Homeb
-}
+    designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIÊN", globalDrawer));
+    }
+    renderAppliedPacksForSpace(designTabState); // [TỐI ƯU PIXEL 2XL] Render các pack gọi từ PIECE
+    }
 private void renderPanelDesign() {
     // Yêu cầu 2 & 4: Chuyển không gian Panel thành kho Data Pack lưu biến tối ưu RAM Pixel 2 XL
     designSliderContainer.removeAllViews();
