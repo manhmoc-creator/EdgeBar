@@ -743,7 +743,7 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
     content.setPadding(20, 10, 20, 20);
 
     content.addView(createSectionTitle("FORMAT BAR (Chọn cấu hình Bar)"));
-    java.util.List<String> barIds = getDynamiclds("pack_bar_ids");
+    java.util.List<String> barIds = getDynamicIds("pack_bar_ids");
     java.util.ArrayList<CheckBox> barBoxes = new java.util.ArrayList<>();
     for (String id : barIds) {
         CheckBox cb = new CheckBox(this);
@@ -762,7 +762,7 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
     }
 
     content.addView(createSectionTitle("FORMAT CORNER (Chọn cấu hình Góc)"));
-    java.util.List<String> cornerIds = getDynamiclds("pack_corner_ids");
+    java.util.List<String> cornerIds = getDynamicIds("pack_corner_ids");
     java.util.ArrayList<CheckBox> cornerBoxes = new java.util.ArrayList<>();
     for (String id : cornerIds) {
         CheckBox cb = new CheckBox(this);
