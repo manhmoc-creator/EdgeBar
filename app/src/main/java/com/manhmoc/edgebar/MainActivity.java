@@ -1052,17 +1052,12 @@ private void ensureHomeServiceForPreview() {
                 infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
                 
                 TextView tGest = new TextView(this);
-        String rawGest = prefs.getString("prule_" + rId + "_gestures", "Tap");
-        // code thuật toán tối ưu tiết kiệm pin/RAM cho pixel 2xl: xử lý string in-place
-        if (rawGest.length() > 0) {
-            rawGest = rawGest.substring(0, 1).toUpperCase() + rawGest.substring(1);
-        }
-        tGest.setText(rawGest);
-        tGest.setTextColor(Color.parseColor("#9AA0A6"));
-        tGest.setTextSize(12);
-        tGest.setPadding(0, 5, 0, 5);
-        tGest.setMaxLines(1);
-        tGest.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                tGest.setText(prefs.getString("prule_" + rId + "_gestures", "Tap"));
+                tGest.setTextColor(Color.parseColor("#9AA0A6"));
+                tGest.setTextSize(12);
+                tGest.setPadding(0, 5, 0, 5);
+                tGest.setMaxLines(1); tGest.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
                 TextView tAct = new TextView(this);
                 String acts = prefs.getString("prule_" + rId + "_acts", "NONE");
                 String displayAct = acts.replace("LAUNCH_APP", "Mở App").replace("RUN_SHORTCUT", "Shortcut");
@@ -3075,7 +3070,7 @@ private void renderPanelDesign() {
             int visMode = prefs.getInt("pack_panel_" + id + "_vis", 0);
             
             String strVis = visMode == 1 ? "🌍" : "🎭"; // Toàn cục / Cục bộ
-            String strShape = iconShape == 0 ? "🧫" : (iconShape == 1 ? "🎲" : (iconShape == 2 ? "☄️" : "♾️"));
+            String strShape = iconShape == 0 ? "🧫" : (iconShape == 1 ? "🎲" : (iconShape == 2 ? "☄️" : "⚙️"));
             String strName = showName == 1 ? "🌕" : "🌑";
             
             TextView tIcons = new TextView(this);
