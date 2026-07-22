@@ -1347,11 +1347,10 @@ private void ensureHomeServiceForPreview() {
         List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", ACT_KEYS, ACT_LABS);
         List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", ACT_KEYS, ACT_LABS);
 
-        content.addView(buildActionCategoryCard("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
-        content.addView(buildActionCategoryCard("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
-        content.addView(buildActionCategoryCard("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
-        content.addView(buildActionCategoryCard("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
-
+        content.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
+content.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
+content.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
+content.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
         CheckBox cbVib = new CheckBox(this);
         cbVib.setText("Bật Rung (Haptic Feedback)");
         cbVib.setTextColor(Color.WHITE);
@@ -3249,10 +3248,10 @@ private void renderTriggSpace() {
             infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
             
             TextView tName = new TextView(this);
-            tName.setText("[" + posAbbr + "] " + prefs.getString(packPrefix + id + "_name", "Data Pack"));
-            tName.setTextColor(Color.parseColor("#E8EAED"));
-            tName.setTextSize(16f);
-            tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+tName.setText(prefs.getString("trigg_" + id + "_name", "Pattern Mới"));
+tName.setTextColor(Color.parseColor("#E8EAED"));
+tName.setTextSize(16f);
+tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
             TextView tGest = new TextView(this);
             tGest.setText(prefs.getString("trigg_" + id + "_gestures", "Chưa có cử chỉ"));
             tGest.setTextColor(Color.parseColor("#9AA0A6"));
