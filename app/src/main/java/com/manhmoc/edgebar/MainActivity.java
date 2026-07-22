@@ -60,7 +60,7 @@ private View livePreviewOverlay;
 private WindowManager.LayoutParams livePreviewLp;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; private int frontierSubTab = 0;
-    private final String CURRENT_VERSION = "V19.12.3.6.22"; 
+    private final String CURRENT_VERSION = "V19.12.3.6.23"; 
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -1629,7 +1629,12 @@ for (String sa : savedArray) {
     String t = sa.trim();
     if (!t.equals("LAUNCH_APP") && !t.equals("RUN_SHORTCUT") && !t.isEmpty()) selectedActs.add(t);
 }
-List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "SPLIT_SCREEN"}, actKeysUsed, actLabsUsed);
+// Khôi phục lại đặc quyền cho VolKey Mode có thể dùng SCREEN_ON
+        String[] sysKeys = isVolKeyMode 
+            ? new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "SCREEN_ON", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "SPLIT_SCREEN"}
+            : new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "SPLIT_SCREEN"};
+            
+        List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeys, actKeysUsed, actLabsUsed);
         
         if (!isLockSpace && !isVolKeyMode) {
             LinearLayout rowApp = new LinearLayout(this);
@@ -3253,11 +3258,11 @@ tName.setTextColor(Color.parseColor("#E8EAED"));
 tName.setTextSize(16f);
 tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
             TextView tGest = new TextView(this);
-            tGest.setText(prefs.getString("trigg_" + id + "_gestures", "Chưa có cử chỉ"));
+            String rawGestures = prefs.getString("trigg_" + id + "_gestures", "Chưa có cử chỉ");
+            tGest.setText(rawGestures.toLowerCase());
             tGest.setTextColor(Color.parseColor("#9AA0A6"));
             tGest.setTextSize(12f); tGest.setPadding(0, 5, 0, 5);
             tGest.setMaxLines(1); tGest.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            
             TextView tAct = new TextView(this);
             String acts = prefs.getString("trigg_" + id + "_acts", "");
             StringBuilder actName = new StringBuilder();
@@ -3966,11 +3971,11 @@ content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 
             content.addView(pickRow);
             
             Button btnSc = new Button(this); btnSc.setText("COLLECT SHORTCUTS (" + scCount + ")");
-            btnSc.setBackground(getRounded("#7C4DFF", 20f));
-            btnSc.setTextColor(Color.WHITE);
-            btnSc.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-            btnSc.setOnClickListener(v -> showPanelMultiPicker(prefix + id + "_shortcuts", false));
-            content.addView(btnSc);
+        btnSc.setBackground(getRounded("#7C4DFF", 20f));
+        btnSc.setTextColor(Color.WHITE);
+        btnSc.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        btnSc.setOnClickListener(v -> showPanelMultiPicker(prefix + id + "_shortcuts", false, true)); // Gọi với flag isShortcut = true
+        content.addView(btnSc);
             // --- MỤC 2: PANEL CONFIG (NGĂN KÉO — Lazy Inflate, Zero-RAM khi đóng) ---
 LinearLayout panelCfgBody = new LinearLayout(this);
 panelCfgBody.setOrientation(LinearLayout.VERTICAL);
@@ -4163,27 +4168,39 @@ private LinearLayout createMiniSlider(String t, String k, int max, int def) {
 }
 // isApp=true: multi-select app picker (ghi CSV package name)
 // isApp=false: multi-select action picker (ghi CSV action key, dùng ACT_KEYS/ACT_LABS có sẵn)
-private void showPanelMultiPicker(String prefKey, boolean isApp) {
-    String cur = prefs.getString(prefKey, "");
-    final java.util.LinkedHashSet<String> selectedOrder = new java.util.LinkedHashSet<>();
-    for (String s : cur.split(",")) if (!s.trim().isEmpty()) selectedOrder.add(s.trim());
-
-    final List<String[]> allItems = new ArrayList<>();
-    if (isApp) {
-        allItems.addAll(getAppListCached());
-    } else {
-        reloadActionLabels();
-        for (int i = 1; i < ACT_KEYS.length; i++) {
-            if (ACT_KEYS[i].equals("LAUNCH_APP")) continue;
-            allItems.add(new String[]{ACT_LABS[i], ACT_KEYS[i]});
-        }
-        String scIds = prefs.getString("shortcut_ids", "");
-        if (!scIds.isEmpty()) for (String id : scIds.split(",")) {
-            String nm = prefs.getString("shortcut_" + id + "_name", "Shortcut");
-            allItems.add(new String[]{"🔗 " + nm, "RUN_SHORTCUT_" + id});
-        }
+// Gọi phương thức chính nếu không phải là Shortcut
+    private void showPanelMultiPicker(String prefKey, boolean isApp) {
+        showPanelMultiPicker(prefKey, isApp, false);
     }
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+
+    // Phương thức gánh logic
+    private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShortcut) {
+        String cur = prefs.getString(prefKey, "");
+        final java.util.LinkedHashSet<String> selectedOrder = new java.util.LinkedHashSet<>();
+        for (String s : cur.split(",")) if (!s.trim().isEmpty()) selectedOrder.add(s.trim());
+        
+        final List<String[]> allItems = new ArrayList<>();
+        if (isApp) {
+            allItems.addAll(getAppListCached());
+        } else if (isShortcut) {
+            // Hiển thị giao diện danh sách Shortcut
+            String scIds = prefs.getString("shortcut_ids", "");
+            if (!scIds.isEmpty()) {
+                for (String id : scIds.split(",")) {
+                    String nm = prefs.getString("shortcut_" + id + "_name", "Shortcut");
+                    allItems.add(new String[]{"🔗 " + nm, "RUN_SHORTCUT_" + id});
+                }
+            }
+        } else {
+            reloadActionLabels();
+            for (int i = 1; i < ACT_KEYS.length; i++) {
+                if (ACT_KEYS[i].equals("LAUNCH_APP")) continue;
+                allItems.add(new String[]{ACT_LABS[i], ACT_KEYS[i]});
+            }
+        }
+
+        // Logic Dialog bên dưới giữ nguyên...
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
 
