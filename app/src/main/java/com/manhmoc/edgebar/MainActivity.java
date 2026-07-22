@@ -1209,7 +1209,7 @@ tAct.setText(formatPruleActionLabel(rId));
     String[] opts = {"✏️ " + T("Edit","Sửa"), "🔗 " + T("Share","Chia sẻ"), "🗑️ " + T("Delete","Xóa")};
     new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
         .setTitle(T("Options","Tùy chọn"))
-        .setItems(opts, (d, which) -> {
+        .setItems(opts, (dialogOpt, which) -> {
             if (which == 0) {
                 openPackRuleEditor(appliedItemKey, rId, null, renderRules[0]);
             } else if (which == 1) {
