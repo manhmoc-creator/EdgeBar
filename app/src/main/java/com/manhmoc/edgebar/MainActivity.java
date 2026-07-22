@@ -60,7 +60,10 @@ private View livePreviewOverlay;
 private WindowManager.LayoutParams livePreviewLp;
     private int designTabState = 0;
     private int currentMainTab = 1; private int currentGesTab = 0; private int frontierSubTab = 0;
-    private final String CURRENT_VERSION = "V19.12.3.6.23"; 
+    // [MULTI-SELECT FRONTIER] Zero-RAM khi không dùng — chỉ 1 boolean + 1 Set rỗng
+    private boolean frontierSelectMode = false;
+    private java.util.Set<String> frontierSelectedItems = new java.util.LinkedHashSet<>();
+    private final String CURRENT_VERSION = "V19.12.3.6.25";
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -311,31 +314,25 @@ if (currentMainTab == 0) {
         fab.setVisibility(View.GONE);
     }
 }
+    // [ĐỔI HÀNH VI] Không còn liệt kê pack có sẵn từ PIECE — giờ tạo Bar/Corner
+    // MỚI trực tiếp ngay trong Frontier, tự động gán vào applied_packs của
+    // không gian đang đứng (Lock/Homeb/Homacc), rồi mở thẳng Format Bar/Corner.
     private void showCallPTDropdownFrontier() {
-    java.util.List<String> barIds = getDynamicIds("pack_bar_ids");
-    java.util.List<String> cornerIds = getDynamicIds("pack_corner_ids");
-    java.util.List<String> combined = new java.util.ArrayList<>();
-    java.util.List<String> combinedNames = new java.util.ArrayList<>();
-    for (String id : barIds) { combined.add("bar_" + id); combinedNames.add("[Bar] " + prefs.getString("pack_bar_"+id+"_name","Data Pack")); }
-    for (String id : cornerIds) { combined.add("corner_" + id); combinedNames.add("[Corner] " + prefs.getString("pack_corner_"+id+"_name","Data Pack")); }
-    if (combined.isEmpty()) { Toast.makeText(this, "Chưa có Data Pack nào ở PIECE!", Toast.LENGTH_SHORT).show(); return; }
-    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-        .setTitle("Gọi Pack từ PIECE")
-        .setItems(combinedNames.toArray(new String[0]), (d, which) -> {
-            String selectedKey = combined.get(which);
-            String prefix = frontierSubTab==0 ? "lock_" : frontierSubTab==1 ? "home_" : "homacc_";
-            String listKey = prefix + "applied_packs";
-            java.util.List<String> currentPacks = getDynamicIds(listKey);
-            if (!currentPacks.contains(selectedKey)) {
-                currentPacks.add(selectedKey);
+        String[] options = {"📊 " + T("Create Bar", "Tạo Bar"), "📐 " + T("Create Corner", "Tạo Corner")};
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(T("New Data Pack", "Tạo Data Pack mới"))
+            .setItems(options, (d, which) -> {
+                String prefix = frontierSubTab==0 ? "lock_" : frontierSubTab==1 ? "home_" : "homacc_";
+                String listKey = prefix + "applied_packs";
+                java.util.List<String> currentPacks = getDynamicIds(listKey);
+                int type = which; // 0 = Bar, 1 = Corner
+                String newId = addDynamicId(type == 0 ? "pack_bar_ids" : "pack_corner_ids");
+                String itemKey = (type == 0 ? "bar_" : "corner_") + newId;
+                currentPacks.add(itemKey);
                 prefs.edit().putString(listKey, TextUtils.join(",", currentPacks)).apply();
-                renderRulesList(); // vẽ lại toàn Frontier — tần suất bấm thấp nên đủ nhẹ
-                Toast.makeText(this, "Đã gọi Pack thành công!", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, "Pack này đã tồn tại trong không gian!", Toast.LENGTH_SHORT).show();
-            }
-        }).show();
-}
+                openDataPackEditor(type, newId);
+            }).show();
+    }
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -410,7 +407,7 @@ main.addView(headerRow);
     navMain = new LinearLayout(this);
     navMain.setOrientation(LinearLayout.HORIZONTAL); navMain.setPadding(0, 0, 0, 40);
         Button btnNavCond = createNavBtn(T("🎯 CONDITIONS", "ĐIỀU KIỆN"));
-        Button btnNavEco = createNavBtn(" 🎭ECOSYSTEM");
+        Button btnNavEco = createNavBtn(" 🎭 ECOSYSTEM");
         navMain.addView(btnNavCond); navMain.addView(btnNavEco); main.addView(navMain);
 
         pageDesign = new LinearLayout(this); pageDesign.setOrientation(LinearLayout.VERTICAL); pageDesign.setVisibility(View.GONE); buildDesignSpace();
@@ -452,7 +449,7 @@ if (currentMainTab == 1) { // Đang ở Condition Space
     }
 });
         Button btnDesign = createCircleBtn("⚙️", "#333333"); btnDesign.setTag("btnDesign");
-        btnDesign.setOnClickListener(v -> { if(pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); btnDesign.setText("⚙️"); btnDesign.setBackground(getRounded("#333333", 100f)); } else { openDesignSpace(); btnDesign.setText("<"); btnDesign.setBackground(getRounded("#333333", 100f)); } });
+        btnDesign.setOnClickListener(v -> { if(pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); btnDesign.setText("⚙️"); btnDesign.setBackground(getRounded("#333333", 100f)); } else { openDesignSpace(); btnDesign.setText("⚔️"); btnDesign.setBackground(getRounded("#333333", 100f)); } });
         bottomBar.addView(btnUpdate); bottomBar.addView(btnPremium); bottomBar.addView(spacer); bottomBar.addView(fab); bottomBar.addView(btnDesign);
         rootLayout.addView(bottomBar);
 btnNavCond.setOnClickListener(v -> switchMainTab(1, btnNavCond, btnNavEco));
@@ -493,9 +490,10 @@ private void switchMainTab(int idx, Button b1, Button b2) {
         btnFrontier.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
         tabContainer.addView(btnHomacc);
-        tabContainer.addView(btnVolKey);
         tabContainer.addView(btnTexture);
         tabContainer.addView(btnFrontier);
+        tabContainer.addView(btnVolKey);
+
 
         btnTexture.setOnClickListener(v -> {
             currentGesTab = 4; refreshPreview();
@@ -689,56 +687,15 @@ ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
 // không liên quan khi người dùng chỉ đang ở Frontier.
 private void renderBarsCornersEditor(LinearLayout container, String prefix,
         String[] bKeys, String[] bNames, boolean isHomaccStyle) {
-    String colorAccent = isHomaccStyle ? "#7C4DFF" : "#4CAF50";
-    container.addView(createSectionTitle("EDGE BARS (" + bKeys.length + " THANH)"));
-    for (int i = 0; i < bKeys.length; i++) {
-        LinearLayout dc = new LinearLayout(this);
-        dc.setOrientation(LinearLayout.VERTICAL); dc.setPadding(30,10,30,30);
-        CheckBox cb = new CheckBox(this);
-        cb.setText("BẬT: " + bNames[i]); cb.setTextColor(Color.parseColor(colorAccent));
-        cb.setChecked(prefs.getBoolean(prefix+bKeys[i]+"_en", false));
-        final int idx = i;
-        cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+bKeys[idx]+"_en", c).apply());
-        dc.addView(cb);
-        dc.addView(createComboDropdown("Hiển thị", prefix+bKeys[i]+"_vis_mode",
-            new String[]{"Hiện hoàn toàn","Tàng hình (Nháy sáng)","Ẩn hoàn toàn (Vô hình)"}, 0));
-        dc.addView(createComboDropdown("Chế độ Cảm ứng", prefix+bKeys[i]+"_pri_mode",
-            new String[]{"Ưu tiên Edge Bar (Khoá cứng)","Nhường OS (Xuyên thấu)"}, 0));
-        dc.addView(createSlider("Độ trong suốt", prefix+bKeys[i]+"_alpha", 255, 50));
-        dc.addView(createSlider("Chiều ngang", prefix+bKeys[i]+"_w", 3000, 300));
-        dc.addView(createSlider("Chiều dọc", prefix+bKeys[i]+"_h", 3000, 60));
-        dc.addView(createSlider("Toạ độ X", prefix+bKeys[i]+"_x", 1000, 0));
-        dc.addView(createSlider("Toạ độ Y", prefix+bKeys[i]+"_y", 2500, 0));
-        container.addView(createDrawer(bNames[i], dc));
-    }
-    container.addView(createSectionTitle("4 FRAME CORNERS"));
-    for (int i = 0; i < 4; i++) {
-        LinearLayout dc = new LinearLayout(this);
-        dc.setOrientation(LinearLayout.VERTICAL); dc.setPadding(30,10,30,30);
-        CheckBox cbEn = new CheckBox(this);
-        cbEn.setText("BẬT: " + CORNER_NAMES[i]); cbEn.setTextColor(Color.parseColor(colorAccent));
-        cbEn.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_en", false));
-        final int idx = i;
-        cbEn.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idx]+"_en", c).apply());
-        dc.addView(cbEn);
-        dc.addView(createComboDropdown("Hiển thị", prefix+"corner_"+CORNERS[i]+"_vis_mode",
-            new String[]{"Hiện hoàn toàn","Tàng hình (Nháy sáng)","Ẩn hoàn toàn (Vô hình)"}, 0));
-        dc.addView(createComboDropdown("Chế độ Cảm ứng", prefix+"corner_"+CORNERS[i]+"_pri_mode",
-            new String[]{"Ưu tiên Edge Bar (Khoá cứng)","Nhường OS (Xuyên thấu)"}, 0));
-        dc.addView(createComboDropdown("Hình dáng Góc", prefix+"corner_"+CORNERS[i]+"_shape",
-            new String[]{"Bo Cong","Thẳng Ngang","Thẳng Dọc"}, 0));
-        dc.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix+"corner_"+CORNERS[i]+"_w", 2500, 100));
-        dc.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix+"corner_"+CORNERS[i]+"_h", 2500, 100));
-        dc.addView(createSlider("Di chuyển Ngang (X)", prefix+"corner_"+CORNERS[i]+"_x", 2500, 0));
-        dc.addView(createSlider("Di chuyển Dọc (Y)", prefix+"corner_"+CORNERS[i]+"_y", 2500, 0));
-        dc.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix+"corner_"+CORNERS[i]+"_moon_w", 2500, 100));
-        dc.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix+"corner_"+CORNERS[i]+"_moon_h", 2500, 100));
-        dc.addView(createSlider("Di chuyển Trăng Non Ngang (X)", prefix+"corner_"+CORNERS[i]+"_moon_x", 2500, 1250));
-        dc.addView(createSlider("Di chuyển Trăng Non Dọc (Y)", prefix+"corner_"+CORNERS[i]+"_moon_y", 2500, 1250));
-        dc.addView(createSlider("Độ cong BO VIỀN", prefix+"corner_"+CORNERS[i]+"_rad", 1000, 80));
-        dc.addView(createSlider("Độ cong TRĂNG NON", prefix+"corner_"+CORNERS[i]+"_moon_rad", 1000, 80));
-        container.addView(createDrawer(CORNER_NAMES[i], dc));
-    }
+    // [TỐI ƯU PIXEL 2XL] Bỏ hẳn 2 vòng for dựng "EDGE BARS" (N thanh) và
+    // "4 FRAME CORNERS" — trước đây mỗi lần mở Home/Lock/Homacc phải
+    // inflate 5+4 = 9 Drawer, mỗi Drawer chứa 1 CheckBox + 2-3 Dropdown +
+    // 6-11 Slider => hàng trăm View con dựng ra rồi đọc SharedPreferences
+    // ngay cả khi người dùng không mở drawer nào. Giờ chỉ còn 1 Drawer
+    // duy nhất "TÙY CHỈNH CHUNG GÓC VIỀN" (4 slider) => giảm ~90% số View
+    // + số lần gọi prefs.getBoolean()/getInt() mỗi lần renderSliders().
+    // Tham số bKeys/bNames vẫn giữ nguyên chữ ký hàm để không phải sửa
+    // nơi gọi renderBarsCornersEditor(...) ở redrawFrontierBody().
     LinearLayout gd = new LinearLayout(this);
     gd.setOrientation(LinearLayout.VERTICAL); gd.setPadding(30,10,30,30);
     gd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500));
@@ -833,161 +790,277 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
     //   lock_applied_packs / home_applied_packs / homacc_applied_packs (qua Frontier)
     //   morse_applied_packs (qua đây)
     // -> không còn khả năng 1 lần bấm ảnh hưởng >1 không gian cùng lúc.
-    renderAppliedPacksForSpaceInto(designSliderContainer, "morse_", tabState);
+    renderAppliedPacksForSpaceInto(designSliderContainer, "morse_", tabState, false); // false = không phải Frontier
 }
-private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState) {
-        String listKey = prefix + "applied_packs";
-        java.util.List<String> appliedPacks = getDynamicIds(listKey);
-        if (appliedPacks.isEmpty()) return;
+private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState, boolean isFrontier) {
+    String listKey = prefix + "applied_packs";
+    java.util.List<String> appliedPacks = getDynamicIds(listKey);
 
-        container.addView(createSectionTitle(" PACK ĐÃ GỌI TỪ PIECE"));
+    // [MULTI-SELECT] Thanh công cụ chỉ dựng khi ĐANG ở chế độ chọn nhiều —
+    // Zero-RAM lúc bình thường, giống mọi khu vực lazy-inflate khác trong app.
+    if (isFrontier && frontierSelectMode) {
+        container.addView(buildFrontierSelectionToolbar(listKey, appliedPacks));
+    }
 
-        LinearLayout currentRow = null;
-        int count = 0;
-        String[] bPos = {"RB", "LB", "RT", "LT", "TC"};
-        String[] cPos = {"BR", "BL", "TR", "TL"};
+    if (appliedPacks.isEmpty()) {
+        if (!isFrontier) return; // Morse: giữ nguyên hành vi cũ — không hiện gì nếu rỗng
+        TextView empty = new TextView(this);
+        empty.setText(T("No Data Pack yet.\nTap 'NEW EB' to create Bar/Corner.", "Chưa có Data Pack nào.\nBấm 'NEW EB' để tạo Bar/Corner."));
+        empty.setTextColor(Color.parseColor("#777777"));
+        empty.setGravity(Gravity.CENTER);
+        empty.setPadding(0, 60, 0, 0);
+        container.addView(empty);
+        return;
+    }
 
-        for (String itemKey : appliedPacks) {
-            if (count % 2 == 0) {
-                currentRow = new LinearLayout(this);
-                currentRow.setOrientation(LinearLayout.HORIZONTAL);
-                currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT));
-                container.addView(currentRow);
+    container.addView(createSectionTitle(isFrontier
+        ? T("DATA PACK OF THIS SPACE", "DATA PACK CỦA KHÔNG GIAN NÀY")
+        : " PACK ĐÃ GỌI TỪ PIECE"));
+
+    LinearLayout currentRow = null;
+    int count = 0;
+    String[] bPos = {"RB", "LB", "RT", "LT", "TC"};
+    String[] cPos = {"BR", "BL", "TR", "TL"};
+
+    for (String itemKey : appliedPacks) {
+        if (count % 2 == 0) {
+            currentRow = new LinearLayout(this);
+            currentRow.setOrientation(LinearLayout.HORIZONTAL);
+            currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT));
+            container.addView(currentRow);
+        }
+
+        boolean isBar = itemKey.startsWith("bar_");
+        String id = itemKey.replace(isBar ? "bar_" : "corner_", "");
+        String packPrefix = isBar ? "pack_bar_" : "pack_corner_";
+
+        // FrameLayout bọc ngoài để có chỗ gắn chấm chọn (●) góc trên-phải khi vào chế độ multi-select
+        FrameLayout cardWrap = new FrameLayout(this);
+        LinearLayout.LayoutParams wrapLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        wrapLp.setMargins(6, 6, 6, 6);
+        cardWrap.setLayoutParams(wrapLp);
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setBackground(getRounded("#202124", 24f));
+        card.setPadding(15, 24, 10, 24);
+
+        int locIdx = prefs.getInt(packPrefix + id + "_loc", 0);
+        int visIdx = prefs.getInt(packPrefix + id + "_vis_mode", 0);
+        int priIdx = prefs.getInt(packPrefix + id + "_pri_mode", 0);
+
+        LinearLayout optCol = new LinearLayout(this);
+        optCol.setOrientation(LinearLayout.VERTICAL);
+        optCol.setGravity(Gravity.CENTER);
+        optCol.setPadding(0, 0, 15, 0);
+        String visIcon = visIdx == 0 ? "☠️" : (visIdx == 1 ? "👻" : "🕶️");
+        String priIcon = priIdx == 0 ? "👆" : "👇";
+        String shapeIcon = "";
+        if (!isBar) {
+            int shapeIdx = prefs.getInt(packPrefix + id + "_shape", 0);
+            shapeIcon = "\n" + (shapeIdx == 0 ? "🔲" : (shapeIdx == 1 ? "➖" : "⏸️"));
+        }
+        TextView tIcons = new TextView(this);
+        tIcons.setText(visIcon + "\n" + priIcon + shapeIcon);
+        tIcons.setTextSize(15);
+        tIcons.setLineSpacing(0, 1.2f);
+        tIcons.setGravity(Gravity.CENTER);
+        optCol.addView(tIcons);
+
+        LinearLayout infoCol = new LinearLayout(this);
+        infoCol.setOrientation(LinearLayout.VERTICAL);
+        infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        String posAbbr = isBar ? (locIdx >= 0 && locIdx < bPos.length ? bPos[locIdx] : "?") : (locIdx >= 0 && locIdx < cPos.length ? cPos[locIdx] : "?");
+        TextView tName = new TextView(this);
+        tName.setText("[" + posAbbr + "] " + prefs.getString(packPrefix + id + "_name", "Data Pack Mới"));
+        tName.setTextColor(Color.parseColor("#E8EAED"));
+        tName.setTextSize(16f);
+        tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("A:").append(prefs.getInt(packPrefix + id + "_alpha", 50))
+          .append(" W:").append(prefs.getInt(packPrefix + id + "_w", isBar ? 300 : 100))
+          .append(" H:").append(prefs.getInt(packPrefix + id + "_h", isBar ? 60 : 100))
+          .append(" X:").append(prefs.getInt(packPrefix + id + "_x", 0))
+          .append(" Y:").append(prefs.getInt(packPrefix + id + "_y", 0));
+        if (!isBar) {
+            sb.append("\nmW:").append(prefs.getInt(packPrefix + id + "_moon_w", 100))
+              .append(" mH:").append(prefs.getInt(packPrefix + id + "_moon_h", 100))
+              .append("\nR:").append(prefs.getInt(packPrefix + id + "_rad", 80));
+        }
+        TextView tSliders = new TextView(this);
+        tSliders.setText(sb.toString());
+        tSliders.setTextColor(Color.parseColor("#8AB4F8"));
+        tSliders.setTextSize(11f);
+        tSliders.setLineSpacing(0, 1.1f);
+        tSliders.setPadding(0, 4, 0, 0);
+        infoCol.addView(tName); infoCol.addView(tSliders);
+
+        LinearLayout ctrlCol = new LinearLayout(this);
+        ctrlCol.setOrientation(LinearLayout.VERTICAL);
+        ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        Switch swEn = new Switch(this);
+        swEn.setChecked(prefs.getBoolean(prefix + itemKey + "_en", false));
+        swEn.setScaleX(0.8f); swEn.setScaleY(0.8f);
+        swEn.setOnCheckedChangeListener((sw, chk) -> {
+            prefs.edit().putBoolean(prefix + itemKey + "_en", chk).apply();
+            if (chk) { if (isBar) applyBarPackToSpace(id, prefix); else applyCornerPackToSpace(id, prefix); }
+        });
+        swEn.setPadding(0, 0, 0, 6);
+
+        Button btnCopy = new Button(this); btnCopy.setText("COPY");
+        btnCopy.setBackground(getRounded("#303134", 14f));
+        btnCopy.setTextColor(Color.WHITE);
+        btnCopy.setTextSize(11f);
+        btnCopy.setPadding(10, 8, 10, 8);
+        LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(-2, -2); cpLp.setMargins(0, 4, 0, 0);
+        btnCopy.setLayoutParams(cpLp); btnCopy.setMinimumHeight(64);
+        final int fTabState = tabState;
+        btnCopy.setOnClickListener(v -> {
+            appliedPacks.add(itemKey);
+            prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
+            if (isFrontier) renderRulesList(); else renderSliders();
+            Toast.makeText(this, "Đã nhân bản Pack!", Toast.LENGTH_SHORT).show();
+        });
+
+        // [MỚI] Nút EDIT ngay dưới Copy — mở thẳng Format Bar/Corner giống PIECE trước đây
+        Button btnEdit = new Button(this); btnEdit.setText(T("EDIT", "SỬA"));
+        btnEdit.setBackground(getRounded("#00E5FF", 14f));
+        btnEdit.setTextColor(Color.BLACK);
+        btnEdit.setTextSize(11f);
+        btnEdit.setPadding(10, 8, 10, 8);
+        LinearLayout.LayoutParams edLp = new LinearLayout.LayoutParams(-2, -2); edLp.setMargins(0, 4, 0, 0);
+        btnEdit.setLayoutParams(edLp); btnEdit.setMinimumHeight(64);
+        final boolean fIsBar = isBar; final String fId = id;
+        btnEdit.setOnClickListener(v -> openDataPackEditor(fIsBar ? 0 : 1, fId));
+
+        ctrlCol.addView(swEn); ctrlCol.addView(btnCopy); ctrlCol.addView(btnEdit);
+        card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
+        cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+
+        final String fItemKey = itemKey;
+        if (isFrontier) {
+            if (frontierSelectMode) {
+                // [YÊU CẦU 1] Chấm chọn dời xuống góc dưới-trái — dễ chạm bằng ngón cái hơn
+                // khi cầm máy 1 tay trên màn hình lớn Pixel 2XL, không đụng vùng info/control
+                // ở giữa và bên phải của card.
+                TextView selDot = new TextView(this);
+                boolean sel = frontierSelectedItems.contains(fItemKey);
+                selDot.setText(sel ? "🔵" : "⚪");
+                selDot.setTextSize(18);
+                FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+                dotLp.gravity = Gravity.BOTTOM | Gravity.START;
+                dotLp.setMargins(10, 0, 0, 6);
+                selDot.setLayoutParams(dotLp);
+                cardWrap.addView(selDot);
+                card.setOnClickListener(v -> {
+                    if (frontierSelectedItems.contains(fItemKey)) frontierSelectedItems.remove(fItemKey);
+                    else frontierSelectedItems.add(fItemKey);
+                    renderRulesList();
+                });
+                card.setOnLongClickListener(v -> true);
+            } else {
+                // [YÊU CẦU 2] Chạm 1 lần vào Data Pack ở Frontier -> mở kho biến "Pattern"
+                // (openPackRuleSpace + openPackRuleEditor) thay vì mở thẳng Format Bar/Corner.
+                // Đây chính là không gian đã tồn tại sẵn cho Morse (kho prule_*), giờ dùng
+                // chung cho Frontier -> KHÔNG cấp phát thêm Dialog/Activity nào mới, chỉ
+                // route lại onClickListener -> Zero thêm RAM.
+                card.setOnClickListener(v -> openPackRuleSpace(fItemKey, fTabState));
+                card.setOnLongClickListener(v -> {
+                    frontierSelectMode = true;
+                    frontierSelectedItems.clear();
+                    frontierSelectedItems.add(fItemKey);
+                    renderRulesList();
+                    return true;
+                });
             }
-
-            boolean isBar = itemKey.startsWith("bar_");
-            String id = itemKey.replace(isBar ? "bar_" : "corner_", "");
-            String packPrefix = isBar ? "pack_bar_" : "pack_corner_";
-
-            LinearLayout card = new LinearLayout(this);
-            card.setOrientation(LinearLayout.HORIZONTAL);
-            card.setBackground(getRounded("#202124", 24f));
-            card.setPadding(15, 24, 10, 24);
-            LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            cLp.setMargins(6, 6, 6, 6);
-            card.setLayoutParams(cLp);
-
-            int locIdx = prefs.getInt(packPrefix + id + "_loc", 0);
-            int visIdx = prefs.getInt(packPrefix + id + "_vis_mode", 0);
-            int priIdx = prefs.getInt(packPrefix + id + "_pri_mode", 0);
-
-            // Cột 1 (Trái cùng): Icon Option
-            LinearLayout optCol = new LinearLayout(this);
-            optCol.setOrientation(LinearLayout.VERTICAL);
-            optCol.setGravity(Gravity.CENTER);
-            optCol.setPadding(0, 0, 15, 0);
-            
-            String visIcon = visIdx == 0 ? "☠️" : (visIdx == 1 ? "👻" : "🕶️");
-            String priIcon = priIdx == 0 ? "👆" : "👇";
-            String shapeIcon = "";
-            if (!isBar) {
-                int shapeIdx = prefs.getInt(packPrefix + id + "_shape", 0);
-                shapeIcon = "\n" + (shapeIdx == 0 ? "🔲" : (shapeIdx == 1 ? "➖" : "⏸️"));
-            }
-            
-            TextView tIcons = new TextView(this);
-            tIcons.setText(visIcon + "\n" + priIcon + shapeIcon);
-            tIcons.setTextSize(15);
-            tIcons.setLineSpacing(0, 1.2f);
-            tIcons.setGravity(Gravity.CENTER);
-            optCol.addView(tIcons);
-
-            // Cột 2 (Giữa): Info (Tên + Sliders)
-            LinearLayout infoCol = new LinearLayout(this);
-            infoCol.setOrientation(LinearLayout.VERTICAL);
-            infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-            String posAbbr = isBar ? (locIdx >= 0 && locIdx < bPos.length ? bPos[locIdx] : "?") : (locIdx >= 0 && locIdx < cPos.length ? cPos[locIdx] : "?");
-            TextView tName = new TextView(this);
-            tName.setText("[" + posAbbr + "] " + prefs.getString(packPrefix + id + "_name", "Data Pack Mới"));
-            tName.setTextColor(Color.parseColor("#E8EAED"));
-            tName.setTextSize(16f);
-            tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            StringBuilder sb = new StringBuilder();
-            sb.append("A:").append(prefs.getInt(packPrefix + id + "_alpha", 50))
-              .append(" W:").append(prefs.getInt(packPrefix + id + "_w", isBar ? 300 : 100))
-              .append(" H:").append(prefs.getInt(packPrefix + id + "_h", isBar ? 60 : 100))
-              .append(" X:").append(prefs.getInt(packPrefix + id + "_x", 0))
-              .append(" Y:").append(prefs.getInt(packPrefix + id + "_y", 0));
-            
-            if (!isBar) {
-                sb.append("\nmW:").append(prefs.getInt(packPrefix + id + "_moon_w", 100))
-                  .append(" mH:").append(prefs.getInt(packPrefix + id + "_moon_h", 100))
-                  .append(" mX:").append(prefs.getInt(packPrefix + id + "_moon_x", 1250))
-                  .append(" mY:").append(prefs.getInt(packPrefix + id + "_moon_y", 1250))
-                  .append("\nR:").append(prefs.getInt(packPrefix + id + "_rad", 80))
-                  .append(" mR:").append(prefs.getInt(packPrefix + id + "_moon_rad", 80));
-            }
-
-            TextView tSliders = new TextView(this);
-            tSliders.setText(sb.toString());
-            tSliders.setTextColor(Color.parseColor("#8AB4F8"));
-            tSliders.setTextSize(11f);
-            tSliders.setLineSpacing(0, 1.1f);
-            tSliders.setPadding(0, 4, 0, 0);
-
-            infoCol.addView(tName); infoCol.addView(tSliders);
-
-            // Cột 3 (Phải cùng): Control
-            LinearLayout ctrlCol = new LinearLayout(this);
-            ctrlCol.setOrientation(LinearLayout.VERTICAL);
-            ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
-
-            Switch swEn = new Switch(this);
-            swEn.setChecked(prefs.getBoolean(prefix + itemKey + "_en", false));
-            swEn.setScaleX(0.85f); swEn.setScaleY(0.85f);
-            swEn.setOnCheckedChangeListener((sw, chk) -> {
-                prefs.edit().putBoolean(prefix + itemKey + "_en", chk).apply();
-                if (chk) {
-                    if (isBar) applyBarPackToSpace(id, prefix);
-                    else applyCornerPackToSpace(id, prefix);
-                    Toast.makeText(this, "Đã áp dụng cấu hình pack!", Toast.LENGTH_SHORT).show();
-                }
-            });
-            swEn.setPadding(0, 0, 0, 10);
-
-            Button btnCopy = new Button(this); btnCopy.setText("COPY");
-            btnCopy.setBackground(getRounded("#303134", 14f));
-            btnCopy.setTextColor(Color.WHITE);
-            btnCopy.setTextSize(12.5f);
-            btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-            btnCopy.setPadding(12, 10, 12, 10);
-            LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-2, -2);
-            btnLp.setMargins(0, 8, 0, 0); btnCopy.setLayoutParams(btnLp);
-            btnCopy.setMinimumHeight(88);
-
-            btnCopy.setOnClickListener(v -> {
-                appliedPacks.add(itemKey);
-                prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
-                if (currentMainTab == 1 && currentGesTab == 5) renderRulesList();
-                else renderSliders();
-                Toast.makeText(this, "Đã nhân bản Pack!", Toast.LENGTH_SHORT).show();
-            });
-
-            ctrlCol.addView(swEn); ctrlCol.addView(btnCopy);
-            card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
-            card.setOnClickListener(btn -> openPackRuleSpace(itemKey, tabState));
+        } else {
+            card.setOnClickListener(btn -> openPackRuleSpace(fItemKey, fTabState));
             card.setOnLongClickListener(btn -> {
                 new AlertDialog.Builder(this).setTitle("Gỡ Pack này khỏi không gian?")
                     .setPositiveButton("GỠ", (d, w) -> {
-                        appliedPacks.remove(itemKey);
+                        appliedPacks.remove(fItemKey);
                         prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
-                        if (currentMainTab == 1 && currentGesTab == 5) renderRulesList();
-                        else renderSliders();
+                        renderSliders();
                     }).setNegativeButton("HỦY", null).show();
                 return true;
             });
-
-            currentRow.addView(card);
-            count++;
         }
 
-        if (count % 2 != 0 && currentRow != null) {
-            View dummy = new View(this);
-            dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
-            currentRow.addView(dummy);
-        }
+        currentRow.addView(cardWrap);
+        count++;
     }
+
+    if (count % 2 != 0 && currentRow != null) {
+        View dummy = new View(this);
+        dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+        currentRow.addView(dummy);
+    }
+}
+ // [MULTI-SELECT] Thanh công cụ Share/Delete/Cancel — chỉ tồn tại lúc đang chọn nhiều,
+// GC thu hồi ngay khi thoát chế độ chọn (frontierSelectMode = false → không addView nữa)
+private LinearLayout buildFrontierSelectionToolbar(String listKey, java.util.List<String> appliedPacks) {
+    LinearLayout bar = new LinearLayout(this);
+    bar.setOrientation(LinearLayout.HORIZONTAL);
+    bar.setGravity(Gravity.CENTER_VERTICAL);
+    bar.setPadding(0, 0, 0, 20);
+
+    TextView tvCount = new TextView(this);
+    tvCount.setText(frontierSelectedItems.size() + " " + T("selected", "đã chọn"));
+    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    Button btnShare = new Button(this); btnShare.setText("🔗 " + T("Share", "Chia sẻ"));
+    btnShare.setBackground(getRounded("#7C4DFF", 20f)); btnShare.setTextColor(Color.WHITE); btnShare.setTextSize(12.5f);
+    btnShare.setOnClickListener(v -> showShareToSpaceDialog());
+
+    Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", " 💫 Xóa"));
+    btnDelete.setBackground(getRounded("#D32F2F", 20f)); btnDelete.setTextColor(Color.WHITE); btnDelete.setTextSize(12.5f);
+    LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(-2, -2); delLp.setMargins(10, 0, 10, 0);
+    btnDelete.setLayoutParams(delLp);
+    btnDelete.setOnClickListener(v -> {
+        new AlertDialog.Builder(this).setTitle(T("Delete selected packs?", "Xóa các pack đã chọn?"))
+            .setPositiveButton(T("DELETE", "XÓA"), (d, w) -> {
+                appliedPacks.removeAll(frontierSelectedItems);
+                prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
+                frontierSelectMode = false;
+                frontierSelectedItems.clear();
+                renderRulesList();
+            }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
+    });
+
+    Button btnCancel = new Button(this); btnCancel.setText(T("Cancel", "Hủy"));
+    btnCancel.setBackground(getRounded("#333333", 20f)); btnCancel.setTextColor(Color.WHITE); btnCancel.setTextSize(12.5f);
+    btnCancel.setOnClickListener(v -> { frontierSelectMode = false; frontierSelectedItems.clear(); renderRulesList(); });
+
+    bar.addView(tvCount); bar.addView(btnShare); bar.addView(btnDelete); bar.addView(btnCancel);
+    return bar;
+}
+
+// "Share" = thêm tham chiếu pack đã chọn vào applied_packs của không gian khác
+// (KHÔNG nhân bản pack_bar_/pack_corner_ storage — chỉ dùng chung 1 pack ở nhiều nơi,
+// đúng tinh thần "data pack tái sử dụng nhiều chỗ" thay vì tạo file trùng lặp).
+private void showShareToSpaceDialog() {
+    String[] spaces = {"LOCK", "HOMEB", "HOMACC"};
+    String[] prefixes = {"lock_", "home_", "homacc_"};
+    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle(T("Share to space", "Chia sẻ sang không gian"))
+        .setItems(spaces, (d, which) -> {
+            String targetPrefix = prefixes[which];
+            String targetListKey = targetPrefix + "applied_packs";
+            java.util.List<String> targetPacks = getDynamicIds(targetListKey);
+            int added = 0;
+            for (String itemKey : frontierSelectedItems) {
+                if (!targetPacks.contains(itemKey)) { targetPacks.add(itemKey); added++; }
+            }
+            prefs.edit().putString(targetListKey, TextUtils.join(",", targetPacks)).apply();
+            frontierSelectMode = false;
+            frontierSelectedItems.clear();
+            Toast.makeText(this, T("Shared", "Đã chia sẻ") + " " + added + " pack!", Toast.LENGTH_SHORT).show();
+            renderRulesList();
+        }).show();
+}
     private void renderFrontierSpace() {
     LinearLayout subTab = new LinearLayout(this);
     subTab.setOrientation(LinearLayout.HORIZONTAL);
@@ -996,7 +1069,7 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
     LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0,-2,1f); lp1.setMargins(0,0,10,0);
     LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(0,-2,1f); lp2.setMargins(0,0,10,0);
     b1.setLayoutParams(lp1); b2.setLayoutParams(lp2); b3.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-    subTab.addView(b1); subTab.addView(b2); subTab.addView(b3);
+    subTab.addView(b2); subTab.addView(b3); subTab.addView(b1);
     listRules.addView(subTab);
 
     LinearLayout body = new LinearLayout(this);
@@ -1023,9 +1096,8 @@ private void redrawFrontierBody(LinearLayout body) {
     String prefix = frontierSubTab==0 ? "lock_" : frontierSubTab==1 ? "home_" : "homacc_";
     renderBarsCornersEditor(body, prefix, BARS, BAR_NAMES, frontierSubTab==2);
     int packTabState = frontierSubTab==0 ? 0 : frontierSubTab==1 ? 1 : 4;
-    renderAppliedPacksForSpaceInto(body, prefix, packTabState);
+    renderAppliedPacksForSpaceInto(body, prefix, packTabState, true); // true = isFrontier
 }
-
 // Chỉ khởi động HomescreenService khi thực sự cần xem trước Homeb —
 // nếu service đã sống sẵn (do Morse hoặc Homeb thật đang bật) thì không làm
 // gì thêm, tránh gọi startForegroundService() thừa (mỗi lần gọi = 1 IPC tốn pin).
@@ -2758,25 +2830,11 @@ btnEditPanel = new Button(this); btnEditPanel.setText("PANEL");
 btnEditPanel.setLayoutParams(mP2);
 btnEditPanel.setOnClickListener(v -> { designTabState = 5; refreshPreview();
 updateVisTabs(); renderSliders(); });
-
-Button btnEditDesignConfig = new Button(this);
-btnEditDesignConfig.setText("PIECE");
-btnEditDesignConfig.setTag("btnEditDesignConfig");
-btnEditDesignConfig.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-btnEditDesignConfig.setOnClickListener(v -> { designTabState = 6; refreshPreview();
-updateVisTabs(); renderSliders(); });
-
+// [TỐI ƯU PIXEL 2XL] Xóa hẳn 2 nút PIECE & TRIGG (không còn Button, không
+// còn OnClickListener nào tồn tại trong bộ nhớ) — designTabState sẽ không
+// bao giờ còn nhận giá trị 6 hoặc 7 nữa từ đường nào khác.
 toggleRow2.addView(btnEditMorse);
-        toggleRow2.addView(btnEditPanel);
-        toggleRow2.addView(btnEditDesignConfig);
-        
-        // Nút "Trigg" (designTabState = 7)
-        Button btnTrigg = new Button(this); btnTrigg.setText("TRIGG");
-        btnTrigg.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        btnTrigg.setTag("btnEditTrigg");
-        btnTrigg.setOnClickListener(v -> { designTabState = 7; refreshPreview(); updateVisTabs(); renderSliders(); });
-        toggleRow2.addView(btnTrigg);
-
+toggleRow2.addView(btnEditPanel);
         // ANIMA chuyển ra ngoài cùng bên phải — CHỈ đổi thứ tự addView(),
         // không đổi designTabState (vẫn giữ = 3) và không đổi bất kỳ
         // listener/logic nào khác. Đây là lệnh dựng UI 1 LẦN DUY NHẤT lúc
@@ -2796,26 +2854,13 @@ toggleRow2.addView(btnEditMorse);
         btnEditAnim.setTextColor(designTabState == 3 ? Color.BLACK : Color.WHITE);
         btnEditPanel.setBackground(getRounded(designTabState == 5 ? "#00E5FF" : "#222222", 20f));
         btnEditPanel.setTextColor(designTabState == 5 ? Color.BLACK : Color.WHITE);
-
-        Button btnTrigg = pageDesign.findViewWithTag("btnEditTrigg");
-        if (btnTrigg != null) {
-            btnTrigg.setBackground(getRounded(designTabState == 7 ? "#00E5FF" : "#222222", 20f));
-            btnTrigg.setTextColor(designTabState == 7 ? Color.BLACK : Color.WHITE);
-        }
-    // YÊU CẦU 3: Cập nhật màu nút CẤU HÌNH DESIGN (designTabState == 6)
-    Button btnCfg = pageDesign.findViewWithTag("btnEditDesignConfig");
-    if (btnCfg != null) {
-        btnCfg.setBackground(getRounded(designTabState == 6 ? "#00E5FF" : "#222222", 20f));
-        btnCfg.setTextColor(designTabState == 6 ? Color.BLACK : Color.WHITE);
-    }
+        // [TỐI ƯU PIXEL 2XL] Xóa 2 lệnh findViewWithTag() — đây là thao tác
+// duyệt cây View (tốn CPU hơn truy cập field trực tiếp), giờ không còn
+// nút nào mang tag "btnEditTrigg"/"btnEditDesignConfig" để tìm nữa.
 }
-
 private void renderSliders() {
-    designSliderContainer.removeAllViews();
-    if (designTabState == 7) { renderTriggSpace(); return; }
-    if (designTabState == 5) { renderPanelDesign(); return; }
-    // YÊU CẦU 3: Điều hướng sang không gian Cấu hình Design (Zero-RAM Overhead)
-    if (designTabState == 6) { renderDesignConfigSpace(); return; }
+designSliderContainer.removeAllViews();
+if (designTabState == 5) { renderPanelDesign(); return; }
     if(designTabState == 3) {
             Button btnTest = new Button(this); btnTest.setText("▶ THỬ NGAY HIỆU ỨNG"); btnTest.setBackground(getRounded("#FFC107", 20f)); btnTest.setTextColor(Color.BLACK); btnTest.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(-1,-2); testLp.setMargins(0,0,0,20); btnTest.setLayoutParams(testLp); btnTest.setOnClickListener(v -> { Intent i = new Intent("com.manhmoc.edgebar.TEST_ANIM"); i.setPackage(getPackageName()); sendBroadcast(i); Toast.makeText(this, "Playing Animation...", Toast.LENGTH_SHORT).show(); }); designSliderContainer.addView(btnTest);
             LinearLayout lC = new LinearLayout(this); lC.setOrientation(LinearLayout.HORIZONTAL); lC.setPadding(0,10,0,10); TextView tC = new TextView(this); tC.setText("Chủ đề:"); tC.setTextColor(Color.WHITE); tC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sC = createSpinner(); sC.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, COLOR_NAMES)); String curC = prefs.getString("anim_color", "WHITE"); for(int i=0;i<COLOR_KEYS.length;i++) if(COLOR_KEYS[i].equals(curC)) sC.setSelection(i); sC.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putString("anim_color",COLOR_KEYS[pos]).apply();}public void onNothingSelected(AdapterView<?> p){}}); sC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lC.addView(tC); lC.addView(sC); designSliderContainer.addView(lC); 
