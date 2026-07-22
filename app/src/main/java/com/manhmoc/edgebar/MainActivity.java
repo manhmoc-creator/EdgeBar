@@ -53,7 +53,7 @@ private String[] PANEL_COLOR_KEYS = {"SLATE","STEEL","MIST","GRAPHITE","INDIGO_M
 private String[] PANEL_COLOR_HEX  = {"#607D8B","#78909C","#90A4AE","#455A64","#5C6BC0","#4DB6AC","#B0BEC5","#37474F"};
 private String[] PANEL_COLOR_NAMES; // set trong reloadActionLabels()
 private String[] PANEL_POS_NAMES;   // 9 vị trí, set trong reloadActionLabels()
-private Button btnLock, btnHomacc, btnHome, btnVolKey, btnEditMorse, btnEditAnim, btnEditPanel;
+private Button btnHomacc, btnVolKey, btnEditMorse, btnEditAnim, btnEditPanel;
 private int currentPanelIdx = 1; // 1-3, panel nào đang được chỉnh trong tab PANEL
 private Button fab;
 private View livePreviewOverlay;
@@ -473,19 +473,14 @@ private void switchMainTab(int idx, Button b1, Button b2) {
 }
     // ==================== KHÔNG GIAN ĐIỀU KIỆN ====================
     private void buildConditionsSpace() {
-    LinearLayout tabContainer = new LinearLayout(this);
-    tabContainer.setOrientation(LinearLayout.HORIZONTAL);
-    tabContainer.setPadding(0, 0, 0, 20);
-btnLock = createTabBtn("LOCK");
-btnHomacc = createTabBtn("HOMACC");
-        btnHome = createTabBtn("HOMEB");
-        btnVolKey = createTabBtn("VOLKEY");
-        Button btnTexture = createTabBtn("TEXTURE"); // Yêu cầu 3
-        Button btnFrontier = createTabBtn("FRONTIER"); // Yêu cầu 3
+        LinearLayout tabContainer = new LinearLayout(this);
+        tabContainer.setOrientation(LinearLayout.HORIZONTAL);
+        tabContainer.setPadding(0, 0, 0, 20);
 
-        LinearLayout.LayoutParams pMargR = new LinearLayout.LayoutParams(0, -2, 1f);
-        pMargR.setMargins(0, 0, 10, 0);
-        btnLock.setLayoutParams(pMargR);
+        btnHomacc = createTabBtn("HOMACC");
+        btnVolKey = createTabBtn("VOLKEY");
+        Button btnTexture = createTabBtn("TEXTURE");
+        Button btnFrontier = createTabBtn("FRONTIER");
 
         LinearLayout.LayoutParams pMargR2 = new LinearLayout.LayoutParams(0, -2, 1f);
         pMargR2.setMargins(0, 0, 10, 0);
@@ -493,77 +488,58 @@ btnHomacc = createTabBtn("HOMACC");
 
         LinearLayout.LayoutParams pMargR3 = new LinearLayout.LayoutParams(0, -2, 1f);
         pMargR3.setMargins(0, 0, 10, 0);
-        btnHome.setLayoutParams(pMargR3);
-        
         btnVolKey.setLayoutParams(pMargR3);
         btnTexture.setLayoutParams(pMargR3);
         btnFrontier.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
-        tabContainer.addView(btnLock);
         tabContainer.addView(btnHomacc);
-        tabContainer.addView(btnHome);
         tabContainer.addView(btnVolKey);
         tabContainer.addView(btnTexture);
         tabContainer.addView(btnFrontier);
-        
+
         btnTexture.setOnClickListener(v -> {
-    currentGesTab = 4; refreshPreview();
-    btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE);
-    btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
-    btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE);
-    btnVolKey.setBackground(getRounded("#222222", 20f)); btnVolKey.setTextColor(Color.WHITE);
-    btnTexture.setBackground(getRounded("#4CAF50", 20f)); btnTexture.setTextColor(Color.BLACK);
-    btnFrontier.setBackground(getRounded("#222222", 20f)); btnFrontier.setTextColor(Color.WHITE);
-    updateFabVisibility(); renderRulesList();
-});
-btnFrontier.setOnClickListener(v -> {
-    currentGesTab = 5; refreshPreview();
-    btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE);
-    btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
-    btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE);
-    btnVolKey.setBackground(getRounded("#222222", 20f)); btnVolKey.setTextColor(Color.WHITE);
-    btnTexture.setBackground(getRounded("#222222", 20f)); btnTexture.setTextColor(Color.WHITE);
-    btnFrontier.setBackground(getRounded("#E91E63", 20f)); btnFrontier.setTextColor(Color.WHITE);
-    updateFabVisibility(); renderRulesList();
-});
-pageConditions.addView(tabContainer);
-    listRules = new LinearLayout(this);
-    listRules.setOrientation(LinearLayout.VERTICAL);
-    pageConditions.addView(listRules);
-btnLock.setOnClickListener(v -> {
-    currentGesTab = 0; refreshPreview();
-    btnLock.setBackground(getRounded("#00E5FF", 20f)); btnLock.setTextColor(Color.BLACK);
-    btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
-    btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE);
-    btnVolKey.setBackground(getRounded("#222222", 20f)); btnVolKey.setTextColor(Color.WHITE);
-    updateFabVisibility(); renderRulesList();
-});
-btnHomacc.setOnClickListener(v -> {
-    currentGesTab = 1; refreshPreview();
-    btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE);
-    btnHomacc.setBackground(getRounded("#7C4DFF", 20f)); btnHomacc.setTextColor(Color.BLACK);
-    btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE);
-    btnVolKey.setBackground(getRounded("#222222", 20f)); btnVolKey.setTextColor(Color.WHITE);
-    updateFabVisibility(); renderRulesList();
-});
-btnHome.setOnClickListener(v -> {
-    currentGesTab = 2; refreshPreview();
-    btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE);
-    btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
-    btnHome.setBackground(getRounded("#00E5FF", 20f)); btnHome.setTextColor(Color.BLACK);
-    btnVolKey.setBackground(getRounded("#222222", 20f)); btnVolKey.setTextColor(Color.WHITE);
-    updateFabVisibility(); renderRulesList();
-});
-btnVolKey.setOnClickListener(v -> {
-    currentGesTab = 3; refreshPreview();
-    btnLock.setBackground(getRounded("#222222", 20f)); btnLock.setTextColor(Color.WHITE);
-    btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
-    btnHome.setBackground(getRounded("#222222", 20f)); btnHome.setTextColor(Color.WHITE);
-    btnVolKey.setBackground(getRounded("#FFC107", 20f)); btnVolKey.setTextColor(Color.BLACK);
-    updateFabVisibility(); renderRulesList();
-});
-btnHome.performClick();
-}
+            currentGesTab = 4; refreshPreview();
+            btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
+            btnVolKey.setBackground(getRounded("#222222", 20f)); btnVolKey.setTextColor(Color.WHITE);
+            btnTexture.setBackground(getRounded("#4CAF50", 20f)); btnTexture.setTextColor(Color.BLACK);
+            btnFrontier.setBackground(getRounded("#222222", 20f)); btnFrontier.setTextColor(Color.WHITE);
+            updateFabVisibility(); renderRulesList();
+        });
+        btnFrontier.setOnClickListener(v -> {
+            currentGesTab = 5; refreshPreview();
+            btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
+            btnVolKey.setBackground(getRounded("#222222", 20f)); btnVolKey.setTextColor(Color.WHITE);
+            btnTexture.setBackground(getRounded("#222222", 20f)); btnTexture.setTextColor(Color.WHITE);
+            btnFrontier.setBackground(getRounded("#E91E63", 20f)); btnFrontier.setTextColor(Color.WHITE);
+            updateFabVisibility(); renderRulesList();
+        });
+
+        pageConditions.addView(tabContainer);
+        listRules = new LinearLayout(this);
+        listRules.setOrientation(LinearLayout.VERTICAL);
+        pageConditions.addView(listRules);
+
+        btnHomacc.setOnClickListener(v -> {
+            currentGesTab = 1; refreshPreview();
+            btnHomacc.setBackground(getRounded("#7C4DFF", 20f)); btnHomacc.setTextColor(Color.BLACK);
+            btnVolKey.setBackground(getRounded("#222222", 20f)); btnVolKey.setTextColor(Color.WHITE);
+            btnTexture.setBackground(getRounded("#222222", 20f)); btnTexture.setTextColor(Color.WHITE);
+            btnFrontier.setBackground(getRounded("#222222", 20f)); btnFrontier.setTextColor(Color.WHITE);
+            updateFabVisibility(); renderRulesList();
+        });
+        btnVolKey.setOnClickListener(v -> {
+            currentGesTab = 3; refreshPreview();
+            btnHomacc.setBackground(getRounded("#333333", 20f)); btnHomacc.setTextColor(Color.WHITE);
+            btnVolKey.setBackground(getRounded("#FFC107", 20f)); btnVolKey.setTextColor(Color.BLACK);
+            btnTexture.setBackground(getRounded("#222222", 20f)); btnTexture.setTextColor(Color.WHITE);
+            btnFrontier.setBackground(getRounded("#222222", 20f)); btnFrontier.setTextColor(Color.WHITE);
+            updateFabVisibility(); renderRulesList();
+        });
+
+        // Lock/Homeb đã dời sang FRONTIER — mặc định mở FRONTIER thay vì HOMEB
+        // như bản cũ, vì HOMEB không còn nút nào để tự bấm vào nữa.
+        btnFrontier.performClick();
+    }
 private String getSpacePrefix() {
     if (currentGesTab == 3) return "volkey_";
     switch (currentGesTab) {
@@ -4209,10 +4185,8 @@ private LinearLayout createMiniSlider(String t, String k, int max, int def) {
     etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
     etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
     root.addView(etSearch);
-
     ListView lv = new ListView(this);
     lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-    root.addView(lv);
 
     final List<String[]> shown = new ArrayList<>();
     final Runnable[] refreshHolder = new Runnable[1];
@@ -4234,41 +4208,41 @@ private LinearLayout createMiniSlider(String t, String k, int max, int def) {
             row.addView(cb); row.addView(tv);
             row.setOnClickListener(v -> {
                 if (selectedOrder.contains(item[1])) selectedOrder.remove(item[1]);
-                else selectedOrder.add(item[1]); // mục vừa chọn -> cuối danh sách đã chọn (thứ tự ưu tiên)
-                refreshHolder[0].run(); // nhảy lên đầu ngay lập tức
+                else selectedOrder.add(item[1]);
+                refreshHolder[0].run();
             });
             return row;
         }
     };
     lv.setAdapter(adapter);
 
-    Runnable doRefresh = () -> {
-        String q = etSearch.getText().toString().trim().toLowerCase();
-        shown.clear();
-        List<String[]> selectedSorted = new ArrayList<>();
-        List<String[]> restList = new ArrayList<>();
-        for (String key : selectedOrder) {
-            for (String[] it : allItems) {
-                if (it[1].equals(key) && (q.isEmpty() || it[0].toLowerCase().contains(q))) { selectedSorted.add(it); break; }
-            }
-        }
-        for (String[] it : allItems) {
-            if (selectedOrder.contains(it[1])) continue;
-            if (!q.isEmpty() && !it[0].toLowerCase().contains(q)) continue;
-            restList.add(it);
-        }
-        shown.addAll(selectedSorted);
-        shown.addAll(restList);
-        adapter.notifyDataSetChanged();
-    };
-    refreshHolder[0] = doRefresh;
-    etSearch.addTextChangedListener(new android.text.TextWatcher(){
-        public void afterTextChanged(android.text.Editable s){ doRefresh.run(); }
-        public void beforeTextChanged(CharSequence s,int a,int b,int c){}
-        public void onTextChanged(CharSequence s,int a,int b,int c){}
-    });
-    doRefresh.run();
+    // [FIX MỤC 4] Chỉ trong không gian Shortcut mới hiện nút "Tạo Shortcut mới" —
+    // gọi ĐÚNG showShortcutPickerDialog() giống hệt luồng Homeb/Homacc dùng
+    // (ACTION_CREATE_SHORTCUT thật, cho phép chọn app rồi tạo shortcut nếu chưa có),
+    // thay vì chỉ chọn lại trong danh sách đã tạo sẵn như code cũ.
+    // Zero-RAM: nút chỉ tồn tại trong lúc Dialog này mở, GC thu hồi khi đóng.
+    if (isShortcut) {
+        Button btnNewShortcut = new Button(this);
+        btnNewShortcut.setText("➕ " + T("Create new Shortcut", "Tạo Shortcut mới"));
+        btnNewShortcut.setBackground(getRounded("#7C4DFF", 20f));
+        btnNewShortcut.setTextColor(Color.WHITE);
+        btnNewShortcut.setTextSize(13.5f);
+        LinearLayout.LayoutParams nsLp = new LinearLayout.LayoutParams(-1, -2);
+        nsLp.setMargins(0, 10, 0, 10);
+        btnNewShortcut.setLayoutParams(nsLp);
+        btnNewShortcut.setOnClickListener(v -> showShortcutPickerDialog((newId, newName) -> {
+            String newKey = "RUN_SHORTCUT_" + newId;
+            boolean already = false;
+            for (String[] it : allItems) if (it[1].equals(newKey)) { already = true; break; }
+            if (!already) allItems.add(new String[]{"🔗 " + newName, newKey});
+            selectedOrder.add(newKey);
+            refreshHolder[0].run();
+        }));
+        root.addView(btnNewShortcut);
+    }
 
+    root.addView(lv);
+    doRefresh.run();
     LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,20,0,0);
     Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY")); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     Button bSave = new Button(this); bSave.setText(T("SAVE","LƯU")); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0); bSave.setLayoutParams(slp);
