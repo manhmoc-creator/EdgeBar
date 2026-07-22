@@ -923,7 +923,7 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
 
             String posAbbr = isBar ? (locIdx >= 0 && locIdx < bPos.length ? bPos[locIdx] : "?") : (locIdx >= 0 && locIdx < cPos.length ? cPos[locIdx] : "?");
             TextView tName = new TextView(this);
-            tName.setText("[" + posAbbr + "] " + prefs.getString(namePrefix + id + "_name", "Data Pack Mới"));
+            tName.setText("[" + posAbbr + "] " + prefs.getString(packPrefix + id + "_name", "Data Pack Mới"));
             tName.setTextColor(Color.parseColor("#E8EAED"));
             tName.setTextSize(16f);
             tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
