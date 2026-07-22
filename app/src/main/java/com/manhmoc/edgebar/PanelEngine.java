@@ -31,14 +31,23 @@ private boolean[] forceTestOn = new boolean[3]; // Bật/tắt từ checkbox TES
         ACT_LABEL_MAP.put("RECENTS","Đa nhiệm"); ACT_LABEL_MAP.put("VOICE_RECORD","Ghi âm");
         ACT_LABEL_MAP.put("TOGGLE_MORSE","Khóa Morse");
     }
-
     public PanelEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode) {
     this.ctx = ctx; this.wm = wm; this.prefs = prefs; this.isAnyMode = isAnyMode;
     this.km = (KeyguardManager) ctx.getSystemService(Context.KEYGUARD_SERVICE);
-    for (int i = 0; i < 3; i++) {
-        if (shouldPanelBodyExistNow(i)) buildPanelBody(i);
-        if (shouldHandleExistNow(i)) buildHandle(i);
+    // [FIX PANEL MA] Hệ panel1_/panel2_/panel3_ cũ đã bị thay bằng Data Pack
+    // Panel (pack_panel_*) nhưng UI không còn màn hình nào chỉnh panel1_en/
+    // panel2_en/panel3_en nữa. Nếu còn sót giá trị true từ bản cũ, panel sẽ
+    // hiện vĩnh viễn vì không cách nào tắt qua giao diện. Dọn 1 lần, an toàn
+    // tuyệt đối vì không còn UI nào dùng các key này.
+    SharedPreferences.Editor cleanup = prefs.edit();
+    boolean hasLegacy = false;
+    for (int i = 1; i <= 3; i++) {
+        if (prefs.getBoolean("panel" + i + "_en", false)) {
+            cleanup.putBoolean("panel" + i + "_en", false);
+            hasLegacy = true;
+        }
     }
+    if (hasLegacy) cleanup.apply();
 }
     /** Gọi mỗi khi lock state / accessibility state đổi — decide xem instance này
      *  (Lock hay Homacc, tùy trạng thái) có được phép giữ panel hay không. */
