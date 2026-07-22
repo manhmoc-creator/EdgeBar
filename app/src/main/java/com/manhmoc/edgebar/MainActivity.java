@@ -922,14 +922,11 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
             infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
             String posAbbr = isBar ? (locIdx >= 0 && locIdx < bPos.length ? bPos[locIdx] : "?") : (locIdx >= 0 && locIdx < cPos.length ? cPos[locIdx] : "?");
-
             TextView tName = new TextView(this);
-            tName.setText("[" + posAbbr + "] " + prefs.getString(packPrefix + id + "_name", "Data Pack"));
+            tName.setText("[" + posAbbr + "] " + prefs.getString(namePrefix + id + "_name", "Data Pack Mới"));
             tName.setTextColor(Color.parseColor("#E8EAED"));
             tName.setTextSize(16f);
-            tName.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
             tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-
             StringBuilder sb = new StringBuilder();
             sb.append("A:").append(prefs.getInt(packPrefix + id + "_alpha", 50))
               .append(" W:").append(prefs.getInt(packPrefix + id + "_w", isBar ? 300 : 100))
@@ -1633,99 +1630,66 @@ for (String sa : savedArray) {
     String t = sa.trim();
     if (!t.equals("LAUNCH_APP") && !t.equals("RUN_SHORTCUT") && !t.isEmpty()) selectedActs.add(t);
 }
-// --- [CODE MỚI THAY THẾ - TỐI ƯU PIXEL 2 XL] ---
-List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{
-"BACK","HOME", "RECENTS", "SCREEN_OFF","FLASH","POWER_DIALOG", "VOLUME",
-"SCREENSHOT", "CAMERA","NOTIFICATIONS","SPLIT_SCREEN" 
-}, actKeysUsed, actLabsUsed);
+List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "SPLIT_SCREEN"}, actKeysUsed, actLabsUsed);
+        
+        if (!isLockSpace && !isVolKeyMode) {
+            LinearLayout rowApp = new LinearLayout(this);
+            rowApp.setOrientation(LinearLayout.HORIZONTAL);
+            rowApp.setGravity(Gravity.CENTER_VERTICAL);
+            rowApp.setPadding(0, 0, 0, 20);
+            Switch swApp = new Switch(this);
+            swApp.setChecked(launchAppSelected[0]);
+            swApp.setOnCheckedChangeListener((b,c) -> launchAppSelected[0] = c);
+            swApp.setPadding(0, 0, 20, 0);
+            Button btnPickApp = new Button(this);
+            btnPickApp.setBackground(getRounded("#00E5FF", 20f));
+            btnPickApp.setTextColor(Color.BLACK);
+            btnPickApp.setTextSize(13.5f);
+            btnPickApp.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            btnPickApp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            Runnable updateApp = () -> btnPickApp.setText("📱 MỞ APP: " + (launchAppPkg[0].isEmpty() ? "CHƯA CHỌN" : getAppLabelCached(launchAppPkg[0])));
+            updateApp.run();
+            btnPickApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> { launchAppPkg[0] = pkg; swApp.setChecked(true); updateApp.run(); }));
+            rowApp.addView(swApp); rowApp.addView(btnPickApp);
+            vAct.addView(rowApp);
 
-// YÊU CẦU 1: Tách riêng Launch App/Shortcut (chỉ cho Homeb sáng màn)
-// Tiện ích/Intents/Macros được phép dùng trên cả HOMEB và LOCK SPACE
-if (!isLockSpace && !isVolKeyMode) {
-    // 1. HỘP LAUNCH APP (Khóa trên màn Lock vì cần unlock OS)
-    LinearLayout launchAppCard = new LinearLayout(this);
-    launchAppCard.setOrientation(LinearLayout.VERTICAL);
-    launchAppCard.setBackground(getRounded("#1A2C3A", 20f));
-    launchAppCard.setPadding(30, 30, 30, 30);
-    LinearLayout.LayoutParams lacLp = new LinearLayout.LayoutParams(-1, -2);
-    lacLp.setMargins(0, 0, 0, 20);
-    launchAppCard.setLayoutParams(lacLp);
-    LinearLayout lacRow = new LinearLayout(this);
-    lacRow.setOrientation(LinearLayout.HORIZONTAL);
-    lacRow.setGravity(Gravity.CENTER_VERTICAL);
-    TextView tvLacTitle = new TextView(this); tvLacTitle.setText("🚀 " + T("Launch App", "Mở Ứng Dụng"));
-    tvLacTitle.setTextColor(Color.WHITE); tvLacTitle.setTextSize(14.5f);
-    tvLacTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    tvLacTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    Switch swLaunchApp = new Switch(this);
-    swLaunchApp.setChecked(launchAppSelected[0]);
-    swLaunchApp.setOnCheckedChangeListener((b, c) -> launchAppSelected[0] = c);
-    lacRow.addView(tvLacTitle); lacRow.addView(swLaunchApp);
-    launchAppCard.addView(lacRow);
-    TextView tvChosenApp = new TextView(this);
-    tvChosenApp.setTextColor(Color.parseColor("#00E5FF")); tvChosenApp.setPadding(0, 10, 0, 15);
-    tvChosenApp.setText(getAppLabelCached(launchAppPkg[0]));
-    launchAppCard.addView(tvChosenApp);
-    Button btnPickLaunchApp = new Button(this); btnPickLaunchApp.setText("📱 " + T("CHOOSE APP", "CHỌN APP"));
-    btnPickLaunchApp.setBackground(getRounded("#00E5FF", 20f));
-    btnPickLaunchApp.setTextColor(Color.BLACK); btnPickLaunchApp.setTextSize(13f);
-    btnPickLaunchApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> { launchAppPkg[0] = pkg; tvChosenApp.setText(getAppLabelCached(pkg)); swLaunchApp.setChecked(true); }));
-    launchAppCard.addView(btnPickLaunchApp);
-    vAct.addView(launchAppCard);
+            LinearLayout rowSc = new LinearLayout(this);
+            rowSc.setOrientation(LinearLayout.HORIZONTAL);
+            rowSc.setGravity(Gravity.CENTER_VERTICAL);
+            rowSc.setPadding(0, 0, 0, 20);
+            Switch swSc = new Switch(this);
+            swSc.setChecked(shortcutSelected[0]);
+            swSc.setOnCheckedChangeListener((b,c) -> shortcutSelected[0] = c);
+            swSc.setPadding(0, 0, 20, 0);
+            Button btnPickSc = new Button(this);
+            btnPickSc.setBackground(getRounded("#7C4DFF", 20f));
+            btnPickSc.setTextColor(Color.WHITE);
+            btnPickSc.setTextSize(13.5f);
+            btnPickSc.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            btnPickSc.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            Runnable updateSc = () -> btnPickSc.setText("🔗 SHORTCUT: " + (shortcutId[0].isEmpty() ? "CHƯA CHỌN" : prefs.getString("shortcut_" + shortcutId[0] + "_name", "?")));
+            updateSc.run();
+            btnPickSc.setOnClickListener(v -> showShortcutPickerDialog((idSc, name) -> { shortcutId[0] = idSc; swSc.setChecked(true); updateSc.run(); }));
+            rowSc.addView(swSc); rowSc.addView(btnPickSc);
+            vAct.addView(rowSc);
+        } else {
+            launchAppSelected[0] = false;
+            shortcutSelected[0] = false;
+        }
 
-    // 2. HỘP RUN SHORTCUT
-    LinearLayout shortcutCard = new LinearLayout(this);
-    shortcutCard.setOrientation(LinearLayout.VERTICAL);
-    shortcutCard.setBackground(getRounded("#2A1A3A", 20f));
-    shortcutCard.setPadding(30, 30, 30, 30);
-    LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(-1, -2);
-    scLp.setMargins(0, 0, 0, 20);
-    shortcutCard.setLayoutParams(scLp);
-    LinearLayout scRow = new LinearLayout(this);
-    scRow.setOrientation(LinearLayout.HORIZONTAL);
-    scRow.setGravity(Gravity.CENTER_VERTICAL);
-    TextView tvScTitle = new TextView(this); tvScTitle.setText("🔗 " + T("Run Shortcut", "Chạy Shortcut"));
-    tvScTitle.setTextColor(Color.WHITE); tvScTitle.setTextSize(14.5f);
-    tvScTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    tvScTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    Switch swShortcut = new Switch(this); swShortcut.setChecked(shortcutSelected[0]);
-    swShortcut.setOnCheckedChangeListener((b, c) -> shortcutSelected[0] = c);
-    scRow.addView(tvScTitle); scRow.addView(swShortcut);
-    shortcutCard.addView(scRow);
-    TextView tvChosenSc = new TextView(this);
-    tvChosenSc.setTextColor(Color.parseColor("#00E5FF")); tvChosenSc.setPadding(0, 10, 0, 15);
-    tvChosenSc.setText(shortcutId[0].isEmpty() ? T("(Not selected)", "(Chưa chọn)") : prefs.getString("shortcut_" + shortcutId[0] + "_name", "?"));
-    shortcutCard.addView(tvChosenSc);
-    Button btnPickShortcut = new Button(this); btnPickShortcut.setText("⚡ " + T("CHOOSE SHORTCUT", "CHỌN SHORTCUT"));
-    btnPickShortcut.setBackground(getRounded("#7C4DFF", 20f));
-    btnPickShortcut.setTextColor(Color.WHITE); btnPickShortcut.setTextSize(13f);
-    btnPickShortcut.setOnClickListener(v -> showShortcutPickerDialog((id, name) -> { shortcutId[0] = id; tvChosenSc.setText(name); swShortcut.setChecked(true); }));
-    shortcutCard.addView(btnPickShortcut);
-    vAct.addView(shortcutCard);
-} else {
-    // Zero-RAM: Không tải 2 hộp App/Shortcut cho Lock và VolKey
-    launchAppSelected[0] = false;
-    shortcutSelected[0] = false;
-}
-
-// MỤC SYSTEM: Luôn hiển thị ở mọi không gian
-vAct.addView(buildActionCategoryCard("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
-
-// YÊU CẦU 1 (Cốt lõi): UTILITIES / INTENTS/MACROS mở khóa cho CẢ HOMEB và LOCK
-            // Chỉ khóa với VolKey (phím cứng khi tắt màn không nên chạy Macro/Intent nặng)
-            if (!isVolKeyMode) {
-                // Đã gom toàn bộ các action tiện ích vào khối UTILITIES để hiển thị đầy đủ cho không gian LOCK
-                List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{
-                        "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", "YTDL_DOWNLOAD", "OPEN_PANEL_1", "OPEN_PANEL_2", "OPEN_PANEL_3"
-                }, actKeysUsed, actLabsUsed);
-                List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", actKeysUsed,
-                        actLabsUsed);
-                List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", actKeysUsed, actLabsUsed);
-    vAct.addView(buildActionCategoryCard("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
-    vAct.addView(buildActionCategoryCard("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
-    vAct.addView(buildActionCategoryCard("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
-}
-// --- [KẾT THÚC CODE MỚI] ---
+        List<String[]> PANEL_ITEMS = buildItemsForKeys(new String[]{"OPEN_PANEL_1", "OPEN_PANEL_2", "OPEN_PANEL_3"}, actKeysUsed, actLabsUsed);
+        vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
+        
+        if (!isVolKeyMode) {
+            List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", "YTDL_DOWNLOAD"}, actKeysUsed, actLabsUsed);
+            List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", actKeysUsed, actLabsUsed);
+            List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", actKeysUsed, actLabsUsed);
+            
+            vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
+            vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0"));
+            vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
+            vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
+        }
 cbVib.setText(T("Haptic Feedback", "Bật Rung (Haptic Feedback)"));
 cbVib.setTextColor(Color.WHITE); cbVib.setChecked(editKey == null ||
 prefs.getBoolean(editKey+"_vib", true)); vTrig.addView(cbVib);
@@ -1862,49 +1826,26 @@ private List<String[]> buildItemsForPrefix(String prefix, String[] actKeysUsed, 
     return out;
 }
 
-private LinearLayout buildActionCategoryCard(String title, String emoji, List<String[]>
-items, java.util.LinkedHashSet<String> selectedSet, String colorHex) {
-LinearLayout card = new LinearLayout(this);
-card.setOrientation (LinearLayout.VERTICAL);
-card.setBackground(getRounded("#202124", 20f));
-card.setPadding (30, 30, 30, 30);
-LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-    lp.setMargins(0, 0, 0, 20);
-    card.setLayoutParams(lp);
+private Button buildActionCategoryButton(String title, String emoji, List<String[]> items, java.util.LinkedHashSet<String> selectedSet, String colorHex) {
+        Button btnPick = new Button(this);
+        btnPick.setBackground(getRounded(colorHex, 20f));
+        btnPick.setTextColor(Color.WHITE);
+        btnPick.setTextSize(13.5f);
+        btnPick.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, 20);
+        btnPick.setLayoutParams(lp);
 
-    LinearLayout row = new LinearLayout(this);
-    row.setOrientation(LinearLayout.HORIZONTAL);
-    row.setGravity(Gravity.CENTER_VERTICAL);
-    TextView tvTitle = new TextView(this);
-    tvTitle.setText(emoji + " " + title);
-    tvTitle.setTextColor(Color.WHITE);
-    tvTitle.setTextSize(14.5f);
-    tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    row.addView(tvTitle);
-    card.addView(row);
+        Runnable updateCount = () -> {
+            int cnt = 0;
+            for (String[] it : items) if (selectedSet.contains(it[1])) cnt++;
+            btnPick.setText(emoji + " " + title + (cnt > 0 ? " (" + cnt + ")" : ""));
+        };
+        updateCount.run();
 
-    TextView tvCount = new TextView(this);
-    tvCount.setTextColor(Color.parseColor("#00E5FF"));
-    tvCount.setPadding(0, 10, 0, 15);
-    Runnable updateCount = () -> {
-        int cnt = 0;
-        for (String[] it : items) if (selectedSet.contains(it[1])) cnt++;
-        tvCount.setText(cnt == 0 ? T("(Not selected)", "(Chưa chọn)") : "⚡ " + cnt + " " + T("selected", "hành động đã chọn"));
-    };
-updateCount.run();
-card.addView(tvCount);
-Button btnPick = new Button(this);
-btnPick.setText("⚡ " + T("CHOOSE ACTIONS", "CHỌN HÀNH ĐỘNG"));
-btnPick.setBackground(getRounded(colorHex, 20f));
-btnPick.setTextColor(Color.WHITE);
-btnPick.setTextSize(13f);
-btnPick.setOnClickListener(v -> showActionCategoryPicker(title, items, selectedSet,
-updateCount));
-card.setOnClickListener(v -> btnPick.performClick());
-card.addView(btnPick);
-return card;
-}
+        btnPick.setOnClickListener(v -> showActionCategoryPicker(title, items, selectedSet, updateCount));
+        return btnPick;
+    }
 // Dialog picker DÙNG CHUNG cho cả 4 category — có ô tìm kiếm + multi-select,
 // y hệt pattern showPanelMultiPicker() đã có sẵn, để đồng bộ trải nghiệm.
 private void showActionCategoryPicker(String title, List<String[]> items,
@@ -3308,12 +3249,10 @@ private void renderTriggSpace() {
             infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
             
             TextView tName = new TextView(this);
-            tName.setText(prefs.getString("trigg_" + id + "_name", "Pattern Mới"));
+            tName.setText("[" + posAbbr + "] " + prefs.getString(packPrefix + id + "_name", "Data Pack"));
             tName.setTextColor(Color.parseColor("#E8EAED"));
             tName.setTextSize(16f);
-            tName.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
             tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            
             TextView tGest = new TextView(this);
             tGest.setText(prefs.getString("trigg_" + id + "_gestures", "Chưa có cử chỉ"));
             tGest.setTextColor(Color.parseColor("#9AA0A6"));
@@ -3322,9 +3261,30 @@ private void renderTriggSpace() {
             
             TextView tAct = new TextView(this);
             String acts = prefs.getString("trigg_" + id + "_acts", "");
-            tAct.setText(acts.isEmpty() ? "Chưa có hành động" : acts.replace("LAUNCH_APP", "Mở App").replace("RUN_SHORTCUT", "Shortcut"));
+            StringBuilder actName = new StringBuilder();
+            if (!acts.isEmpty()) {
+                for (String a : acts.split(",")) {
+                    String at = a.trim();
+                    if (at.equals("LAUNCH_APP")) {
+                        if (actName.length() > 0) actName.append(" + ");
+                        actName.append(getAppLabelCached(prefs.getString("trigg_" + id + "_launch_pkg", "")));
+                    } else if (at.equals("RUN_SHORTCUT")) {
+                        if (actName.length() > 0) actName.append(" + ");
+                        String scId = prefs.getString("trigg_" + id + "_shortcut_id", "");
+                        actName.append(scId.isEmpty() ? "Shortcut" : prefs.getString("shortcut_" + scId + "_name", "Shortcut"));
+                    } else {
+                        for (int i = 0; i < ACT_KEYS.length; i++) {
+                            if (ACT_KEYS[i].equals(at)) {
+                                if (actName.length() > 0) actName.append(" + ");
+                                actName.append(ACT_LABS[i]);
+                            }
+                        }
+                    }
+                }
+            }
+            tAct.setText(actName.length() == 0 ? "Chưa có hành động" : actName.toString());
             tAct.setTextColor(Color.parseColor("#8AB4F8"));
-            tAct.setTextSize(16f);
+            tAct.setTextSize(14f);
             tAct.setMaxLines(1); tAct.setEllipsize(android.text.TextUtils.TruncateAt.END);
             
             infoCol.addView(tName); infoCol.addView(tGest); infoCol.addView(tAct);
@@ -3465,98 +3425,57 @@ private void openTriggPackEditor(String id) {
         final String[] launchAppPkg = { prefs.getString("trigg_" + id + "_launch_pkg", "") };
         final boolean[] shortcutSelected = { selectedActs.contains("RUN_SHORTCUT") };
         final String[] shortcutId = { prefs.getString("trigg_" + id + "_shortcut_id", "") };
+        LinearLayout rowApp = new LinearLayout(this);
+        rowApp.setOrientation(LinearLayout.HORIZONTAL);
+        rowApp.setGravity(Gravity.CENTER_VERTICAL);
+        rowApp.setPadding(0, 0, 0, 20);
+        Switch swApp = new Switch(this);
+        swApp.setChecked(launchAppSelected[0]);
+        swApp.setOnCheckedChangeListener((b,c) -> launchAppSelected[0] = c);
+        swApp.setPadding(0, 0, 20, 0);
+        Button btnPickApp = new Button(this);
+        btnPickApp.setBackground(getRounded("#00E5FF", 20f));
+        btnPickApp.setTextColor(Color.BLACK);
+        btnPickApp.setTextSize(13.5f);
+        btnPickApp.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        btnPickApp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        Runnable updateApp = () -> btnPickApp.setText("📱 MỞ APP: " + (launchAppPkg[0].isEmpty() ? "CHƯA CHỌN" : getAppLabelCached(launchAppPkg[0])));
+        updateApp.run();
+        btnPickApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> { launchAppPkg[0] = pkg; swApp.setChecked(true); updateApp.run(); }));
+        rowApp.addView(swApp); rowApp.addView(btnPickApp);
+        content.addView(rowApp);
 
-        // 1. HỘP LAUNCH APP
-        LinearLayout launchAppCard = new LinearLayout(this);
-        launchAppCard.setOrientation(LinearLayout.VERTICAL);
-        launchAppCard.setBackground(getRounded("#1A2C3A", 20f));
-        launchAppCard.setPadding(30, 30, 30, 30);
-        LinearLayout.LayoutParams lacLp = new LinearLayout.LayoutParams(-1, -2);
-        lacLp.setMargins(0, 0, 0, 20);
-        launchAppCard.setLayoutParams(lacLp);
-        
-        LinearLayout lacRow = new LinearLayout(this);
-        lacRow.setOrientation(LinearLayout.HORIZONTAL);
-        lacRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView tvLacTitle = new TextView(this); tvLacTitle.setText("📱 Mở Ứng Dụng");
-        tvLacTitle.setTextColor(Color.WHITE); tvLacTitle.setTextSize(14.5f);
-        tvLacTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        tvLacTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        
-        Switch swLaunchApp = new Switch(this);
-        swLaunchApp.setChecked(launchAppSelected[0]);
-        swLaunchApp.setOnCheckedChangeListener((b, c) -> launchAppSelected[0] = c);
-        lacRow.addView(tvLacTitle); lacRow.addView(swLaunchApp);
-        launchAppCard.addView(lacRow);
-        
-        TextView tvChosenApp = new TextView(this);
-        tvChosenApp.setTextColor(Color.parseColor("#00E5FF"));
-        tvChosenApp.setPadding(0, 10, 0, 15);
-        tvChosenApp.setText(getAppLabelCached(launchAppPkg[0]));
-        launchAppCard.addView(tvChosenApp);
-        
-        Button btnPickLaunchApp = new Button(this); btnPickLaunchApp.setText("CHỌN APP");
-        btnPickLaunchApp.setBackground(getRounded("#00E5FF", 20f));
-        btnPickLaunchApp.setTextColor(Color.BLACK); btnPickLaunchApp.setTextSize(13f);
-        btnPickLaunchApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> {
-            launchAppPkg[0] = pkg; tvChosenApp.setText(getAppLabelCached(pkg));
-            swLaunchApp.setChecked(true); 
-        }));
-        launchAppCard.addView(btnPickLaunchApp);
-        vAct.addView(launchAppCard);
+        LinearLayout rowSc = new LinearLayout(this);
+        rowSc.setOrientation(LinearLayout.HORIZONTAL);
+        rowSc.setGravity(Gravity.CENTER_VERTICAL);
+        rowSc.setPadding(0, 0, 0, 20);
+        Switch swSc = new Switch(this);
+        swSc.setChecked(shortcutSelected[0]);
+        swSc.setOnCheckedChangeListener((b,c) -> shortcutSelected[0] = c);
+        swSc.setPadding(0, 0, 20, 0);
+        Button btnPickSc = new Button(this);
+        btnPickSc.setBackground(getRounded("#7C4DFF", 20f));
+        btnPickSc.setTextColor(Color.WHITE);
+        btnPickSc.setTextSize(13.5f);
+        btnPickSc.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        btnPickSc.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        Runnable updateSc = () -> btnPickSc.setText("🔗 SHORTCUT: " + (shortcutId[0].isEmpty() ? "CHƯA CHỌN" : prefs.getString("shortcut_" + shortcutId[0] + "_name", "?")));
+        updateSc.run();
+        btnPickSc.setOnClickListener(v -> showShortcutPickerDialog((idSc, name) -> { shortcutId[0] = idSc; swSc.setChecked(true); updateSc.run(); }));
+        rowSc.addView(swSc); rowSc.addView(btnPickSc);
+        content.addView(rowSc);
 
-        // 2. HỘP RUN SHORTCUT
-        LinearLayout shortcutCard = new LinearLayout(this);
-        shortcutCard.setOrientation(LinearLayout.VERTICAL);
-        shortcutCard.setBackground(getRounded("#2A1A3A", 20f));
-        shortcutCard.setPadding(30, 30, 30, 30);
-        LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(-1, -2);
-        scLp.setMargins(0, 0, 0, 20);
-        shortcutCard.setLayoutParams(scLp);
-        
-        LinearLayout scRow = new LinearLayout(this);
-        scRow.setOrientation(LinearLayout.HORIZONTAL);
-        scRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView tvScTitle = new TextView(this); tvScTitle.setText("🔗 Chạy Shortcut");
-        tvScTitle.setTextColor(Color.WHITE); tvScTitle.setTextSize(14.5f);
-        tvScTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        tvScTitle.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        
-        Switch swShortcut = new Switch(this); swShortcut.setChecked(shortcutSelected[0]);
-        swShortcut.setOnCheckedChangeListener((b, c) -> shortcutSelected[0] = c);
-        scRow.addView(tvScTitle); scRow.addView(swShortcut);
-        shortcutCard.addView(scRow);
-        
-        TextView tvChosenSc = new TextView(this);
-        tvChosenSc.setTextColor(Color.parseColor("#00E5FF")); tvChosenSc.setPadding(0, 10, 0, 15);
-        tvChosenSc.setText(shortcutId[0].isEmpty() ? "(Chưa chọn)" : prefs.getString("shortcut_" + shortcutId[0] + "_name", "?"));
-        shortcutCard.addView(tvChosenSc);
-        
-        Button btnPickShortcut = new Button(this); btnPickShortcut.setText("CHỌN SHORTCUT");
-        btnPickShortcut.setBackground(getRounded("#7C4DFF", 20f));
-        btnPickShortcut.setTextColor(Color.WHITE); btnPickShortcut.setTextSize(13f);
-        btnPickShortcut.setOnClickListener(v -> showShortcutPickerDialog((idSc, name) -> {
-            shortcutId[0] = idSc; tvChosenSc.setText(name); swShortcut.setChecked(true); 
-        }));
-        shortcutCard.addView(btnPickShortcut);
-        vAct.addView(shortcutCard);
-
-        List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{
-                "BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME",
-                "SCREENSHOT","CAMERA","NOTIFICATIONS","SPLIT_SCREEN"
-        }, ACT_KEYS, ACT_LABS);
-        List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{
-                "TOGGLE_ACC","TOGGLE_OVERLAY","TOGGLE_MORSE","VOICE_RECORD","YTDL_DOWNLOAD",
-                "OPEN_PANEL_1","OPEN_PANEL_2","OPEN_PANEL_3"
-        }, ACT_KEYS, ACT_LABS);
+        List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "SPLIT_SCREEN"}, ACT_KEYS, ACT_LABS);
+        List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", "YTDL_DOWNLOAD"}, ACT_KEYS, ACT_LABS);
+        List<String[]> PANEL_ITEMS = buildItemsForKeys(new String[]{"OPEN_PANEL_1", "OPEN_PANEL_2", "OPEN_PANEL_3"}, ACT_KEYS, ACT_LABS);
         List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", ACT_KEYS, ACT_LABS);
         List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", ACT_KEYS, ACT_LABS);
 
-        vAct.addView(buildActionCategoryCard("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
-        vAct.addView(buildActionCategoryCard("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
-        vAct.addView(buildActionCategoryCard("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
-        vAct.addView(buildActionCategoryCard("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
-
+        content.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
+        content.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
+        content.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0"));
+        content.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
+        content.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
         content.addView(vTrig); content.addView(vAct);
 
         View.OnClickListener tabClick = v -> {
