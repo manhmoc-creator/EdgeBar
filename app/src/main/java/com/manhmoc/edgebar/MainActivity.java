@@ -891,11 +891,36 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
             cLp.setMargins(6, 6, 6, 6);
             card.setLayoutParams(cLp);
 
+            int locIdx = prefs.getInt(packPrefix + id + "_loc", 0);
+            int visIdx = prefs.getInt(packPrefix + id + "_vis_mode", 0);
+            int priIdx = prefs.getInt(packPrefix + id + "_pri_mode", 0);
+
+            // Cột 1 (Trái cùng): Icon Option
+            LinearLayout optCol = new LinearLayout(this);
+            optCol.setOrientation(LinearLayout.VERTICAL);
+            optCol.setGravity(Gravity.CENTER);
+            optCol.setPadding(0, 0, 15, 0);
+            
+            String visIcon = visIdx == 0 ? "☠️" : (visIdx == 1 ? "👻" : "🕶️");
+            String priIcon = priIdx == 0 ? "👆" : "👇";
+            String shapeIcon = "";
+            if (!isBar) {
+                int shapeIdx = prefs.getInt(packPrefix + id + "_shape", 0);
+                shapeIcon = "\n" + (shapeIdx == 0 ? "🔲" : (shapeIdx == 1 ? "➖" : "⏸️"));
+            }
+            
+            TextView tIcons = new TextView(this);
+            tIcons.setText(visIcon + "\n" + priIcon + shapeIcon);
+            tIcons.setTextSize(15);
+            tIcons.setLineSpacing(0, 1.2f);
+            tIcons.setGravity(Gravity.CENTER);
+            optCol.addView(tIcons);
+
+            // Cột 2 (Giữa): Info (Tên + Sliders)
             LinearLayout infoCol = new LinearLayout(this);
             infoCol.setOrientation(LinearLayout.VERTICAL);
             infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
-            int locIdx = prefs.getInt(packPrefix + id + "_loc", 0);
             String posAbbr = isBar ? (locIdx >= 0 && locIdx < bPos.length ? bPos[locIdx] : "?") : (locIdx >= 0 && locIdx < cPos.length ? cPos[locIdx] : "?");
 
             TextView tName = new TextView(this);
@@ -905,37 +930,32 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
             tName.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
             tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
 
-            int visIdx = prefs.getInt(packPrefix + id + "_vis_mode", 0);
-            int priIdx = prefs.getInt(packPrefix + id + "_pri_mode", 0);
-            String visText = visIdx == 0 ? "☠️ Hiện" : (visIdx == 1 ? "👻 Tàng hình" : "🕶️ Ẩn");
-            String priText = priIdx == 0 ? "👆 Ưu tiên" : "👇 Nhường OS";
-            String shapeText = "";
-            if (!isBar) {
-                int shapeIdx = prefs.getInt(packPrefix + id + "_shape", 0);
-                shapeText = " • 📐 " + (shapeIdx == 0 ? "Bo" : (shapeIdx == 1 ? "Ngang" : "Dọc"));
-            }
-
-            TextView tProps = new TextView(this);
-            tProps.setText(visText + " • " + priText + shapeText);
-            tProps.setTextColor(Color.parseColor("#9AA0A6"));
-            tProps.setTextSize(12f);
-            tProps.setPadding(0, 4, 0, 4);
-            tProps.setMaxLines(1); tProps.setEllipsize(android.text.TextUtils.TruncateAt.END);
-
             StringBuilder sb = new StringBuilder();
             sb.append("A:").append(prefs.getInt(packPrefix + id + "_alpha", 50))
               .append(" W:").append(prefs.getInt(packPrefix + id + "_w", isBar ? 300 : 100))
               .append(" H:").append(prefs.getInt(packPrefix + id + "_h", isBar ? 60 : 100))
               .append(" X:").append(prefs.getInt(packPrefix + id + "_x", 0))
               .append(" Y:").append(prefs.getInt(packPrefix + id + "_y", 0));
+            
+            if (!isBar) {
+                sb.append("\nmW:").append(prefs.getInt(packPrefix + id + "_moon_w", 100))
+                  .append(" mH:").append(prefs.getInt(packPrefix + id + "_moon_h", 100))
+                  .append(" mX:").append(prefs.getInt(packPrefix + id + "_moon_x", 1250))
+                  .append(" mY:").append(prefs.getInt(packPrefix + id + "_moon_y", 1250))
+                  .append("\nR:").append(prefs.getInt(packPrefix + id + "_rad", 80))
+                  .append(" mR:").append(prefs.getInt(packPrefix + id + "_moon_rad", 80));
+            }
 
             TextView tSliders = new TextView(this);
             tSliders.setText(sb.toString());
             tSliders.setTextColor(Color.parseColor("#8AB4F8"));
             tSliders.setTextSize(11f);
+            tSliders.setLineSpacing(0, 1.1f);
+            tSliders.setPadding(0, 4, 0, 0);
 
-            infoCol.addView(tName); infoCol.addView(tProps); infoCol.addView(tSliders);
+            infoCol.addView(tName); infoCol.addView(tSliders);
 
+            // Cột 3 (Phải cùng): Control
             LinearLayout ctrlCol = new LinearLayout(this);
             ctrlCol.setOrientation(LinearLayout.VERTICAL);
             ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -972,8 +992,7 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
             });
 
             ctrlCol.addView(swEn); ctrlCol.addView(btnCopy);
-            card.addView(infoCol); card.addView(ctrlCol);
-
+            card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
             card.setOnClickListener(btn -> openPackRuleSpace(itemKey, tabState));
             card.setOnLongClickListener(btn -> {
                 new AlertDialog.Builder(this).setTitle("Gỡ Pack này khỏi không gian?")
@@ -3694,12 +3713,36 @@ private void renderDataPackList(LinearLayout container, int type) {
             cLp.setMargins(6, 6, 6, 6);
             card.setLayoutParams(cLp);
 
-            // Cột Info (Không Icon, xếp dọc)
+            int locIdx = prefs.getInt(namePrefix + id + "_loc", 0);
+            int visIdx = prefs.getInt(namePrefix + id + "_vis_mode", 0);
+            int priIdx = prefs.getInt(namePrefix + id + "_pri_mode", 0);
+
+            // Cột 1 (Trái cùng): Icon Option
+            LinearLayout optCol = new LinearLayout(this);
+            optCol.setOrientation(LinearLayout.VERTICAL);
+            optCol.setGravity(Gravity.CENTER);
+            optCol.setPadding(0, 0, 15, 0);
+            
+            String visIcon = visIdx == 0 ? "☠️" : (visIdx == 1 ? "👻" : "🕶️");
+            String priIcon = priIdx == 0 ? "👆" : "👇";
+            String shapeIcon = "";
+            if (type == 1) {
+                int shapeIdx = prefs.getInt(namePrefix + id + "_shape", 0);
+                shapeIcon = "\n" + (shapeIdx == 0 ? "🔲" : (shapeIdx == 1 ? "➖" : "⏸️"));
+            }
+            
+            TextView tIcons = new TextView(this);
+            tIcons.setText(visIcon + "\n" + priIcon + shapeIcon);
+            tIcons.setTextSize(15);
+            tIcons.setLineSpacing(0, 1.2f);
+            tIcons.setGravity(Gravity.CENTER);
+            optCol.addView(tIcons);
+
+            // Cột 2 (Giữa): Info (Tên + Sliders)
             LinearLayout infoCol = new LinearLayout(this);
             infoCol.setOrientation(LinearLayout.VERTICAL);
             infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
-            int locIdx = prefs.getInt(namePrefix + id + "_loc", 0);
             String posAbbr = type == 0 ? (locIdx >= 0 && locIdx < bPos.length ? bPos[locIdx] : "?") : (locIdx >= 0 && locIdx < cPos.length ? cPos[locIdx] : "?");
             
             TextView tName = new TextView(this);
@@ -3708,23 +3751,6 @@ private void renderDataPackList(LinearLayout container, int type) {
             tName.setTextSize(16f);
             tName.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
             tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-
-            int visIdx = prefs.getInt(namePrefix + id + "_vis_mode", 0);
-            int priIdx = prefs.getInt(namePrefix + id + "_pri_mode", 0);
-            String visText = visIdx == 0 ? "👁️ Hiện" : (visIdx == 1 ? "👻 Tàng hình" : "🕶️ Ẩn vô hình");
-            String priText = priIdx == 0 ? "👆 Ưu tiên" : "👇 Nhường OS";
-            String shapeText = "";
-            if (type == 1) {
-                int shapeIdx = prefs.getInt(namePrefix + id + "_shape", 0);
-                shapeText = " • 📐 " + (shapeIdx == 0 ? "Bo" : (shapeIdx == 1 ? "Ngang" : "Dọc"));
-            }
-
-            TextView tProps = new TextView(this);
-            tProps.setText(visText + " • " + priText + shapeText);
-            tProps.setTextColor(Color.parseColor("#9AA0A6"));
-            tProps.setTextSize(12f);
-            tProps.setPadding(0, 4, 0, 4);
-            tProps.setMaxLines(1); tProps.setEllipsize(android.text.TextUtils.TruncateAt.END);
 
             StringBuilder sb = new StringBuilder();
             sb.append("A:").append(prefs.getInt(namePrefix + id + "_alpha", 50))
@@ -3747,10 +3773,11 @@ private void renderDataPackList(LinearLayout container, int type) {
             tSliders.setTextColor(Color.parseColor("#8AB4F8"));
             tSliders.setTextSize(11f);
             tSliders.setLineSpacing(0, 1.1f);
+            tSliders.setPadding(0, 4, 0, 0);
 
-            infoCol.addView(tName); infoCol.addView(tProps); infoCol.addView(tSliders);
+            infoCol.addView(tName); infoCol.addView(tSliders);
 
-            // Cột Control
+            // Cột 3 (Phải cùng): Control
             LinearLayout ctrlCol = new LinearLayout(this);
             ctrlCol.setOrientation(LinearLayout.VERTICAL);
             ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -3805,8 +3832,7 @@ private void renderDataPackList(LinearLayout container, int type) {
             });
 
             ctrlCol.addView(swEn); ctrlCol.addView(btnCopy);
-            card.addView(infoCol); card.addView(ctrlCol);
-
+            card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
             card.setOnClickListener(btn -> openDataPackEditor(fType2, id));
             card.setOnLongClickListener(btn -> {
                 new AlertDialog.Builder(this).setTitle("Xóa Data Pack?")
