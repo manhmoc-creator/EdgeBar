@@ -927,7 +927,7 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
                 // ở giữa và bên phải của card.
                 TextView selDot = new TextView(this);
                 boolean sel = frontierSelectedItems.contains(fItemKey);
-                selDot.setText(sel ? "🔵" : "⚪");
+                selDot.setText(sel ? "🟢" : "⚪");
                 selDot.setTextSize(18);
                 FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
                 dotLp.gravity = Gravity.BOTTOM | Gravity.START;
@@ -1337,18 +1337,21 @@ tAct.setText(formatPruleActionLabel(rId));
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
         root.setPadding(30, 80, 30, 30);
+        
         ScrollView scroll = new ScrollView(this);
         scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+        
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(content);
         root.addView(scroll);
-
-        String sourceId = editId != null ? editId : copyId;
         
+        String sourceId = editId != null ? editId : copyId;
         content.addView(createSectionTitle("1. CHỌN CỬ CHỈ (OR logic)"));
+        
         ArrayList<CheckBox> gestureBoxes = new ArrayList<>();
         String savedGestures = sourceId != null ? prefs.getString("prule_" + sourceId + "_gestures", "") : "";
+        
         for (int i = 0; i < C_GESTURES.length; i++) {
             CheckBox cb = new CheckBox(this);
             cb.setText(C_GESTURE_NAMES[i]);
@@ -1358,53 +1361,170 @@ tAct.setText(formatPruleActionLabel(rId));
             gestureBoxes.add(cb);
             content.addView(cb);
         }
-
+        
         content.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (Được chọn nhiều)"));
+        
         String savedActs = sourceId != null ? prefs.getString("prule_" + sourceId + "_acts", "") : "";
         final java.util.LinkedHashSet<String> selectedActs = new java.util.LinkedHashSet<>();
         for (String sa : savedActs.split(",")) if (!sa.trim().isEmpty()) selectedActs.add(sa.trim());
         
-        final boolean[] launchAppSelected = {sourceId != null && selectedActs.contains("LAUNCH_APP")};
-        final String[] launchAppPkg = {sourceId != null ? prefs.getString("prule_" + sourceId + "_launch_pkg", "") : ""};
-LinearLayout rowApp = new LinearLayout(this);
-rowApp.setOrientation(LinearLayout.HORIZONTAL);
-rowApp.setGravity(Gravity.CENTER_VERTICAL);
-rowApp.setPadding(0, 0, 0, 20);
-Switch swApp = new Switch(this);
-swApp.setChecked(launchAppSelected[0]);
-swApp.setOnCheckedChangeListener((b,c) -> launchAppSelected[0] = c);
-swApp.setPadding(0, 0, 20, 0);
-Button btnPickApp = new Button(this);
-btnPickApp.setBackground(getRounded("#00E5FF", 20f));
-btnPickApp.setTextColor(Color.BLACK);
-btnPickApp.setTextSize(13.5f);
-btnPickApp.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-btnPickApp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-Runnable updateApp = () -> btnPickApp.setText("📱 MỞ APP: " + (launchAppPkg[0].isEmpty() ? "CHƯA CHỌN" : getAppLabelCached(launchAppPkg[0])));
-updateApp.run();
-btnPickApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> { launchAppPkg[0] = pkg; swApp.setChecked(true); updateApp.run(); }));
-rowApp.addView(swApp); rowApp.addView(btnPickApp);
-content.addView(rowApp);
+        final boolean[] launchAppSelected = { sourceId != null && selectedActs.contains("LAUNCH_APP") };
+        final String[] launchAppPkg = { sourceId != null ? prefs.getString("prule_" + sourceId + "_launch_pkg", "") : "" };
+        
+        // 1. Thêm khai báo 2 biến còn thiếu dựa trên dữ liệu đã có trong pack rule
+        final boolean[] shortcutSelected = { sourceId != null && selectedActs.contains("RUN_SHORTCUT") };
+        final String[] shortcutId = { sourceId != null ? prefs.getString("prule_" + sourceId + "_shortcut_id", "") : "" };
+        
+        // 2. Bổ sung lại phần thân còn thiếu (Copy đúng cấu trúc phần chọn App/Shortcut/System)
+        LinearLayout rowApp = new LinearLayout(this);
+        rowApp.setOrientation(LinearLayout.HORIZONTAL);
+        rowApp.setGravity(Gravity.CENTER_VERTICAL);
+        rowApp.setPadding(0, 0, 0, 20);
+        Switch swApp = new Switch(this);
+        swApp.setChecked(launchAppSelected[0]);
+        swApp.setOnCheckedChangeListener((b,c) -> launchAppSelected[0] = c);
+        swApp.setPadding(0, 0, 20, 0);
+        Button btnPickApp = new Button(this);
+        btnPickApp.setBackground(getRounded("#00E5FF", 20f));
+        btnPickApp.setTextColor(Color.BLACK);
+        btnPickApp.setTextSize(13.5f);
+        btnPickApp.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        btnPickApp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        Runnable updateApp = () -> btnPickApp.setText("📱 MỞ APP: " + (launchAppPkg[0].isEmpty() ? "CHƯA CHỌN" : getAppLabelCached(launchAppPkg[0])));
+        updateApp.run();
+        btnPickApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> { launchAppPkg[0] = pkg; swApp.setChecked(true); updateApp.run(); }));
+        rowApp.addView(swApp); rowApp.addView(btnPickApp);
+        content.addView(rowApp);
 
-LinearLayout rowSc = new LinearLayout(this);
-rowSc.setOrientation(LinearLayout.HORIZONTAL);
-rowSc.setGravity(Gravity.CENTER_VERTICAL);
-rowSc.setPadding(0, 0, 0, 20);
-Switch swSc = new Switch(this);
-swSc.setChecked(shortcutSelected[0]);
-swSc.setOnCheckedChangeListener((b,c) -> shortcutSelected[0] = c);
-swSc.setPadding(0, 0, 20, 0);
-Button btnPickSc = new Button(this);
-btnPickSc.setBackground(getRounded("#7C4DFF", 20f));
-btnPickSc.setTextColor(Color.WHITE);
-btnPickSc.setTextSize(13.5f);
-btnPickSc.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-btnPickSc.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-Runnable updateSc = () -> btnPickSc.setText("🔗 SHORTCUT: " + (shortcutId[0].isEmpty() ? "CHƯA CHỌN" : prefs.getString("shortcut_" + shortcutId[0] + "_name", "?")));
-updateSc.run();
-btnPickSc.setOnClickListener(v -> showShortcutPickerDialog((idSc, name) -> { shortcutId[0] = idSc; swSc.setChecked(true); updateSc.run(); }));
-rowSc.addView(swSc); rowSc.addView(btnPickSc);
-content.addView(rowSc);
+        LinearLayout rowSc = new LinearLayout(this);
+        rowSc.setOrientation(LinearLayout.HORIZONTAL);
+        rowSc.setGravity(Gravity.CENTER_VERTICAL);
+        rowSc.setPadding(0, 0, 0, 20);
+        Switch swSc = new Switch(this);
+        swSc.setChecked(shortcutSelected[0]);
+        swSc.setOnCheckedChangeListener((b,c) -> shortcutSelected[0] = c);
+        swSc.setPadding(0, 0, 20, 0);
+        Button btnPickSc = new Button(this);
+        btnPickSc.setBackground(getRounded("#7C4DFF", 20f));
+        btnPickSc.setTextColor(Color.WHITE);
+        btnPickSc.setTextSize(13.5f);
+        btnPickSc.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        btnPickSc.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        Runnable updateSc = () -> btnPickSc.setText("🔗 SHORTCUT: " + (shortcutId[0].isEmpty() ? "CHƯA CHỌN" : prefs.getString("shortcut_" + shortcutId[0] + "_name", "?")));
+        updateSc.run();
+        btnPickSc.setOnClickListener(v -> showShortcutPickerDialog((idSc, name) -> { shortcutId[0] = idSc; swSc.setChecked(true); updateSc.run(); }));
+        rowSc.addView(swSc); rowSc.addView(btnPickSc);
+        content.addView(rowSc);
+
+        List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "SPLIT_SCREEN"}, ACT_KEYS, ACT_LABS);
+        List<String[]> PANEL_ITEMS = buildItemsForKeys(new String[]{"OPEN_PANEL_1", "OPEN_PANEL_2", "OPEN_PANEL_3"}, ACT_KEYS, ACT_LABS);
+        List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", "YTDL_DOWNLOAD"}, ACT_KEYS, ACT_LABS);
+        List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", ACT_KEYS, ACT_LABS);
+        List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", ACT_KEYS, ACT_LABS);
+
+        content.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
+        content.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
+        content.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0"));
+        content.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
+        content.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
+
+        CheckBox cbVib = new CheckBox(this);
+        cbVib.setText("Bật Rung (Haptic Feedback)");
+        cbVib.setTextColor(Color.WHITE);
+        cbVib.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_vib", true));
+        content.addView(cbVib);
+
+        CheckBox cbAnim = new CheckBox(this);
+        cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)");
+        cbAnim.setTextColor(Color.WHITE);
+        cbAnim.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_anim", true));
+        content.addView(cbAnim);
+
+        LinearLayout footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.HORIZONTAL);
+        footer.setPadding(0, 20, 0, 0);
+        
+        Button bCancel = new Button(this); 
+        bCancel.setText("HỦY");
+        bCancel.setBackground(getRounded("#333333", 20f));
+        bCancel.setTextColor(Color.WHITE); 
+        bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        
+        Button bSave = new Button(this); 
+        bSave.setText("SAVE RULE");
+        bSave.setBackground(getRounded("#4CAF50", 20f));
+        bSave.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f);
+        slp.setMargins(20, 0, 0, 0); 
+        bSave.setLayoutParams(slp);
+        
+        footer.addView(bCancel); 
+        footer.addView(bSave);
+        root.addView(footer);
+
+        bCancel.setOnClickListener(v -> d.dismiss());
+        bSave.setOnClickListener(v -> {
+            ArrayList<String> gestures = new ArrayList<>();
+            for (int i = 0; i < gestureBoxes.size(); i++)
+                if (gestureBoxes.get(i).isChecked()) gestures.add(C_GESTURES[i]);
+            
+            if (gestures.isEmpty()) {
+                Toast.makeText(this, "Hãy chọn ít nhất 1 Cử chỉ!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            
+            if (launchAppSelected[0]) {
+                if (launchAppPkg[0].isEmpty()) { 
+                    Toast.makeText(this, "Chọn app trước!", Toast.LENGTH_SHORT).show(); 
+                    return; 
+                }
+                selectedActs.add("LAUNCH_APP");
+            } else {
+                selectedActs.remove("LAUNCH_APP");
+            }
+            
+            // 3. Khi lưu, ghi thêm RUN_SHORTCUT và shortcut_id
+            if (shortcutSelected[0]) {
+                if (shortcutId[0].isEmpty()) { 
+                    Toast.makeText(this, "Chọn shortcut trước!", Toast.LENGTH_SHORT).show(); 
+                    return; 
+                }
+                selectedActs.add("RUN_SHORTCUT");
+            } else {
+                selectedActs.remove("RUN_SHORTCUT");
+            }
+            
+            if (selectedActs.isEmpty()) {
+                Toast.makeText(this, "Hãy chọn ít nhất 1 Hành động!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            
+            String targetId = editId != null ? editId : java.util.UUID.randomUUID().toString().substring(0, 8);
+            
+            if (editId == null) {
+                String listKey = appliedItemKey + "_pack_rules";
+                java.util.List<String> curRules = getDynamicIds(listKey);
+                curRules.add(targetId);
+                prefs.edit().putString(listKey, android.text.TextUtils.join(",", curRules)).apply();
+            }
+            
+            prefs.edit()
+                .putString("prule_" + targetId + "_gestures", android.text.TextUtils.join(",", gestures))
+                .putString("prule_" + targetId + "_acts", android.text.TextUtils.join(",", selectedActs))
+                .putString("prule_" + targetId + "_launch_pkg", launchAppPkg[0])
+                .putString("prule_" + targetId + "_shortcut_id", shortcutId[0])
+                .putBoolean("prule_" + targetId + "_vib", cbVib.isChecked())
+                .putBoolean("prule_" + targetId + "_anim", cbAnim.isChecked())
+                .putBoolean("prule_" + targetId + "_en", true)
+                .apply();
+                
+            if (onRefresh != null) onRefresh.run();
+            d.dismiss();
+        });
+        
+        d.setContentView(root); 
+        d.show();
+    }
     private void applyBarPackToSpace(String id, String targetPrefix) {
         String src = "pack_bar_" + id + "_";
         int loc = prefs.getInt(src + "loc", 0);
