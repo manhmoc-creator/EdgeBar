@@ -4242,7 +4242,24 @@ private LinearLayout createMiniSlider(String t, String k, int max, int def) {
     }
 
     root.addView(lv);
+
+    Runnable doRefresh = () -> {
+        String q = etSearch.getText().toString().trim().toLowerCase();
+        shown.clear();
+        for (String[] it : allItems) {
+            if (!q.isEmpty() && !it[0].toLowerCase().contains(q)) continue;
+            shown.add(it);
+        }
+        adapter.notifyDataSetChanged();
+    };
+    refreshHolder[0] = doRefresh;
+    etSearch.addTextChangedListener(new android.text.TextWatcher() {
+        public void afterTextChanged(android.text.Editable s) { doRefresh.run(); }
+        public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+        public void onTextChanged(CharSequence s, int a, int b, int c) {}
+    });
     doRefresh.run();
+
     LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,20,0,0);
     Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY")); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     Button bSave = new Button(this); bSave.setText(T("SAVE","LƯU")); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0); bSave.setLayoutParams(slp);
