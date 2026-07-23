@@ -201,14 +201,17 @@ private boolean shouldPanelBodyExistNow(String id) {
 // HANDLE: Cục Bộ chỉ hiện trong Design; Toàn Cục hiện như panel
 private boolean shouldHandleExistNow(String id) {
     String px = "pack_panel_" + id + "_";
-    if (!prefs.getBoolean(px+"en", false)) return false;
-
-    int visMode = prefs.getInt(px+"vis", 0); // 0 = Cục Bộ, 1 = Toàn Cục
+    int visMode = prefs.getInt(px+"vis", 0);
+    // [FIX] Cục Bộ (visMode==0) là chế độ XEM TRƯỚC lúc setup — phải hoạt
+    // động ĐỘC LẬP với Enable, vì lúc đang dựng Panel người dùng thường
+    // CHƯA bật Enable. Bắt buộc "en" ở đây là nguyên nhân khiến tick
+    // Preview Handle không có tác dụng gì.
     if (visMode == 0) {
-        // Per-pack, KHÔNG dùng cờ toàn cục "preview_panel" nữa — tránh mọi
-        // Handle Cục Bộ của mọi Pack cùng bật chỉ vì đứng trong tab PANEL.
         return prefs.getBoolean(px+"preview_handle", false);
     }
+    // Toàn Cục (visMode==1) là hành vi production thật -> vẫn cần Enable
+    // để Handle không tự ý xuất hiện ngoài ý muốn khi user chưa bật Pack.
+    if (!prefs.getBoolean(px+"en", false)) return false;
     return shouldPanelBodyExistNow(id);
 }
 // Gọi từ Activity (qua broadcast) khi bật/tắt checkbox TEST

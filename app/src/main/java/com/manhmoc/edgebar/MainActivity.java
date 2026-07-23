@@ -692,12 +692,18 @@ if (!action.equals("NONE")) {
             actName.append(getAppLabelCached(prefs.getString(key + "_launch_pkg", "")));
             continue;
         }
-        for(int i = 0; i < actKeysUsed.length; i++) { 
-            if(actKeysUsed[i].equals(at)) {
-                if(actName.length() > 0) actName.append(" + "); 
-                actName.append(actLabsUsed[i]); 
-            } 
-        }
+        for(int i = 0; i < actKeysUsed.length; i++) {
+    // [FIX CRASH HOMACC/VOLKEY] ACT_KEYS có cỡ cố định 41 nhưng chỉ 18 ô
+    // đầu được điền (phần Intent/Macro cũ đã chuyển sang danh sách động),
+    // các ô còn lại là null. Thiếu guard null + thiếu break khiến vòng lặp
+    // luôn quét tới vùng null và ném NullPointerException ngay khi render
+    // 1 card Rule đã lưu — đúng lúc mở tab Homacc/VolKey có rule sẵn.
+    if (actKeysUsed[i] != null && actKeysUsed[i].equals(at)) {
+        if(actName.length() > 0) actName.append(" + ");
+        actName.append(actLabsUsed[i]);
+        break; // tìm thấy rồi thì dừng, khỏi quét tiếp vào vùng null phía sau
+    }
+}
     }
     tAct.setText(actName.toString().isEmpty() ? "Lỗi" : actName.toString());
 tAct.setTextColor(Color.parseColor("#8AB4F8"));
