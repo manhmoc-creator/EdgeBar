@@ -66,7 +66,7 @@ private void stopKeepAlive() { if (keepAliveRunnable != null) keepAliveHandler.r
     @Override public void onCreate() {
         super.onCreate();
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        startForegroundQuiet(); // BẮT BUỘC gọi trong 5s đầu — thiếu dòng này gây crash ANR
+if (!startForegroundQuiet()) return; // FGS bị hệ thống từ chối → thoát êm, không crash dây chuyền
 screenReceiver = new BroadcastReceiver() {
     @Override public void onReceive(Context c, Intent i) {
         String act = i.getAction();
@@ -189,7 +189,8 @@ if (act.startsWith("RUN_SHORTCUT_")) {
 }
 sendBroadcast(ipc);
     }
-    private void startForegroundQuiet() {
+    private boolean startForegroundQuiet() {
+    try {
         String cid = "eb_volkey";
         NotificationChannel c = new NotificationChannel(cid, "Phím Âm Lượng (Màn tắt)",
                 NotificationManager.IMPORTANCE_MIN);
@@ -202,8 +203,13 @@ sendBroadcast(ipc);
         if (Build.VERSION.SDK_INT >= 29)
             startForeground(91, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         else startForeground(91, n);
+        return true;
+    } catch (Exception e) {
+        isRunning = false;
+        stopSelf();
+        return false;
     }
-
+}
     @Override public int onStartCommand(Intent i, int flags, int id) { return START_STICKY; }
     @Override public IBinder onBind(Intent i) { return null; }
 

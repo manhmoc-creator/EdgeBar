@@ -122,15 +122,14 @@ private List<String[]> getAppListCached() {
     boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0)
         || (currentMainTab==1 && currentGesTab==0) || inFrontierLock; 
     boolean pMorse = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==2);
-    boolean pPanel = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==5);
     boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4) || inFrontierHomacc;
-    prefs.edit().putBoolean("preview_lock", pLock).putBoolean("preview_morse", pMorse)
-        .putBoolean("preview_panel", pPanel).putBoolean("preview_homacc", pHomacc)
-        .putBoolean("preview_home", inFrontierHome).apply(); 
+prefs.edit().putBoolean("preview_lock", pLock).putBoolean("preview_morse", pMorse)
+    .putBoolean("preview_homacc", pHomacc)
+    .putBoolean("preview_home", inFrontierHome).apply();
     Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); 
 }
     @Override protected void onResume() { super.onResume(); refreshPreview(); }
-    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).putBoolean("preview_panel", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
+    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
     private void reloadActionLabels() {
 // [XÓA] OPEN_PANEL_1/2/3 — Panel giờ liệt kê động qua nút "PANEL" (buildDynamicPackItems).
 String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD", "LAUNCH_APP", "SPLIT_SCREEN"};
@@ -3486,13 +3485,13 @@ private void openDataPackEditor(int type, String id) {
 // → bỏ hẳn bản trùng này khỏi FormatBar/FormatCorner cho gọn màn hình.
 // Panel (type==2) vẫn giữ vì yêu cầu chỉ bỏ ở Bar/Corner.
 if (type == 2) {
-    CheckBox cbEnGlobal = new CheckBox(this);
-    cbEnGlobal.setText("Bật Data Pack này (Enable)");
-    cbEnGlobal.setTextColor(Color.parseColor("#4CAF50"));
-    cbEnGlobal.setChecked(prefs.getBoolean(prefix + id + "_en", false));
-    cbEnGlobal.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(prefix + id + "_en", c).apply());
-    cbEnGlobal.setPadding(10, 10, 10, 30);
-    content.addView(cbEnGlobal);
+    CheckBox cbPreviewHandle = new CheckBox(this);
+    cbPreviewHandle.setText(T("Preview Handle (thanh gọi Panel)", "Xem trước Handle (thanh gọi Panel)"));
+    cbPreviewHandle.setTextColor(Color.parseColor("#4CAF50"));
+    cbPreviewHandle.setChecked(prefs.getBoolean(prefix + id + "_preview_handle", false));
+    cbPreviewHandle.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(prefix + id + "_preview_handle", c).apply());
+    cbPreviewHandle.setPadding(10, 10, 10, 30);
+    content.addView(cbPreviewHandle);
 }
 if (type == 0) {
             // Bỏ dòng tiêu đề "LIVE PREVIEW" thừa — checkbox cbPreview bên dưới
@@ -3618,25 +3617,6 @@ content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 
             // Zero-RAM khi tắt: chỉ addView 1 CheckBox nhẹ, overlay chỉ addView
             // khi bật, gỡ ngay khi tắt/đóng Dialog (dùng chung removeLivePreviewOverlay()
             // đã có sẵn ở cuối openDataPackEditor).
-            CheckBox cbPreviewPanel = new CheckBox(this);
-            cbPreviewPanel.setText("Bật xem trước (Live Preview)");
-            cbPreviewPanel.setTextColor(Color.parseColor("#00E5FF"));
-            cbPreviewPanel.setTextSize(14f);
-            content.addView(cbPreviewPanel);
-            cbPreviewPanel.setOnCheckedChangeListener((vw, c) -> {
-                if (c) {
-                    previewListenerHolder[0] = (p, k) -> {
-                        if (k == null || !k.startsWith(prefix + id + "_")) return;
-                        updateLivePreviewPanel(prefix + id + "_");
-                    };
-                    prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
-                    updateLivePreviewPanel(prefix + id + "_");
-                } else {
-                    if (previewListenerHolder[0] != null) prefs.unregisterOnSharedPreferenceChangeListener(previewListenerHolder[0]);
-                    removeLivePreviewOverlay();
-                }
-            });
-
             // --- MỤC 1: COMMON & COLLECTIONS ---
             content.addView(createSectionTitle("1. COMMON & COLLECTIONS"));
             content.addView(createComboDropdown("Color (Màu)", prefix + id + "_color_idx", PANEL_COLOR_NAMES, 0));
@@ -3786,9 +3766,14 @@ handleCfgHeader.setOnClickListener(v -> {
     });
     // [FIX LIVE PREVIEW] Hủy listener + gỡ overlay ngay khi đóng Dialog (mọi cách đóng)
     d.setOnDismissListener(dlg -> {
-        if (previewListenerHolder[0] != null) prefs.unregisterOnSharedPreferenceChangeListener(previewListenerHolder[0]);
-        removeLivePreviewOverlay();
-    });
+    if (previewListenerHolder[0] != null) prefs.unregisterOnSharedPreferenceChangeListener(previewListenerHolder[0]);
+    removeLivePreviewOverlay();
+    if (type == 2) {
+        // Tự tắt Preview Handle khi rời Editor — tránh Handle Cục Bộ nằm lại
+        // vĩnh viễn trên màn hình, tiết kiệm 1 overlay + touch listener trên Pixel 2XL.
+        prefs.edit().putBoolean(prefix + id + "_preview_handle", false).apply();
+    }
+});
     d.setContentView(root); d.show();
 }
 // Yêu cầu 1: Hàm tạo viên thuốc rỗng ruột cho không gian Lock/Homeb/Homacc/Anima/Morsos (Zero RAM)

@@ -17,18 +17,30 @@ public class AccessibleHomeService extends Service {
         super.onCreate();
         // Nâng LOW thay vì MIN — giúp process không bị xếp vào cache-tier
         // thấp nhất khi RAM căng trên Pixel 2XL (4GB, dễ bị OOM sớm)
-        if (Build.VERSION.SDK_INT >= 26) {
-            String cid = "acc_home_core";
-            NotificationChannel nc = new NotificationChannel(
-                    cid, "Động cơ Trợ năng", NotificationManager.IMPORTANCE_LOW);
-            getSystemService(NotificationManager.class).createNotificationChannel(nc);
-            Notification n = new Notification.Builder(this, cid)
-                    .setContentTitle("Động cơ Trợ năng")
-                    .setSmallIcon(android.R.drawable.ic_menu_search)
-                    .build();
+       if (Build.VERSION.SDK_INT >= 26) {
+    try {
+        String cid = "acc_home_core";
+        NotificationChannel nc = new NotificationChannel(
+                cid, "Động cơ Trợ năng", NotificationManager.IMPORTANCE_LOW);
+        getSystemService(NotificationManager.class).createNotificationChannel(nc);
+        Notification n = new Notification.Builder(this, cid)
+                .setContentTitle("Động cơ Trợ năng")
+                .setSmallIcon(android.R.drawable.ic_menu_search)
+                .build();
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(88, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        } else {
             startForeground(88, n);
         }
-        scheduleWatchdog();
+    } catch (Exception e) {
+        // Thiếu <property> FGS subtype hoặc bị OS chặn → dừng NGAY thay vì để
+        // Exception phá process → tránh vòng lặp crash-restart tốn pin/CPU.
+        isRunning = false;
+        stopSelf();
+        return;
+    }
+}
+scheduleWatchdog();
     }
 
     private void scheduleWatchdog() {

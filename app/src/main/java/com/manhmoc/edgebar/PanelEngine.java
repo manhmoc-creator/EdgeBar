@@ -98,10 +98,11 @@ public class PanelEngine {
         if (sep <= 0) return;
         String id = rest.substring(0, sep);
         boolean structural = key.endsWith("_apps") || key.endsWith("_acts") || key.endsWith("_cols")
-            || key.endsWith("_icon_shape") || key.endsWith("_show_name") || key.endsWith("_en")
-            || key.endsWith("_vis") || key.endsWith("_pos") || key.endsWith("_color_idx");
-        if (structural) { rebuildOne(id); return; }
-        liveUpdateCosmetic(id);
+    || key.endsWith("_icon_shape") || key.endsWith("_show_name") || key.endsWith("_en")
+    || key.endsWith("_vis") || key.endsWith("_pos") || key.endsWith("_color_idx")
+    || key.endsWith("_preview_handle");
+if (structural) { rebuildOne(id); return; }
+liveUpdateCosmetic(id);
     }
     /** Update tại chỗ (KHÔNG removeView/addView) cho opacity/length/width/radius/icon size. */
     private void liveUpdateCosmetic(String id) {
@@ -204,7 +205,9 @@ private boolean shouldHandleExistNow(String id) {
 
     int visMode = prefs.getInt(px+"vis", 0); // 0 = Cục Bộ, 1 = Toàn Cục
     if (visMode == 0) {
-        return prefs.getBoolean("preview_panel", false);
+        // Per-pack, KHÔNG dùng cờ toàn cục "preview_panel" nữa — tránh mọi
+        // Handle Cục Bộ của mọi Pack cùng bật chỉ vì đứng trong tab PANEL.
+        return prefs.getBoolean(px+"preview_handle", false);
     }
     return shouldPanelBodyExistNow(id);
 }
