@@ -63,7 +63,7 @@ private WindowManager.LayoutParams livePreviewLp;
     // [MULTI-SELECT FRONTIER] Zero-RAM khi không dùng — chỉ 1 boolean + 1 Set rỗng
     private boolean frontierSelectMode = false;
     private java.util.Set<String> frontierSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "V19.12.3.6.25";
+    private final String CURRENT_VERSION = "V19.12.3.6.26";
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -232,7 +232,14 @@ private String[] getVolKeyActLabs() {
     }
 }
     @Override public void onBackPressed() { if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); Button btnD = rootLayout.findViewWithTag("btnDesign"); if(btnD!=null){btnD.setText("⚙️"); btnD.setBackground(getRounded("#333333", 100f));} } else super.onBackPressed(); }
-    private void closeDesignSpace() { currentMainTab = 1; pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(View.VISIBLE); updateFabVisibility(); refreshPreview(); }
+    private void closeDesignSpace() { 
+    currentMainTab = 1; pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(View.VISIBLE); updateFabVisibility(); refreshPreview();
+    boolean morseOn = prefs.getBoolean("morse_mode_en", false);
+    boolean oldHomeOn = prefs.getBoolean("shortcut_home_on", false);
+    if (!morseOn && !oldHomeOn && HomescreenService.isRunning) {
+        stopService(new Intent(this, HomescreenService.class));
+    }
+}
 private void openDesignSpace() { currentMainTab = 0; refreshPreview(); navMain.setVisibility(View.GONE); pageConditions.setVisibility(View.GONE); pageEcosystem.setVisibility(View.GONE); pageDesign.setVisibility(View.VISIBLE); if(fab != null) fab.setVisibility(View.GONE); }
     // V19.12.3.6.10: FAB "+NEW EB" hiện ở mọi tab Điều kiện (kể cả LOCK) —
 // riêng option vân tay đã bị loại khỏi component list của LOCK ngay trong
@@ -320,7 +327,42 @@ if (currentMainTab == 0) {
         // Tối ưu OLED: Nền đen tuyệt đối #000000 tắt hoàn toàn bóng LED trên Pixel 2XL
     rootLayout = new RelativeLayout(this);
     rootLayout.setBackgroundColor(Color.parseColor("#000000"));
-
+    // [THÊM MỚI] Kiểm tra quyền — chỉ addView khi thiếu quyền, Zero-RAM khi đã đủ quyền
+LinearLayout permBanner = new LinearLayout(this);
+permBanner.setOrientation(LinearLayout.VERTICAL);
+if (!Settings.canDrawOverlays(this)) {
+    permBanner.addView(createPermBanner("⚠️ GRANT OVERLAY", "#D32F2F", v -> {
+        startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:"+getPackageName())));
+    }));
+}
+NotificationManager nmChk = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+if (Build.VERSION.SDK_INT>=23 && !nmChk.isNotificationPolicyAccessGranted()) {
+    permBanner.addView(createPermBanner("⚠️ CẤP QUYỀN KHÔNG LÀM PHIỀN (DND)\nĐể gọi Screen Off/On bằng phím Âm lượng", "#F57C00", v -> {
+        startActivity(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS));
+    }));
+}
+android.os.PowerManager pmChk = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+if (Build.VERSION.SDK_INT>=23 && !pmChk.isIgnoringBatteryOptimizations(getPackageName())) {
+    permBanner.addView(createPermBanner("⚠️ TẮT TỐI ƯU HÓA PIN\nGiúp Phím Âm Lượng ổn định hơn khi tắt màn hình", "#E64A19", v -> {
+        Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+        i.setData(Uri.parse("package:"+getPackageName())); startActivity(i);
+    }));
+}
+android.app.admin.DevicePolicyManager dpmChk = (android.app.admin.DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
+if (!dpmChk.isAdminActive(new ComponentName(this, EdgeAdminReceiver.class))) {
+    permBanner.addView(createPermBanner("⚠️ CẤP QUYỀN ADMIN DEVICE (Bảo vệ lớp phủ Morse)", "#D32F2F", v -> {
+        Intent i = new Intent(android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
+        i.putExtra(android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, new ComponentName(this, EdgeAdminReceiver.class));
+        startActivity(i);
+    }));
+}
+if (!android.provider.Settings.Secure.getString(getContentResolver(),"enabled_notification_listeners","").contains(getPackageName())
+    && !hasUsageStatsPermission()) {
+    permBanner.addView(createPermBanner("⚠️ CẤP QUYỀN TRUY CẬP DỮ LIỆU SỬ DỤNG", "#D32F2F", v -> {
+        startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
+    }));
+}
+if (permBanner.getChildCount() > 0) rootLayout.addView(permBanner); // chỉ add khi có banner
     ScrollView scroll = new ScrollView(this); 
     RelativeLayout.LayoutParams rLp = new RelativeLayout.LayoutParams(-1,-1); 
     rLp.bottomMargin = 240;
@@ -874,8 +916,18 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
         tSliders.setTextSize(11f);
         tSliders.setLineSpacing(0, 1.1f);
         tSliders.setPadding(0, 4, 0, 0);
-        infoCol.addView(tName); infoCol.addView(tSliders);
 
+        // [THÊM] Đếm số Pattern (prule_*) đã tạo cho Data Pack này — chỉ đọc lại
+        // list CSV đã có sẵn trong SharedPreferences (đã cache trong RAM bởi hệ điều
+        // hành), KHÔNG quét file/thư mục nào thêm → Zero I/O phụ trội trên Pixel 2XL.
+        int patternCount = getDynamicIds(itemKey + "_pack_rules").size();
+        TextView tPatternCount = new TextView(this);
+        tPatternCount.setText("🎯 " + T("Patterns: ", "Pattern: ") + patternCount);
+        tPatternCount.setTextColor(patternCount > 0 ? Color.parseColor("#4CAF50") : Color.parseColor("#777777"));
+        tPatternCount.setTextSize(11f);
+        tPatternCount.setPadding(0, 2, 0, 0);
+
+        infoCol.addView(tName); infoCol.addView(tSliders); infoCol.addView(tPatternCount);
         LinearLayout ctrlCol = new LinearLayout(this);
         ctrlCol.setOrientation(LinearLayout.VERTICAL);
         ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -1204,15 +1256,17 @@ tAct.setText(formatPruleActionLabel(rId));
                 card.addView(infoCol);
                 card.addView(ctrlCol);
 
-                // Sự kiện Edit và Delete
+                // [MỚI] Chạm 1 lần -> SỬA thẳng, giống hệt hành vi "NEW EB" của Homacc/Volkey
+                card.setOnClickListener(v -> openPackRuleEditor(appliedItemKey, rId, null, renderRules[0]));
+
+                // Chạm GIỮ -> chỉ còn Chia sẻ / Xóa / Hủy (bỏ "Edit" vì tap đã đảm nhiệm rồi
+                // → menu ngắn hơn = ít item AlertDialog phải inflate hơn, nhẹ RAM hơn 1 chút)
                 card.setOnLongClickListener(v -> {
-    String[] opts = {"✏️ " + T("Edit","Sửa"), "🔗 " + T("Share","Chia sẻ"), "🗑️ " + T("Delete","Xóa")};
+    String[] opts = {"🔗 " + T("Share","Chia sẻ"), "🗑️ " + T("Delete","Xóa")};
     new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
         .setTitle(T("Options","Tùy chọn"))
         .setItems(opts, (dialogOpt, which) -> {
             if (which == 0) {
-                openPackRuleEditor(appliedItemKey, rId, null, renderRules[0]);
-            } else if (which == 1) {
                 showShareRuleToPackDialog(rId, appliedItemKey, renderRules[0]);
             } else {
                 new AlertDialog.Builder(this).setTitle(T("Delete this rule?","Xóa Rule này?"))
@@ -2843,7 +2897,7 @@ renderEcosystem(); d.dismiss();
     btnEditAnim.setLayoutParams(mP2);
 
     btnEditMorse.setOnClickListener(v -> { designTabState=2; refreshPreview(); updateVisTabs(); renderSliders(); });
-    btnEditAnim.setOnClickListener(v -> { designTabState=3; refreshPreview(); updateVisTabs(); renderSliders(); });
+    btnEditAnim.setOnClickListener(v -> { designTabState=3; ensureHomeServiceForPreview(); refreshPreview(); updateVisTabs(); renderSliders(); });
 btnEditPanel = new Button(this); btnEditPanel.setText("PANEL");
 btnEditPanel.setLayoutParams(mP2);
 btnEditPanel.setOnClickListener(v -> { designTabState = 5; refreshPreview();
@@ -4175,6 +4229,22 @@ private Button createSystemBtn(String text, String bgHex, String textHex) {
     b.setPadding(10, 0, 10, 0); // Kèm padding tối ưu để không bị chèn chữ
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
     lp.setMargins(4, 0, 4, 0); b.setLayoutParams(lp);
+    return b;
+}
+ private boolean hasUsageStatsPermission() {
+    try {
+        android.app.AppOpsManager aom = (android.app.AppOpsManager) getSystemService(APP_OPS_SERVICE);
+        int mode = aom.checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+            android.os.Process.myUid(), getPackageName());
+        return mode == android.app.AppOpsManager.MODE_ALLOWED;
+    } catch (Exception e) { return false; }
+}
+private LinearLayout createPermBanner(String text, String color, View.OnClickListener onClick) {
+    LinearLayout b = new LinearLayout(this); b.setOrientation(LinearLayout.VERTICAL);
+    b.setBackground(getRounded(color, 0f)); b.setPadding(30,25,30,25);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,2); b.setLayoutParams(lp);
+    TextView tv = new TextView(this); tv.setText(text); tv.setTextColor(Color.WHITE); tv.setGravity(Gravity.CENTER); tv.setTextSize(15f);
+    b.addView(tv); b.setOnClickListener(onClick);
     return b;
 }
     private Button createNavBtn(String t) {
