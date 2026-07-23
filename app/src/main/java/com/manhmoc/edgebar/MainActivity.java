@@ -3541,7 +3541,8 @@ handleCfgHeader.setOnClickListener(v -> {
             renderPanelDesign(); // Refresh lại danh sách kho biến Panel
             sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
         } else {
-            renderDesignConfigSpace(); // Refresh kho biến Bar/Corner
+            renderRulesList();
+            renderSliders(); // Refresh kho biến Bar/Corner (Frontier + Morse)
         }
         d.dismiss();
     });
