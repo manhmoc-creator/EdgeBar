@@ -64,6 +64,9 @@ private WindowManager.LayoutParams livePreviewLp;
     // [MULTI-SELECT FRONTIER] Zero-RAM khi không dùng — chỉ 1 boolean + 1 Set rỗng
     private boolean frontierSelectMode = false;
     private java.util.Set<String> frontierSelectedItems = new java.util.LinkedHashSet<>();
+    // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
+private boolean prulesSelectMode = false;
+private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
     private final String CURRENT_VERSION = "V19.12.3.6.26";
     private RelativeLayout rootLayout;
 
@@ -328,44 +331,6 @@ if (currentMainTab == 0) {
         // Tối ưu OLED: Nền đen tuyệt đối #000000 tắt hoàn toàn bóng LED trên Pixel 2XL
     rootLayout = new RelativeLayout(this);
     rootLayout.setBackgroundColor(Color.parseColor("#000000"));
-    // [THÊM MỚI] Kiểm tra quyền — chỉ addView khi thiếu quyền, Zero-RAM khi đã đủ quyền
-LinearLayout permBanner = new LinearLayout(this);
-permBanner.setOrientation(LinearLayout.VERTICAL);
-if (!Settings.canDrawOverlays(this)) {
-    permBanner.addView(createPermBanner("⚠️ GRANT OVERLAY", "#D32F2F", v -> {
-        startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:"+getPackageName())));
-    }));
-}
-NotificationManager nmChk = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-if (Build.VERSION.SDK_INT>=23 && !nmChk.isNotificationPolicyAccessGranted()) {
-    permBanner.addView(createPermBanner("⚠️ CẤP QUYỀN KHÔNG LÀM PHIỀN (DND)\nĐể gọi Screen Off/On bằng phím Âm lượng", "#F57C00", v -> {
-        startActivity(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS));
-    }));
-}
-android.os.PowerManager pmChk = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-if (Build.VERSION.SDK_INT>=23 && !pmChk.isIgnoringBatteryOptimizations(getPackageName())) {
-    permBanner.addView(createPermBanner("⚠️ TẮT TỐI ƯU HÓA PIN\nGiúp Phím Âm Lượng ổn định hơn khi tắt màn hình", "#E64A19", v -> {
-        Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-        i.setData(Uri.parse("package:"+getPackageName())); startActivity(i);
-    }));
-}
-android.app.admin.DevicePolicyManager dpmChk = (android.app.admin.DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
-if (!dpmChk.isAdminActive(new ComponentName(this, EdgeAdminReceiver.class))) {
-    permBanner.addView(createPermBanner("⚠️ CẤP QUYỀN ADMIN DEVICE (Bảo vệ lớp phủ Morse)", "#D32F2F", v -> {
-        Intent i = new Intent(android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
-        i.putExtra(android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, new ComponentName(this, EdgeAdminReceiver.class));
-        startActivity(i);
-    }));
-}
-String enabledListeners = android.provider.Settings.Secure.getString(
-        getContentResolver(), "enabled_notification_listeners");
-if ((enabledListeners == null || !enabledListeners.contains(getPackageName()))
-        && !hasUsageStatsPermission()) {
-    permBanner.addView(createPermBanner("⚠️ CẤP QUYỀN TRUY CẬP DỮ LIỆU SỬ DỤNG", "#D32F2F", v -> {
-        startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
-    }));
-}
-if (permBanner.getChildCount() > 0) rootLayout.addView(permBanner); // chỉ add khi có banner
     ScrollView scroll = new ScrollView(this); 
     RelativeLayout.LayoutParams rLp = new RelativeLayout.LayoutParams(-1,-1); 
     rLp.bottomMargin = 240;
@@ -428,6 +393,99 @@ btnLang.setLayoutParams(langLp);
 rightCol.addView(topBtns); rightCol.addView(btnLang);
 headerRow.addView(leftCol); headerRow.addView(rightCol);
 main.addView(headerRow);
+reloadActionLabels();
+        
+        rootLayout = new RelativeLayout(this); rootLayout.setBackgroundColor(Color.parseColor("#121212"));
+        ScrollView scroll = new ScrollView(this); RelativeLayout.LayoutParams rLp = new RelativeLayout.LayoutParams(-1,-1); rLp.bottomMargin = 240; scroll.setLayoutParams(rLp);
+        LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.VERTICAL); main.setPadding(40,60,40,40); 
+        
+        LinearLayout headerRow = new LinearLayout(this); headerRow.setOrientation(LinearLayout.HORIZONTAL); headerRow.setGravity(Gravity.CENTER_VERTICAL); headerRow.setPadding(0, 0, 0, 50);
+        TextView title = new TextView(this); title.setText("Edge Bar\n" + CURRENT_VERSION); title.setTextColor(Color.WHITE); title.setTextSize(24); title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        Button btnLang = new Button(this); btnLang.setText(isVi ? "🇻🇳 TIẾNG VIỆT" : "🇺🇸 ENGLISH"); btnLang.setTextColor(Color.WHITE); btnLang.setBackground(getRounded("#2E7D32", 20f)); btnLang.setPadding(30, 20, 30, 20); 
+        btnLang.setOnClickListener(v -> { prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate(); });
+        headerRow.addView(title); headerRow.addView(btnLang); main.addView(headerRow);
+        
+        if (!Settings.canDrawOverlays(this)) { Button btnReq = new Button(this); btnReq.setText(T("⚠️ GRANT OVERLAY", "⚠️ CẤP QUYỀN LỚP PHỦ")); btnReq.setBackground(getRounded("#D32F2F", 25f)); btnReq.setTextColor(Color.WHITE); btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))); main.addView(btnReq); }
+
+// --- DO NOT DISTURB (DND) --- Xin quyền ghi đè âm lượng (Volume Mapper)
+android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+if (android.os.Build.VERSION.SDK_INT >= 23 && !nm.isNotificationPolicyAccessGranted()) {
+    Button btnDnd = new Button(this);
+    btnDnd.setText("⚠️ CẤP QUYỀN KHÔNG LÀM PHIỀN (DND)\nĐể gọi Screen Off/On bằng phím Âm lượng");
+    btnDnd.setBackground(getRounded("#FF9800", 25f));
+    btnDnd.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams dndLp = new LinearLayout.LayoutParams(-1, -2);
+    dndLp.setMargins(0, 10, 0, 0);
+    btnDnd.setLayoutParams(dndLp);
+    btnDnd.setOnClickListener(v -> startActivity(new Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)));
+    main.addView(btnDnd);
+}
+    android.os.PowerManager pmCheck = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
+        && !pmCheck.isIgnoringBatteryOptimizations(getPackageName())) {
+    Button btnBattery = new Button(this);
+    btnBattery.setText("⚠️ TẮT TỐI ƯU HÓA PIN\nGiúp Phím Âm Lượng ổn định hơn khi tắt màn hình");
+    btnBattery.setBackground(getRounded("#FF5722", 25f));
+    btnBattery.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams battLp = new LinearLayout.LayoutParams(-1, -2);
+    battLp.setMargins(0, 10, 0, 0);
+    btnBattery.setLayoutParams(battLp);
+    btnBattery.setOnClickListener(v -> {
+        try {
+            Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            i.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(i);
+        } catch (Exception e) {
+            startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+        }
+    });
+    main.addView(btnBattery);
+}
+// --- DEVICE ADMIN ---
+android.app.admin.DevicePolicyManager dpm =
+(android.app.admin.DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
+        ComponentName adminComp = new ComponentName(this, EdgeAdminReceiver.class);
+        if (!dpm.isAdminActive(adminComp)) {
+            Button btnAdmin = new Button(this);
+            btnAdmin.setText("⚠️ CẤP QUYỀN ADMIN DEVICE (Bảo vệ lớp phủ Morse)");
+            btnAdmin.setBackground(getRounded("#D32F2F", 25f));
+            btnAdmin.setTextColor(Color.WHITE);
+            LinearLayout.LayoutParams adminLp = new LinearLayout.LayoutParams(-1, -2);
+            adminLp.setMargins(0, 10, 0, 0);
+            btnAdmin.setLayoutParams(adminLp);
+            btnAdmin.setOnClickListener(v -> {
+                Intent adminIntent = new Intent(
+                    android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
+                adminIntent.putExtra(
+                    android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComp);
+                adminIntent.putExtra(
+                    android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                    "Bảo vệ lớp phủ Morse khỏi bị gỡ và chống gỡ cài đặt nhanh từ Home.");
+                startActivity(adminIntent);
+            });
+            main.addView(btnAdmin);
+        }
+
+        // --- USAGE STATS ---
+        try {
+            android.app.AppOpsManager aom =
+                (android.app.AppOpsManager) getSystemService(APP_OPS_SERVICE);
+            int mode = aom.checkOpNoThrow(
+                android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+                android.os.Process.myUid(), getPackageName());
+            if (mode != android.app.AppOpsManager.MODE_ALLOWED) {
+                Button btnUsage = new Button(this);
+                btnUsage.setText("⚠️ CẤP QUYỀN TRUY CẬP DỮ LIỆU SỬ DỤNG");
+                btnUsage.setBackground(getRounded("#D32F2F", 25f));
+                btnUsage.setTextColor(Color.WHITE);
+                LinearLayout.LayoutParams usageLp = new LinearLayout.LayoutParams(-1, -2);
+                usageLp.setMargins(0, 10, 0, 0);
+                btnUsage.setLayoutParams(usageLp);
+                btnUsage.setOnClickListener(v ->
+                    startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
+                main.addView(btnUsage);
+            }
+        } catch (Exception e) { /* bỏ qua nếu thiết bị không hỗ trợ */ }
     // Navigation Tab đẩy ra đầu dòng kèm icon
     navMain = new LinearLayout(this);
     navMain.setOrientation(LinearLayout.HORIZONTAL); navMain.setPadding(0, 0, 0, 40);
@@ -1144,8 +1202,10 @@ private void ensureHomeServiceForPreview() {
 }
     // [TỐI ƯU PIXEL 2XL] Không gian lưu Rule động cho Pack (Hiển thị 2 cột, 2 data pack 1 hàng)
     private void openPackRuleSpace(String appliedItemKey, int tabState) {
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
-        RelativeLayout rootLayout = new RelativeLayout(this);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    prulesSelectMode = false;
+    prulesSelectedItems.clear();
+    RelativeLayout rootLayout = new RelativeLayout(this);
         rootLayout.setBackgroundColor(Color.parseColor("#000000"));
 
         ScrollView scroll = new ScrollView(this);
@@ -1168,6 +1228,9 @@ private void ensureHomeServiceForPreview() {
             listContainer.removeAllViews();
             String listKey = appliedItemKey + "_pack_rules";
             java.util.List<String> rules = getDynamicIds(listKey);
+            if (prulesSelectMode) {
+                listContainer.addView(buildPruleSelectionToolbar(appliedItemKey, rules, renderRules));
+            }
             if (rules.isEmpty()) {
                 TextView empty = new TextView(this);
                 empty.setText("Chưa có Rule nào.\nBấm 'NEW EB' góc dưới để tạo.");
@@ -1259,32 +1322,41 @@ tAct.setText(formatPruleActionLabel(rId));
                 card.addView(infoCol);
                 card.addView(ctrlCol);
 
-                // [MỚI] Chạm 1 lần -> SỬA thẳng, giống hệt hành vi "NEW EB" của Homacc/Volkey
-                card.setOnClickListener(v -> openPackRuleEditor(appliedItemKey, rId, null, renderRules[0]));
+                FrameLayout cardWrap = new FrameLayout(this);
+                LinearLayout.LayoutParams wrapLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                wrapLp.setMargins(6, 6, 6, 6);
+                cardWrap.setLayoutParams(wrapLp);
+                cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
 
-                // Chạm GIỮ -> chỉ còn Chia sẻ / Xóa / Hủy (bỏ "Edit" vì tap đã đảm nhiệm rồi
-                // → menu ngắn hơn = ít item AlertDialog phải inflate hơn, nhẹ RAM hơn 1 chút)
-                card.setOnLongClickListener(v -> {
-    String[] opts = {"🔗 " + T("Share","Chia sẻ"), "🗑️ " + T("Delete","Xóa")};
-    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-        .setTitle(T("Options","Tùy chọn"))
-        .setItems(opts, (dialogOpt, which) -> {
-            if (which == 0) {
-                showShareRuleToPackDialog(rId, appliedItemKey, renderRules[0]);
-            } else {
-                new AlertDialog.Builder(this).setTitle(T("Delete this rule?","Xóa Rule này?"))
-                    .setPositiveButton("XÓA", (dd, w) -> {
-                        rules.remove(rId);
-                        prefs.edit().putString(listKey, android.text.TextUtils.join(",", rules)).apply();
+                final String fRId = rId;
+                if (prulesSelectMode) {
+                    TextView selDot = new TextView(this);
+                    boolean sel = prulesSelectedItems.contains(fRId);
+                    selDot.setText(sel ? "🟢" : "⚪");
+                    selDot.setTextSize(18);
+                    FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+                    dotLp.gravity = Gravity.BOTTOM | Gravity.START;
+                    dotLp.setMargins(10, 0, 0, 6);
+                    selDot.setLayoutParams(dotLp);
+                    cardWrap.addView(selDot);
+                    card.setOnClickListener(v -> {
+                        if (prulesSelectedItems.contains(fRId)) prulesSelectedItems.remove(fRId);
+                        else prulesSelectedItems.add(fRId);
                         renderRules[0].run();
-                    }).setNegativeButton("HỦY", null).show();
-            }
-        })
-        .setNegativeButton(T("CANCEL","Hủy"), null)
-        .show();
-    return true;
-});
-                currentRow.addView(card);
+                    });
+                    card.setOnLongClickListener(v -> true);
+                } else {
+                    card.setOnClickListener(v -> openPackRuleEditor(appliedItemKey, fRId, null, renderRules[0]));
+                    card.setOnLongClickListener(v -> {
+                        prulesSelectMode = true;
+                        prulesSelectedItems.clear();
+                        prulesSelectedItems.add(fRId);
+                        renderRules[0].run();
+                        return true;
+                    });
+                }
+
+                currentRow.addView(cardWrap);
                 count++;
             }
             if(count % 2 != 0 && currentRow != null) { 
@@ -1386,202 +1458,284 @@ tAct.setText(formatPruleActionLabel(rId));
             if (onDone != null) onDone.run();
         }).show();
 }
+   private LinearLayout buildPruleSelectionToolbar(String appliedItemKey, java.util.List<String> rules, Runnable[] renderRules) {
+    String listKey = appliedItemKey + "_pack_rules";
+    LinearLayout bar = new LinearLayout(this);
+    bar.setOrientation(LinearLayout.HORIZONTAL);
+    bar.setGravity(Gravity.CENTER_VERTICAL);
+    bar.setPadding(0, 0, 0, 20);
+
+    TextView tvCount = new TextView(this);
+    tvCount.setText(prulesSelectedItems.size() + " " + T("selected", "đã chọn"));
+    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    Button btnShare = new Button(this); btnShare.setText("🔗 " + T("Share", "Chia sẻ"));
+    btnShare.setBackground(getRounded("#7C4DFF", 20f)); btnShare.setTextColor(Color.WHITE); btnShare.setTextSize(12.5f);
+    btnShare.setOnClickListener(v -> showShareMultipleRulesToPackDialog(prulesSelectedItems, appliedItemKey, () -> {
+        prulesSelectMode = false; prulesSelectedItems.clear(); renderRules[0].run();
+    }));
+
+    Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", "Xóa"));
+    btnDelete.setBackground(getRounded("#D32F2F", 20f)); btnDelete.setTextColor(Color.WHITE); btnDelete.setTextSize(12.5f);
+    LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(-2, -2); delLp.setMargins(10, 0, 10, 0);
+    btnDelete.setLayoutParams(delLp);
+    btnDelete.setOnClickListener(v -> {
+        new AlertDialog.Builder(this).setTitle(T("Delete selected patterns?", "Xóa các Pattern đã chọn?"))
+            .setPositiveButton(T("DELETE", "XÓA"), (d, w) -> {
+                rules.removeAll(prulesSelectedItems);
+                prefs.edit().putString(listKey, android.text.TextUtils.join(",", rules)).apply();
+                prulesSelectMode = false;
+                prulesSelectedItems.clear();
+                renderRules[0].run();
+            }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
+    });
+
+    Button btnCancel = new Button(this); btnCancel.setText(T("Cancel", "Hủy"));
+    btnCancel.setBackground(getRounded("#333333", 20f)); btnCancel.setTextColor(Color.WHITE); btnCancel.setTextSize(12.5f);
+    btnCancel.setOnClickListener(v -> { prulesSelectMode = false; prulesSelectedItems.clear(); renderRules[0].run(); });
+
+    bar.addView(tvCount); bar.addView(btnShare); bar.addView(btnDelete); bar.addView(btnCancel);
+    return bar;
+}
+
+private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, String currentItemKey, Runnable onDone) {
+    java.util.LinkedHashSet<String> targets = new java.util.LinkedHashSet<>();
+    for (String px : new String[]{"lock_","home_","homacc_"}) {
+        for (String key : getDynamicIds(px + "applied_packs")) if (!key.equals(currentItemKey)) targets.add(key);
+    }
+    if (targets.isEmpty()) { Toast.makeText(this, T("No other Data Pack to share to","Không có Data Pack khác để chia sẻ"), Toast.LENGTH_SHORT).show(); return; }
+    String[] names = new String[targets.size()];
+    String[] keys = targets.toArray(new String[0]);
+    for (int i = 0; i < keys.length; i++) {
+        boolean isBar = keys[i].startsWith("bar_");
+        String id = keys[i].replace(isBar ? "bar_" : "corner_", "");
+        String pfx = isBar ? "pack_bar_" : "pack_corner_";
+        names[i] = (isBar ? "[Bar] " : "[Corner] ") + prefs.getString(pfx + id + "_name", "Data Pack");
+    }
+    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle(T("Copy selected patterns to...","Sao chép các Pattern đã chọn sang..."))
+        .setItems(names, (d, which) -> {
+            String targetItemKey = keys[which];
+            String targetListKey = targetItemKey + "_pack_rules";
+            java.util.List<String> targetRules = getDynamicIds(targetListKey);
+            int copied = 0;
+            for (String rId : rIds) {
+                String newId = java.util.UUID.randomUUID().toString().substring(0, 8);
+                targetRules.add(newId);
+                prefs.edit()
+                    .putString("prule_" + newId + "_gestures", prefs.getString("prule_" + rId + "_gestures", ""))
+                    .putString("prule_" + newId + "_acts", prefs.getString("prule_" + rId + "_acts", ""))
+                    .putString("prule_" + newId + "_launch_pkg", prefs.getString("prule_" + rId + "_launch_pkg", ""))
+                    .putString("prule_" + newId + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
+                    .putBoolean("prule_" + newId + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
+                    .putBoolean("prule_" + newId + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
+                    .putBoolean("prule_" + newId + "_en", true)
+                    .apply();
+                copied++;
+            }
+            prefs.edit().putString(targetListKey, android.text.TextUtils.join(",", targetRules)).apply();
+            Toast.makeText(this, T("Shared","Đã chia sẻ") + " " + copied + " pattern!", Toast.LENGTH_SHORT).show();
+            if (onDone != null) onDone.run();
+        }).show();
+}
     // [TỐI ƯU PIXEL 2XL] Trình Editor Rule đặc biệt cho Pack (Không có mục Chọn Component)
     private void openPackRuleEditor(String appliedItemKey, String editId, String copyId, Runnable onRefresh) {
-        reloadActionLabels();
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.parseColor("#121212"));
-        root.setPadding(30, 80, 30, 30);
-        
-        ScrollView scroll = new ScrollView(this);
-        scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-        
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(content);
-        root.addView(scroll);
-        
-        String sourceId = editId != null ? editId : copyId;
-        content.addView(createSectionTitle("1. CHỌN CỬ CHỈ (OR logic)"));
-        
-        ArrayList<CheckBox> gestureBoxes = new ArrayList<>();
-        String savedGestures = sourceId != null ? prefs.getString("prule_" + sourceId + "_gestures", "") : "";
-        
-        for (int i = 0; i < C_GESTURES.length; i++) {
-            CheckBox cb = new CheckBox(this);
-            cb.setText(C_GESTURE_NAMES[i]);
-            cb.setTextColor(Color.WHITE);
-            cb.setPadding(0, 15, 0, 15);
-            cb.setChecked(("," + savedGestures + ",").contains("," + C_GESTURES[i] + ","));
-            gestureBoxes.add(cb);
-            content.addView(cb);
-        }
-        
-        content.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (Được chọn nhiều)"));
-        
-        String savedActs = sourceId != null ? prefs.getString("prule_" + sourceId + "_acts", "") : "";
-        final java.util.LinkedHashSet<String> selectedActs = new java.util.LinkedHashSet<>();
-        for (String sa : savedActs.split(",")) if (!sa.trim().isEmpty()) selectedActs.add(sa.trim());
-        
-        final boolean[] launchAppSelected = { sourceId != null && selectedActs.contains("LAUNCH_APP") };
-        final String[] launchAppPkg = { sourceId != null ? prefs.getString("prule_" + sourceId + "_launch_pkg", "") : "" };
-        
-        // 1. Thêm khai báo 2 biến còn thiếu dựa trên dữ liệu đã có trong pack rule
-        final boolean[] shortcutSelected = { sourceId != null && selectedActs.contains("RUN_SHORTCUT") };
-        final String[] shortcutId = { sourceId != null ? prefs.getString("prule_" + sourceId + "_shortcut_id", "") : "" };
-        
-        // 2. Bổ sung lại phần thân còn thiếu (Copy đúng cấu trúc phần chọn App/Shortcut/System)
-        LinearLayout rowApp = new LinearLayout(this);
-        rowApp.setOrientation(LinearLayout.HORIZONTAL);
-        rowApp.setGravity(Gravity.CENTER_VERTICAL);
-        rowApp.setPadding(0, 0, 0, 20);
-        Switch swApp = new Switch(this);
-        swApp.setChecked(launchAppSelected[0]);
-        swApp.setOnCheckedChangeListener((b,c) -> launchAppSelected[0] = c);
-        swApp.setPadding(0, 0, 20, 0);
-        Button btnPickApp = new Button(this);
-        btnPickApp.setBackground(getRounded("#00E5FF", 20f));
-        btnPickApp.setTextColor(Color.BLACK);
-        btnPickApp.setTextSize(13.5f);
-        btnPickApp.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        btnPickApp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        Runnable updateApp = () -> btnPickApp.setText("📱 MỞ APP: " + (launchAppPkg[0].isEmpty() ? "CHƯA CHỌN" : getAppLabelCached(launchAppPkg[0])));
-        updateApp.run();
-        btnPickApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> { launchAppPkg[0] = pkg; swApp.setChecked(true); updateApp.run(); }));
-        rowApp.addView(swApp); rowApp.addView(btnPickApp);
-        content.addView(rowApp);
+    reloadActionLabels();
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212"));
+    root.setPadding(30, 80, 30, 30);
 
-        LinearLayout rowSc = new LinearLayout(this);
-        rowSc.setOrientation(LinearLayout.HORIZONTAL);
-        rowSc.setGravity(Gravity.CENTER_VERTICAL);
-        rowSc.setPadding(0, 0, 0, 20);
-        Switch swSc = new Switch(this);
-        swSc.setChecked(shortcutSelected[0]);
-        swSc.setOnCheckedChangeListener((b,c) -> shortcutSelected[0] = c);
-        swSc.setPadding(0, 0, 20, 0);
-        Button btnPickSc = new Button(this);
-        btnPickSc.setBackground(getRounded("#7C4DFF", 20f));
-        btnPickSc.setTextColor(Color.WHITE);
-        btnPickSc.setTextSize(13.5f);
-        btnPickSc.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        btnPickSc.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        Runnable updateSc = () -> btnPickSc.setText("🔗 SHORTCUT: " + (shortcutId[0].isEmpty() ? "CHƯA CHỌN" : prefs.getString("shortcut_" + shortcutId[0] + "_name", "?")));
-        updateSc.run();
-        btnPickSc.setOnClickListener(v -> showShortcutPickerDialog((idSc, name) -> { shortcutId[0] = idSc; swSc.setChecked(true); updateSc.run(); }));
-        rowSc.addView(swSc); rowSc.addView(btnPickSc);
-        content.addView(rowSc);
+    LinearLayout tabs = new LinearLayout(this);
+    tabs.setOrientation(LinearLayout.HORIZONTAL);
+    Button bTrig = createTabBtn("TRIGGER"); Button bAct = createTabBtn("ACTION");
+    LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(0, -2, 1f);
+    tabLp.setMargins(10, 0, 10, 0);
+    bTrig.setLayoutParams(tabLp); bAct.setLayoutParams(tabLp);
+    tabs.addView(bTrig); tabs.addView(bAct); root.addView(tabs);
 
-        List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "SPLIT_SCREEN"}, ACT_KEYS, ACT_LABS);
-        List<String[]> PANEL_ITEMS = buildItemsForKeys(new String[]{"OPEN_PANEL_1", "OPEN_PANEL_2", "OPEN_PANEL_3"}, ACT_KEYS, ACT_LABS);
-        List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", "YTDL_DOWNLOAD"}, ACT_KEYS, ACT_LABS);
-        List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", ACT_KEYS, ACT_LABS);
-        List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", ACT_KEYS, ACT_LABS);
+    ScrollView scroll = new ScrollView(this);
+    scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    LinearLayout content = new LinearLayout(this);
+    content.setOrientation(LinearLayout.VERTICAL);
+    content.setPadding(0, 40, 0, 0);
+    scroll.addView(content);
+    root.addView(scroll);
 
-        content.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
-        content.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
-        content.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0"));
-        content.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
-        content.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
+    String sourceId = editId != null ? editId : copyId;
 
-        CheckBox cbVib = new CheckBox(this);
-        cbVib.setText("Bật Rung (Haptic Feedback)");
-        cbVib.setTextColor(Color.WHITE);
-        cbVib.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_vib", true));
-        content.addView(cbVib);
+    LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
+    vTrig.addView(createSectionTitle("1. CHỌN CỬ CHỈ (OR logic)"));
 
-        CheckBox cbAnim = new CheckBox(this);
-        cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)");
-        cbAnim.setTextColor(Color.WHITE);
-        cbAnim.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_anim", true));
-        content.addView(cbAnim);
-
-        LinearLayout footer = new LinearLayout(this);
-        footer.setOrientation(LinearLayout.HORIZONTAL);
-        footer.setPadding(0, 20, 0, 0);
-        
-        Button bCancel = new Button(this); 
-        bCancel.setText("HỦY");
-        bCancel.setBackground(getRounded("#333333", 20f));
-        bCancel.setTextColor(Color.WHITE); 
-        bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        
-        Button bSave = new Button(this); 
-        bSave.setText("SAVE RULE");
-        bSave.setBackground(getRounded("#4CAF50", 20f));
-        bSave.setTextColor(Color.WHITE);
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f);
-        slp.setMargins(20, 0, 0, 0); 
-        bSave.setLayoutParams(slp);
-        
-        footer.addView(bCancel); 
-        footer.addView(bSave);
-        root.addView(footer);
-
-        bCancel.setOnClickListener(v -> d.dismiss());
-        bSave.setOnClickListener(v -> {
-            ArrayList<String> gestures = new ArrayList<>();
-            for (int i = 0; i < gestureBoxes.size(); i++)
-                if (gestureBoxes.get(i).isChecked()) gestures.add(C_GESTURES[i]);
-            
-            if (gestures.isEmpty()) {
-                Toast.makeText(this, "Hãy chọn ít nhất 1 Cử chỉ!", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            
-            if (launchAppSelected[0]) {
-                if (launchAppPkg[0].isEmpty()) { 
-                    Toast.makeText(this, "Chọn app trước!", Toast.LENGTH_SHORT).show(); 
-                    return; 
-                }
-                selectedActs.add("LAUNCH_APP");
-            } else {
-                selectedActs.remove("LAUNCH_APP");
-            }
-            
-            // 3. Khi lưu, ghi thêm RUN_SHORTCUT và shortcut_id
-            if (shortcutSelected[0]) {
-                if (shortcutId[0].isEmpty()) { 
-                    Toast.makeText(this, "Chọn shortcut trước!", Toast.LENGTH_SHORT).show(); 
-                    return; 
-                }
-                selectedActs.add("RUN_SHORTCUT");
-            } else {
-                selectedActs.remove("RUN_SHORTCUT");
-            }
-            
-            if (selectedActs.isEmpty()) {
-                Toast.makeText(this, "Hãy chọn ít nhất 1 Hành động!", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            
-            String targetId = editId != null ? editId : java.util.UUID.randomUUID().toString().substring(0, 8);
-            
-            if (editId == null) {
-                String listKey = appliedItemKey + "_pack_rules";
-                java.util.List<String> curRules = getDynamicIds(listKey);
-                curRules.add(targetId);
-                prefs.edit().putString(listKey, android.text.TextUtils.join(",", curRules)).apply();
-            }
-            
-            prefs.edit()
-                .putString("prule_" + targetId + "_gestures", android.text.TextUtils.join(",", gestures))
-                .putString("prule_" + targetId + "_acts", android.text.TextUtils.join(",", selectedActs))
-                .putString("prule_" + targetId + "_launch_pkg", launchAppPkg[0])
-                .putString("prule_" + targetId + "_shortcut_id", shortcutId[0])
-                .putBoolean("prule_" + targetId + "_vib", cbVib.isChecked())
-                .putBoolean("prule_" + targetId + "_anim", cbAnim.isChecked())
-                .putBoolean("prule_" + targetId + "_en", true)
-                .apply();
-                
-            if (onRefresh != null) onRefresh.run();
-            d.dismiss();
-        });
-        
-        d.setContentView(root); 
-        d.show();
+    ArrayList<CheckBox> gestureBoxes = new ArrayList<>();
+    String savedGestures = sourceId != null ? prefs.getString("prule_" + sourceId + "_gestures", "") : "";
+    for (int i = 0; i < C_GESTURES.length; i++) {
+        CheckBox cb = new CheckBox(this);
+        cb.setText(C_GESTURE_NAMES[i]);
+        cb.setTextColor(Color.WHITE);
+        cb.setPadding(0, 15, 0, 15);
+        cb.setChecked(("," + savedGestures + ",").contains("," + C_GESTURES[i] + ","));
+        gestureBoxes.add(cb);
+        vTrig.addView(cb);
     }
+
+    LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
+    vAct.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (Được chọn nhiều)"));
+
+    String savedActs = sourceId != null ? prefs.getString("prule_" + sourceId + "_acts", "") : "";
+    final java.util.LinkedHashSet<String> selectedActs = new java.util.LinkedHashSet<>();
+    for (String sa : savedActs.split(",")) if (!sa.trim().isEmpty()) selectedActs.add(sa.trim());
+
+    final boolean[] launchAppSelected = { sourceId != null && selectedActs.contains("LAUNCH_APP") };
+    final String[] launchAppPkg = { sourceId != null ? prefs.getString("prule_" + sourceId + "_launch_pkg", "") : "" };
+    final boolean[] shortcutSelected = { sourceId != null && selectedActs.contains("RUN_SHORTCUT") };
+    final String[] shortcutId = { sourceId != null ? prefs.getString("prule_" + sourceId + "_shortcut_id", "") : "" };
+
+    LinearLayout rowApp = new LinearLayout(this);
+    rowApp.setOrientation(LinearLayout.HORIZONTAL);
+    rowApp.setGravity(Gravity.CENTER_VERTICAL);
+    rowApp.setPadding(0, 0, 0, 20);
+    Switch swApp = new Switch(this);
+    swApp.setChecked(launchAppSelected[0]);
+    swApp.setOnCheckedChangeListener((b,c) -> launchAppSelected[0] = c);
+    swApp.setPadding(0, 0, 20, 0);
+    Button btnPickApp = new Button(this);
+    btnPickApp.setBackground(getRounded("#00E5FF", 20f));
+    btnPickApp.setTextColor(Color.BLACK);
+    btnPickApp.setTextSize(13.5f);
+    btnPickApp.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    btnPickApp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Runnable updateApp = () -> btnPickApp.setText("📱 MỞ APP: " + (launchAppPkg[0].isEmpty() ? "CHƯA CHỌN" : getAppLabelCached(launchAppPkg[0])));
+    updateApp.run();
+    btnPickApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> { launchAppPkg[0] = pkg; swApp.setChecked(true); updateApp.run(); }));
+    rowApp.addView(swApp); rowApp.addView(btnPickApp);
+    vAct.addView(rowApp);
+
+    LinearLayout rowSc = new LinearLayout(this);
+    rowSc.setOrientation(LinearLayout.HORIZONTAL);
+    rowSc.setGravity(Gravity.CENTER_VERTICAL);
+    rowSc.setPadding(0, 0, 0, 20);
+    Switch swSc = new Switch(this);
+    swSc.setChecked(shortcutSelected[0]);
+    swSc.setOnCheckedChangeListener((b,c) -> shortcutSelected[0] = c);
+    swSc.setPadding(0, 0, 20, 0);
+    Button btnPickSc = new Button(this);
+    btnPickSc.setBackground(getRounded("#7C4DFF", 20f));
+    btnPickSc.setTextColor(Color.WHITE);
+    btnPickSc.setTextSize(13.5f);
+    btnPickSc.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    btnPickSc.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Runnable updateSc = () -> btnPickSc.setText("🔗 SHORTCUT: " + (shortcutId[0].isEmpty() ? "CHƯA CHỌN" : prefs.getString("shortcut_" + shortcutId[0] + "_name", "?")));
+    updateSc.run();
+    btnPickSc.setOnClickListener(v -> showShortcutPickerDialog((idSc, name) -> { shortcutId[0] = idSc; swSc.setChecked(true); updateSc.run(); }));
+    rowSc.addView(swSc); rowSc.addView(btnPickSc);
+    vAct.addView(rowSc);
+
+    List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "SPLIT_SCREEN"}, ACT_KEYS, ACT_LABS);
+    List<String[]> PANEL_ITEMS = buildItemsForKeys(new String[]{"OPEN_PANEL_1", "OPEN_PANEL_2", "OPEN_PANEL_3"}, ACT_KEYS, ACT_LABS);
+    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", "YTDL_DOWNLOAD"}, ACT_KEYS, ACT_LABS);
+    List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", ACT_KEYS, ACT_LABS);
+    List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", ACT_KEYS, ACT_LABS);
+
+    vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
+    vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
+    vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0"));
+    vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
+    vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
+
+    vTrig.addView(createSectionTitle("3. CHỌN TÙY CHỌN"));
+    CheckBox cbVib = new CheckBox(this);
+    cbVib.setText("Bật Rung (Haptic Feedback)");
+    cbVib.setTextColor(Color.WHITE);
+    cbVib.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_vib", true));
+    vTrig.addView(cbVib);
+
+    CheckBox cbAnim = new CheckBox(this);
+    cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)");
+    cbAnim.setTextColor(Color.WHITE);
+    cbAnim.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_anim", true));
+    vTrig.addView(cbAnim);
+
+    content.addView(vTrig); content.addView(vAct);
+    View.OnClickListener tabClick = v -> {
+        bTrig.setBackground(getRounded(v==bTrig?"#00E5FF":"#222222", 15f));
+        bTrig.setTextColor(v==bTrig?Color.BLACK:Color.WHITE);
+        bAct.setBackground(getRounded(v==bAct?"#00E5FF":"#222222", 15f));
+        bAct.setTextColor(v==bAct?Color.BLACK:Color.WHITE);
+        vTrig.setVisibility(v==bTrig?View.VISIBLE:View.GONE);
+        vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE);
+    };
+    bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick);
+    bTrig.performClick();
+
+    LinearLayout footer = new LinearLayout(this);
+    footer.setOrientation(LinearLayout.HORIZONTAL);
+    footer.setPadding(0, 20, 0, 0);
+
+    Button bCancel = new Button(this);
+    bCancel.setText("HỦY");
+    bCancel.setBackground(getRounded("#333333", 20f));
+    bCancel.setTextColor(Color.WHITE);
+    bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    Button bSave = new Button(this);
+    bSave.setText("SAVE RULE");
+    bSave.setBackground(getRounded("#4CAF50", 20f));
+    bSave.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f);
+    slp.setMargins(20, 0, 0, 0);
+    bSave.setLayoutParams(slp);
+
+    footer.addView(bCancel);
+    footer.addView(bSave);
+    root.addView(footer);
+
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave.setOnClickListener(v -> {
+        ArrayList<String> gestures = new ArrayList<>();
+        for (int i = 0; i < gestureBoxes.size(); i++)
+            if (gestureBoxes.get(i).isChecked()) gestures.add(C_GESTURES[i]);
+
+        if (gestures.isEmpty()) {
+            Toast.makeText(this, "Hãy chọn ít nhất 1 Cử chỉ!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (launchAppSelected[0]) {
+            if (launchAppPkg[0].isEmpty()) { Toast.makeText(this, "Chọn app trước!", Toast.LENGTH_SHORT).show(); return; }
+            selectedActs.add("LAUNCH_APP");
+        } else { selectedActs.remove("LAUNCH_APP"); }
+        if (shortcutSelected[0]) {
+            if (shortcutId[0].isEmpty()) { Toast.makeText(this, "Chọn shortcut trước!", Toast.LENGTH_SHORT).show(); return; }
+            selectedActs.add("RUN_SHORTCUT");
+        } else { selectedActs.remove("RUN_SHORTCUT"); }
+        if (selectedActs.isEmpty()) { Toast.makeText(this, "Hãy chọn ít nhất 1 Hành động!", Toast.LENGTH_SHORT).show(); return; }
+
+        String targetId = editId != null ? editId : java.util.UUID.randomUUID().toString().substring(0, 8);
+        if (editId == null) {
+            String listKey = appliedItemKey + "_pack_rules";
+            java.util.List<String> curRules = getDynamicIds(listKey);
+            curRules.add(targetId);
+            prefs.edit().putString(listKey, android.text.TextUtils.join(",", curRules)).apply();
+        }
+        prefs.edit()
+            .putString("prule_" + targetId + "_gestures", android.text.TextUtils.join(",", gestures))
+            .putString("prule_" + targetId + "_acts", android.text.TextUtils.join(",", selectedActs))
+            .putString("prule_" + targetId + "_launch_pkg", launchAppPkg[0])
+            .putString("prule_" + targetId + "_shortcut_id", shortcutId[0])
+            .putBoolean("prule_" + targetId + "_vib", cbVib.isChecked())
+            .putBoolean("prule_" + targetId + "_anim", cbAnim.isChecked())
+            .putBoolean("prule_" + targetId + "_en", true)
+            .apply();
+
+        if (onRefresh != null) onRefresh.run();
+        d.dismiss();
+    });
+
+    d.setContentView(root);
+    d.show();
+}
     private void applyBarPackToSpace(String id, String targetPrefix) {
         String src = "pack_bar_" + id + "_";
         int loc = prefs.getInt(src + "loc", 0);
@@ -4232,22 +4386,6 @@ private Button createSystemBtn(String text, String bgHex, String textHex) {
     b.setPadding(10, 0, 10, 0); // Kèm padding tối ưu để không bị chèn chữ
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
     lp.setMargins(4, 0, 4, 0); b.setLayoutParams(lp);
-    return b;
-}
- private boolean hasUsageStatsPermission() {
-    try {
-        android.app.AppOpsManager aom = (android.app.AppOpsManager) getSystemService(APP_OPS_SERVICE);
-        int mode = aom.checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
-            android.os.Process.myUid(), getPackageName());
-        return mode == android.app.AppOpsManager.MODE_ALLOWED;
-    } catch (Exception e) { return false; }
-}
-private LinearLayout createPermBanner(String text, String color, View.OnClickListener onClick) {
-    LinearLayout b = new LinearLayout(this); b.setOrientation(LinearLayout.VERTICAL);
-    b.setBackground(getRounded(color, 0f)); b.setPadding(30,25,30,25);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,2); b.setLayoutParams(lp);
-    TextView tv = new TextView(this); tv.setText(text); tv.setTextColor(Color.WHITE); tv.setGravity(Gravity.CENTER); tv.setTextSize(15f);
-    b.addView(tv); b.setOnClickListener(onClick);
     return b;
 }
     private Button createNavBtn(String t) {
