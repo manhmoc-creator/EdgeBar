@@ -730,12 +730,13 @@ isCountingDown = false;
         }
     }, 600);
 } else if ("com.manhmoc.edgebar.OPEN_PANEL_REQUEST".equals(action)) {
-    int idx = i.getIntExtra("idx", 0);
-    if (panelEngine != null) panelEngine.togglePanel(idx);
+    String panelId = i.getStringExtra("panel_id");
+    if (panelEngine != null && panelId != null) panelEngine.togglePanel(panelId);
 } else if ("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED".equals(action)) {
     if (panelEngine != null) panelEngine.rebuildAll();
 } else if ("com.manhmoc.edgebar.PANEL_TEST_TOGGLE".equals(action)) {
-    if (panelEngine != null) panelEngine.setForceTest(i.getIntExtra("idx",0), i.getBooleanExtra("on", false));
+    String panelId = i.getStringExtra("panel_id");
+    if (panelEngine != null && panelId != null) panelEngine.setForceTest(panelId, i.getBooleanExtra("on", false));
 }
     } // đóng onReceive()
 };

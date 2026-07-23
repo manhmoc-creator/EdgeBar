@@ -195,7 +195,8 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
 } else if ("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED".equals(act)) {
     if (panelEngine != null) panelEngine.rebuildAll();
 } else if ("com.manhmoc.edgebar.PANEL_TEST_TOGGLE".equals(act)) {
-    if (panelEngine != null) panelEngine.setForceTest(i.getIntExtra("idx",0), i.getBooleanExtra("on", false));
+    String panelId = i.getStringExtra("panel_id");
+    if (panelEngine != null && panelId != null) panelEngine.setForceTest(panelId, i.getBooleanExtra("on", false));
 } else {
     updateVisibility();
        }
