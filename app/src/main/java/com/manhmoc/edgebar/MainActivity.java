@@ -67,7 +67,7 @@ private WindowManager.LayoutParams livePreviewLp;
     // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "V19.12.3.6.26";
+    private final String CURRENT_VERSION = "V19.12.3.6.27";
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -129,17 +129,15 @@ private List<String[]> getAppListCached() {
     @Override protected void onResume() { super.onResume(); refreshPreview(); }
     @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).putBoolean("preview_panel", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
     private void reloadActionLabels() {
-String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD", "LAUNCH_APP", "OPEN_PANEL_1", "OPEN_PANEL_2",
-"OPEN_PANEL_3", "SPLIT_SCREEN"};
+// [XÓA] OPEN_PANEL_1/2/3 — Panel giờ liệt kê động qua nút "PANEL" (buildDynamicPackItems).
+String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD", "LAUNCH_APP", "SPLIT_SCREEN"};
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
 T("Recents", "Da nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
-T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm"), T("Launch App", "Mở Ứng dụng"), T("Open Panel 1","Mở Panel 1"), T("Open Panel 2", "Mở Panel 2"), T("Open Panel 3","Mở Panel 3"), T("Split Screen", "Chia đôi màn hình")};
-// V19.12.3.6.10: bỏ SCREEN_ON khỏi danh sách chung  chỉ còn dùng riêng cho VOLKEY
-for(int i = 0; i<21; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
-for(int i = 1; i <= 15; i++) { ACT_KEYS[20+i]="INTENT_"+i; ACT_LABS[20+i] =
-prefs.getString("intent_"+i+"_name", "Intent " + i); }
-for(int i = 1; i <= 5; i++) { ACT_KEYS[35+i]="MACRO_"+i; ACT_LABS[35+i] =
-prefs.getString("macro_"+i+"_name", "Macro " + i); }
+T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Acc", "Bật/Tắt Trợ Năng"), T("Toggle Overlay", "Bật/Tắt Lớp Phủ"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm"), T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình")};
+for(int i = 0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
+// [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
+// LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
+// Đã thay bằng buildDynamicPackItems("intent_ids"/"macro_ids", ...) ở nơi dùng.
 // V19.12.3.6.10: bỏ vol_on/vol_off khỏi component chung (đã có không gian VOLKEY riêng)
 ALL_COMP_NAMES = new String[]{T("Bottom Right", "Thanh Đáy Phải"), T("Bottom Left", "Thanh Đáy Trái"), T("Top Right", "Thanh Cạnh Phải"), T("Top Left", "Thanh Cạnh Trái"), T("Top Center", "Thanh Đỉnh Giữa"), T("Corner BR", "Góc Viền Đáy Phải"), T("Corner BL", "Góc Viền Đáy Trái"), T("Corner TR", "Góc Viền Đỉnh Phải"), T("Corner TL", "Góc Viền Đỉnh Trái"), T("Fingerprint", "Vân Tay"), T("Launch App", "Lắng nghe Mở Ứng dụng")};
 VOLKEY_COMP_NAMES = new String[]{T("Button Up", "Phím Tăng Âm"), T("Button Down", "Phím Giảm Âm")};
@@ -1006,17 +1004,24 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
             Toast.makeText(this, "Đã nhân bản Pack!", Toast.LENGTH_SHORT).show();
         });
 
-        // [MỚI] Nút EDIT ngay dưới Copy — mở thẳng Format Bar/Corner giống PIECE trước đây
-        Button btnEdit = new Button(this); btnEdit.setText(T("EDIT", "SỬA"));
+        // [ĐỔI HÀNH VI] Frontier: nút này đổi thành "PATTERN" -> mở kho biến con
+        // (openPackRuleSpace), vì giờ chạm 1 lần vào card đã mở thẳng Editor cha rồi.
+        // Morse: giữ nguyên "SỬA" -> mở Editor cha (card Morse vẫn tap để mở Pattern như cũ).
+        final boolean fIsBar = isBar; final String fId = id;
+        Button btnEdit = new Button(this);
         btnEdit.setBackground(getRounded("#00E5FF", 14f));
         btnEdit.setTextColor(Color.BLACK);
         btnEdit.setTextSize(11f);
         btnEdit.setPadding(10, 8, 10, 8);
         LinearLayout.LayoutParams edLp = new LinearLayout.LayoutParams(-2, -2); edLp.setMargins(0, 4, 0, 0);
         btnEdit.setLayoutParams(edLp); btnEdit.setMinimumHeight(64);
-        final boolean fIsBar = isBar; final String fId = id;
-        btnEdit.setOnClickListener(v -> openDataPackEditor(fIsBar ? 0 : 1, fId));
-
+        if (isFrontier) {
+            btnEdit.setText("PATTERN");
+            btnEdit.setOnClickListener(v -> openPackRuleSpace(itemKey, fTabState));
+        } else {
+            btnEdit.setText(T("EDIT", "SỬA"));
+            btnEdit.setOnClickListener(v -> openDataPackEditor(fIsBar ? 0 : 1, fId));
+        }
         ctrlCol.addView(swEn); ctrlCol.addView(btnCopy); ctrlCol.addView(btnEdit);
         card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
         cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
@@ -1043,12 +1048,10 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
                 });
                 card.setOnLongClickListener(v -> true);
             } else {
-                // [YÊU CẦU 2] Chạm 1 lần vào Data Pack ở Frontier -> mở kho biến "Pattern"
-                // (openPackRuleSpace + openPackRuleEditor) thay vì mở thẳng Format Bar/Corner.
-                // Đây chính là không gian đã tồn tại sẵn cho Morse (kho prule_*), giờ dùng
-                // chung cho Frontier -> KHÔNG cấp phát thêm Dialog/Activity nào mới, chỉ
-                // route lại onClickListener -> Zero thêm RAM.
-                card.setOnClickListener(v -> openPackRuleSpace(fItemKey, fTabState));
+                // [ĐỔI HÀNH VI] Chạm 1 lần vào Data Pack ở Frontier -> mở thẳng Editor
+                // của chính Data Pack cha (Format Bar/Corner qua openDataPackEditor).
+                // Muốn vào kho Pattern con thì bấm nút "PATTERN" ở cột điều khiển bên phải.
+                card.setOnClickListener(v -> openDataPackEditor(fIsBar ? 0 : 1, fId));
                 card.setOnLongClickListener(v -> {
                     frontierSelectMode = true;
                     frontierSelectedItems.clear();
@@ -1535,7 +1538,7 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
-    root.setPadding(30, 80, 30, 30);
+    root.setPadding(30, 120, 30, 30); // khớp buildRuleEditor — tránh dính status bar
 
     LinearLayout tabs = new LinearLayout(this);
     tabs.setOrientation(LinearLayout.HORIZONTAL);
@@ -1552,11 +1555,15 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     content.setPadding(0, 40, 0, 0);
     scroll.addView(content);
     root.addView(scroll);
-
     String sourceId = editId != null ? editId : copyId;
-
     LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
-    vTrig.addView(createSectionTitle("1. CHỌN CỬ CHỈ (OR logic)"));
+    // ĐỒNG BỘ với buildRuleEditor() (Homacc/Volkey) — cùng màu #E91E63, cùng padding 20.
+    // Pattern KHÔNG có mục "CHỌN COMPONENT" vì Pattern là Rule con nằm BÊN TRONG 1 Data Pack
+    // Bar/Corner cụ thể rồi — nó áp dụng cho chính vùng của Pack đó, không cần chọn lại vùng.
+    TextView tvG = new TextView(this);
+    tvG.setText(T("CHOOSE GESTURES (OR logic)", "1. CHỌN CỬ CHỈ (Được chọn nhiều - Lệnh OR)"));
+    tvG.setTextColor(Color.parseColor("#E91E63"));
+    vTrig.addView(tvG);
 
     ArrayList<CheckBox> gestureBoxes = new ArrayList<>();
     String savedGestures = sourceId != null ? prefs.getString("prule_" + sourceId + "_gestures", "") : "";
@@ -1564,12 +1571,11 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
         CheckBox cb = new CheckBox(this);
         cb.setText(C_GESTURE_NAMES[i]);
         cb.setTextColor(Color.WHITE);
-        cb.setPadding(0, 15, 0, 15);
+        cb.setPadding(0, 20, 0, 20); // khớp buildRuleEditor
         cb.setChecked(("," + savedGestures + ",").contains("," + C_GESTURES[i] + ","));
         gestureBoxes.add(cb);
         vTrig.addView(cb);
     }
-
     LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
     vAct.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (Được chọn nhiều)"));
 
@@ -1623,18 +1629,20 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     vAct.addView(rowSc);
 
     List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "SPLIT_SCREEN"}, ACT_KEYS, ACT_LABS);
-    List<String[]> PANEL_ITEMS = buildItemsForKeys(new String[]{"OPEN_PANEL_1", "OPEN_PANEL_2", "OPEN_PANEL_3"}, ACT_KEYS, ACT_LABS);
+    List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
     List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", "YTDL_DOWNLOAD"}, ACT_KEYS, ACT_LABS);
-    List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", ACT_KEYS, ACT_LABS);
-    List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", ACT_KEYS, ACT_LABS);
-
+    List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
+    List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
     vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
     vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
     vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0"));
     vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
     vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
 
-    vTrig.addView(createSectionTitle("3. CHỌN TÙY CHỌN"));
+    TextView tvOpt = new TextView(this);
+    tvOpt.setText(T("\n3. CHOOSE OPTIONS", "\n3. CHỌN TÙY CHỌN"));
+    tvOpt.setTextColor(Color.parseColor("#E91E63"));
+    vTrig.addView(tvOpt);
     CheckBox cbVib = new CheckBox(this);
     cbVib.setText("Bật Rung (Haptic Feedback)");
     cbVib.setTextColor(Color.WHITE);
@@ -1762,10 +1770,11 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
             .putInt(cornerKey + "moon_y", prefs.getInt(src + "moon_y", 1250))
             .putInt(cornerKey + "rad", prefs.getInt(src + "rad", 80))
             .putInt(cornerKey + "moon_rad", prefs.getInt(src + "moon_rad", 80))
-            .putInt(targetPrefix + "corner_hide_dur", prefs.getInt(src + "hide_dur", 2500))
-            .putInt(targetPrefix + "corner_moon_alpha", prefs.getInt(src + "moon_alpha", 100))
-            .putInt(targetPrefix + "corner_stroke_alpha", prefs.getInt(src + "stroke_alpha", 200))
-            .putInt(targetPrefix + "corner_thick", prefs.getInt(src + "thick", 8))
+            // [XÓA] Không ghi đè corner_hide_dur/moon_alpha/stroke_alpha/thick nữa —
+            // giữ nguyên giá trị "chung" người dùng đã set trong Frontier.
+            // Tiết kiệm: bớt 4 lần prefs.getInt() + 4 lần putInt() (SharedPreferences.apply()
+            // là ghi bất đồng bộ xuống disk — mỗi key thừa = 1 lần wakelock ngắn CPU) mỗi khi
+            // user bật công tắc Enable cho 1 Data Pack Corner.
             .apply();
     }
     private void openRuleBuilderDialogNoComp(String copyActs) {
@@ -1947,14 +1956,13 @@ for (String sa : savedArray) {
             shortcutSelected[0] = false;
         }
 
-        List<String[]> PANEL_ITEMS = buildItemsForKeys(new String[]{"OPEN_PANEL_1", "OPEN_PANEL_2", "OPEN_PANEL_3"}, actKeysUsed, actLabsUsed);
+        List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
         vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
         
         if (!isVolKeyMode) {
             List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_ACC", "TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", "YTDL_DOWNLOAD"}, actKeysUsed, actLabsUsed);
-            List<String[]> INTENT_ITEMS = buildItemsForPrefix("INTENT_", actKeysUsed, actLabsUsed);
-            List<String[]> MACRO_ITEMS = buildItemsForPrefix("MACRO_", actKeysUsed, actLabsUsed);
-            
+            List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
+            List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
             vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
             vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0"));
             vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
@@ -2261,6 +2269,18 @@ private List<String> getDynamicIds(String listKey) {
     String csv = prefs.getString(listKey, "");
     List<String> out = new ArrayList<>();
     if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
+    return out;
+}
+/** Trả về {label, actionKey} cho 1 loại Data Pack động (Panel/Intent/Macro).
+ *  actionKey = "PANEL_"+uuid / "INTENT_"+uuid / "MACRO_"+uuid — id là UUID thật của
+ *  Data Pack, KHÔNG phải số thứ tự cố định. Vì list này không giới hạn số lượng,
+ *  RAM chỉ tốn đúng bằng số Pack user thực sự tạo — không cấp phát dư cho 15/5 slot rỗng. */
+private List<String[]> buildDynamicPackItems(String listKey, String namePrefix, String actionPrefix, String fallback) {
+    List<String[]> out = new ArrayList<>();
+    for (String id : getDynamicIds(listKey)) {
+        String name = prefs.getString(namePrefix + id + "_name", fallback);
+        out.add(new String[]{ name, actionPrefix + id });
+    }
     return out;
 }
 private String addDynamicId(String listKey) {
@@ -3565,13 +3585,7 @@ previewListenerHolder[0] = (p, k) -> {
     int loc = prefs.getInt(prefix + id + "_loc", 0);
     boolean previewOn = prefs.getBoolean(prefix + id + "_preview_" + cKeys[loc], false);
     if (!previewOn) { removeLivePreviewOverlay(); return; }
-    updateLivePreviewCorner(loc,
-        prefs.getInt(prefix + id + "_stroke_alpha", 200),
-        prefs.getInt(prefix + id + "_w", 100),
-        prefs.getInt(prefix + id + "_h", 100),
-        prefs.getInt(prefix + id + "_x", 0),
-        prefs.getInt(prefix + id + "_y", 0),
-        prefs.getInt(prefix + id + "_rad", 80));
+    updateLivePreviewCorner(loc, prefix + id + "_");
 };
 prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
 if (cbPreview.isChecked()) previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_x");
@@ -3588,17 +3602,38 @@ content.addView(createSlider("Di chuyển Trăng Non Ngang (X) (1250=Giữa)", p
 content.addView(createSlider("Di chuyển Trăng Non Dọc (Y) (1250=Giữa)", prefix + id + "_moon_y", 2500, 1250));
 content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 80));
             content.addView(createSlider("Độ cong TRĂNG NON", prefix + id + "_moon_rad", 1000, 80));
-            
-            // Yêu cầu 7: Bổ sung 4 thanh kéo (slider) chung vào FormatC
-            content.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix + id + "_hide_dur", 5000, 2500));
-            content.addView(createSlider("Độ mờ vùng TRĂNG NON", prefix + id + "_moon_alpha", 255, 100));
-            content.addView(createSlider("Độ mờ VIÊN GÓC", prefix + id + "_stroke_alpha", 255, 200));
-            content.addView(createSlider("Độ đậm viền", prefix + id + "_thick", 50, 8));
+            // [XÓA] 4 slider chung — Frontier đã có Drawer "TÙY CHỈNH CHUNG GÓC VIỀN" áp dụng
+            // cho toàn không gian rồi, giữ 2 nơi chỉnh cùng 1 giá trị là dư thừa & gây xung đột.
+            // Tối ưu Pixel 2XL: bớt 4x(createSlider = 1 SeekBar + 2 Button + 2 TextView = 5 View)
+            // = 20 View object không phải cấp phát mỗi lần mở dialog Format C.
         } else if (type == 2) {
             // Yêu cầu 2 & 4: BÊ NGUYÊN VẸN MỌI THỨ TỪ 3 MỤC Common/Panel Config/Handle Config vào ruột viên thuốc Panel
             content.addView(createSectionTitle("📦 DATA PACK PANEL (CORE CONFIG)"));
             content.addView(createComboDropdown("POSITION (Vị trí Panel)", prefix + id + "_pos", PANEL_POS_NAMES, 0));
-            
+
+            // [FIX #1] LIVE PREVIEW cho Panel — trước đây thiếu hẳn checkbox này,
+            // Zero-RAM khi tắt: chỉ addView 1 CheckBox nhẹ, overlay chỉ addView
+            // khi bật, gỡ ngay khi tắt/đóng Dialog (dùng chung removeLivePreviewOverlay()
+            // đã có sẵn ở cuối openDataPackEditor).
+            CheckBox cbPreviewPanel = new CheckBox(this);
+            cbPreviewPanel.setText("Bật xem trước (Live Preview)");
+            cbPreviewPanel.setTextColor(Color.parseColor("#00E5FF"));
+            cbPreviewPanel.setTextSize(14f);
+            content.addView(cbPreviewPanel);
+            cbPreviewPanel.setOnCheckedChangeListener((vw, c) -> {
+                if (c) {
+                    previewListenerHolder[0] = (p, k) -> {
+                        if (k == null || !k.startsWith(prefix + id + "_")) return;
+                        updateLivePreviewPanel(prefix + id + "_");
+                    };
+                    prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
+                    updateLivePreviewPanel(prefix + id + "_");
+                } else {
+                    if (previewListenerHolder[0] != null) prefs.unregisterOnSharedPreferenceChangeListener(previewListenerHolder[0]);
+                    removeLivePreviewOverlay();
+                }
+            });
+
             // --- MỤC 1: COMMON & COLLECTIONS ---
             content.addView(createSectionTitle("1. COMMON & COLLECTIONS"));
             content.addView(createComboDropdown("Color (Màu)", prefix + id + "_color_idx", PANEL_COLOR_NAMES, 0));
@@ -4519,35 +4554,160 @@ private String formatPruleActionLabel(String rId) {
             try { wm.updateViewLayout(livePreviewOverlay, livePreviewLp); } catch (Exception ignored) {}
         }
     }
+    // ============ [FIX #2] LIVE PREVIEW CHÍNH XÁC CHO CORNER ============
+    // Copy nguyên thuật toán vẽ "trăng lưỡi liềm" (2 Path) từ CornerView thật
+    // trong EdgeBarService/HomescreenService — Zero sai lệch hình dạng.
+    private class LiveCornerPreviewView extends View {
+        private Paint pFill, pStroke; private int type; private String ck;
+        public LiveCornerPreviewView(Context c, int type, String ck) {
+            super(c); this.type = type; this.ck = ck;
+            pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true);
+            pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE);
+            pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND);
+        }
+        @Override protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            pStroke.setStrokeWidth(prefs.getInt(ck+"thick", 8));
+            pStroke.setAlpha(prefs.getInt(ck+"stroke_alpha", 200));
+            pFill.setColor(Color.argb(prefs.getInt(ck+"moon_alpha", 100), 96, 125, 139));
 
-    private void updateLivePreviewCorner(int cornerIdx, int alpha, int w, int h, int x, int y, int radiusRaw) {
+            float tw = getWidth(), th = getHeight(), thick = pStroke.getStrokeWidth(), pad = thick/2;
+            int shapeMode = prefs.getInt(ck+"shape", 0);
+            float sRad = prefs.getInt(ck+"rad", 80) / 1000f; float mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
+            float sw = prefs.getInt(ck+"w", 100), sh = prefs.getInt(ck+"h", 100);
+            float mw = prefs.getInt(ck+"moon_w", 100), mh = prefs.getInt(ck+"moon_h", 100);
+
+            android.graphics.Path moonPath = new android.graphics.Path(), strokePath = new android.graphics.Path();
+            float sRootX=0, sRootY=0, sTipX=0, sTipY=0, sCtrlX=0, sCtrlY=0;
+            float mRootX=0, mRootY=0, mTipX=0, mTipY=0, mCtrlX=0, mCtrlY=0;
+
+            if (type == 0) { // BR
+                sRootX=tw-pad; sRootY=th-pad; sTipX=tw-sw+pad; sTipY=th-sh+pad;
+                sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
+                mRootX=tw; mRootY=th; mTipX=tw-mw; mTipY=th-mh;
+                mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
+            } else if (type == 1) { // BL
+                sRootX=pad; sRootY=th-pad; sTipX=sw-pad; sTipY=th-sh+pad;
+                sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
+                mRootX=0; mRootY=th; mTipX=mw; mTipY=th-mh;
+                mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
+            } else if (type == 2) { // TR
+                sRootX=tw-pad; sRootY=pad; sTipX=tw-sw+pad; sTipY=sh-pad;
+                sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
+                mRootX=tw; mRootY=0; mTipX=tw-mw; mTipY=mh;
+                mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
+            } else { // TL
+                sRootX=pad; sRootY=pad; sTipX=sw-pad; sTipY=sh-pad;
+                sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
+                mRootX=0; mRootY=0; mTipX=mw; mTipY=mh;
+                mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
+            }
+
+            if(shapeMode == 1) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sTipX, sRootY); }
+            else if(shapeMode == 2) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sRootX, sTipY); }
+            else { strokePath.moveTo(sRootX, sTipY); strokePath.quadTo(sCtrlX, sCtrlY, sTipX, sRootY); }
+
+            if(type==0||type==1) { moonPath.moveTo(mRootX, mTipY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mTipX, mRootY); moonPath.quadTo(mCtrlX, mCtrlY, mRootX, mTipY); }
+            else { moonPath.moveTo(mTipX, mRootY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mRootX, mTipY); moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY); }
+            moonPath.close();
+
+            canvas.drawPath(strokePath, pStroke);
+            float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
+            float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
+            canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill); canvas.restore();
+        }
+    }
+
+    private void updateLivePreviewCorner(int cornerIdx, String ck) {
         if (!Settings.canDrawOverlays(this)) return;
         WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         int[] gravArr = {
             Gravity.BOTTOM | Gravity.RIGHT, Gravity.BOTTOM | Gravity.LEFT,
             Gravity.TOP | Gravity.RIGHT, Gravity.TOP | Gravity.LEFT
         };
-        float radius = Math.min(w, h) * (radiusRaw / 1000f);
-        GradientDrawable gd = new GradientDrawable();
-        gd.setColor(Color.argb(0, 96, 125, 139));
-        gd.setStroke(8, Color.argb(alpha, 96, 125, 139));
-        gd.setCornerRadius(radius);
-        if (livePreviewOverlay == null) {
-            livePreviewOverlay = new View(this);
-            livePreviewLp = new WindowManager.LayoutParams(w, h,
+        int wPref = prefs.getInt(ck+"w", 100), hPref = prefs.getInt(ck+"h", 100);
+        int mwPref = prefs.getInt(ck+"moon_w", 100), mhPref = prefs.getInt(ck+"moon_h", 100);
+        int mxOffset = Math.abs(prefs.getInt(ck+"moon_x", 1250) - 1250);
+        int myOffset = Math.abs(prefs.getInt(ck+"moon_y", 1250) - 1250);
+        int cw = Math.max(10, Math.max(wPref, mwPref) + mxOffset);
+        int ch = Math.max(10, Math.max(hPref, mhPref) + myOffset);
+        int x = prefs.getInt(ck+"x", 0), y = prefs.getInt(ck+"y", 0);
+
+        if (livePreviewOverlay == null || !(livePreviewOverlay instanceof LiveCornerPreviewView)) {
+            removeLivePreviewOverlay();
+            livePreviewOverlay = new LiveCornerPreviewView(this, cornerIdx, ck);
+            livePreviewLp = new WindowManager.LayoutParams(cw, ch,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 android.graphics.PixelFormat.TRANSLUCENT);
             livePreviewLp.gravity = gravArr[cornerIdx];
             livePreviewLp.x = x; livePreviewLp.y = y;
+            try { wm.addView(livePreviewOverlay, livePreviewLp); } catch (Exception ignored) {}
+        } else {
+            livePreviewLp.width = cw; livePreviewLp.height = ch;
+            livePreviewLp.x = x; livePreviewLp.y = y;
+            livePreviewLp.gravity = gravArr[cornerIdx];
+            try { wm.updateViewLayout(livePreviewOverlay, livePreviewLp); } catch (Exception ignored) {}
+            livePreviewOverlay.invalidate();
+        }
+    }
+    // ============ [FIX #1] LIVE PREVIEW THẬT CHO PANEL DATA PACK ============
+    // Vẽ 1 khối chữ nhật đúng vị trí/kích thước/màu/bo góc panel thật —
+    // KHÔNG load icon/app, KHÔNG spawn Thread nào -> Zero RAM/CPU thêm so với
+    // việc chỉ vẽ Bar/Corner đã có sẵn.
+    private void updateLivePreviewPanel(String ck) {
+        if (!Settings.canDrawOverlays(this)) return;
+        WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        int pos = prefs.getInt(ck + "pos", 0);
+        String edge = pos <= 2 ? "bottom" : (pos <= 5 ? "left" : "right");
+        int[] gravArr = {
+            Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.LEFT, Gravity.BOTTOM|Gravity.RIGHT,
+            Gravity.LEFT|Gravity.TOP, Gravity.LEFT|Gravity.CENTER_VERTICAL, Gravity.LEFT|Gravity.BOTTOM,
+            Gravity.RIGHT|Gravity.TOP, Gravity.RIGHT|Gravity.CENTER_VERTICAL, Gravity.RIGHT|Gravity.BOTTOM
+        };
+        int gravity = gravArr[Math.max(0, Math.min(8, pos))];
+
+        int iconSize = prefs.getInt(ck + "icon_size", 110);
+        int cols = Math.max(1, prefs.getInt(ck + "cols", 4));
+        int alpha = prefs.getInt(ck + "alpha", 200);
+        int size = prefs.getInt(ck + "size", 700);
+        int panelLength = prefs.getInt(ck + "panel_length", 700);
+        int panelRadius = prefs.getInt(ck + "panel_radius", 24);
+        int colorIdx = prefs.getInt(ck + "color_idx", 0);
+
+        int cellPx = iconSize + 32;
+        int mainAxisContent = (edge.equals("bottom") ? cols : 1) * cellPx + 48;
+        int mainAxis = Math.max(panelLength, mainAxisContent);
+        int cross = Math.max(size, iconSize + 48);
+        int w = edge.equals("bottom") ? mainAxis : cross;
+        int h = edge.equals("bottom") ? cross : mainAxis;
+
+        String[] hex = {"#607D8B","#78909C","#90A4AE","#455A64","#5C6BC0","#4DB6AC","#B0BEC5","#37474F"};
+        int color;
+        try { color = Color.parseColor(hex[Math.max(0, Math.min(hex.length-1, colorIdx))]); }
+        catch (Exception e) { color = Color.parseColor("#607D8B"); }
+
+        GradientDrawable gd = new GradientDrawable();
+        gd.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
+        gd.setStroke(4, Color.argb(200, Color.red(color), Color.green(color), Color.blue(color)));
+        gd.setCornerRadius(panelRadius);
+
+        if (livePreviewOverlay == null || livePreviewOverlay instanceof LiveCornerPreviewView) {
+            removeLivePreviewOverlay();
+            livePreviewOverlay = new View(this);
+            livePreviewLp = new WindowManager.LayoutParams(w, h,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                android.graphics.PixelFormat.TRANSLUCENT);
+            livePreviewLp.gravity = gravity;
             livePreviewOverlay.setBackground(gd);
             try { wm.addView(livePreviewOverlay, livePreviewLp); } catch (Exception ignored) {}
         } else {
             livePreviewOverlay.setBackground(gd);
             livePreviewLp.width = w; livePreviewLp.height = h;
-            livePreviewLp.x = x; livePreviewLp.y = y;
-            livePreviewLp.gravity = gravArr[cornerIdx];
+            livePreviewLp.gravity = gravity;
             try { wm.updateViewLayout(livePreviewOverlay, livePreviewLp); } catch (Exception ignored) {}
         }
     }

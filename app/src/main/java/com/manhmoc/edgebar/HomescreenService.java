@@ -1655,16 +1655,7 @@ for (String a : acts) {
         if (a == null || a.equals("NONE")) return;
         try {
             switch (a) {
-                case "MACRO_1":
-                case "MACRO_2":
-                case "MACRO_3":
-                case "MACRO_4":
-                case "MACRO_5":
-                    Intent iM = new Intent("com.manhmoc.edgebar.TOGGLE_MACRO");
-                    iM.putExtra("services", prefs.getString(a.toLowerCase() + "_svcs", ""));
-                    sendBroadcast(iM);
-                    break;
-                case "TOGGLE_MORSE":
+                    case "TOGGLE_MORSE":
                     Intent m = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE");
                     sendBroadcast(m);
                     break;
@@ -1717,15 +1708,20 @@ for (String a : acts) {
                     break;
                 }
                 // THÊM case mới trong switch(a) của cả 2 file:
-case "OPEN_PANEL_1": case "OPEN_PANEL_2": case "OPEN_PANEL_3": {
-    int idx = Character.getNumericValue(a.charAt(a.length()-1)) - 1;
-    Intent op = new Intent("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
-    op.putExtra("idx", idx);
-    sendBroadcast(op);
-    break;
-}
-                default:
-                    if (a.startsWith("INTENT_")) fireIntent(a.split("_")[1]);
+default:
+                    if (a.startsWith("PANEL_")) {
+                        // [THAY] Panel định danh bằng UUID Data Pack, không còn 1/2/3 cố định
+                        Intent op = new Intent("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
+                        op.putExtra("panel_id", a.substring(6));
+                        sendBroadcast(op);
+                    } else if (a.startsWith("INTENT_")) {
+                        fireIntentById(a.substring(7)); // UUID thật, không phải số thứ tự
+                    } else if (a.startsWith("MACRO_")) {
+                        String macroId = a.substring(6);
+                        Intent iM = new Intent("com.manhmoc.edgebar.TOGGLE_MACRO");
+                        iM.putExtra("services", prefs.getString("macro_" + macroId + "_svcs", ""));
+                        sendBroadcast(iM);
+                    }
                     break;
             }
         } catch (Exception e) {}
@@ -1847,7 +1843,37 @@ case "OPEN_PANEL_1": case "OPEN_PANEL_2": case "OPEN_PANEL_3": {
             return true;
         }
     }
-
+    /** Bản thay thế fireIntent() cho hệ Intent động (UUID) — đọc đúng field mà
+ *  openIntentEditorV2() đã lưu ("intent_<uuid>_act/_pkg/_cls/_data/_cat/_flags/_br"). */
+private void fireIntentById(String id) {
+    try {
+        String act = prefs.getString("intent_" + id + "_act", "");
+        String pkg = prefs.getString("intent_" + id + "_pkg", "");
+        Intent i;
+        if (act.isEmpty() && !pkg.isEmpty()) {
+            i = getPackageManager().getLaunchIntentForPackage(pkg);
+            if (i == null) return;
+        } else {
+            i = new Intent(act);
+            if (!pkg.isEmpty()) i.setPackage(pkg);
+            String cls = prefs.getString("intent_" + id + "_cls", "");
+            if (!pkg.isEmpty() && !cls.isEmpty())
+                i.setComponent(new android.content.ComponentName(pkg, cls));
+            String data = prefs.getString("intent_" + id + "_data", "");
+            if (!data.isEmpty()) i.setData(android.net.Uri.parse(data));
+            String cat = prefs.getString("intent_" + id + "_cat", "");
+            if (!cat.isEmpty()) i.addCategory(cat);
+            String flg = prefs.getString("intent_" + id + "_flags", "");
+            if (!flg.isEmpty()) i.addFlags(Integer.parseInt(flg));
+        }
+        if (prefs.getBoolean("intent_" + id + "_br", true) && !act.isEmpty()) {
+            sendBroadcast(i);
+        } else {
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        }
+    } catch (Exception e) {}
+}
     private void scheduleSuicideCheck() {
     // V19.12.3.6.6 THE FINAL JUDGMENT: Guard flag — nếu đã có check pending, KHÔNG đặt thêm
     // Trước đây: updateVisibility() gọi scheduleSuicideCheck() → mỗi SYNC_STATE tạo thêm 1 runnable

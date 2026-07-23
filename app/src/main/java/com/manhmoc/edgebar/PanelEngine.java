@@ -8,14 +8,15 @@ public class PanelEngine {
     private Context ctx; private WindowManager wm; private SharedPreferences prefs;
     private boolean isAnyMode; // true = EdgeBarService (Lock+Homacc), false = HomescreenService (Homeb)
     private KeyguardManager km;
-
-    private View[] handles = new View[3];
-    private LinearLayout[] panels = new LinearLayout[3];
-    private boolean[] panelOpen = new boolean[3];
-private String[] lastSignature = new String[3];
-private boolean[] forceTestOn = new boolean[3]; // Bật/tắt từ checkbox TEST trong màn Design
-    private int[] lastIconSizeCache = new int[]{-1,-1,-1};
-    private final AtomicInteger[] renderGen = {new AtomicInteger(0), new AtomicInteger(0), new AtomicInteger(0)};
+    // [THAY] Map theo UUID thay vì mảng cố định 3 phần tử — số Panel không giới hạn,
+    // RAM chỉ tốn đúng bằng số Panel THẬT SỰ đang bật (không cấp phát dư slot rỗng).
+    private final Map<String, View> handles = new HashMap<>();
+    private final Map<String, LinearLayout> panels = new HashMap<>();
+    private final Map<String, Boolean> panelOpen = new HashMap<>();
+    private final Map<String, String> lastSignature = new HashMap<>();
+    private final Map<String, Boolean> forceTestOn = new HashMap<>();
+    private final Map<String, Integer> lastIconSizeCache = new HashMap<>();
+    private final Map<String, AtomicInteger> renderGen = new HashMap<>();
     private static final int ICON_CACHE_LIMIT = 80;
     private static final LinkedHashMap<String, Drawable> iconCache =
         new LinkedHashMap<String, Drawable>(16, 0.75f, true) {
@@ -51,45 +52,62 @@ private boolean[] forceTestOn = new boolean[3]; // Bật/tắt từ checkbox TES
 }
     /** Gọi mỗi khi lock state / accessibility state đổi — decide xem instance này
      *  (Lock hay Homacc, tùy trạng thái) có được phép giữ panel hay không. */
-    public void rebuildAll() { for (int i = 0; i < 3; i++) rebuildOne(i); }
-    private void rebuildOne(int idx) {
-    String sig = computeSignature(idx);
-    boolean sigChanged = !sig.equals(lastSignature[idx]);
+    public void rebuildAll() {
+        // Duyệt đúng danh sách Panel THẬT đang tồn tại — Panel bị xóa khỏi pack_panel_ids
+        // sẽ tự động bị dọn View ở dưới (không rebuild lại) → tự giải phóng RAM.
+        java.util.Set<String> liveIds = new java.util.HashSet<>(getDynamicIds("pack_panel_ids"));
+        for (String id : liveIds) rebuildOne(id);
+        // Dọn View mồ côi (Panel đã bị xóa nhưng View vẫn còn trong Map)
+        for (String orphan : new java.util.ArrayList<>(panels.keySet()))
+            if (!liveIds.contains(orphan)) removePanelBody(orphan);
+        for (String orphan : new java.util.ArrayList<>(handles.keySet()))
+            if (!liveIds.contains(orphan)) removeHandle(orphan);
+    }
+    private List<String> getDynamicIds(String listKey) {
+        String csv = prefs.getString(listKey, "");
+        List<String> out = new ArrayList<>();
+        if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
+        return out;
+    }
+    private void rebuildOne(String id) {
+    String sig = computeSignature(id);
+    boolean sigChanged = !sig.equals(lastSignature.get(id));
 
-    boolean shouldPanel = shouldPanelBodyExistNow(idx);
-    boolean panelExists = panels[idx] != null;
+    boolean shouldPanel = shouldPanelBodyExistNow(id);
+    boolean panelExists = panels.get(id) != null;
     if (panelExists != shouldPanel || (panelExists && sigChanged)) {
-        removePanelBody(idx);
-        if (shouldPanel) buildPanelBody(idx);
+        removePanelBody(id);
+        if (shouldPanel) buildPanelBody(id);
     }
 
-    boolean shouldHandle = shouldHandleExistNow(idx);
-    boolean handleExists = handles[idx] != null;
+    boolean shouldHandle = shouldHandleExistNow(id);
+    boolean handleExists = handles.get(id) != null;
     if (handleExists != shouldHandle || (handleExists && sigChanged)) {
-        removeHandle(idx);
-        if (shouldHandle) buildHandle(idx);
+        removeHandle(id);
+        if (shouldHandle) buildHandle(id);
     }
 
-    lastSignature[idx] = sig;
+    lastSignature.put(id, sig);
 }
     /** Gọi từ prefListener khi 1 key panelN_xxx đổi — quyết định rebuild nặng hay update nhẹ. */
     public void onPrefChanged(String key) {
-        if (key == null || !key.startsWith("panel") || key.length() < 7) return;
-        int idx;
-        try { idx = Character.getNumericValue(key.charAt(5)) - 1; } catch (Exception e) { return; }
-        if (idx < 0 || idx > 2) return;
+        // key dạng "pack_panel_<uuid>_xxx" — tách UUID ra giữa 2 dấu "_"
+        if (key == null || !key.startsWith("pack_panel_")) return;
+        String rest = key.substring("pack_panel_".length());
+        int sep = rest.indexOf('_');
+        if (sep <= 0) return;
+        String id = rest.substring(0, sep);
         boolean structural = key.endsWith("_apps") || key.endsWith("_acts") || key.endsWith("_cols")
             || key.endsWith("_icon_shape") || key.endsWith("_show_name") || key.endsWith("_en")
             || key.endsWith("_vis") || key.endsWith("_pos") || key.endsWith("_color_idx");
-        if (structural) { rebuildOne(idx); return; }
-        liveUpdateCosmetic(idx);
+        if (structural) { rebuildOne(id); return; }
+        liveUpdateCosmetic(id);
     }
-
     /** Update tại chỗ (KHÔNG removeView/addView) cho opacity/length/width/radius/icon size. */
-    private void liveUpdateCosmetic(int idx) {
-        View handle = handles[idx]; LinearLayout panel = panels[idx];
+    private void liveUpdateCosmetic(String id) {
+        View handle = handles.get(id); LinearLayout panel = panels.get(id);
         if (handle == null && panel == null) return; // chưa build -> để rebuildAll() lo sau
-        String px = "panel" + (idx + 1) + "_";
+        String px = "pack_panel_" + id + "_";
         int color = parsePanelColor(prefs.getInt(px + "color_idx", 0));
         String edge = posToEdge(prefs.getInt(px + "pos", 0));
 
@@ -146,15 +164,16 @@ int cross = Math.max(size, iconSize + 48 + labelExtra);
                 pp.height = Math.min(mainAxis, ctx.getResources().getDisplayMetrics().heightPixels);
             }
             try { wm.updateViewLayout(panel, pp); } catch (Exception ignored) {}
-
-            if (lastIconSizeCache[idx] != iconSize) {
-                lastIconSizeCache[idx] = iconSize;
-                renderPanelGrid(idx); // chỉ vẽ lại grid con, không đụng handle/panel view
+            Integer cachedSize = lastIconSizeCache.get(id);
+            if (cachedSize == null || cachedSize != iconSize) {
+                lastIconSizeCache.put(id, iconSize);
+                renderPanelGrid(id); // chỉ vẽ lại grid con, không đụng handle/panel view
             }
         }
     }
-private String computeSignature(int idx) {
-    String px = "panel" + (idx+1) + "_";
+private String computeSignature(String id) {
+    String px = "pack_panel_" + id + "_";
+    Boolean forceTest = forceTestOn.get(id);
     return prefs.getBoolean(px+"en", false) + "|" + prefs.getInt(px+"vis", 0) + "|"
         + prefs.getInt(px+"pos", 0) + "|" + prefs.getInt(px+"color_idx", 0) + "|"
         + prefs.getInt(px+"size", 700) + "|" + prefs.getInt(px+"thick", 40) + "|"
@@ -163,11 +182,11 @@ private String computeSignature(int idx) {
         + prefs.getInt(px+"icon_size", 110) + "|" + prefs.getInt(px+"cols", 4) + "|"
         + prefs.getInt(px+"icon_shape", 0) + "|" + prefs.getInt(px+"show_name", 0) + "|"
         + prefs.getString(px+"apps","") + "|" + prefs.getString(px+"acts","") + "|"
-        + forceTestOn[idx];
+        + (forceTest != null && forceTest);
 }
 // PANEL BODY: luôn theo đúng vòng đời Lock/Home, KHÔNG phụ thuộc vis nữa
-private boolean shouldPanelBodyExistNow(int idx) {
-    String px = "panel" + (idx+1) + "_";
+private boolean shouldPanelBodyExistNow(String id) {
+    String px = "pack_panel_" + id + "_";
     if (!prefs.getBoolean(px+"en", false)) return false;
 
     boolean locked = km != null && km.isKeyguardLocked();
@@ -178,24 +197,21 @@ private boolean shouldPanelBodyExistNow(int idx) {
     }
     return true;
 }
-
 // HANDLE: Cục Bộ chỉ hiện trong Design; Toàn Cục hiện như panel
-private boolean shouldHandleExistNow(int idx) {
-    String px = "panel" + (idx+1) + "_";
+private boolean shouldHandleExistNow(String id) {
+    String px = "pack_panel_" + id + "_";
     if (!prefs.getBoolean(px+"en", false)) return false;
 
     int visMode = prefs.getInt(px+"vis", 0); // 0 = Cục Bộ, 1 = Toàn Cục
     if (visMode == 0) {
-        // Cục Bộ: chỉ hiện khi đang preview trong Design (không đụng Lock/Home thật)
         return prefs.getBoolean("preview_panel", false);
     }
-    // Toàn Cục: dùng chung điều kiện với panel body
-    return shouldPanelBodyExistNow(idx);
+    return shouldPanelBodyExistNow(id);
 }
 // Gọi từ Activity (qua broadcast) khi bật/tắt checkbox TEST
-public void setForceTest(int idx, boolean on) {
-    forceTestOn[idx] = on;
-    rebuildOne(idx);
+public void setForceTest(String id, boolean on) {
+    forceTestOn.put(id, on);
+    rebuildOne(id);
 }
     private boolean shouldOwnPanelNow() {
         if (!isAnyMode) return true; // Homeb: luôn được phép (chỉ cần unlock, check riêng bên dưới)
@@ -204,8 +220,8 @@ public void setForceTest(int idx, boolean on) {
         // unlocked + Homacc chạy -> Homacc giữ panel. Không bao giờ cả hai cùng lúc.
         return true; // panel Lock vs Homacc tự phân biệt qua px+"owner" bên dưới nếu cần mở rộng
     }
-    private void buildHandle(int idx) {
-    String px = "panel" + (idx+1) + "_";
+    private void buildHandle(String id) {
+    String px = "pack_panel_" + id + "_";
     int pos = prefs.getInt(px+"pos", 0);
     int color = parsePanelColor(prefs.getInt(px+"color_idx", 0));
     String edge = posToEdge(pos);
@@ -236,13 +252,12 @@ public void setForceTest(int idx, boolean on) {
         | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
         PixelFormat.TRANSLUCENT);
     hp.gravity = gravity;
-    try { wm.addView(handle, hp); handles[idx] = handle; } catch (Exception e) { return; }
-    final int fIdx = idx;
-    handle.setOnClickListener(v -> togglePanel(fIdx));
+    try { wm.addView(handle, hp); handles.put(id, handle); } catch (Exception e) { return; }
+    final String fId = id;
+    handle.setOnClickListener(v -> togglePanel(fId));
 }
-
-private void buildPanelBody(int idx) {
-    String px = "panel" + (idx+1) + "_";
+private void buildPanelBody(String id) {
+    String px = "pack_panel_" + id + "_";
     int pos = prefs.getInt(px+"pos", 0);
     int color = parsePanelColor(prefs.getInt(px+"color_idx", 0));
     String edge = posToEdge(pos);
@@ -286,12 +301,12 @@ private void buildPanelBody(int idx) {
     pp.gravity = edge.equals("left") ? (Gravity.LEFT|Gravity.CENTER_VERTICAL)
                : edge.equals("right") ? (Gravity.RIGHT|Gravity.CENTER_VERTICAL)
                : (Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
-    try { wm.addView(panel, pp); panels[idx] = panel; } catch (Exception e) { return; }
-    final int fIdx = idx;
-    panel.setOnTouchListener((v,e) -> { closePanel(fIdx); return true; });
+    try { wm.addView(panel, pp); panels.put(id, panel); } catch (Exception e) { return; }
+    final String fId = id;
+    panel.setOnTouchListener((v,e) -> { closePanel(fId); return true; });
 
-    lastIconSizeCache[idx] = iconSize;
-    renderPanelGrid(idx);
+    lastIconSizeCache.put(id, iconSize);
+    renderPanelGrid(id);
 }
     // Hằng số DÙNG CHUNG giữa renderPanelGrid() và buildPanelIfEnabled() —
 // đảm bảo kích thước panel tính toán KHỚP 100% với kích thước cell thực vẽ,
@@ -299,12 +314,12 @@ private void buildPanelBody(int idx) {
 private static final int CELL_INNER_PAD = 16; // đệm 8px mỗi bên quanh icon
 private static final int CELL_MARGIN   = 16;  // margin 8px mỗi bên giữa các cell
 private static final int CELL_EXTRA    = CELL_INNER_PAD + CELL_MARGIN; // = 32
-
-private void renderPanelGrid(int idx) {
-    String px = "panel" + (idx+1) + "_";
-    LinearLayout panel = panels[idx];
+private void renderPanelGrid(String id) {
+    String px = "pack_panel_" + id + "_";
+    LinearLayout panel = panels.get(id);
     if (panel == null) return;
-    final int myGen = renderGen[idx].incrementAndGet();
+    renderGen.putIfAbsent(id, new AtomicInteger(0));
+    final int myGen = renderGen.get(id).incrementAndGet();
     int cols = Math.max(1, prefs.getInt(px+"cols", 4));
     int iconSize = prefs.getInt(px+"icon_size", 110);
     int cellSize = iconSize + CELL_INNER_PAD;
@@ -323,15 +338,15 @@ private void renderPanelGrid(int idx) {
     new Thread(() -> {
         List<Object[]> loaded = new ArrayList<>();
         for (String pkg : apps) {
-            if (renderGen[idx].get() != myGen) return;
+            if (renderGen.get(id).get() != myGen) return;
             Drawable d = getCachedIcon(pkg);
             if (d != null) loaded.add(new Object[]{d, "APP", pkg});
         }
-        if (renderGen[idx].get() != myGen) return;
+        if (renderGen.get(id).get() != myGen) return;
         for (String act : acts) loaded.add(new Object[]{null, "ACT", act});
-        if (renderGen[idx].get() != myGen) return;
+        if (renderGen.get(id).get() != myGen) return;
         new Handler(Looper.getMainLooper()).post(() -> {
-            if (renderGen[idx].get() != myGen || panels[idx] != panel) return;
+            if (renderGen.get(id).get() != myGen || panels.get(id) != panel) return;
             LinearLayout row = null;
             for (int i = 0; i < loaded.size(); i++) {
                 if (i % cols == 0) {
@@ -527,40 +542,48 @@ private Path buildRoundedPentagon(int size) {
         }
     }
 
-    public void togglePanel(int idx) {
+    public void togglePanel(String id) {
     // Panel body luôn phải tồn tại (theo shouldPanelBodyExistNow), không phụ thuộc Handle
-    if (panels[idx] == null && shouldPanelBodyExistNow(idx)) buildPanelBody(idx);
-    if (panels[idx] == null) return; // chưa đủ điều kiện (chưa bật/đang sai trạng thái khoá)
-    if (panelOpen[idx]) closePanel(idx); else openPanel(idx);
+    if (panels.get(id) == null && shouldPanelBodyExistNow(id)) buildPanelBody(id);
+    if (panels.get(id) == null) return; // chưa đủ điều kiện (chưa bật/đang sai trạng thái khoá)
+    Boolean open = panelOpen.get(id);
+    if (open != null && open) closePanel(id); else openPanel(id);
 }
-    private void openPanel(int idx) {
-        if (panels[idx] == null) return;
-        panelOpen[idx] = true;
-        panels[idx].setVisibility(View.VISIBLE);
-        if (handles[idx] != null) handles[idx].setVisibility(View.GONE);
-        String px = "panel" + (idx+1) + "_";
+    private void openPanel(String id) {
+        LinearLayout panel = panels.get(id);
+        if (panel == null) return;
+        panelOpen.put(id, true);
+        panel.setVisibility(View.VISIBLE);
+        View handle = handles.get(id);
+        if (handle != null) handle.setVisibility(View.GONE);
+        String px = "pack_panel_" + id + "_";
         String edge = posToEdge(prefs.getInt(px+"pos", 0));
         Animation anim = edge.equals("bottom")
             ? new TranslateAnimation(0,0, prefs.getInt(px+"size",500), 0)
             : new TranslateAnimation(edge.equals("left") ? -prefs.getInt(px+"size",500) : prefs.getInt(px+"size",500), 0, 0, 0);
         anim.setDuration(200);
-        panels[idx].startAnimation(anim);
+        panel.startAnimation(anim);
     }
-    private void closePanel(int idx) {
-        if (panels[idx] == null || !panelOpen[idx]) return;
-        panelOpen[idx] = false;
-        panels[idx].setVisibility(View.GONE);
-        if (handles[idx] != null) handles[idx].setVisibility(View.VISIBLE);
+    private void closePanel(String id) {
+        LinearLayout panel = panels.get(id);
+        Boolean open = panelOpen.get(id);
+        if (panel == null || open == null || !open) return;
+        panelOpen.put(id, false);
+        panel.setVisibility(View.GONE);
+        View handle = handles.get(id);
+        if (handle != null) handle.setVisibility(View.VISIBLE);
     }
-    private void closeAllPanels() { for (int i=0;i<3;i++) closePanel(i); }
-    private void removeHandle(int idx) {
-    try { if (handles[idx] != null) wm.removeView(handles[idx]); } catch (Exception ignored) {}
-    handles[idx] = null;
+    private void closeAllPanels() { for (String id : new java.util.ArrayList<>(panels.keySet())) closePanel(id); }
+    private void removeHandle(String id) {
+    View handle = handles.get(id);
+    try { if (handle != null) wm.removeView(handle); } catch (Exception ignored) {}
+    handles.remove(id);
 }
-
-private void removePanelBody(int idx) {
-    renderGen[idx].incrementAndGet();
-    try { if (panels[idx] != null) wm.removeView(panels[idx]); } catch (Exception ignored) {}
-    panels[idx] = null; panelOpen[idx] = false;
+private void removePanelBody(String id) {
+    AtomicInteger gen = renderGen.get(id);
+    if (gen != null) gen.incrementAndGet();
+    LinearLayout panel = panels.get(id);
+    try { if (panel != null) wm.removeView(panel); } catch (Exception ignored) {}
+    panels.remove(id); panelOpen.remove(id);
   }
 }
