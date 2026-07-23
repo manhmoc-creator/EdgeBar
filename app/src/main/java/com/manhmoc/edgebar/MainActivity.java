@@ -3,6 +3,7 @@ package com.manhmoc.edgebar;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
+import android.app.NotificationManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -356,8 +357,10 @@ if (!dpmChk.isAdminActive(new ComponentName(this, EdgeAdminReceiver.class))) {
         startActivity(i);
     }));
 }
-if (!android.provider.Settings.Secure.getString(getContentResolver(),"enabled_notification_listeners","").contains(getPackageName())
-    && !hasUsageStatsPermission()) {
+String enabledListeners = android.provider.Settings.Secure.getString(
+        getContentResolver(), "enabled_notification_listeners");
+if ((enabledListeners == null || !enabledListeners.contains(getPackageName()))
+        && !hasUsageStatsPermission()) {
     permBanner.addView(createPermBanner("⚠️ CẤP QUYỀN TRUY CẬP DỮ LIỆU SỬ DỤNG", "#D32F2F", v -> {
         startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
     }));
