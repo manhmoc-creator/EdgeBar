@@ -87,6 +87,17 @@ private void updateLayoutIfChanged(View v, WindowManager.LayoutParams p) {
     lastLayoutSig.put(v, sig);
     try { wm.updateViewLayout(v, p); } catch (Exception ignored) {}
 }
+private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap<>();
+private void applyAntiTapjacking(View v, int w, int h) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+    String sig = w + "x" + h;
+    if (sig.equals(lastGestureSig.get(v))) return;
+    lastGestureSig.put(v, sig);
+    try {
+        v.setSystemGestureExclusionRects(
+            java.util.Collections.singletonList(new android.graphics.Rect(0, 0, w, h)));
+    } catch (Exception ignored) {}
+}
 private final Handler homaccDebounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable homaccDebounceRunnable = null;
 private final Handler panelDebounceHandler = new Handler(android.os.Looper.getMainLooper());
@@ -223,6 +234,13 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
 } else if ("com.manhmoc.edgebar.PANEL_TEST_TOGGLE".equals(act)) {
     String panelId = i.getStringExtra("panel_id");
     if (panelEngine != null && panelId != null) panelEngine.setForceTest(panelId, i.getBooleanExtra("on", false));
+} else if ("com.manhmoc.edgebar.PAUSE_WM_OPS".equals(act)) {
+    for (int j=0;j<5;j++) if (bars[j]!=null) bars[j].setVisibility(View.GONE);
+    for (int j=0;j<4;j++) if (corners[j]!=null) corners[j].setVisibility(View.GONE);
+    for (int j=0;j<5;j++) if (accHomeBars[j]!=null) accHomeBars[j].setVisibility(View.GONE);
+    for (int j=0;j<4;j++) if (accHomeCorners[j]!=null) accHomeCorners[j].setVisibility(View.GONE);
+} else if ("com.manhmoc.edgebar.RESUME_WM_OPS".equals(act)) {
+    updateVisibility();
 } else {
     updateVisibility();
        }
@@ -445,6 +463,8 @@ if (inv) {
 filter.addAction("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
 filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
 filter.addAction("com.manhmoc.edgebar.PANEL_TEST_TOGGLE");
+filter.addAction("com.manhmoc.edgebar.PAUSE_WM_OPS");
+filter.addAction("com.manhmoc.edgebar.RESUME_WM_OPS");
         registerReceiver(stateReceiver, filter);
         if (Build.VERSION.SDK_INT >= 33)
             registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"), Context.RECEIVER_NOT_EXPORTED);
@@ -873,6 +893,14 @@ case "SCREEN_ON":
                     else startService(recIntent);
                     break;
                 }
+                case "TOGGLE_OVERLAY": {
+                    // [MỚI] Bật/tắt Trợ năng (Homeb ⇄ Overlay Trợ năng) ngay từ Action —
+                    // tái sử dụng NGUYÊN VẸN pipeline PAUSE_WM_OPS -> ghi Settings.Secure ->
+                    // RESUME_WM_OPS đã có sẵn và ổn định trong ToggleReceiver. Zero code
+                    // trùng lặp, Zero RAM/CPU thêm ngoài 1 Intent nội bộ nhỏ cùng process.
+                    sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC"));
+                    break;
+                }
                 // THÊM case mới trong switch(a) của cả 2 file:
 default:
                         if (a.startsWith("PANEL_")) {
@@ -1205,6 +1233,7 @@ for (int i=0;i<5;i++) {
         WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams();
         p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y + pushY; p.gravity = GRAV[i];
         updateLayoutIfChanged(bars[i], p);
+        if (priMode==0) applyAntiTapjacking(bars[i], w, h);
     }
 }
         for (int i=0;i<4;i++) {
@@ -1234,6 +1263,7 @@ for (int i=0;i<5;i++) {
                 int pushY = (pushForKbd && (i==0 || i==1)) ? cachedKbdHeight : 0; // "br","bl" là 2 góc đáy
 p.x = prefs.getInt(ck+"x",0); p.y = prefs.getInt(ck+"y",0) + pushY;
                 updateLayoutIfChanged(corners[i], p);
+                if (priMode==0) applyAntiTapjacking(corners[i], p.width, p.height);
             }
         }
 // CODE MỚI — thêm ngay trước dấu } đóng hàm:
@@ -1425,14 +1455,7 @@ lp.gravity = GRAV[i];
             accHomeBars[i] = null;
             continue;
         }
-
-        // Anti-tapjacking: loại bỏ OS gesture tại đúng vùng bar
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && priMode == 0) {
-            bar.setSystemGestureExclusionRects(
-                java.util.Collections.singletonList(
-                    new android.graphics.Rect(0, 0, w, h)));
-        }
-
+        if (priMode == 0) applyAntiTapjacking(bar, w, h);
         final int barIdx = i;
         bar.setOnTouchListener(new SidebarTouchListener("homacc_" + BARS[barIdx], null));
     }
@@ -1483,12 +1506,7 @@ lp.gravity = C_GRAV[i];
             continue;
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && priMode == 0) {
-            corner.setSystemGestureExclusionRects(
-                java.util.Collections.singletonList(
-                    new android.graphics.Rect(0, 0, cw, ch)));
-        }
-
+        if (priMode == 0) applyAntiTapjacking(corner, cw, ch);
         final int cornIdx = i;
         corner.setOnTouchListener(
             new SidebarTouchListener("homacc_corner_" + CORNERS[cornIdx], corner));
@@ -1558,6 +1576,7 @@ int f = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
 lp.flags = f; lp.width = w; lp.height = h; lp.x = x; lp.y = y + pushY;
 lp.gravity = GRAV[i];
         try { updateLayoutIfChanged(accHomeBars[i], lp); } catch (Exception ignored) {}
+        if (priMode == 0) applyAntiTapjacking(accHomeBars[i], w, h);
     }
     for (int i = 0; i < 4; i++) {
         if (accHomeCorners[i] == null) continue;
@@ -1593,6 +1612,7 @@ lp.flags = f; lp.width = cw; lp.height = ch;
 lp.x = p.getInt(ck + "x", 0); lp.y = p.getInt(ck + "y", 0) + pushYc;
 lp.gravity = C_GRAV[i];
         try { updateLayoutIfChanged(accHomeCorners[i], lp); } catch (Exception ignored) {}
+        if (priMode == 0) applyAntiTapjacking(accHomeCorners[i], cw, ch);
         accHomeCorners[i].invalidate();
     }
   }

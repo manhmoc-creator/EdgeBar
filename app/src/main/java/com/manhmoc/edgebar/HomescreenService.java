@@ -51,6 +51,7 @@ import java.util.Collections;
 public class HomescreenService extends Service {
     // ĐẰNG SAU (Biến cũ của HomescreenService)
     public static boolean isRunning = false;
+    public static volatile String liveForegroundPkg = "";
     private boolean isHomeOverlayShortcutOn() {
     return prefs.getBoolean("shortcut_home_on", false);
 }
@@ -67,6 +68,17 @@ private boolean isAccessibleHomeShortcutOn() {
         if (sig.equals(lastLayoutSig.get(v))) return; // không đổi -> zero IPC
         lastLayoutSig.put(v, sig);
         try { wm.updateViewLayout(v, p); } catch (Exception ignored) {}
+    }
+private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap<>();
+    private void applyAntiTapjacking(View v, int w, int h) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        String sig = w + "x" + h;
+        if (sig.equals(lastGestureSig.get(v))) return;
+        lastGestureSig.put(v, sig);
+        try {
+            v.setSystemGestureExclusionRects(
+                java.util.Collections.singletonList(new Rect(0, 0, w, h)));
+        } catch (Exception ignored) {}
     }
     private RelativeLayout morseContainer;
     private TextView tvMorseStatus;
@@ -575,6 +587,7 @@ lastKbdHeight = i.getIntExtra("kbd_height", 0); // [MỚI]
             && !incomingPkg.contains("quickstep");
         if (isRealApp) {
             currentForegroundPkg = incomingPkg;
+            liveForegroundPkg = incomingPkg;
         }
     }
     if (!pendingRelockPkg.isEmpty()
@@ -673,7 +686,7 @@ lastKbdHeight = i.getIntExtra("kbd_height", 0); // [MỚI]
                 morseFailCount = 0;
                 currentMorseAttempt = "";
                 lockedPkg = "";
-                morseContainer.setVisibility(View.GONE);
+                hideMorseOverlayAtomic();
                 updateVisibility();
             // [THÊM] thay bằng — đổi tên biến loop từ i sang j để tránh trùng tham số Intent i:
 } else if (action.equals("com.manhmoc.edgebar.UNINSTALL_DETECTED")) {
@@ -1443,6 +1456,17 @@ hideNumberRunnable = () -> {
 };
 numberDisplayHandler.postDelayed(hideNumberRunnable, showNumberMs);
     }
+/** [FIX #2] Ẩn ĐỒNG THỜI nền đen + icon khóa + toàn bộ bar/corner Morse trong
+     *  CÙNG một lệnh gọi — không phụ thuộc broadcast SYNC_STATE bất đồng bộ (đây
+     *  chính là nguyên nhân nền đen biến mất trước, bar/corner biến mất trễ hoặc
+     *  thấp thoáng hiện lại trên Home). Zero RAM thêm: chỉ lặp lại View đã có sẵn.
+     */
+    private void hideMorseOverlayAtomic() {
+        if (morseContainer != null) morseContainer.setVisibility(View.GONE);
+        for (int i = 0; i < 8; i++) if (mBars[i] != null) mBars[i].setVisibility(View.GONE);
+        for (int i = 0; i < 4; i++) if (mCorners[i] != null) mCorners[i].setVisibility(View.GONE);
+    }
+
 private void showMorseOSCover() {
         if (morseContainer == null) return;
         if (isMorseLockActive || isPreviewMorse || isUninstallGuardActive) return; 
@@ -1478,10 +1502,11 @@ private void showMorseOSCover() {
    private void dismissMorseOSCover() {
         isCoveringRecents = false;
         if (morseContainer != null) {
-            morseContainer.setVisibility(View.GONE);
             morseContainer.setOnTouchListener(null);
         }
-        // [FIX-BUG--1] Tuyệt đối không Set touch về Null, mạch lắng nghe chạm 1-Tap của ổ khóa sẽ được quản lý tập trung và an toàn bên trong hàm updateVisibility()
+        // [FIX #2] Ẩn atomic — trước đây bar/corner vẫn còn VISIBLE ở nhánh này,
+        // chỉ được dọn khi có 1 sự kiện khác vô tình gọi updateVisibility() sau đó.
+        hideMorseOverlayAtomic();
         new Handler().postDelayed(() -> {
             Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             kick.putExtra("act", "HOME");
@@ -1542,7 +1567,7 @@ if (morseContainer != null && morseContainer.getVisibility() == View.VISIBLE
                 lockedPkg = "";
                 // QUAN TRỌNG: KHÔNG thêm pkg vào unlockedApps
                 // → Khi user mở lại app, MorseLock sẽ hiện đúng
-                morseContainer.setVisibility(View.GONE);
+                hideMorseOverlayAtomic(); // [FIX #2] ẩn nền đen + bar/corner cùng lúc
                 updateVisibility();
             }, 500);
 } else if (isCurrentlyOnHome) {
@@ -1571,7 +1596,11 @@ if (bgView != null) {
 bgView.setBackgroundColor(Color.TRANSPARENT);
 bgView.invalidate();
 }
-morseContainer.setVisibility(View.GONE);
+// [FIX #2] Ẩn atomic (nền đen + bar/corner CÙNG lúc) thay vì chỉ ẩn
+// morseContainer rồi trông chờ broadcast SYNC_STATE bất đồng bộ mới dọn
+// bar/corner — đây chính là nguyên nhân bar/corner biến mất trễ/thấp
+// thoáng hiện lại trên Home.
+hideMorseOverlayAtomic();
 sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
 }
             }
@@ -1659,9 +1688,7 @@ if ((isMorseLockActive && !timeLocked) || isPreviewMorse || isUninstallGuardActi
                     p.y = y;
                     p.gravity = M_GRAV[i];
                     updateLayoutIfChanged(mBars[i], p);
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mBars[i].getVisibility() == View.VISIBLE && !isPreviewMorse) {
-                        mBars[i].setSystemGestureExclusionRects(Collections.singletonList(new Rect(0, 0, w, h)));
-                    }
+                    if (!isPreviewMorse) applyAntiTapjacking(mBars[i], w, h);
                 }
             }
             for (int i = 0; i < 4; i++) {
@@ -1694,9 +1721,7 @@ if ((isMorseLockActive && !timeLocked) || isPreviewMorse || isUninstallGuardActi
                     p.x = prefs.getInt(ck + "x", 0);
                     p.y = prefs.getInt(ck + "y", 0);
                     updateLayoutIfChanged(mCorners[i], p);
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mCorners[i].getVisibility() == View.VISIBLE && !isPreviewMorse) {
-                        mCorners[i].setSystemGestureExclusionRects(Collections.singletonList(new Rect(0, 0, p.width, p.height)));
-                    }
+                    if (!isPreviewMorse) applyAntiTapjacking(mCorners[i], p.width, p.height);
                 }
             }
         } else {
@@ -1735,9 +1760,7 @@ if ((isMorseLockActive && !timeLocked) || isPreviewMorse || isUninstallGuardActi
                     p.y = y + pushY;
                     p.gravity = GRAV[i];
                     updateLayoutIfChanged(bars[i], p);
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && bars[i].getVisibility() == View.VISIBLE && priMode == 0) {
-                        bars[i].setSystemGestureExclusionRects(Collections.singletonList(new Rect(0, 0, w, h)));
-                    }
+                    if (priMode == 0) applyAntiTapjacking(bars[i], w, h);
                 }
             }
             for (int i = 0; i < 4; i++) { 
@@ -1772,9 +1795,7 @@ if ((isMorseLockActive && !timeLocked) || isPreviewMorse || isUninstallGuardActi
                     p.x = prefs.getInt(ck + "x", 0);
                     p.y = prefs.getInt(ck + "y", 0) + pushYc;
                     updateLayoutIfChanged(corners[i], p);
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && corners[i].getVisibility() == View.VISIBLE && priMode == 0) {
-                        corners[i].setSystemGestureExclusionRects(Collections.singletonList(new Rect(0, 0, p.width, p.height)));
-                    }
+                    if (priMode == 0) applyAntiTapjacking(corners[i], p.width, p.height);
                 }
             }
         }
@@ -1900,10 +1921,14 @@ for (String a : acts) {
                 case "VOLUME":
                     ((AudioManager) getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI);
                     break;
-                case "VOICE_RECORD": {
+               case "VOICE_RECORD": {
                     Intent recIntent = new Intent(this, VoiceRecorderService.class);
                     if (Build.VERSION.SDK_INT >= 26) startForegroundService(recIntent);
                     else startService(recIntent);
+                    break;
+                }
+                case "TOGGLE_OVERLAY": {
+                    sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC"));
                     break;
                 }
                 // THÊM case mới trong switch(a) của cả 2 file:
