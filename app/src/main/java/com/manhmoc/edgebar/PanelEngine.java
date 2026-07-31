@@ -598,6 +598,37 @@ private Path buildRoundedPentagon(int size) {
     path.close();
     return path;
 }
+    // [MỚI] Icon App: KHÔNG nền, KHÔNG bo khung riêng — dùng thẳng icon hệ thống
+// của app (đã tự thích ứng hình dạng theo máy nếu là Adaptive Icon), vẽ full
+// kích thước ô. Bỏ hẳn FrameLayout + GradientDrawable backdrop + ViewOutlineProvider
+// so với wrapIconCell() -> giảm 3 object/view mỗi icon, nhẹ GPU hơn trên Adreno 540.
+private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onClick, String label) {
+    int iconSize = prefs.getInt(px + "icon_size", 110);
+    LinearLayout box = new LinearLayout(ctx);
+    box.setOrientation(LinearLayout.VERTICAL);
+    box.setGravity(Gravity.CENTER);
+
+    ImageView iv = new ImageView(ctx);
+    iv.setImageDrawable(icon);
+    iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+    iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
+    box.addView(iv);
+
+    boolean showName = prefs.getInt(px + "show_name", 0) == 1;
+    if (showName && label != null) {
+        TextView tvLabel = new TextView(ctx);
+        tvLabel.setText(label);
+        tvLabel.setTextColor(Color.WHITE);
+        tvLabel.setTextSize(9);
+        tvLabel.setMaxLines(1);
+        tvLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        tvLabel.setGravity(Gravity.CENTER);
+        tvLabel.setLayoutParams(new LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT));
+        box.addView(tvLabel);
+    }
+    box.setOnClickListener(onClick);
+    return box;
+}
     private View wrapIconCell(String px, Drawable icon, String emoji, float[] radii, View.OnClickListener onClick, String label) {
     int iconSize = prefs.getInt(px + "icon_size", 110);
     LinearLayout box = new LinearLayout(ctx); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER);
@@ -681,7 +712,7 @@ shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
         float[] radii = getPanelIconCornerRadii(px);
         String panelId = px.startsWith("pack_panel_") ? px.substring("pack_panel_".length(), px.length()-1) : "";
         if (type.equals("APP")) {
-            return wrapIconCell(px, (Drawable) payload, null, radii, v -> {
+            return wrapAppIconCell(px, (Drawable) payload, v -> {
                 Intent li = ctx.getPackageManager().getLaunchIntentForPackage(ref);
                 if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(li); }
                 closeAllPanels();
