@@ -518,7 +518,8 @@ new Thread(() -> {
             if (val.startsWith("app:")) return getCachedIcon(val.substring(4));
             if (val.startsWith("poolc:")) {
                 int idx = Integer.parseInt(val.substring(6));
-                if (idx >= 0 && idx < CUSTOM_ICON_POOL.length) return ctx.getDrawable(CUSTOM_ICON_POOL[idx]);
+                int[] pool = getCustomIconPool(ctx);
+                if (idx >= 0 && idx < pool.length) return ctx.getDrawable(pool[idx]);
             } else if (val.startsWith("pool:")) {
                 int idx = Integer.parseInt(val.substring(5));
                 if (idx >= 0 && idx < SYSTEM_ICON_POOL.length) return ctx.getDrawable(SYSTEM_ICON_POOL[idx]);
@@ -534,7 +535,8 @@ new Thread(() -> {
             if (val.startsWith("app:")) return getCachedIcon(val.substring(4));
             if (val.startsWith("poolc:")) {
                 int idx = Integer.parseInt(val.substring(6));
-                if (idx >= 0 && idx < CUSTOM_ICON_POOL.length) return ctx.getDrawable(CUSTOM_ICON_POOL[idx]);
+                int[] pool = getCustomIconPool(ctx);
+                if (idx >= 0 && idx < pool.length) return ctx.getDrawable(pool[idx]);
             } else if (val.startsWith("pool:")) {
                 int idx = Integer.parseInt(val.substring(5));
                 if (idx >= 0 && idx < SYSTEM_ICON_POOL.length) return ctx.getDrawable(SYSTEM_ICON_POOL[idx]);
