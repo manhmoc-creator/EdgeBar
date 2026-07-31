@@ -677,23 +677,68 @@ shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
     box.setOnClickListener(onClick);
     return box;
 }
-/** [MỚI] Dành riêng cho icon App — hiển thị icon hệ thống của thiết bị
-     *  NGUYÊN VẸN, full kích thước, KHÔNG bọc nền xám / KHÔNG co nhỏ 0.75 như
-     *  Action icon. Adaptive Icon tự vẽ đúng hình dạng theo launcher máy đó,
-     *  nên không còn phụ thuộc icon_shape của Panel cho riêng App nữa.
-     *  Zero-RAM thêm: chỉ 1 ImageView, không GradientDrawable/FrameLayout/
-     *  clipToOutline -> nhẹ hơn hẳn cho GPU Adreno 540 trên Pixel 2XL. */
+/** [CÂN CHỈNH TỶ LỆ THEO ẢNH] Dành riêng cho icon App
+     *  - Shape 1 (Bo vuông): Bo góc nhẹ 15% (như menu dọc ảnh 2).
+     *  - Shape 2 (Pebble): Bo góc mềm đồng đều 36% - dáng Squircle (như menu ngang ảnh 1).
+     *  - Vẫn giữ FIT_CENTER và không lót nền trắng để icon trong suốt luôn đẹp. */
     private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onClick, String label) {
         int iconSize = prefs.getInt(px + "icon_size", 110);
         LinearLayout box = new LinearLayout(ctx);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
 
+        int shape = prefs.getInt(px + "icon_shape", 0);
+        
+        FrameLayout shapeBox = new FrameLayout(ctx);
+        shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
+        
+        // Phân biệt Icon xịn (Adaptive - tràn viền) và Icon cũ (Legacy - có thể trong suốt)
+        boolean isAdaptive = Build.VERSION.SDK_INT >= 26 && icon instanceof AdaptiveIconDrawable;
+
+        if (shape == 3) {
+            // Dáng "Hệ thống": Không ép khuôn, để OS tự lo
+            shapeBox.setClipToOutline(false);
+        } else {
+            // Ép cắt theo khuôn Tròn / Vuông / Pebble đã cân chỉnh
+            shapeBox.setClipToOutline(true);
+            shapeBox.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View v, Outline o) {
+                    int w = v.getWidth() == 0 ? iconSize : v.getWidth();
+                    int h = v.getHeight() == 0 ? iconSize : v.getHeight();
+                    
+                    if (shape == 0) {
+                        // 0: Tròn hoàn hảo
+                        o.setOval(0, 0, w, h);
+                    } else if (shape == 1) {
+                        // 1: Vuông bo viền (Như ảnh 2 - Bán kính nhỏ 15%, sắc nét hơn)
+                        o.setRoundRect(0, 0, w, h, w * 0.15f);
+                    } else if (shape == 2) {
+                        // 2: Pebble (Như ảnh 1 - Bo tròn đều và mềm mại 36%, dáng Squircle)
+                        o.setRoundRect(0, 0, w, h, w * 0.36f);
+                    }
+                }
+            });
+        }
+
         ImageView iv = new ImageView(ctx);
         iv.setImageDrawable(icon);
-        iv.setScaleType(ImageView.ScaleType.FIT_CENTER); // lấp đầy khung, không co nhỏ + đệm như trước
-        iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
-        box.addView(iv);
+        
+        // Cân chỉnh hiển thị để chống lẹm góc
+        if (isAdaptive) {
+            // Adaptive Icon (như MB Bank) -> Lấp đầy kín hoàn toàn bộ khuôn cắt
+            iv.setScaleType(ImageView.ScaleType.FIT_XY);
+            iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
+        } else {
+            // Legacy Icon -> Thu nhỏ vừa vặn bên trong khuôn, thêm 5% đệm bảo vệ viền
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            int pad = (int) (iconSize * 0.05f); 
+            iv.setPadding(pad, pad, pad, pad);
+            iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
+        }
+        
+        shapeBox.addView(iv);
+        box.addView(shapeBox);
 
         boolean showName = prefs.getInt(px + "show_name", 0) == 1;
         if (showName && label != null) {
