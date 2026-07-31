@@ -677,11 +677,48 @@ shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
     box.setOnClickListener(onClick);
     return box;
 }
+   /** [MỚI] Dành riêng cho icon App — hiển thị icon hệ thống của thiết bị
+     *  NGUYÊN VẸN, full kích thước, KHÔNG bọc nền xám / KHÔNG co nhỏ 0.75 như
+     *  Action icon. Adaptive Icon tự vẽ đúng hình dạng theo launcher máy đó,
+     *  nên không còn phụ thuộc icon_shape của Panel cho riêng App nữa.
+     *  Zero-RAM thêm: chỉ 1 ImageView, không GradientDrawable/FrameLayout/
+     *  clipToOutline -> nhẹ hơn hẳn cho GPU Adreno 540 trên Pixel 2XL. */
+    private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onClick, String label) {
+        int iconSize = prefs.getInt(px + "icon_size", 110);
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+
+        ImageView iv = new ImageView(ctx);
+        iv.setImageDrawable(icon);
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER); // lấp đầy khung, không co nhỏ + đệm như trước
+        iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
+        box.addView(iv);
+
+        boolean showName = prefs.getInt(px + "show_name", 0) == 1;
+        if (showName && label != null) {
+            TextView tvLabel = new TextView(ctx);
+            tvLabel.setText(label);
+            tvLabel.setTextColor(Color.WHITE);
+            tvLabel.setTextSize(9);
+            tvLabel.setMaxLines(1);
+            tvLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tvLabel.setGravity(Gravity.CENTER);
+            tvLabel.setLayoutParams(new LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT));
+            box.addView(tvLabel);
+        }
+        box.setOnClickListener(onClick);
+        return box;
+    }
     private View buildCell(String px, String type, Object payload, String ref) {
         float[] radii = getPanelIconCornerRadii(px);
         String panelId = px.startsWith("pack_panel_") ? px.substring("pack_panel_".length(), px.length()-1) : "";
         if (type.equals("APP")) {
-            return wrapIconCell(px, (Drawable) payload, null, radii, v -> {
+            // [MỚI] App icon: dùng THẲNG icon hệ thống của thiết bị, KHÔNG bọc nền/
+            // khung xám, KHÔNG thu nhỏ 0.75 như Action icon. Adaptive Icon (API 26+)
+            // tự vẽ đúng hình dạng theo launcher máy -> không cần icon_shape can thiệp
+            // vào App nữa. Nhẹ GPU hơn: bớt 1 GradientDrawable + 1 FrameLayout mỗi ô.
+            return wrapAppIconCell(px, (Drawable) payload, v -> {
                 Intent li = ctx.getPackageManager().getLaunchIntentForPackage(ref);
                 if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(li); }
                 closeAllPanels();
