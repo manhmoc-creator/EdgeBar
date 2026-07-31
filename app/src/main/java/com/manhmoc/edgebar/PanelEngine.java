@@ -652,7 +652,7 @@ private Path buildRoundedPentagon(int size) {
 if (icon != null) {
     ImageView iv = new ImageView(ctx);
     iv.setImageDrawable(icon);
-    float ICON_INNER_SCALE = 0.7f; // <-- CHỈNH SỐ NÀY
+    float ICON_INNER_SCALE = 0.75f; // <-- CHỈNH SỐ NÀY
     iv.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
     int innerSize = (int) (iconSize * ICON_INNER_SCALE);
     int pad = (iconSize - innerSize) / 2;
