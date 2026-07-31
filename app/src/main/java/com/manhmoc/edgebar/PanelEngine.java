@@ -677,77 +677,166 @@ shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
     box.setOnClickListener(onClick);
     return box;
 }
-private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onClick, String label) {
-    int iconSize = prefs.getInt(px + "icon_size", 110);
-    LinearLayout box = new LinearLayout(ctx);
-    box.setOrientation(LinearLayout.VERTICAL);
-    box.setGravity(Gravity.CENTER);
+/**
+     * [BẢN VẼ ĐỒ HỌA VECTOR Y HỆT ẢNH MẪU]
+     * Bộ 6 Icon Shape Styles:
+     * 0: CIRCLE | 1: SQUIRCLE | 2: PEBBLE | 3: PENTACLE | 4: ROUGH | 5: SYSTEM
+     */
+    private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onClick, String label) {
+        int iconSize = prefs.getInt(px + "icon_size", 110);
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
 
-    int shape = prefs.getInt(px + "icon_shape", 0);
+        int shape = prefs.getInt(px + "icon_shape", 0); // 0..5
 
-    FrameLayout shapeBox = new FrameLayout(ctx);
-    shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
+        FrameLayout shapeBox = new FrameLayout(ctx);
+        shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
 
-    boolean isAdaptive = Build.VERSION.SDK_INT >= 26 && icon instanceof AdaptiveIconDrawable;
-    ImageView iv = new ImageView(ctx);
-    iv.setImageDrawable(icon);
+        boolean isAdaptive = Build.VERSION.SDK_INT >= 26 && icon instanceof AdaptiveIconDrawable;
+        ImageView iv = new ImageView(ctx);
+        iv.setImageDrawable(icon);
 
-    // [MỚI] Chế độ "Hệ thống": icon Adaptive giữ nguyên hình dáng gốc do OS quyết định
-    // (không ép khuôn). Icon vuông cứng KHÔNG phải Adaptive (VD: MB Bank) thì luôn bị ép
-    // tròn vành vạnh y hệt chế độ "Tròn" — vì loại icon này không tự có bo góc, để mặc
-    // định sẽ lộ 4 góc vuông xấu ngay trong chế độ Hệ thống.
-    boolean forceCircleInSystemMode = (shape == 3) && !isAdaptive;
-
-    if (shape == 3 && !forceCircleInSystemMode) {
-        // Adaptive icon ở chế độ Hệ thống: giao toàn quyền cho Android, không ép khuôn.
-        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
-        shapeBox.setClipToOutline(false);
-    } else {
-        // Chế độ Ép Khuôn: Tròn / Bo vuông Google / Pebble / (Hệ thống + icon vuông cứng -> ép Tròn)
-        final int effectiveShape = forceCircleInSystemMode ? 0 : shape;
-        shapeBox.setClipToOutline(true);
-        shapeBox.setOutlineProvider(new ViewOutlineProvider() {
-            @Override
-            public void getOutline(View v, Outline o) {
-                int w = v.getWidth() == 0 ? iconSize : v.getWidth();
-                int h = v.getHeight() == 0 ? iconSize : v.getHeight();
-                if (effectiveShape == 0) {
-                    o.setOval(0, 0, w, h); // Tròn vành vạnh
-                } else if (effectiveShape == 1) {
-                    o.setRoundRect(0, 0, w, h, w * 0.15f); // Bo vuông Google
-                } else if (effectiveShape == 2) {
-                    o.setRoundRect(0, 0, w, h, w * 0.36f); // Pebble / Squircle
-                }
+        if (shape == 5) { // 5: SYSTEM (Chế độ Hệ thống)
+            if (isAdaptive) {
+                // App hỗ trợ Adaptive -> giữ nguyên kích thước gốc chuẩn OS
+                iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
+                shapeBox.setClipToOutline(false);
+            } else {
+                // App vuông cứng (MB Bank, Beta Cinema...) ở chế độ System -> Ép Tròn + Phóng to nhẹ để biến mất 4 góc
+                shapeBox.setClipToOutline(true);
+                shapeBox.setOutlineProvider(new ViewOutlineProvider() {
+                    @Override
+                    public void getOutline(View v, Outline o) {
+                        int w = v.getWidth() == 0 ? iconSize : v.getWidth();
+                        int h = v.getHeight() == 0 ? iconSize : v.getHeight();
+                        o.setOval(0, 0, w, h);
+                    }
+                });
+                iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                // Phóng to nhẹ 1.15x ép lấp đầy
+                int scaledSize = (int) (iconSize * 1.15f);
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(scaledSize, scaledSize);
+                lp.gravity = Gravity.CENTER;
+                iv.setLayoutParams(lp);
             }
-        });
+        } else {
+            // Chế độ Ép Khuôn Đồ Họa: 0: Circle, 1: Squircle, 2: Pebble, 3: Pentacle, 4: Rough
+            shapeBox.setClipToOutline(true);
+            shapeBox.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View v, Outline o) {
+                    int w = v.getWidth() == 0 ? iconSize : v.getWidth();
+                    int h = v.getHeight() == 0 ? iconSize : v.getHeight();
 
-        // [MỚI] Luôn CENTER_CROP phóng to lấp đầy khuôn cho MỌI icon (kể cả icon vuông
-        // cứng như MB Bank) — bỏ hẳn phân biệt Adaptive/không-Adaptive, bỏ nền xám lót +
-        // thu nhỏ 18% như bản cũ. Icon vuông sắc cạnh khi bị ép vào Tròn/Bo vuông/Pebble
-        // sẽ tự động được phóng to để lấp đầy khuôn, không còn lộ 4 góc vuông nữa.
-        iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
+                    if (shape == 0) {
+                        // 0: CIRCLE - Tròn hoàn hảo
+                        o.setOval(0, 0, w, h);
+                    } else if (shape == 1) {
+                        // 1: SQUIRCLE - Hình vuông phồng bụng mượt như TV/HyperOS (y hệt ảnh)
+                        Path path = new Path();
+                        float cx = w / 2f, cy = h / 2f, r = w / 2f;
+                        path.moveTo(cx, 0);
+                        path.cubicTo(w * 0.85f, 0, w, h * 0.15f, w, cy);
+                        path.cubicTo(w, h * 0.85f, w * 0.85f, h, cx, h);
+                        path.cubicTo(w * 0.15f, h, 0, h * 0.85f, 0, cy);
+                        path.cubicTo(0, h * 0.15f, w * 0.15f, 0, cx, 0);
+                        path.close();
+                        o.setConvexPath(path);
+                    } else if (shape == 2) {
+                        // 2: PEBBLE - Viên sỏi nghiêng tròn bầu dẹt (y hệt ảnh)
+                        Path path = new Path();
+                        path.addRoundRect(new RectF(0, 0, w, h),
+                                new float[]{
+                                    w * 0.42f, h * 0.42f,  // Top-Left
+                                    w * 0.55f, h * 0.55f,  // Top-Right
+                                    w * 0.45f, h * 0.45f,  // Bottom-Right
+                                    w * 0.35f, h * 0.35f   // Bottom-Left
+                                }, Path.Direction.CW);
+                        o.setConvexPath(path);
+                    } else if (shape == 3) {
+                        // 3: PENTACLE - Ngũ giác bo góc tròn mềm (y hệt ảnh)
+                        Path path = new Path();
+                        int n = 5;
+                        float cx = w / 2f, cy = h / 2f;
+                        float radius = w / 2f;
+                        float cornerR = w * 0.18f;
+                        float[] xs = new float[n], ys = new float[n];
+                        for (int i = 0; i < n; i++) {
+                            double angle = Math.toRadians(-90 + i * 72);
+                            xs[i] = (float) (cx + radius * Math.cos(angle));
+                            ys[i] = (float) (cy + radius * Math.sin(angle));
+                        }
+                        for (int i = 0; i < n; i++) {
+                            int prev = (i - 1 + n) % n, next = (i + 1) % n;
+                            float vx1 = xs[i] - xs[prev], vy1 = ys[i] - ys[prev];
+                            float len1 = (float) Math.hypot(vx1, vy1);
+                            float ax = xs[i] - vx1 / len1 * Math.min(cornerR, len1 / 2);
+                            float ay = ys[i] - vy1 / len1 * Math.min(cornerR, len1 / 2);
+
+                            float vx2 = xs[next] - xs[i], vy2 = ys[next] - ys[i];
+                            float len2 = (float) Math.hypot(vx2, vy2);
+                            float bx = xs[i] + vx2 / len2 * Math.min(cornerR, len2 / 2);
+                            float by = ys[i] + vy2 / len2 * Math.min(cornerR, len2 / 2);
+
+                            if (i == 0) path.moveTo(ax, ay); else path.lineTo(ax, ay);
+                            path.quadTo(xs[i], ys[i], bx, by);
+                        }
+                        path.close();
+                        o.setConvexPath(path);
+                    } else if (shape == 4) {
+                        // 4: ROUGH - Hình viền xù xì / nham nhở hạt mây (y hệt ảnh)
+                        Path path = new Path();
+                        float cx = w / 2f, cy = h / 2f;
+                        float baseR = w * 0.43f;
+                        int points = 24;
+                        // Mảng biên độ nham nhở ngẫu nhiên cố định để đường vẽ không bị nhấp nháy
+                        float[] noise = {1.05f, 0.92f, 1.08f, 0.88f, 1.04f, 0.95f, 1.10f, 0.90f,
+                                         1.02f, 0.96f, 1.07f, 0.89f, 1.06f, 0.93f, 1.09f, 0.87f,
+                                         1.03f, 0.94f, 1.08f, 0.91f, 1.05f, 0.88f, 1.07f, 0.92f};
+                        for (int i = 0; i < points; i++) {
+                            double angle = Math.toRadians(i * (360.0 / points));
+                            float r = baseR * noise[i % noise.length];
+                            float x = (float) (cx + r * Math.cos(angle));
+                            float y = (float) (cy + r * Math.sin(angle));
+                            if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
+                        }
+                        path.close();
+                        o.setConvexPath(path);
+                    }
+                }
+            });
+
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            // Phóng to thông minh theo loại Icon:
+            // App vuông cứng (Non-adaptive): Phóng to 1.22x để xén hoàn toàn 4 góc nhọn.
+            // App Adaptive: Phóng to nhẹ 1.08x lấp đầy các góc lẹm phức tạp (Pentacle/Rough).
+            float scaleFactor = isAdaptive ? 1.08f : 1.22f;
+            int scaledSize = (int) (iconSize * scaleFactor);
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(scaledSize, scaledSize);
+            lp.gravity = Gravity.CENTER;
+            iv.setLayoutParams(lp);
+        }
+
+        shapeBox.addView(iv);
+        box.addView(shapeBox);
+
+        boolean showName = prefs.getInt(px + "show_name", 0) == 1;
+        if (showName && label != null) {
+            TextView tvLabel = new TextView(ctx);
+            tvLabel.setText(label);
+            tvLabel.setTextColor(Color.WHITE);
+            tvLabel.setTextSize(9);
+            tvLabel.setMaxLines(1);
+            tvLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tvLabel.setGravity(Gravity.CENTER);
+            tvLabel.setLayoutParams(new LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT));
+            box.addView(tvLabel);
+        }
+        box.setOnClickListener(onClick);
+        return box;
     }
-
-    shapeBox.addView(iv);
-    box.addView(shapeBox);
-
-    boolean showName = prefs.getInt(px + "show_name", 0) == 1;
-    if (showName && label != null) {
-        TextView tvLabel = new TextView(ctx);
-        tvLabel.setText(label);
-        tvLabel.setTextColor(Color.WHITE);
-        tvLabel.setTextSize(9);
-        tvLabel.setMaxLines(1);
-        tvLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        tvLabel.setGravity(Gravity.CENTER);
-        tvLabel.setLayoutParams(new LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT));
-        box.addView(tvLabel);
-    }
-    box.setOnClickListener(onClick);
-    return box;
-}
     private View buildCell(String px, String type, Object payload, String ref) {
         float[] radii = getPanelIconCornerRadii(px);
         String panelId = px.startsWith("pack_panel_") ? px.substring("pack_panel_".length(), px.length()-1) : "";
