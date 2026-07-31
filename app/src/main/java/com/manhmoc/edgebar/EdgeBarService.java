@@ -67,6 +67,22 @@ private boolean fpRegistered = false;
     private CameraManager cm;
     private String cId;
     private boolean fOn = false, isKbd = false, isBl = false;
+    // [FIX TAPJACKING] Danh sách app hệ thống hay hiện dialog nhạy cảm (Play Protect,
+    // xin quyền, xoá app...) — khi các app này đang ở foreground, Android sẽ CHẶN
+    // chạm nếu bar/corner Trợ năng của EdgeBar chồng hình học lên nút bấm của chúng.
+    // Không có cách nào tắt cơ chế bảo mật này từ app bên thứ ba, nên giải pháp là
+    // TỰ ĐỘNG ẩn bar/corner ngay khi phát hiện các app này ở foreground.
+    private boolean isSensitiveSystemUI = false;
+    private static final String[] SENSITIVE_UI_PKGS = {
+        "com.android.vending", "com.android.packageinstaller", "com.google.android.packageinstaller",
+        "com.android.permissioncontroller", "com.google.android.permissioncontroller",
+        "com.android.settings"
+    };
+    private boolean isSensitivePkg(String pkg) {
+        if (pkg == null || pkg.isEmpty()) return false;
+        for (String s : SENSITIVE_UI_PKGS) if (pkg.equals(s) || pkg.startsWith(s)) return true;
+        return false;
+    }
     private boolean isInRecents = false;
     private String lastForegroundPkg = ""; 
     private KeyguardManager km;
@@ -600,6 +616,15 @@ if (pName.contains("settings")) {
     boolean newIsKbd = newKbdHeight > 0;
 String bl = prefs.getString("blacklist", "");
 boolean newIsBl = !pName.isEmpty() && bl.contains(pName);
+// [FIX TAPJACKING] Chỉ gọi lại updateHomaccLive()/updateVisibility() khi trạng thái
+// THỰC SỰ đổi (true<->false) — Zero cost khi app nhạy cảm không xuất hiện, đúng
+// tinh thần tối ưu pin/RAM đã áp dụng xuyên suốt EdgeBarService.
+boolean newIsSensitive = isSensitivePkg(pName);
+if (newIsSensitive != isSensitiveSystemUI) {
+    isSensitiveSystemUI = newIsSensitive;
+    updateHomaccLive();
+    updateVisibility();
+}
 // [MỚI] Blacklist Auto-Homeb: app blacklist vừa mở (false→true)
 if (newIsBl && !lastIsBl_cache && prefs.getBoolean("blacklist_auto_homeb_en", false)) {
     triggerBlacklistAutoHomeb();
@@ -1208,7 +1233,7 @@ private void syncHomaccPreviewState() {
     boolean isPreview = prefs.getBoolean("preview_lock", false);
         boolean isLocked = km.isKeyguardLocked() || isPreview;
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
-        boolean hide = isBl; // isKbd không ẩn nữa — đẩy lên thay vì ẩn
+        boolean hide = isBl || isSensitiveSystemUI; // [FIX TAPJACKING] Ẩn thêm khi Play Store/Settings/PackageInstaller foreground
 boolean pushForKbd = avoidKbd && cachedKbdHeight > 0;
 if (hide && fV != null) fV.setVisibility(View.GONE);
 for (int i=0;i<5;i++) {
@@ -1539,7 +1564,9 @@ boolean pushForKbd = avoidKbd && cachedKbdHeight > 0;
     for (int i = 0; i < 5; i++) {
         if (accHomeBars[i] == null) continue;
         boolean en = p.getBoolean(px + BARS[i] + "_en", false);
-        accHomeBars[i].setVisibility(en ? View.VISIBLE : View.GONE);
+        // [FIX TAPJACKING] en && !isSensitiveSystemUI — bar tự ẩn ngay khi Play Store/
+        // Settings/PackageInstaller đang foreground, tự hiện lại ngay khi rời khỏi.
+        accHomeBars[i].setVisibility((en && !isSensitiveSystemUI) ? View.VISIBLE : View.GONE);
         if (!en) continue;
         int alpha   = p.getInt(px + BARS[i] + "_alpha", 50);
         int w       = p.getInt(px + BARS[i] + "_w", 300);
@@ -1581,7 +1608,7 @@ lp.gravity = GRAV[i];
     for (int i = 0; i < 4; i++) {
         if (accHomeCorners[i] == null) continue;
         boolean en = p.getBoolean(px + "corner_" + CORNERS[i] + "_en", false);
-        accHomeCorners[i].setVisibility(en ? View.VISIBLE : View.GONE);
+        accHomeCorners[i].setVisibility((en && !isSensitiveSystemUI) ? View.VISIBLE : View.GONE);
         if (!en) continue;
         String ck = px + "corner_" + CORNERS[i] + "_";
         int moonAlpha   = p.getInt(px + "corner_moon_alpha", 100);
