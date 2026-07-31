@@ -649,16 +649,20 @@ private Path buildRoundedPentagon(int size) {
             });
         }
         View core;
-        if (icon != null) {
-            ImageView iv = new ImageView(ctx);
-            iv.setImageDrawable(icon);
-            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            core = iv;
-        } else {
-            TextView tv = new TextView(ctx); tv.setText(emoji); tv.setTextSize(26); tv.setGravity(Gravity.CENTER);
-            core = tv;
-        }
-        shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
+if (icon != null) {
+    ImageView iv = new ImageView(ctx);
+    iv.setImageDrawable(icon);
+    float ICON_INNER_SCALE = 0.6f; // <-- CHỈNH SỐ NÀY
+    iv.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+    int innerSize = (int) (iconSize * ICON_INNER_SCALE);
+    int pad = (iconSize - innerSize) / 2;
+    iv.setPadding(pad, pad, pad, pad);
+    core = iv;
+} else {
+    TextView tv = new TextView(ctx); tv.setText(emoji); tv.setTextSize(26); tv.setGravity(Gravity.CENTER);
+    core = tv;
+}
+shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
         box.addView(shapeBox);
     }
 
