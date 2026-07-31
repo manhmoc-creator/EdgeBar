@@ -677,9 +677,10 @@ shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
     box.setOnClickListener(onClick);
     return box;
 }
-   /** [FIX] Áp dụng Shape Mask và lấp đầy khung cho Icon App
-     *  Cắt (clip) các icon vuông nguyên thủy để tuân thủ thiết lập "Kiểu Icon" của Panel,
-     *  sử dụng CENTER_CROP để điền đầy viền, loại bỏ khe hở khó chịu. */
+   /** [FIX TOÀN DIỆN] Xử lý Icon App "Bị chó gặm" & Ép khuôn mọi hình dáng
+     *  - Thêm Backdrop (nền trắng) cho các icon legacy có viền trong suốt.
+     *  - Dùng padding + FIT_CENTER để logo không bị cắt phạm viền.
+     *  - Adaptive Icon (Android 8+) vẫn được tôn trọng để tự động lấp đầy khuôn. */
     private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onClick, String label) {
         int iconSize = prefs.getInt(px + "icon_size", 110);
         LinearLayout box = new LinearLayout(ctx);
@@ -692,15 +693,22 @@ shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
         FrameLayout shapeBox = new FrameLayout(ctx);
         shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
         
-        boolean useSystemMask = shape == 3 && icon != null 
-                && Build.VERSION.SDK_INT >= 26 && icon instanceof AdaptiveIconDrawable;
+        // Phân loại: Icon này có phải là Adaptive (tự động thích ứng khuôn) không?
+        boolean isAdaptive = Build.VERSION.SDK_INT >= 26 && icon instanceof AdaptiveIconDrawable;
+        boolean useSystemMask = shape == 3 && isAdaptive;
 
         if (useSystemMask) {
-            // AdaptiveIconDrawable tự lo định dạng, không cần cắt cứng
             shapeBox.setClipToOutline(false);
         } else {
+            // [QUAN TRỌNG NHẤT] Lót 1 tấm nền trắng phía sau. 
+            // Nếu icon trong suốt (legacy), tấm nền này sẽ tạo hình (Tròn/Pebble) thay cho khoảng không.
+            GradientDrawable backdrop = new GradientDrawable();
+            // Bạn có thể đổi Color.WHITE thành Color.parseColor("#F5F5F5") nếu muốn nền hơi xám nhẹ
+            backdrop.setColor(Color.WHITE); 
+            shapeBox.setBackground(backdrop);
+
             shapeBox.setClipToOutline(true);
-            if (shape == 2) { // Dạng Pebble
+            if (shape == 2) { // Pebble
                 shapeBox.setOutlineProvider(new ViewOutlineProvider() {
                     public void getOutline(View v, Outline o) {
                         int w = v.getWidth() == 0 ? iconSize : v.getWidth();
@@ -721,9 +729,19 @@ shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
 
         ImageView iv = new ImageView(ctx);
         iv.setImageDrawable(icon);
-        // CENTER_CROP giúp app icon vuông lấp đầy tuyệt đối mặt nạ được cắt ở trên
-        iv.setScaleType(useSystemMask ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
-        iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
+        
+        // Xử lý co giãn (Scale) & Đệm (Padding) để icon không bị cắt phạm
+        if (isAdaptive || useSystemMask) {
+            // Adaptive Icon được thiết kế để tự lấp đầy khuôn -> Không cần đệm
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
+        } else {
+            // Legacy Icon: Co lại và tạo khoảng đệm 15% để nằm gọn giữa background trắng
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            int pad = (int) (iconSize * 0.15f); 
+            iv.setPadding(pad, pad, pad, pad);
+            iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
+        }
         
         shapeBox.addView(iv);
         box.addView(shapeBox);
