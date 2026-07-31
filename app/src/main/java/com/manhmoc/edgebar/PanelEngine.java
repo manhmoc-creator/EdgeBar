@@ -677,23 +677,56 @@ shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
     box.setOnClickListener(onClick);
     return box;
 }
-   /** [MỚI] Dành riêng cho icon App — hiển thị icon hệ thống của thiết bị
-     *  NGUYÊN VẸN, full kích thước, KHÔNG bọc nền xám / KHÔNG co nhỏ 0.75 như
-     *  Action icon. Adaptive Icon tự vẽ đúng hình dạng theo launcher máy đó,
-     *  nên không còn phụ thuộc icon_shape của Panel cho riêng App nữa.
-     *  Zero-RAM thêm: chỉ 1 ImageView, không GradientDrawable/FrameLayout/
-     *  clipToOutline -> nhẹ hơn hẳn cho GPU Adreno 540 trên Pixel 2XL. */
+   /** [FIX] Áp dụng Shape Mask và lấp đầy khung cho Icon App
+     *  Cắt (clip) các icon vuông nguyên thủy để tuân thủ thiết lập "Kiểu Icon" của Panel,
+     *  sử dụng CENTER_CROP để điền đầy viền, loại bỏ khe hở khó chịu. */
     private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onClick, String label) {
         int iconSize = prefs.getInt(px + "icon_size", 110);
         LinearLayout box = new LinearLayout(ctx);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
 
+        int shape = prefs.getInt(px + "icon_shape", 0);
+        float[] radii = getPanelIconCornerRadii(px);
+
+        FrameLayout shapeBox = new FrameLayout(ctx);
+        shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
+        
+        boolean useSystemMask = shape == 3 && icon != null 
+                && Build.VERSION.SDK_INT >= 26 && icon instanceof AdaptiveIconDrawable;
+
+        if (useSystemMask) {
+            // AdaptiveIconDrawable tự lo định dạng, không cần cắt cứng
+            shapeBox.setClipToOutline(false);
+        } else {
+            shapeBox.setClipToOutline(true);
+            if (shape == 2) { // Dạng Pebble
+                shapeBox.setOutlineProvider(new ViewOutlineProvider() {
+                    public void getOutline(View v, Outline o) {
+                        int w = v.getWidth() == 0 ? iconSize : v.getWidth();
+                        o.setConvexPath(buildRoundedPentagon(w));
+                    }
+                });
+            } else { // Tròn hoặc Bo vuông
+                final float maxR = Math.max(Math.max(radii[0], radii[1]), Math.max(radii[2], radii[3]));
+                shapeBox.setOutlineProvider(new ViewOutlineProvider() {
+                    public void getOutline(View v, Outline o) {
+                        int w = v.getWidth() == 0 ? iconSize : v.getWidth();
+                        int h = v.getHeight() == 0 ? iconSize : v.getHeight();
+                        o.setRoundRect(0, 0, w, h, w * maxR);
+                    }
+                });
+            }
+        }
+
         ImageView iv = new ImageView(ctx);
         iv.setImageDrawable(icon);
-        iv.setScaleType(ImageView.ScaleType.FIT_CENTER); // lấp đầy khung, không co nhỏ + đệm như trước
-        iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
-        box.addView(iv);
+        // CENTER_CROP giúp app icon vuông lấp đầy tuyệt đối mặt nạ được cắt ở trên
+        iv.setScaleType(useSystemMask ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
+        iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
+        
+        shapeBox.addView(iv);
+        box.addView(shapeBox);
 
         boolean showName = prefs.getInt(px + "show_name", 0) == 1;
         if (showName && label != null) {
