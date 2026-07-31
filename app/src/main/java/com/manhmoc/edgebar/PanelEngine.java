@@ -677,85 +677,77 @@ shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
     box.setOnClickListener(onClick);
     return box;
 }
-/** 
-     *  Xử lý hình dáng Icon: Tự động lót nền xám đen cho các app có viền trong suốt.
-     *  Đảm bảo khuôn Tròn / Bo Vuông (15%) / Pebble (36%) hiển thị rõ ràng trên mọi App. 
-     */
-    private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onClick, String label) {
-        int iconSize = prefs.getInt(px + "icon_size", 110);
-        LinearLayout box = new LinearLayout(ctx);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setGravity(Gravity.CENTER);
+private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onClick, String label) {
+    int iconSize = prefs.getInt(px + "icon_size", 110);
+    LinearLayout box = new LinearLayout(ctx);
+    box.setOrientation(LinearLayout.VERTICAL);
+    box.setGravity(Gravity.CENTER);
 
-        int shape = prefs.getInt(px + "icon_shape", 0);
-        
-        FrameLayout shapeBox = new FrameLayout(ctx);
-        shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
-        
-        boolean isAdaptive = Build.VERSION.SDK_INT >= 26 && icon instanceof AdaptiveIconDrawable;
-        ImageView iv = new ImageView(ctx);
-        iv.setImageDrawable(icon);
+    int shape = prefs.getInt(px + "icon_shape", 0);
 
-        if (shape == 3) {
-            // Chế độ "Hệ thống": Giao toàn quyền cho Android. Icon sẽ hiển thị theo theme gốc của máy.
-            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
-            shapeBox.setClipToOutline(false);
-        } else {
-            // Chế độ Ép Khuôn: Tròn, Bo vuông, Pebble
-            shapeBox.setClipToOutline(true);
-            shapeBox.setOutlineProvider(new ViewOutlineProvider() {
-                @Override
-                public void getOutline(View v, Outline o) {
-                    int w = v.getWidth() == 0 ? iconSize : v.getWidth();
-                    int h = v.getHeight() == 0 ? iconSize : v.getHeight();
-                    
-                    if (shape == 0) {
-                        o.setOval(0, 0, w, h); // Tròn vành vạnh
-                    } else if (shape == 1) {
-                        o.setRoundRect(0, 0, w, h, w * 0.15f); // Bo vuông 15%
-                    } else if (shape == 2) {
-                        o.setRoundRect(0, 0, w, h, w * 0.36f); // Pebble / Squircle 36%
-                    }
+    FrameLayout shapeBox = new FrameLayout(ctx);
+    shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
+
+    boolean isAdaptive = Build.VERSION.SDK_INT >= 26 && icon instanceof AdaptiveIconDrawable;
+    ImageView iv = new ImageView(ctx);
+    iv.setImageDrawable(icon);
+
+    // [MỚI] Chế độ "Hệ thống": icon Adaptive giữ nguyên hình dáng gốc do OS quyết định
+    // (không ép khuôn). Icon vuông cứng KHÔNG phải Adaptive (VD: MB Bank) thì luôn bị ép
+    // tròn vành vạnh y hệt chế độ "Tròn" — vì loại icon này không tự có bo góc, để mặc
+    // định sẽ lộ 4 góc vuông xấu ngay trong chế độ Hệ thống.
+    boolean forceCircleInSystemMode = (shape == 3) && !isAdaptive;
+
+    if (shape == 3 && !forceCircleInSystemMode) {
+        // Adaptive icon ở chế độ Hệ thống: giao toàn quyền cho Android, không ép khuôn.
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
+        shapeBox.setClipToOutline(false);
+    } else {
+        // Chế độ Ép Khuôn: Tròn / Bo vuông Google / Pebble / (Hệ thống + icon vuông cứng -> ép Tròn)
+        final int effectiveShape = forceCircleInSystemMode ? 0 : shape;
+        shapeBox.setClipToOutline(true);
+        shapeBox.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline o) {
+                int w = v.getWidth() == 0 ? iconSize : v.getWidth();
+                int h = v.getHeight() == 0 ? iconSize : v.getHeight();
+                if (effectiveShape == 0) {
+                    o.setOval(0, 0, w, h); // Tròn vành vạnh
+                } else if (effectiveShape == 1) {
+                    o.setRoundRect(0, 0, w, h, w * 0.15f); // Bo vuông Google
+                } else if (effectiveShape == 2) {
+                    o.setRoundRect(0, 0, w, h, w * 0.36f); // Pebble / Squircle
                 }
-            });
-
-            if (isAdaptive) {
-                // Icon đời mới (VD: MB Bank): Phóng to lấp đầy khuôn cắt, không khe hở
-                iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
-            } else {
-                // Icon viền trong suốt: Lót nền xám tối sang trọng để làm nổi bật hình dáng khuôn
-                GradientDrawable backdrop = new GradientDrawable();
-                backdrop.setColor(Color.parseColor("#2C2C2C"));
-                shapeBox.setBackground(backdrop);
-                
-                // Thu nhỏ icon lại 18% để nằm lọt lòng gọn gàng bên trong nền xám
-                iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                int pad = (int) (iconSize * 0.18f); 
-                iv.setPadding(pad, pad, pad, pad);
-                iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
             }
-        }
-        
-        shapeBox.addView(iv);
-        box.addView(shapeBox);
+        });
 
-        boolean showName = prefs.getInt(px + "show_name", 0) == 1;
-        if (showName && label != null) {
-            TextView tvLabel = new TextView(ctx);
-            tvLabel.setText(label);
-            tvLabel.setTextColor(Color.WHITE);
-            tvLabel.setTextSize(9);
-            tvLabel.setMaxLines(1);
-            tvLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            tvLabel.setGravity(Gravity.CENTER);
-            tvLabel.setLayoutParams(new LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT));
-            box.addView(tvLabel);
-        }
-        box.setOnClickListener(onClick);
-        return box;
+        // [MỚI] Luôn CENTER_CROP phóng to lấp đầy khuôn cho MỌI icon (kể cả icon vuông
+        // cứng như MB Bank) — bỏ hẳn phân biệt Adaptive/không-Adaptive, bỏ nền xám lót +
+        // thu nhỏ 18% như bản cũ. Icon vuông sắc cạnh khi bị ép vào Tròn/Bo vuông/Pebble
+        // sẽ tự động được phóng to để lấp đầy khuôn, không còn lộ 4 góc vuông nữa.
+        iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
     }
+
+    shapeBox.addView(iv);
+    box.addView(shapeBox);
+
+    boolean showName = prefs.getInt(px + "show_name", 0) == 1;
+    if (showName && label != null) {
+        TextView tvLabel = new TextView(ctx);
+        tvLabel.setText(label);
+        tvLabel.setTextColor(Color.WHITE);
+        tvLabel.setTextSize(9);
+        tvLabel.setMaxLines(1);
+        tvLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        tvLabel.setGravity(Gravity.CENTER);
+        tvLabel.setLayoutParams(new LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT));
+        box.addView(tvLabel);
+    }
+    box.setOnClickListener(onClick);
+    return box;
+}
     private View buildCell(String px, String type, Object payload, String ref) {
         float[] radii = getPanelIconCornerRadii(px);
         String panelId = px.startsWith("pack_panel_") ? px.substring("pack_panel_".length(), px.length()-1) : "";
