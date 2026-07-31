@@ -618,7 +618,10 @@ private Path buildRoundedPentagon(int size) {
     } else {
         FrameLayout shapeBox = new FrameLayout(ctx);
         GradientDrawable backdrop = new GradientDrawable();
-        backdrop.setColor(Color.argb(235, 255, 255, 255));
+        // [FIX] Đổi nền icon từ trắng chói sang xám Material đồng bộ kiểu QS Tile
+        // (#3C4043) — giảm chói mắt, đồng thời tiết kiệm pin nhẹ vì không phải
+        // vẽ layer trắng full-alpha (GPU tốn hơn khi blend trắng trên nền tối).
+        backdrop.setColor(Color.argb(230, 60, 64, 67));
         backdrop.setCornerRadii(new float[]{
             iconSize*radii[0], iconSize*radii[0],
             iconSize*radii[1], iconSize*radii[1],
@@ -704,6 +707,13 @@ private Path buildRoundedPentagon(int size) {
             Integer resId = ACT_ICON_RES.get(ref);
             Drawable sysIcon = overrideIcon != null ? overrideIcon
                 : (resId != null ? ctx.getDrawable(resId) : null);
+            // [FIX] Chỉ tô trắng icon hệ thống MẶC ĐỊNH (không phải icon user tự chọn)
+            // để tương phản tốt trên nền xám mới — không đụng tới icon app/tùy chỉnh
+            // thật vì tô trắng sẽ làm mất màu logo gốc của chúng.
+            if (overrideIcon == null && sysIcon != null) {
+                sysIcon = sysIcon.mutate();
+                sysIcon.setTint(Color.WHITE);
+            }
             return wrapIconCell(px, sysIcon, sysIcon == null ? actEmoji(ref) : null, radii, v -> {
                 Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
                 ipc.putExtra("act", ref);
