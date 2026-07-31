@@ -727,7 +727,12 @@ private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onCl
 
     int shape = prefs.getInt(px + "icon_shape", 0);
     // 0=Circle 1=Squircle 2=Pebble 3=Rough 4=Pentacle 5=System
+    boolean isAdaptive = Build.VERSION.SDK_INT >= 26 && icon instanceof AdaptiveIconDrawable;
     boolean forceCircleInSystemMode = (shape == 5) && !isAdaptive;
+
+    FrameLayout shapeBox = new FrameLayout(ctx);
+    ImageView iv = new ImageView(ctx);
+    iv.setImageDrawable(icon);
 
     if (shape == 5 && !forceCircleInSystemMode) {
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
