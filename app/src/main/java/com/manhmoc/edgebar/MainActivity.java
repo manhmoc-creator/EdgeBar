@@ -3868,7 +3868,8 @@ private void renderPanelDesign() {
             int visMode = prefs.getInt("pack_panel_" + id + "_vis", 0);
             
             String strVis = visMode == 1 ? "🌍" : "🎭"; // Toàn cục / Cục bộ
-            String strShape = iconShape == 0 ? "🧿" : (iconShape == 1 ? "🎲" : (iconShape == 2 ? "☄️" : "⚙️"));
+            String strShape = iconShape == 0 ? "⭕" : (iconShape == 1 ? "🔲" : 
+(iconShape == 2 ? "☄️" : (iconShape == 3 ? "💥" : (iconShape == 4 ? "⭐" : "⚙️"))));
             String strName = showName == 1 ? "🌕" : "🌑";
             
             TextView tIcons = new TextView(this);
@@ -4306,7 +4307,8 @@ panelCfgHeader.setOnClickListener(v -> {
     if (willOpen && !panelCfgInflated[0]) {
         // Chỉ dựng View đúng 1 lần duy nhất, ngay khi user thực sự mở
         panelCfgInflated[0] = true;
-        panelCfgBody.addView(createCycleRow("Icon Style", prefix + id + "_icon_shape", new String[]{"Tròn", "Google (bo vuông)", "Pebble", "Hệ thống"}));
+        panelCfgBody.addView(createCycleRow("Icon Style", prefix + id +
+"_icon_shape", new String[]{"Circle", "Squircle", "Pebble", "Rough", "Pentacle", "System"}));
         panelCfgBody.addView(createCycleRow("Show Name (Hiện tên)", prefix + id + "_show_name", new String[]{"Không", "Có"}));
         panelCfgBody.addView(createSlider("Opacity (Độ trong suốt)", prefix + id + "_alpha", 255, 200));
         panelCfgBody.addView(createSlider("Length (Chiều dài)", prefix + id + "_panel_length", 3000, 700));
@@ -5265,7 +5267,7 @@ private void deleteShortcutGlobally(String id) {
     panelDrawer.addView(btnPickPanelApps);
 
     panelDrawer.addView(createComboDropdown("Kiểu Icon", "panel_icon_shape",
-        new String[]{"Tròn", "Vuông bo góc", "Bubble méo"}, 0));
+        new String[]{"Circle", "Squircle", "Pebble", "Rough", "Pentacle"}, 0));
     panelDrawer.addView(createSlider("Số cột", "panel_columns", 6, 4));
 
     parent.addView(createDrawer("EDGE PANEL (Kiểu Samsung)", panelDrawer));
