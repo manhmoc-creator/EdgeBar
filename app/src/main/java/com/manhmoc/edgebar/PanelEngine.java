@@ -569,65 +569,107 @@ new Thread(() -> {
 }
 // Ngũ giác bo góc mềm — dùng Outline.setConvexPath() để clip, KHÔNG cần custom Drawable
 // riêng, tận dụng luôn backdrop trắng sẵn có -> nhẹ GPU, không thêm object vẽ nào.
+// [FIX] Toạ độ Q-curve LẤY ĐÚNG từ path SVG mẫu PENTACLE (viewBox 500x500) —
+// trước đây tự tính ngũ giác đều bo góc, giờ khớp chính xác dáng "giọt lệ 5 cạnh"
+// của file mẫu. Scale theo iconSize/500. Tên hàm giữ nguyên để không phải sửa
+// mọi nơi gọi buildRoundedPentagon(...).
 private Path buildRoundedPentagon(int size) {
     Path path = new Path();
-    int n = 5;
-    float cx = size / 2f, cy = size / 2f;
-    float r = size / 2f * 0.98f;
-    float cornerR = size * 0.16f; // độ bo mềm ở mỗi đỉnh
-    float[] xs = new float[n], ys = new float[n];
-    for (int i = 0; i < n; i++) {
-        double angle = Math.toRadians(-90 + i * 72);
-        xs[i] = (float) (cx + r * Math.cos(angle));
-        ys[i] = (float) (cy + r * Math.sin(angle));
-    }
-    for (int i = 0; i < n; i++) {
-        int prev = (i - 1 + n) % n, next = (i + 1) % n;
-        float vx1 = xs[i] - xs[prev], vy1 = ys[i] - ys[prev];
-        float len1 = (float) Math.hypot(vx1, vy1);
-        float ax = xs[i] - vx1 / len1 * Math.min(cornerR, len1 / 2);
-        float ay = ys[i] - vy1 / len1 * Math.min(cornerR, len1 / 2);
-        float vx2 = xs[next] - xs[i], vy2 = ys[next] - ys[i];
-        float len2 = (float) Math.hypot(vx2, vy2);
-        float bx = xs[i] + vx2 / len2 * Math.min(cornerR, len2 / 2);
-        float by = ys[i] + vy2 / len2 * Math.min(cornerR, len2 / 2);
-        if (i == 0) path.moveTo(ax, ay); else path.lineTo(ax, ay);
-        path.quadTo(xs[i], ys[i], bx, by);
+    float s = size / 500f;
+    path.moveTo(229.46f * s, 84.93f * s);
+    path.quadTo(250f * s, 70f * s, 270.54f * s, 84.93f * s);
+    path.quadTo(339.13f * s, 127.35f * s, 400.66f * s, 179.47f * s);
+    path.quadTo(421.2f * s, 194.4f * s, 413.35f * s, 218.54f * s);
+    path.quadTo(394.21f * s, 296.85f * s, 363.65f * s, 371.46f * s);
+    path.quadTo(355.8f * s, 395.6f * s, 330.41f * s, 395.6f * s);
+    path.quadTo(250f * s, 401.6f * s, 169.59f * s, 395.6f * s);
+    path.quadTo(144.2f * s, 395.6f * s, 136.35f * s, 371.46f * s);
+    path.quadTo(105.79f * s, 296.85f * s, 86.65f * s, 218.54f * s);
+    path.quadTo(78.8f * s, 194.4f * s, 99.34f * s, 179.47f * s);
+    path.quadTo(160.87f * s, 127.35f * s, 229.46f * s, 84.93f * s);
+    path.close();
+    return path;
+}
+   // [MỚI] Squircle đúng thuật toán superellipse (|x|^n+|y|^n=1, n=5) — khớp hình
+// dạng file mẫu SQUIRCLE (bo góc mềm, không phải RoundRect 0.15 như code cũ).
+// 90 điểm là đủ mượt cho icon panel, không tốn thêm CPU đáng kể so với RoundRect cũ.
+private Path buildSquirclePath(int size) {
+    Path path = new Path();
+    float cx = size / 2f, cy = size / 2f, r = size / 2f;
+    float n = 5f;
+    int steps = 72;
+    for (int i = 0; i <= steps; i++) {
+        double t = (Math.PI * 2 * i) / steps;
+        double ct = Math.cos(t), st = Math.sin(t);
+        float x = (float) (cx + r * Math.signum(ct) * Math.pow(Math.abs(ct), 2.0 / n));
+        float y = (float) (cy + r * Math.signum(st) * Math.pow(Math.abs(st), 2.0 / n));
+        if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
     }
     path.close();
     return path;
 }
    // Pebble — 1 góc to, 3 góc nhỏ (kiểu Material You "pebble"). Path chỉ build lại khi
 // kích thước icon đổi (Android cache Outline) — rẻ ngang RoundRect, không tốn thêm CPU.
+// [FIX] Toạ độ Q-curve LẤY ĐÚNG từ path SVG mẫu PEBBLE (viewBox 480x480), đã lật
+// ngang (mirror x = 480-x) để khớp CSS "transform: scaleX(-1)" mà file mẫu áp dụng
+// lên đúng chiều hiển thị thật. Scale theo iconSize/480.
 private Path buildPebblePath(int size) {
     Path path = new Path();
-    float bigR = size * 0.5f;
-    float smR  = size * 0.18f;
-    path.moveTo(bigR, 0);
-    path.lineTo(size - smR, 0);
-    path.quadTo(size, 0, size, smR);
-    path.lineTo(size, size - smR);
-    path.quadTo(size, size, size - smR, size);
-    path.lineTo(smR, size);
-    path.quadTo(0, size, 0, size - smR);
-    path.lineTo(0, bigR);
-    path.quadTo(0, 0, bigR, 0);
+    float s = size / 480f;
+    path.moveTo(93f * s, 319.5f * s);
+    path.quadTo(148f * s, 399f * s, 247f * s, 411.5f * s);
+    path.quadTo(346f * s, 424f * s, 388f * s, 332f * s);
+    path.quadTo(430f * s, 240f * s, 384f * s, 155f * s);
+    path.quadTo(338f * s, 70f * s, 241.5f * s, 72.5f * s);
+    path.quadTo(145f * s, 75f * s, 91.5f * s, 157.5f * s);
+    path.quadTo(38f * s, 240f * s, 93f * s, 319.5f * s);
     path.close();
     return path;
 }
-
 // Rough — viền lởm chởm kiểu "xé giấy". Toạ độ CỐ ĐỊNH (không Random) nên mọi icon
 // Rough trong cùng Panel vẽ giống hệt nhau, Zero jitter/Zero alloc thêm mỗi lần render.
+// [FIX] Toạ độ ĐẦY ĐỦ lấy đúng từ path SVG mẫu ROUGH (viewBox 500x500) — trước đây
+// chỉ có 20 điểm tự vẽ tay xấp xỉ, giờ dùng nguyên bộ ~100 điểm gốc để đúng hình
+// "xé giấy" như file mẫu. Scale theo iconSize/500.
+private static final float[][] ROUGH_PTS_500 = {
+    {407.18f,250.00f},{411.17f,256.33f},{412.91f,262.82f},{413.20f,269.32f},{415.70f,276.24f},
+    {419.13f,283.64f},{421.58f,291.19f},{417.25f,297.17f},{414.81f,303.55f},{411.09f,309.43f},
+    {408.39f,315.61f},{406.27f,322.04f},{403.78f,328.35f},{401.76f,334.99f},{400.91f,342.48f},
+    {398.48f,349.21f},{393.48f,354.25f},{386.58f,357.67f},{381.53f,362.34f},{376.74f,367.16f},
+    {369.11f,369.11f},{362.49f,371.69f},{355.79f,373.87f},{350.49f,377.47f},{344.79f,380.46f},
+    {339.78f,384.37f},{334.84f,388.45f},{330.69f,394.08f},{324.56f,396.33f},{317.81f,397.08f},
+    {312.30f,400.42f},{306.20f,402.34f},{300.89f,406.63f},{295.34f,410.76f},{288.56f,410.63f},
+    {281.79f,409.82f},{275.48f,410.86f},{269.26f,412.70f},{262.90f,413.93f},{256.19f,407.67f},
+    {250.00f,402.60f},{244.17f,398.47f},{238.49f,396.30f},{233.13f,392.56f},{227.35f,393.00f},
+    {221.50f,393.28f},{216.56f,389.29f},{211.16f,387.71f},{206.13f,385.03f},{200.10f,385.25f},
+    {193.09f,387.40f},{186.16f,388.47f},{178.30f,390.71f},{173.60f,386.42f},{168.08f,383.68f},
+    {161.97f,381.74f},{156.08f,379.27f},{153.49f,372.42f},{151.07f,365.84f},{149.01f,359.25f},
+    {146.32f,353.68f},{142.45f,349.42f},{137.41f,346.16f},{132.87f,342.34f},{126.18f,339.96f},
+    {118.74f,337.71f},{111.53f,334.85f},{102.25f,332.74f},{92.70f,330.15f},{88.17f,324.60f},
+    {82.05f,319.57f},{82.48f,311.80f},{83.78f,304.01f},{84.58f,296.65f},{84.39f,289.76f},
+    {84.28f,282.96f},{84.87f,276.15f},{83.30f,269.73f},{82.13f,263.21f},{80.15f,256.67f},
+    {78.46f,250.00f},{75.73f,243.15f},{73.57f,236.11f},{70.61f,228.77f},{67.47f,221.09f},
+    {63.88f,212.98f},{61.64f,204.78f},{62.83f,197.21f},{65.69f,190.11f},{68.26f,182.95f},
+    {70.44f,175.62f},{74.30f,169.00f},{77.78f,162.25f},{84.26f,157.18f},{91.31f,152.76f},
+    {99.53f,149.46f},{105.88f,145.29f},{112.23f,141.39f},{118.57f,137.74f},{125.18f,134.61f},
+    {130.59f,130.59f},{135.04f,125.64f},{140.22f,121.46f},{145.67f,117.66f},{149.88f,112.19f},
+    {154.50f,107.08f},{162.64f,107.44f},{169.92f,107.01f},{176.75f,106.24f},{183.03f,104.73f},
+    {189.82f,104.70f},{196.95f,106.19f},{203.40f,106.59f},{209.64f,106.88f},{215.29f,105.44f},
+    {220.97f,104.04f},{226.34f,100.65f},{231.97f,97.63f},{237.61f,92.63f},{243.64f,88.22f},
+    {250.00f,82.72f},{256.81f,76.75f},{264.09f,71.02f},{272.02f,63.99f},{279.19f,65.70f},
+    {286.43f,66.83f},{293.74f,67.82f},{300.83f,69.76f},{307.90f,71.80f},{313.43f,78.07f},
+    {318.32f,85.07f},{322.71f,92.27f},{327.77f,97.36f},{331.93f,103.71f},{335.69f,110.16f},
+    {340.84f,114.05f},{344.85f,119.44f},{349.49f,123.80f},{355.19f,126.84f},{360.49f,130.48f},
+    {367.61f,132.39f},{374.45f,134.96f},{380.48f,138.56f},{388.67f,140.68f},{395.93f,143.98f},
+    {404.95f,146.46f},{412.78f,150.25f},{416.08f,156.99f},{419.72f,163.52f},{416.90f,173.06f},
+    {413.79f,182.16f},{410.78f,190.68f},{407.95f,198.68f},{405.08f,206.26f},{403.86f,213.06f},
+    {401.96f,219.77f},{400.88f,226.10f},{401.10f,232.12f},{402.37f,238.01f},{404.41f,243.93f}
+};
 private Path buildRoughPath(int size) {
     Path path = new Path();
-    float[][] pts = {
-        {0.08f,0.02f},{0.30f,0.00f},{0.46f,0.06f},{0.62f,0.00f},{0.82f,0.03f},
-        {1.00f,0.16f},{0.96f,0.34f},{1.00f,0.50f},{0.94f,0.68f},{1.00f,0.84f},
-        {0.86f,1.00f},{0.66f,0.95f},{0.50f,1.00f},{0.32f,0.96f},{0.14f,1.00f},
-        {0.00f,0.86f},{0.05f,0.68f},{0.00f,0.50f},{0.04f,0.32f},{0.00f,0.16f}
-    };
-    for (int i = 0; i < pts.length; i++) {
-        float x = pts[i][0] * size, y = pts[i][1] * size;
+    float s = size / 500f;
+    for (int i = 0; i < ROUGH_PTS_500.length; i++) {
+        float x = ROUGH_PTS_500[i][0] * s, y = ROUGH_PTS_500[i][1] * s;
         if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
     }
     path.close();
@@ -681,6 +723,15 @@ private Path buildRoughPath(int size) {
                     o.setConvexPath(buildRoundedPentagon(w));
                 }
             });
+        } else if (shape == 1) {
+            // [MỚI] Squircle đúng thuật toán superellipse, thay cho RoundRect 0.15
+            // gần đúng cũ.
+            shapeBox.setOutlineProvider(new ViewOutlineProvider() {
+                public void getOutline(View v, Outline o) {
+                    int w = v.getWidth()==0?iconSize:v.getWidth();
+                    o.setConvexPath(buildSquirclePath(w));
+                }
+            });
         } else {
             final float maxR = Math.max(Math.max(radii[0],radii[1]), Math.max(radii[2],radii[3]));
             shapeBox.setOutlineProvider(new ViewOutlineProvider() {
@@ -694,7 +745,7 @@ private Path buildRoughPath(int size) {
 if (icon != null) {
     ImageView iv = new ImageView(ctx);
     iv.setImageDrawable(icon);
-    float ICON_INNER_SCALE = 0.75f; // <-- CHỈNH SỐ NÀY
+    float ICON_INNER_SCALE = 0.8f; // <-- CHỈNH SỐ NÀY
     iv.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
     int innerSize = (int) (iconSize * ICON_INNER_SCALE);
     int pad = (iconSize - innerSize) / 2;
@@ -731,6 +782,10 @@ private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onCl
     boolean forceCircleInSystemMode = (shape == 5) && !isAdaptive;
 
     FrameLayout shapeBox = new FrameLayout(ctx);
+    // [MỚI] Ép cứng khung = iconSize x iconSize ngay từ đầu. Trước đây shapeBox để
+    // wrap_content nên khi phóng to icon vuông (bên dưới) khung sẽ phình theo icon
+    // luôn -> mất tác dụng cắt viền. Cố định khung mới clip đúng kích thước mong muốn.
+    shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
     ImageView iv = new ImageView(ctx);
     iv.setImageDrawable(icon);
 
@@ -749,7 +804,8 @@ private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onCl
                 if (effectiveShape == 0) {
                     o.setOval(0, 0, w, h);
                 } else if (effectiveShape == 1) {
-                    o.setRoundRect(0, 0, w, h, w * 0.15f);
+                    // [MỚI] Squircle đúng thuật toán superellipse, thay cho RoundRect 0.15 gần đúng cũ
+                    o.setConvexPath(buildSquirclePath(w));
                 } else if (effectiveShape == 2) {
                     o.setConvexPath(buildPebblePath(w));
                 } else if (effectiveShape == 3) {
@@ -760,11 +816,21 @@ private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onCl
             }
         });
         iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
+        // [MỚI] Icon vuông truyền thống (MB Bank, Beta Cinema...) luôn có viền
+        // trong suốt "đóng gói sẵn" trong file PNG — CENTER_CROP ở đúng iconSize
+        // không đủ loại bỏ viền đó, logo vẫn bị lọt thỏm giữa khung. Phóng
+        // ImageView lên 1.28x rồi để FrameLayout clip lại đúng iconSize (đã
+        // setLayoutParams cố định phía trên) => cắt bớt viền thừa, logo thật
+        // chạm sát 4 cạnh, áp dụng cho MỌI icon_shape (kể cả System). Icon
+        // Adaptive (đã tự chuẩn hoá layer bởi hệ thống) giữ nguyên iconSize,
+        // không zoom, tránh cắt mất icon.
+        int zoomedSize = isAdaptive ? iconSize : Math.round(iconSize * 1.28f);
+        FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(zoomedSize, zoomedSize);
+        ivLp.gravity = Gravity.CENTER;
+        iv.setLayoutParams(ivLp);
     }
     shapeBox.addView(iv);
     box.addView(shapeBox);
-
     boolean showName = prefs.getInt(px + "show_name", 0) == 1;
     if (showName && label != null) {
         TextView tvLabel = new TextView(ctx);
