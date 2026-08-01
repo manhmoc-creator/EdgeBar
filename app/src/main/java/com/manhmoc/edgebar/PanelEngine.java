@@ -517,7 +517,23 @@ private Path getShapePath(int shape, int size) {
     shapePathCache.put(key, p);
     return p;
 }
-
+/** Đo bounding box thật của Path rồi scale+căn giữa để lấp đầy khung size x size
+ *  (giữ nguyên tỉ lệ, không méo hình) — làm cho Pentacle/Pebble/Rough to bằng
+ *  Squircle/Circle, vốn đã tự chạm mép khung sẵn. */
+private Path normalizeToFullSize(Path path, int size) {
+    RectF b = new RectF();
+    path.computeBounds(b, true);
+    float w = b.width(), h = b.height();
+    if (w <= 0 || h <= 0) return path;
+    float scale = size / Math.max(w, h);
+    Matrix m = new Matrix();
+    m.postTranslate(-b.left, -b.top);
+    m.postScale(scale, scale);
+    float scaledW = w * scale, scaledH = h * scale;
+    m.postTranslate((size - scaledW) / 2f, (size - scaledH) / 2f);
+    path.transform(m);
+    return path;
+}
 /** Cắt Bitmap nội dung theo đúng Path bằng Porter-Duff SRC_IN — cắt chính xác với
  *  MỌI hình kể cả lõm, viền chống răng cưa thật sự (không như Outline). */
 private Bitmap maskBitmapToShape(Bitmap content, int shape, int size) {
@@ -648,7 +664,7 @@ private Path buildRoundedPentagon(int size) {
     path.quadTo(78.8f * s, 194.4f * s, 99.34f * s, 179.47f * s);
     path.quadTo(160.87f * s, 127.35f * s, 229.46f * s, 84.93f * s);
     path.close();
-    return path;
+    return normalizeToFullSize(path, size);
 }
    // [MỚI] Squircle đúng thuật toán superellipse (|x|^n+|y|^n=1, n=5) — khớp hình
 // dạng file mẫu SQUIRCLE (bo góc mềm, không phải RoundRect 0.15 như code cũ).
@@ -684,7 +700,7 @@ private Path buildPebblePath(int size) {
     path.quadTo(145f * s, 75f * s, 91.5f * s, 157.5f * s);
     path.quadTo(38f * s, 240f * s, 93f * s, 319.5f * s);
     path.close();
-    return path;
+    return normalizeToFullSize(path, size);
 }
 // Rough — viền lởm chởm kiểu "xé giấy". Toạ độ CỐ ĐỊNH (không Random) nên mọi icon
 // Rough trong cùng Panel vẽ giống hệt nhau, Zero jitter/Zero alloc thêm mỗi lần render.
@@ -733,7 +749,7 @@ private Path buildRoughPath(int size) {
         if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
     }
     path.close();
-    return path;
+    return normalizeToFullSize(path, size);
 }
         private View wrapIconCell(String px, Drawable icon, String emoji, String cacheKey, View.OnClickListener onClick, String label) {
     int iconSize = prefs.getInt(px + "icon_size", 110);
