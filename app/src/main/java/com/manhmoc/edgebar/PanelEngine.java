@@ -551,8 +551,15 @@ private Bitmap maskBitmapToShape(Bitmap content, int shape, int size) {
  *  thực sự đổi, không tốn CPU khi cuộn danh sách.
  *  cover=true: phóng to 1.28x che kín 4 góc (dùng cho icon App).
  *  cover=false: thu nhỏ 0.8x, chừa đệm quanh (dùng cho icon Action/Shortcut). */
-private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor, boolean cover) {
-    String key = cacheKey + "_" + shape + "_" + size + "_" + cover + "_" + backdropColor;
+// [FIX] Bỏ hẳn tham số "cover" (nguồn gốc gây icon App bị phóng to 1.28x trong khi
+// Action/Shortcut chỉ 0.8x, khiến 6 kiểu icon lệch kích thước nền so với nhau).
+// Dùng DUY NHẤT 1 hệ số ICON_CONTENT_SCALE cho mọi loại icon (App/Shortcut/Action)
+// và mọi kiểu hình (Circle/Squircle/Pebble/Rough/Pentacle/System) -> nền đồng nhất.
+// Cache key cũng ngắn hơn (bớt biến cover) -> ít alloc String hơn, nhẹ hơn cho Pixel 2XL.
+private static final float ICON_CONTENT_SCALE = 0.82f;
+
+private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor) {
+    String key = cacheKey + "_" + shape + "_" + size + "_" + backdropColor;
     synchronized (maskedIconCache) {
         Bitmap cached = maskedIconCache.get(key);
         if (cached != null && !cached.isRecycled()) return cached;
@@ -561,7 +568,7 @@ private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji,
     Canvas cc = new Canvas(content);
     if (backdropColor != 0) cc.drawColor(backdropColor);
     if (icon != null) {
-        int targetSize = Math.round(size * (cover ? 1.28f : 0.8f));
+        int targetSize = Math.round(size * ICON_CONTENT_SCALE);
         int off = (size - targetSize) / 2;
         icon.setBounds(off, off, off + targetSize, off + targetSize);
         icon.draw(cc);
@@ -767,7 +774,7 @@ private Path buildRoughPath(int size) {
     } else {
         int effectiveShape = (shape == 5) ? 0 : shape;
         int backdropColor = Color.argb(230, 60, 64, 67);
-        Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null, effectiveShape, iconSize, backdropColor, false);
+        Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null, effectiveShape, iconSize, backdropColor);
         ImageView iv = new ImageView(ctx);
         iv.setImageBitmap(styled);
         iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
@@ -796,17 +803,19 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
     ImageView iv = new ImageView(ctx);
     iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
     if (shape == 5 && isAdaptive) {
-        // Icon Adaptive thật của launcher -> giữ nguyên hình dạng hệ thống, KHÔNG cắt lại
+        // Icon Adaptive thật của launcher -> giữ nguyên hình dạng + kích thước hệ thống
         iv.setImageDrawable(icon);
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
     } else {
-        // System + icon vuông sắc cạnh (MB Bank, Beta Cinema...) -> ép Circle + phóng to.
-        // Các style khác (Squircle/Pebble/Rough/Pentacle) cũng luôn phóng to 1.28x cho
-        // icon App để che kín 4 góc, đúng yêu cầu.
+        // [FIX] Bỏ hẳn zoom 1.28x + FIT_XY (gây méo/lem 4 góc). Dùng chung 1 hệ số
+        // ICON_CONTENT_SCALE với Action/Shortcut -> 6 kiểu icon có cùng size nền.
+        // Icon vuông sắc cạnh không-Adaptive (MB Bank, Beta Cinema...) được đặt lên
+        // nền TRẮNG giống đúng hành vi launcher hệ thống, không kéo méo ảnh nữa.
         int effectiveShape = (shape == 5) ? 0 : shape;
-        Bitmap styled = getStyledIconBitmap(cacheKey, icon, null, effectiveShape, iconSize, 0, true);
+        int backdropColor = isAdaptive ? 0 : Color.WHITE;
+        Bitmap styled = getStyledIconBitmap(cacheKey, icon, null, effectiveShape, iconSize, backdropColor);
         iv.setImageBitmap(styled);
-        iv.setScaleType(ImageView.ScaleType.FIT_XY);
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
     }
     box.addView(iv);
 
