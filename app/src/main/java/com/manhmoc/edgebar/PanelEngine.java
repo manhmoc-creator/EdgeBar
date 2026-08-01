@@ -520,17 +520,21 @@ private Path getShapePath(int shape, int size) {
 /** Đo bounding box thật của Path rồi scale+căn giữa để lấp đầy khung size x size
  *  (giữ nguyên tỉ lệ, không méo hình) — làm cho Pentacle/Pebble/Rough to bằng
  *  Squircle/Circle, vốn đã tự chạm mép khung sẵn. */
+// [FIX #2] Scale RIÊNG trục X và Y (kéo giãn lấp đầy đúng khung size x size) thay vì
+// scale đều giữ nguyên tỉ lệ gốc. Bug cũ: Pebble/Rough/Pentacle có bounding box không
+// vuông (rộng != cao), scale-giữ-tỉ-lệ khiến 1 chiều không chạm hết khung -> nhìn nhỏ
+// hơn hẳn Circle/Squircle (vốn luôn chạm đủ 4 cạnh). Kéo giãn 2 trục độc lập đảm bảo
+// MỌI shape đều lấp đầy chính xác khung icon, kích thước hiển thị bằng nhau tuyệt đối.
 private Path normalizeToFullSize(Path path, int size) {
     RectF b = new RectF();
     path.computeBounds(b, true);
     float w = b.width(), h = b.height();
     if (w <= 0 || h <= 0) return path;
-    float scale = size / Math.max(w, h);
+    float scaleX = size / w;
+    float scaleY = size / h;
     Matrix m = new Matrix();
     m.postTranslate(-b.left, -b.top);
-    m.postScale(scale, scale);
-    float scaledW = w * scale, scaledH = h * scale;
-    m.postTranslate((size - scaledW) / 2f, (size - scaledH) / 2f);
+    m.postScale(scaleX, scaleY);
     path.transform(m);
     return path;
 }
@@ -556,8 +560,10 @@ private Bitmap maskBitmapToShape(Bitmap content, int shape, int size) {
 // Dùng DUY NHẤT 1 hệ số ICON_CONTENT_SCALE cho mọi loại icon (App/Shortcut/Action)
 // và mọi kiểu hình (Circle/Squircle/Pebble/Rough/Pentacle/System) -> nền đồng nhất.
 // Cache key cũng ngắn hơn (bớt biến cover) -> ít alloc String hơn, nhẹ hơn cho Pixel 2XL.
-private static final float ICON_CONTENT_SCALE = 0.82f;
-
+// [FIX] Tăng từ 0.82 lên 0.92 — lấp đầy khung gần trọn vẹn, tránh cảm giác icon
+// "bị thu bé" so với trước (bản cũ App icon phóng to 1.28x, Action icon chỉ 0.8x —
+// giờ dùng chung 1 hệ số nên phải tăng lên để không còn bé hơn hẳn so với trước).
+private static final float ICON_CONTENT_SCALE = 0.92f;
 private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor) {
     String key = cacheKey + "_" + shape + "_" + size + "_" + backdropColor;
     synchronized (maskedIconCache) {
@@ -811,8 +817,16 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
         // ICON_CONTENT_SCALE với Action/Shortcut -> 6 kiểu icon có cùng size nền.
         // Icon vuông sắc cạnh không-Adaptive (MB Bank, Beta Cinema...) được đặt lên
         // nền TRẮNG giống đúng hành vi launcher hệ thống, không kéo méo ảnh nữa.
+       // [FIX] Bỏ hẳn điều kiện isAdaptive khi chọn màu nền — bug gốc là ở đây:
+        // đa số app hiện đại (kể cả MB Bank) đều là AdaptiveIconDrawable, không
+        // riêng Messenger, nên nhánh cũ luôn rơi vào "nền trong suốt" cho GẦN NHƯ
+        // MỌI app -> MB Bank vẫn bị cắt mà không có nền trắng, còn app full-bleed
+        // như Messenger thì cắt style gần như không thấy khác biệt (icon đã đặc
+        // kín sẵn). Giờ LUÔN ép nền trắng cho mọi icon App khi áp Style (trừ style
+        // "System" đã xử lý riêng ở nhánh if phía trên) -> đồng nhất tuyệt đối,
+        // và khi cắt hình cũng LUÔN nhìn thấy rõ viền trắng + hình dạng đã đổi.
         int effectiveShape = (shape == 5) ? 0 : shape;
-        int backdropColor = isAdaptive ? 0 : Color.WHITE;
+        int backdropColor = Color.WHITE;
         Bitmap styled = getStyledIconBitmap(cacheKey, icon, null, effectiveShape, iconSize, backdropColor);
         iv.setImageBitmap(styled);
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
