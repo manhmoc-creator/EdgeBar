@@ -26,14 +26,19 @@ public class PanelEngine {
         };
     private static final java.util.Map<String,String> labelCache = new java.util.HashMap<>();
     private static final java.util.Map<String,String> ACT_LABEL_MAP = new java.util.HashMap<>();
-    static {
-        ACT_LABEL_MAP.put("FLASH","Đèn pin"); ACT_LABEL_MAP.put("SCREEN_OFF","Tắt màn hình");
-        ACT_LABEL_MAP.put("SCREENSHOT","Chụp màn hình"); ACT_LABEL_MAP.put("CAMERA","Camera");
-        ACT_LABEL_MAP.put("VOLUME","Âm lượng"); ACT_LABEL_MAP.put("NOTIFICATIONS","Thông báo");
-        ACT_LABEL_MAP.put("BACK","Quay lại"); ACT_LABEL_MAP.put("HOME","Màn chính");
-        ACT_LABEL_MAP.put("RECENTS","Đa nhiệm"); ACT_LABEL_MAP.put("VOICE_RECORD","Ghi âm");
-        ACT_LABEL_MAP.put("TOGGLE_MORSE","Khóa Morse");
-    }
+static {
+    ACT_LABEL_MAP.put("FLASH","Đèn pin"); ACT_LABEL_MAP.put("SCREEN_OFF","Tắt màn hình");
+    ACT_LABEL_MAP.put("SCREENSHOT","Chụp màn hình"); ACT_LABEL_MAP.put("CAMERA","Camera");
+    ACT_LABEL_MAP.put("VOLUME","Âm lượng"); ACT_LABEL_MAP.put("NOTIFICATIONS","Thông báo");
+    ACT_LABEL_MAP.put("BACK","Quay lại"); ACT_LABEL_MAP.put("HOME","Màn chính");
+    ACT_LABEL_MAP.put("RECENTS","Đa nhiệm"); ACT_LABEL_MAP.put("VOICE_RECORD","Ghi âm");
+    ACT_LABEL_MAP.put("TOGGLE_MORSE","Khóa Morse");
+    // [FIX] Thiếu 4 key này khiến label fallback về nguyên key viết hoa (VD: "POWER_DIALOG")
+    ACT_LABEL_MAP.put("POWER_DIALOG","Menu nguồn");
+    ACT_LABEL_MAP.put("TOGGLE_OVERLAY","Bật/Tắt Trợ Năng");
+    ACT_LABEL_MAP.put("YTDL_DOWNLOAD","Tải video");
+    ACT_LABEL_MAP.put("SPLIT_SCREEN","Chia đôi màn hình");
+}
     // [MỚI] Icon hệ thống gần đúng nhất với màn "Chỉnh sửa lối tắt" của Android (ảnh mẫu).
     // Dùng thẳng android.R.drawable có sẵn trong OS — 0 tài nguyên thêm, 0 dung lượng APK.
     private static final java.util.Map<String, Integer> ACT_ICON_RES = new java.util.HashMap<>();
@@ -509,13 +514,30 @@ private Path getShapePath(int shape, int size) {
     if (p != null) return p;
     switch (shape) {
         case 1: p = buildSquirclePath(size); break;
-        case 2: p = buildPebblePath(size); break;
-        case 3: p = buildRoughPath(size); break;
-        case 4: p = buildRoundedPentagon(size); break;
+        // [FIX] Pebble/Rough/Pentacle là hình lõm (concave) — sau khi
+        // normalizeToFullSize() chạm đủ 4 cạnh khung, diện tích thực (phần
+        // tô màu) vẫn nhỏ hơn hẳn Circle/Squircle nên nhìn "yếu" hơn.
+        // Phóng to thêm quanh tâm để bù thị giác — phần vượt khung sẽ tự
+        // bị Bitmap canvas cắt (clip), không cần code xử lý riêng.
+        case 2: p = buildPebblePath(size); p = enlargeAroundCenter(p, size, 1.18f); break;
+        case 3: p = buildRoughPath(size); p = enlargeAroundCenter(p, size, 1.12f); break;
+        case 4: p = buildRoundedPentagon(size); p = enlargeAroundCenter(p, size, 1.15f); break;
         default: p = new Path(); p.addOval(0, 0, size, size, Path.Direction.CW); break;
     }
     shapePathCache.put(key, p);
     return p;
+}
+
+// [MỚI] Phóng to Path quanh đúng tâm hình vuông size×size — dùng để bù
+// thị giác cho các hình lõm (Pebble/Rough/Pentacle) mà không làm lệch tâm.
+private Path enlargeAroundCenter(Path path, int size, float factor) {
+    Matrix m = new Matrix();
+    float c = size / 2f;
+    m.postTranslate(-c, -c);
+    m.postScale(factor, factor);
+    m.postTranslate(c, c);
+    path.transform(m);
+    return path;
 }
 /** Đo bounding box thật của Path rồi scale+căn giữa để lấp đầy khung size x size
  *  (giữ nguyên tỉ lệ, không méo hình) — làm cho Pentacle/Pebble/Rough to bằng
@@ -563,7 +585,7 @@ private Bitmap maskBitmapToShape(Bitmap content, int shape, int size) {
 // [FIX] Tăng từ 0.82 lên 0.92 — lấp đầy khung gần trọn vẹn, tránh cảm giác icon
 // "bị thu bé" so với trước (bản cũ App icon phóng to 1.28x, Action icon chỉ 0.8x —
 // giờ dùng chung 1 hệ số nên phải tăng lên để không còn bé hơn hẳn so với trước).
-private static final float ICON_CONTENT_SCALE = 0.92f;
+private static final float ICON_CONTENT_SCALE = 0.77f;
 private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor) {
     String key = cacheKey + "_" + shape + "_" + size + "_" + backdropColor;
     synchronized (maskedIconCache) {
