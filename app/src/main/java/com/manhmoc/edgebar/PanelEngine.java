@@ -494,6 +494,72 @@ new Thread(() -> {
         new LinkedHashMap<String, Drawable>(16, 0.75f, true) {
             protected boolean removeEldestEntry(Map.Entry<String, Drawable> e) { return size() > ICON_CACHE_LIMIT; }
         };
+    // ===== MẶT NẠ HÌNH DẠNG ICON (thay Outline.setConvexPath — không cắt được hình lõm
+// như Pebble/Rough/Pentacle, đây là nguyên nhân 4/5 style không đổi hình trước đây) =====
+private static final int MASKED_ICON_CACHE_LIMIT = 60;
+private static final LinkedHashMap<String, Bitmap> maskedIconCache =
+    new LinkedHashMap<String, Bitmap>(16, 0.75f, true) {
+        protected boolean removeEldestEntry(Map.Entry<String, Bitmap> e) { return size() > MASKED_ICON_CACHE_LIMIT; }
+    };
+private static final Map<String, Path> shapePathCache = new HashMap<>();
+
+private Path getShapePath(int shape, int size) {
+    String key = shape + "_" + size;
+    Path p = shapePathCache.get(key);
+    if (p != null) return p;
+    switch (shape) {
+        case 1: p = buildSquirclePath(size); break;
+        case 2: p = buildPebblePath(size); break;
+        case 3: p = buildRoughPath(size); break;
+        case 4: p = buildRoundedPentagon(size); break;
+        default: p = new Path(); p.addOval(0, 0, size, size, Path.Direction.CW); break;
+    }
+    shapePathCache.put(key, p);
+    return p;
+}
+
+/** Cắt Bitmap nội dung theo đúng Path bằng Porter-Duff SRC_IN — cắt chính xác với
+ *  MỌI hình kể cả lõm, viền chống răng cưa thật sự (không như Outline). */
+private Bitmap maskBitmapToShape(Bitmap content, int shape, int size) {
+    Bitmap result = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+    Canvas canvas = new Canvas(result);
+    Paint maskPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    canvas.drawPath(getShapePath(shape, size), maskPaint);
+    maskPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
+    canvas.drawBitmap(content, 0, 0, maskPaint);
+    return result;
+}
+
+/** Vẽ nền màu (nếu có) + icon/emoji rồi cắt theo hình đã chọn. Cache theo
+ *  (cacheKey, shape, size, cover, backdropColor) — chỉ vẽ lại khi style/kích thước
+ *  thực sự đổi, không tốn CPU khi cuộn danh sách.
+ *  cover=true: phóng to 1.28x che kín 4 góc (dùng cho icon App).
+ *  cover=false: thu nhỏ 0.8x, chừa đệm quanh (dùng cho icon Action/Shortcut). */
+private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor, boolean cover) {
+    String key = cacheKey + "_" + shape + "_" + size + "_" + cover + "_" + backdropColor;
+    synchronized (maskedIconCache) {
+        Bitmap cached = maskedIconCache.get(key);
+        if (cached != null && !cached.isRecycled()) return cached;
+    }
+    Bitmap content = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+    Canvas cc = new Canvas(content);
+    if (backdropColor != 0) cc.drawColor(backdropColor);
+    if (icon != null) {
+        int targetSize = Math.round(size * (cover ? 1.28f : 0.8f));
+        int off = (size - targetSize) / 2;
+        icon.setBounds(off, off, off + targetSize, off + targetSize);
+        icon.draw(cc);
+    } else if (emoji != null) {
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setTextSize(size * 0.5f); p.setTextAlign(Paint.Align.CENTER); p.setColor(Color.WHITE);
+        Paint.FontMetrics fm = p.getFontMetrics();
+        cc.drawText(emoji, size / 2f, size / 2f - (fm.ascent + fm.descent) / 2, p);
+    }
+    Bitmap result = maskBitmapToShape(content, shape, size);
+    content.recycle();
+    synchronized (maskedIconCache) { maskedIconCache.put(key, result); }
+    return result;
+}
     private Drawable getCachedShortcutIcon(String scId) {
         Drawable overrideIcon = getShortcutIconOverride(scId);
         if (overrideIcon != null) return overrideIcon;
@@ -560,12 +626,6 @@ new Thread(() -> {
     if (key.startsWith("MACRO_")) return prefs.getString("macro_" + key.substring(6) + "_name", "Macro");
     String l = ACT_LABEL_MAP.get(key);
     return l != null ? l : key;
-}
-    // 0=Tròn, 1=Vuông bo góc Google, 2=Pebble (bất đối xứng, giống Material You)
-    private float[] getPanelIconCornerRadii(String px) {
-    int shape = prefs.getInt(px + "icon_shape", 0);
-    if (shape == 1) return new float[]{0.22f, 0.22f, 0.22f, 0.22f}; // Squircle
-    return new float[]{0.5f, 0.5f, 0.5f, 0.5f}; // Circle mặc định — Pebble/Rough/Pentacle dùng Path riêng bên dưới
 }
 // Ngũ giác bo góc mềm — dùng Outline.setConvexPath() để clip, KHÔNG cần custom Drawable
 // riêng, tận dụng luôn backdrop trắng sẵn có -> nhẹ GPU, không thêm object vẽ nào.
@@ -675,12 +735,11 @@ private Path buildRoughPath(int size) {
     path.close();
     return path;
 }
-        private View wrapIconCell(String px, Drawable icon, String emoji, float[] radii, View.OnClickListener onClick, String label) {
+        private View wrapIconCell(String px, Drawable icon, String emoji, String cacheKey, View.OnClickListener onClick, String label) {
     int iconSize = prefs.getInt(px + "icon_size", 110);
     LinearLayout box = new LinearLayout(ctx); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER);
 
     int shape = prefs.getInt(px + "icon_shape", 0);
-    // 0=Circle 1=Squircle 2=Pebble 3=Rough 4=Pentacle 5=System
     boolean useSystemMask = shape == 5 && icon != null
         && Build.VERSION.SDK_INT >= 26 && icon instanceof AdaptiveIconDrawable;
 
@@ -690,73 +749,13 @@ private Path buildRoughPath(int size) {
         iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
         box.addView(iv);
     } else {
-        FrameLayout shapeBox = new FrameLayout(ctx);
-        GradientDrawable backdrop = new GradientDrawable();
-        backdrop.setColor(Color.argb(230, 60, 64, 67));
-        backdrop.setCornerRadii(new float[]{
-            iconSize*radii[0], iconSize*radii[0],
-            iconSize*radii[1], iconSize*radii[1],
-            iconSize*radii[2], iconSize*radii[2],
-            iconSize*radii[3], iconSize*radii[3]
-        });
-        shapeBox.setBackground(backdrop);
-        shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
-        shapeBox.setClipToOutline(true);
-        if (shape == 2) {
-            shapeBox.setOutlineProvider(new ViewOutlineProvider() {
-                public void getOutline(View v, Outline o) {
-                    int w = v.getWidth()==0?iconSize:v.getWidth();
-                    o.setConvexPath(buildPebblePath(w));
-                }
-            });
-        } else if (shape == 3) {
-            shapeBox.setOutlineProvider(new ViewOutlineProvider() {
-                public void getOutline(View v, Outline o) {
-                    int w = v.getWidth()==0?iconSize:v.getWidth();
-                    o.setConvexPath(buildRoughPath(w));
-                }
-            });
-        } else if (shape == 4) {
-            shapeBox.setOutlineProvider(new ViewOutlineProvider() {
-                public void getOutline(View v, Outline o) {
-                    int w = v.getWidth()==0?iconSize:v.getWidth();
-                    o.setConvexPath(buildRoundedPentagon(w));
-                }
-            });
-        } else if (shape == 1) {
-            // [MỚI] Squircle đúng thuật toán superellipse, thay cho RoundRect 0.15
-            // gần đúng cũ.
-            shapeBox.setOutlineProvider(new ViewOutlineProvider() {
-                public void getOutline(View v, Outline o) {
-                    int w = v.getWidth()==0?iconSize:v.getWidth();
-                    o.setConvexPath(buildSquirclePath(w));
-                }
-            });
-        } else {
-            final float maxR = Math.max(Math.max(radii[0],radii[1]), Math.max(radii[2],radii[3]));
-            shapeBox.setOutlineProvider(new ViewOutlineProvider() {
-                public void getOutline(View v, Outline o) {
-                    int w = v.getWidth()==0?iconSize:v.getWidth(), h = v.getHeight()==0?iconSize:v.getHeight();
-                    o.setRoundRect(0,0,w,h, w*maxR);
-                }
-            });
-        }
-        View core;
-if (icon != null) {
-    ImageView iv = new ImageView(ctx);
-    iv.setImageDrawable(icon);
-    float ICON_INNER_SCALE = 0.8f; // <-- CHỈNH SỐ NÀY
-    iv.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-    int innerSize = (int) (iconSize * ICON_INNER_SCALE);
-    int pad = (iconSize - innerSize) / 2;
-    iv.setPadding(pad, pad, pad, pad);
-    core = iv;
-} else {
-    TextView tv = new TextView(ctx); tv.setText(emoji); tv.setTextSize(26); tv.setGravity(Gravity.CENTER);
-    core = tv;
-}
-shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
-        box.addView(shapeBox);
+        int effectiveShape = (shape == 5) ? 0 : shape;
+        int backdropColor = Color.argb(230, 60, 64, 67);
+        Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null, effectiveShape, iconSize, backdropColor, false);
+        ImageView iv = new ImageView(ctx);
+        iv.setImageBitmap(styled);
+        iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
+        box.addView(iv);
     }
 
     boolean showName = prefs.getInt(px + "show_name", 0) == 1;
@@ -770,67 +769,33 @@ shapeBox.addView(core, new FrameLayout.LayoutParams(iconSize, iconSize));
     box.setOnClickListener(onClick);
     return box;
 }
-private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onClick, String label) {
+private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnClickListener onClick, String label) {
     int iconSize = prefs.getInt(px + "icon_size", 110);
     LinearLayout box = new LinearLayout(ctx);
     box.setOrientation(LinearLayout.VERTICAL);
     box.setGravity(Gravity.CENTER);
 
     int shape = prefs.getInt(px + "icon_shape", 0);
-    // 0=Circle 1=Squircle 2=Pebble 3=Rough 4=Pentacle 5=System
     boolean isAdaptive = Build.VERSION.SDK_INT >= 26 && icon instanceof AdaptiveIconDrawable;
-    boolean forceCircleInSystemMode = (shape == 5) && !isAdaptive;
 
-    FrameLayout shapeBox = new FrameLayout(ctx);
-    // [MỚI] Ép cứng khung = iconSize x iconSize ngay từ đầu. Trước đây shapeBox để
-    // wrap_content nên khi phóng to icon vuông (bên dưới) khung sẽ phình theo icon
-    // luôn -> mất tác dụng cắt viền. Cố định khung mới clip đúng kích thước mong muốn.
-    shapeBox.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
     ImageView iv = new ImageView(ctx);
-    iv.setImageDrawable(icon);
+    iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
 
-    if (shape == 5 && !forceCircleInSystemMode) {
+    if (shape == 5 && isAdaptive) {
+        // Icon Adaptive thật của launcher -> giữ nguyên hình dạng hệ thống, KHÔNG cắt lại
+        iv.setImageDrawable(icon);
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        iv.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize));
-        shapeBox.setClipToOutline(false);
     } else {
-        final int effectiveShape = forceCircleInSystemMode ? 0 : shape;
-        shapeBox.setClipToOutline(true);
-        shapeBox.setOutlineProvider(new ViewOutlineProvider() {
-            @Override
-            public void getOutline(View v, Outline o) {
-                int w = v.getWidth() == 0 ? iconSize : v.getWidth();
-                int h = v.getHeight() == 0 ? iconSize : v.getHeight();
-                if (effectiveShape == 0) {
-                    o.setOval(0, 0, w, h);
-                } else if (effectiveShape == 1) {
-                    // [MỚI] Squircle đúng thuật toán superellipse, thay cho RoundRect 0.15 gần đúng cũ
-                    o.setConvexPath(buildSquirclePath(w));
-                } else if (effectiveShape == 2) {
-                    o.setConvexPath(buildPebblePath(w));
-                } else if (effectiveShape == 3) {
-                    o.setConvexPath(buildRoughPath(w));
-                } else if (effectiveShape == 4) {
-                    o.setConvexPath(buildRoundedPentagon(w));
-                }
-            }
-        });
-        iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        // [MỚI] Icon vuông truyền thống (MB Bank, Beta Cinema...) luôn có viền
-        // trong suốt "đóng gói sẵn" trong file PNG — CENTER_CROP ở đúng iconSize
-        // không đủ loại bỏ viền đó, logo vẫn bị lọt thỏm giữa khung. Phóng
-        // ImageView lên 1.28x rồi để FrameLayout clip lại đúng iconSize (đã
-        // setLayoutParams cố định phía trên) => cắt bớt viền thừa, logo thật
-        // chạm sát 4 cạnh, áp dụng cho MỌI icon_shape (kể cả System). Icon
-        // Adaptive (đã tự chuẩn hoá layer bởi hệ thống) giữ nguyên iconSize,
-        // không zoom, tránh cắt mất icon.
-        int zoomedSize = isAdaptive ? iconSize : Math.round(iconSize * 1.28f);
-        FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(zoomedSize, zoomedSize);
-        ivLp.gravity = Gravity.CENTER;
-        iv.setLayoutParams(ivLp);
+        // System + icon vuông sắc cạnh (MB Bank, Beta Cinema...) -> ép Circle + phóng to.
+        // Các style khác (Squircle/Pebble/Rough/Pentacle) cũng luôn phóng to 1.28x cho
+        // icon App để che kín 4 góc, đúng yêu cầu.
+        int effectiveShape = (shape == 5) ? 0 : shape;
+        Bitmap styled = getStyledIconBitmap(cacheKey, icon, null, effectiveShape, iconSize, 0, true);
+        iv.setImageBitmap(styled);
+        iv.setScaleType(ImageView.ScaleType.FIT_XY);
     }
-    shapeBox.addView(iv);
-    box.addView(shapeBox);
+    box.addView(iv);
+
     boolean showName = prefs.getInt(px + "show_name", 0) == 1;
     if (showName && label != null) {
         TextView tvLabel = new TextView(ctx);
@@ -847,58 +812,46 @@ private View wrapAppIconCell(String px, Drawable icon, View.OnClickListener onCl
     return box;
 }
     private View buildCell(String px, String type, Object payload, String ref) {
-        float[] radii = getPanelIconCornerRadii(px);
-        String panelId = px.startsWith("pack_panel_") ? px.substring("pack_panel_".length(), px.length()-1) : "";
-        if (type.equals("APP")) {
-            // [MỚI] App icon: dùng THẲNG icon hệ thống của thiết bị, KHÔNG bọc nền/
-            // khung xám, KHÔNG thu nhỏ 0.75 như Action icon. Adaptive Icon (API 26+)
-            // tự vẽ đúng hình dạng theo launcher máy -> không cần icon_shape can thiệp
-            // vào App nữa. Nhẹ GPU hơn: bớt 1 GradientDrawable + 1 FrameLayout mỗi ô.
-            return wrapAppIconCell(px, (Drawable) payload, v -> {
-                Intent li = ctx.getPackageManager().getLaunchIntentForPackage(ref);
-                if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(li); }
-                closeAllPanels();
-            }, getCachedAppLabel(ref));
-        } else if (ref.startsWith("RUN_SHORTCUT_")) {
-            // [FIX] Shortcut giờ chạy TRỰC TIẾP (startActivity ngay tại đây) thay vì gửi
-            // broadcast IPC_ACTION mà EdgeBarService từng không hiểu → dùng icon THẬT đã
-            // lưu lúc tạo, không còn dùng emoji 🔗 mặc định.
-            String scId = ref.substring("RUN_SHORTCUT_".length());
-            Drawable icon = getCachedShortcutIcon(scId);
-            String label = prefs.getString("shortcut_" + scId + "_name", "Shortcut");
-            return wrapIconCell(px, icon, icon == null ? "🔗" : null, radii, v -> {
-                try {
-                    String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
-                    if (!uri.isEmpty()) {
-                        Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
-                        scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        ctx.startActivity(scIntent);
-                    }
-                } catch (Exception ignored) {}
-                closeAllPanels();
-            }, label);
-        } else {
-            String label = getActionLabelForPanel(ref);
-            // [MỚI] Thứ tự ưu tiên: icon user tự chọn > icon hệ thống mặc định > emoji
-            Drawable overrideIcon = getIconOverride(panelId, ref);
-            Integer resId = ACT_ICON_RES.get(ref);
-            Drawable sysIcon = overrideIcon != null ? overrideIcon
-                : (resId != null ? ctx.getDrawable(resId) : null);
-            // [FIX] Chỉ tô trắng icon hệ thống MẶC ĐỊNH (không phải icon user tự chọn)
-            // để tương phản tốt trên nền xám mới — không đụng tới icon app/tùy chỉnh
-            // thật vì tô trắng sẽ làm mất màu logo gốc của chúng.
-            if (overrideIcon == null && sysIcon != null) {
-                sysIcon = sysIcon.mutate();
-                sysIcon.setTint(Color.WHITE);
-            }
-            return wrapIconCell(px, sysIcon, sysIcon == null ? actEmoji(ref) : null, radii, v -> {
-                Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-                ipc.putExtra("act", ref);
-                ctx.sendBroadcast(ipc);
-                closeAllPanels();
-            }, label);
+    String panelId = px.startsWith("pack_panel_") ? px.substring("pack_panel_".length(), px.length()-1) : "";
+    if (type.equals("APP")) {
+        return wrapAppIconCell(px, (Drawable) payload, ref, v -> {
+            Intent li = ctx.getPackageManager().getLaunchIntentForPackage(ref);
+            if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(li); }
+            closeAllPanels();
+        }, getCachedAppLabel(ref));
+    } else if (ref.startsWith("RUN_SHORTCUT_")) {
+        String scId = ref.substring("RUN_SHORTCUT_".length());
+        Drawable icon = getCachedShortcutIcon(scId);
+        String label = prefs.getString("shortcut_" + scId + "_name", "Shortcut");
+        return wrapIconCell(px, icon, icon == null ? "🔗" : null, "sc_" + scId, v -> {
+            try {
+                String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+                if (!uri.isEmpty()) {
+                    Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
+                    scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    ctx.startActivity(scIntent);
+                }
+            } catch (Exception ignored) {}
+            closeAllPanels();
+        }, label);
+    } else {
+        String label = getActionLabelForPanel(ref);
+        Drawable overrideIcon = getIconOverride(panelId, ref);
+        Integer resId = ACT_ICON_RES.get(ref);
+        Drawable sysIcon = overrideIcon != null ? overrideIcon
+            : (resId != null ? ctx.getDrawable(resId) : null);
+        if (overrideIcon == null && sysIcon != null) {
+            sysIcon = sysIcon.mutate();
+            sysIcon.setTint(Color.WHITE);
         }
+        return wrapIconCell(px, sysIcon, sysIcon == null ? actEmoji(ref) : null, "act_" + panelId + "_" + ref, v -> {
+            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            ipc.putExtra("act", ref);
+            ctx.sendBroadcast(ipc);
+            closeAllPanels();
+        }, label);
     }
+}
     private String actEmoji(String key) {
     if (key.startsWith("RUN_SHORTCUT_")) return "🔗";
     if (key.startsWith("INTENT_")) return "⚡";
