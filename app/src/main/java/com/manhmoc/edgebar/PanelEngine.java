@@ -551,8 +551,8 @@ private Bitmap maskBitmapToShape(Bitmap content, int shape, int size) {
  *  thực sự đổi, không tốn CPU khi cuộn danh sách.
  *  cover=true: phóng to 1.28x che kín 4 góc (dùng cho icon App).
  *  cover=false: thu nhỏ 0.8x, chừa đệm quanh (dùng cho icon Action/Shortcut). */
-private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor, boolean cover) {
-    String key = cacheKey + "_" + shape + "_" + size + "_" + cover + "_" + backdropColor;
+private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor) {
+    String key = cacheKey + "_" + shape + "_" + size + "_" + backdropColor;
     synchronized (maskedIconCache) {
         Bitmap cached = maskedIconCache.get(key);
         if (cached != null && !cached.isRecycled()) return cached;
@@ -561,7 +561,10 @@ private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji,
     Canvas cc = new Canvas(content);
     if (backdropColor != 0) cc.drawColor(backdropColor);
     if (icon != null) {
-        int targetSize = Math.round(size * (cover ? 1.28f : 0.8f));
+        // [FIX] CẤM phóng to icon dưới mọi hình thức — luôn vẽ ở đúng 0.82x kích
+        // thước khung, KHÔNG BAO GIỜ vượt 1.0x. Trước đây icon App bị ép 1.28x để
+        // "che góc" khi cắt hình, khiến icon to bất thường và bị cắt sâu.
+        int targetSize = Math.round(size * 0.82f);
         int off = (size - targetSize) / 2;
         icon.setBounds(off, off, off + targetSize, off + targetSize);
         icon.draw(cc);
@@ -773,7 +776,7 @@ private Path buildRoughPath(int size) {
         // giữ nguyên vì vốn đã lồi, an toàn.
         int effectiveShape = (shape == 5) ? 0 : (shape >= 2 ? 1 : shape);
         int backdropColor = Color.argb(230, 60, 64, 67);
-        Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null, effectiveShape, iconSize, backdropColor, false);
+        Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null, effectiveShape, iconSize, backdropColor);
         ImageView iv = new ImageView(ctx);
         iv.setImageBitmap(styled);
         iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
@@ -801,25 +804,26 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
 
     ImageView iv = new ImageView(ctx);
     iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
-    if (isAdaptive) {
-        // [FIX] Icon Adaptive thật của launcher (đã tự tròn/tự vuông sẵn từ hệ thống)
-        // -> LUÔN giữ nguyên hình dạng gốc, KHÔNG zoom, KHÔNG cắt lại, BẤT KỂ style
-        // Panel đang chọn là gì. Trước đây chỉ áp dụng khi style == "System" (shape==5),
-        // khiến icon tròn có sẵn bị ép cắt vào Squircle/Pebble/Rough/Pentacle một cách
-        // vô lý. Zero chi phí thêm: vẫn dùng đúng Drawable gốc, không tạo Bitmap mới.
+    if (shape == 5 && isAdaptive) {
+        // [FIX] "System" CHỈ giữ nguyên hình gốc khi icon THẬT SỰ là Adaptive Icon.
+        // Mọi style khác (Circle/Squircle/Pebble/Rough/Pentacle) LUÔN được áp dụng
+        // cho MỌI icon App — kể cả Adaptive — nếu không thì đổi style sẽ không có
+        // tác dụng gì với phần lớn app, vì đa số icon hệ thống đều là Adaptive.
         iv.setImageDrawable(icon);
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
     } else {
-        // Chỉ icon vuông sắc cạnh kiểu cũ (MB Bank, Beta Cinema...) — loại này KHÔNG
-        // có sẵn hình bo tròn — mới cần ép Circle/Squircle/... + phóng to 1.28x để
-        // che kín 4 góc vuông. Style "System" (5) cho nhóm này fallback về Circle (0).
-        int effectiveShape = (shape == 5) ? 0 : shape;
-        Bitmap styled = getStyledIconBitmap(cacheKey, icon, null, effectiveShape, iconSize, 0, true);
+        // [FIX] CẤM zoom/phóng to hoàn toàn. Icon vuông cũ (MB Bank, Beta Cinema...)
+        // được bọc trong 1 lớp NỀN TRẮNG — giống hệt cách Android tự "adapt" icon cũ
+        // khi hiển thị trên Home — rồi vẽ ở đúng kích thước gốc (không zoom) trước
+        // khi cắt theo hình đã chọn. Icon Adaptive (đã có sẵn nền riêng) thì KHÔNG
+        // cần thêm nền trắng nữa (backdrop = 0, trong suốt).
+        int effectiveShape = (shape == 5) ? 0 : shape; // "System" nhưng icon không Adaptive -> fallback Circle
+        int backdrop = isAdaptive ? 0 : Color.WHITE;
+        Bitmap styled = getStyledIconBitmap(cacheKey, icon, null, effectiveShape, iconSize, backdrop);
         iv.setImageBitmap(styled);
         iv.setScaleType(ImageView.ScaleType.FIT_XY);
     }
     box.addView(iv);
-
     boolean showName = prefs.getInt(px + "show_name", 0) == 1;
     if (showName && label != null) {
         TextView tvLabel = new TextView(ctx);
