@@ -514,20 +514,14 @@ private Path getShapePath(int shape, int size) {
     if (p != null) return p;
     switch (shape) {
         case 1: p = buildSquirclePath(size); break;
-        // [FIX] Pebble/Rough/Pentacle là hình lõm (concave) — sau khi
-        // normalizeToFullSize() chạm đủ 4 cạnh khung, diện tích thực (phần
-        // tô màu) vẫn nhỏ hơn hẳn Circle/Squircle nên nhìn "yếu" hơn.
-        // Phóng to thêm quanh tâm để bù thị giác — phần vượt khung sẽ tự
-        // bị Bitmap canvas cắt (clip), không cần code xử lý riêng.
-        case 2: p = buildPebblePath(size); p = enlargeAroundCenter(p, size, 1.18f); break;
-        case 3: p = buildRoughPath(size); p = enlargeAroundCenter(p, size, 1.12f); break;
-        case 4: p = buildRoundedPentagon(size); p = enlargeAroundCenter(p, size, 1.15f); break;
+        case 2: p = buildPebblePath(size); break;
+        case 3: p = buildRoughPath(size); break;
+        case 4: p = buildRoundedPentagon(size); break;
         default: p = new Path(); p.addOval(0, 0, size, size, Path.Direction.CW); break;
     }
     shapePathCache.put(key, p);
     return p;
 }
-
 // [MỚI] Phóng to Path quanh đúng tâm hình vuông size×size — dùng để bù
 // thị giác cho các hình lõm (Pebble/Rough/Pentacle) mà không làm lệch tâm.
 private Path enlargeAroundCenter(Path path, int size, float factor) {
