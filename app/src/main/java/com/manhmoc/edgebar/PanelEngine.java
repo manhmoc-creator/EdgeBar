@@ -765,7 +765,13 @@ private Path buildRoughPath(int size) {
         iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
         box.addView(iv);
     } else {
-        int effectiveShape = (shape == 5) ? 0 : shape;
+        // [FIX] Action/Shortcut là glyph nhỏ (đèn pin, ghi âm, icon shortcut...), không
+        // phải ảnh full-bleed như icon App -> các hình LÕM (Pebble=2, Rough=3,
+        // Pentacle=4) cắt sâu vào giữa làm glyph bị khuyết/lệch. Ép các hình lõm về
+        // Squircle (1) — vẫn đổi hình theo ý người dùng nhưng luôn là hình LỒI nên
+        // glyph không bao giờ bị cắt mất một phần. Circle(0)/Squircle(1)/System(5→0)
+        // giữ nguyên vì vốn đã lồi, an toàn.
+        int effectiveShape = (shape == 5) ? 0 : (shape >= 2 ? 1 : shape);
         int backdropColor = Color.argb(230, 60, 64, 67);
         Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null, effectiveShape, iconSize, backdropColor, false);
         ImageView iv = new ImageView(ctx);
@@ -773,7 +779,6 @@ private Path buildRoughPath(int size) {
         iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
         box.addView(iv);
     }
-
     boolean showName = prefs.getInt(px + "show_name", 0) == 1;
     if (showName && label != null) {
         TextView tvLabel = new TextView(ctx); tvLabel.setText(label); tvLabel.setTextColor(Color.WHITE);
@@ -796,15 +801,18 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
 
     ImageView iv = new ImageView(ctx);
     iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
-
-    if (shape == 5 && isAdaptive) {
-        // Icon Adaptive thật của launcher -> giữ nguyên hình dạng hệ thống, KHÔNG cắt lại
+    if (isAdaptive) {
+        // [FIX] Icon Adaptive thật của launcher (đã tự tròn/tự vuông sẵn từ hệ thống)
+        // -> LUÔN giữ nguyên hình dạng gốc, KHÔNG zoom, KHÔNG cắt lại, BẤT KỂ style
+        // Panel đang chọn là gì. Trước đây chỉ áp dụng khi style == "System" (shape==5),
+        // khiến icon tròn có sẵn bị ép cắt vào Squircle/Pebble/Rough/Pentacle một cách
+        // vô lý. Zero chi phí thêm: vẫn dùng đúng Drawable gốc, không tạo Bitmap mới.
         iv.setImageDrawable(icon);
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
     } else {
-        // System + icon vuông sắc cạnh (MB Bank, Beta Cinema...) -> ép Circle + phóng to.
-        // Các style khác (Squircle/Pebble/Rough/Pentacle) cũng luôn phóng to 1.28x cho
-        // icon App để che kín 4 góc, đúng yêu cầu.
+        // Chỉ icon vuông sắc cạnh kiểu cũ (MB Bank, Beta Cinema...) — loại này KHÔNG
+        // có sẵn hình bo tròn — mới cần ép Circle/Squircle/... + phóng to 1.28x để
+        // che kín 4 góc vuông. Style "System" (5) cho nhóm này fallback về Circle (0).
         int effectiveShape = (shape == 5) ? 0 : shape;
         Bitmap styled = getStyledIconBitmap(cacheKey, icon, null, effectiveShape, iconSize, 0, true);
         iv.setImageBitmap(styled);
