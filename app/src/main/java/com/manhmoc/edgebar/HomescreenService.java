@@ -89,6 +89,10 @@ private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap
     private Vibrator vibrator;
     private PanelEngine panelEngine;
     private int lastKbdHeight = 0;
+    private long lastSyncMs = 0;
+    private static final long SYNC_THROTTLE_MS = 150;
+    private long accCheckTimestamp = 0;
+    private static final int KBD_HEIGHT_CHANGE_THRESHOLD = 20;
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
 
