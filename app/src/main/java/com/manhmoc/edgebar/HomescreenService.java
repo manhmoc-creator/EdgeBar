@@ -88,51 +88,9 @@ private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap
     private KeyguardManager km;
     private Vibrator vibrator;
     private PanelEngine panelEngine;
-    private MorseLockEngine morseEngine;
-    private Handler relockHandler = new Handler();
-    private long relockScheduledTime = 0;
-    private String pendingRelockPkg = "";
-    private java.util.Set<String> unlockedApps = new java.util.HashSet<>();
-    private long lastUnlockedTime = 0;
-    
-    private Runnable relockRunnable = () -> {
-    String pkgToLock = pendingRelockPkg;
-    unlockedApps.remove(pkgToLock);
-    lastUnlockedTime = 0;
-    relockScheduledTime = 0;
-    pendingRelockPkg = "";
-    if (!pkgToLock.isEmpty() && pkgToLock.equals(currentForegroundPkg)) {
-        // Set trực tiếp, KHÔNG qua broadcast để tránh vòng lặp vô tận
-        isMorseLockActive = true;
-        lockedPkg = pkgToLock;
-        morseFailCount = 0;
-        currentMorseAttempt = "";
-        if (morseEngine.tvMorseStatus != null) morseEngine.tvMorseStatus.setText("");
-// FIX-TEXT-1: Apply style đồng bộ trước khi hiện
-morseEngine.applyMorseTextStyle();
-morseEngine.applyLockIconStyle();
-morseEngine.updateLockIconPosition();
-if (morseEngine.morseContainer != null) morseEngine.morseContainer.setVisibility(View.VISIBLE);
-updateVisibility();
-    }
-};
-
-    private Handler numberDisplayHandler = new Handler();
-    private Runnable hideNumberRunnable; 
-
-    private int bgType = 0;
-    private String bgImagePath = "";
-    private Bitmap bgBitmap = null;
-    private int bgAlpha = 180;
     private int lastKbdHeight = 0;
-    private int cachedBgAlpha = 180; // cache tránh đọc disk trong onDraw
-
-
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
-
-    private final String[] M_BARS = {"r", "l", "t_r", "t_l", "t_c", "m_b_c", "m_mid_t", "m_mid_b"};
-    private final int[] M_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.CENTER, Gravity.CENTER};
 
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
@@ -206,8 +164,7 @@ updateVisibility();
         private Paint pFill, pStroke; private int type; private String prefix;
         private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
         private boolean isInv = false;
-        private Paint labelPaint; // chỉ dùng khi prefix == "morse_"
-        public CornerView(Context c, int type, String prefix) { super(c); this.type = type; this.prefix = prefix; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
+        public CornerView(Context c, int type, String prefix) {  super(c); this.type = type; this.prefix = prefix; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
 
         public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) {
 pStroke.setStrokeWidth(thick);
@@ -268,350 +225,60 @@ canvas.drawPath(strokePath, pStroke);
             float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
             float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
             canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill); canvas.restore();
-
-            // [MỚI] Hiện số/ký tự đã gán qua Map Keys — CHỈ áp dụng cho MorseLock
-            if (prefix.equals("morse_")) {
-                String v = prefs.getString("morse_map_corner_" + CORNERS[type], "*");
-                if (!v.equals("*") && !v.isEmpty()) {
-                    if (labelPaint == null) {
-                        labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                        labelPaint.setColor(Color.WHITE);
-                        labelPaint.setTextAlign(Paint.Align.CENTER);
-                        labelPaint.setShadowLayer(6f, 0, 0, Color.BLACK);
-                    }
-                    labelPaint.setTextSize(prefs.getInt("morse_map_label_size", 20));
-                    Paint.FontMetrics fm = labelPaint.getFontMetrics();
-                    canvas.drawText(v, tw/2f, th/2f - (fm.ascent+fm.descent)/2, labelPaint);
-                }
-            }
         }
+      }
     }
     private BroadcastReceiver syncReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
             String action = i.getAction();
             if (action.equals("com.manhmoc.edgebar.SYNC_STATE")) {
-    // V19.12.3.6.6: Throttle — tối đa 1 lần xử lý SYNC_STATE mỗi 150ms
-    // Chặn vòng lặp vô tận: Zalo event → EdgeBar → SYNC_STATE → HomescreenService → loop
-    long nowSync = System.currentTimeMillis();
-    if (nowSync - lastSyncMs < SYNC_THROTTLE_MS) return;
-    lastSyncMs = nowSync;
+                // V19.12.3.6.6: Throttle — tối đa 1 lần xử lý SYNC_STATE mỗi 150ms
+                long nowSync = System.currentTimeMillis();
+                if (nowSync - lastSyncMs < SYNC_THROTTLE_MS) return;
+                lastSyncMs = nowSync;
 
-    isKbd = i.getBooleanExtra("isKbd", false);
-isBl = i.getBooleanExtra("isBl", false);
-lastKbdHeight = i.getIntExtra("kbd_height", 0); // [MỚI]
-    String incomingPkg = i.getStringExtra("foreground_pkg");
-    if (incomingPkg != null && !incomingPkg.isEmpty()) {
-        boolean isRealApp = !incomingPkg.contains("systemui")
-            && !incomingPkg.contains("launcher")
-            && !incomingPkg.contains("nexuslauncher")
-            && !incomingPkg.contains("inputmethod")
-            && !incomingPkg.equals("android")
-            && !incomingPkg.equals("com.android.settings")
-            && !incomingPkg.contains("quickstep");
-        if (isRealApp) {
-            currentForegroundPkg = incomingPkg;
-            liveForegroundPkg = incomingPkg;
-        }
-    }
-    if (!pendingRelockPkg.isEmpty()
-            && currentForegroundPkg.equals(pendingRelockPkg)) {
-        relockHandler.removeCallbacks(relockRunnable);
-        relockScheduledTime = 0;
-        pendingRelockPkg = "";
-    } else if (!unlockedApps.isEmpty()
-            && !currentForegroundPkg.isEmpty()
-            && !currentForegroundPkg.contains("systemui")
-            && !currentForegroundPkg.contains("launcher")
-            && !unlockedApps.contains(currentForegroundPkg)
-            && relockScheduledTime == 0) {
-        String locklist = prefs.getString("locklist", "");
-        for (String unlocked : unlockedApps) {
-            if (locklist.contains(unlocked) && pendingRelockPkg.isEmpty()) {
-                long relockMs = prefs.getInt("morse_relock_ms", 5000);
-                relockScheduledTime = System.currentTimeMillis() + relockMs;
-                pendingRelockPkg = unlocked;
-                relockHandler.removeCallbacks(relockRunnable);
-                relockHandler.postDelayed(relockRunnable, relockMs);
-                break;
-            }
-        }
-    }
-    isPreviewMorse = prefs.getBoolean("preview_morse", false);
-    // HYBRID HOME: Reset cache Accessibility nếu được yêu cầu
-    if (i.getBooleanExtra("acc_cache_reset", false)) {
-        accCheckTimestamp = 0;
-    }
-    // ← KẾT THÚC PHẦN THÊM
-    updateVisibility();
+                isKbd = i.getBooleanExtra("isKbd", false);
+                isBl = i.getBooleanExtra("isBl", false);
+                lastKbdHeight = i.getIntExtra("kbd_height", 0);
+                String incomingPkg = i.getStringExtra("foreground_pkg");
+                if (incomingPkg != null && !incomingPkg.isEmpty()) {
+                    boolean isRealApp = !incomingPkg.contains("systemui")
+                        && !incomingPkg.contains("launcher")
+                        && !incomingPkg.contains("nexuslauncher")
+                        && !incomingPkg.contains("inputmethod")
+                        && !incomingPkg.equals("android")
+                        && !incomingPkg.equals("com.android.settings")
+                        && !incomingPkg.contains("quickstep");
+                    if (isRealApp) liveForegroundPkg = incomingPkg;
+                }
+                if (i.getBooleanExtra("acc_cache_reset", false)) {
+                    accCheckTimestamp = 0;
+                }
+                updateVisibility();
             } else if (action.equals("com.manhmoc.edgebar.TEST_ANIM")) {
                 playAnim();
-} else if (action.equals("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE")) {
-    String pkg = i.getStringExtra("pkg");
-    if (pkg == null || pkg.isEmpty()) return;
-    if (isUnlockCooldown) return;
-
-    // V19.12.3.6.8 THE ETERNAL EGO: Whitelist tuyệt đối — safety net cuối cùng
-    boolean pkgIsSystem = pkg.contains("launcher") || pkg.contains("nexuslauncher")
-            || pkg.contains("quickstep") || pkg.contains("systemui")
-            || pkg.equals("android") || pkg.contains("recents")
-            || pkg.contains("inputmethod") || pkg.contains("packageinstaller");
-    if (pkgIsSystem) return;
-
-    // from_windows_api = true: EdgeBarService đã xác nhận pkg qua getWindows()
-    // → KHÔNG cần foregroundMatch double-check (gây race condition)
-    // from_windows_api = false: fallback path → vẫn check currentForegroundPkg
-    boolean fromWindowsApi = i.getBooleanExtra("from_windows_api", false);
-    if (!fromWindowsApi) {
-        // Fallback: backward compat cho các broadcast cũ không có flag
-        boolean currentIsHome = currentForegroundPkg.isEmpty()
-                || currentForegroundPkg.contains("launcher")
-                || currentForegroundPkg.contains("nexuslauncher")
-                || currentForegroundPkg.contains("quickstep")
-                || currentForegroundPkg.contains("systemui");
-        if (currentIsHome) return;
-        if (!currentForegroundPkg.equals(pkg)) return;
-    }
-
-    long now = System.currentTimeMillis();
-    if (isMorseLockActive && pkg.equals(lockedPkg)) return;
-    if (unlockedApps.contains(pkg)) return;
-
-    // V19.12.3.6.8: dismissedPkg có thời hạn 3 giây — tránh permanent dismiss
-    if (pkg.equals(dismissedPkg)) {
-        long dismissedAge = now - dismissedTime;
-        if (dismissedAge < 3000) return; // Còn trong grace period
-        else { dismissedPkg = ""; dismissedTime = 0; } // Hết hạn → reset
-    }
-
-    long thisPkgLockUntil = perPkgLockUntil.containsKey(pkg)
-        ? perPkgLockUntil.get(pkg) : 0L;
-    if (now < thisPkgLockUntil) {
-        Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-        kick.putExtra("act", "HOME");
-        sendBroadcast(kick);
-        return;
-    }
-
-    isMorseLockActive = true;
-    lockedPkg = pkg;
-    morseFailCount = 0;
-    currentMorseAttempt = "";
-    // V19.12.3.6.8: Đồng bộ currentForegroundPkg nếu đến từ windows API
-    if (fromWindowsApi) currentForegroundPkg = pkg;
-    if (morseEngine.tvMorseStatus != null) morseEngine.tvMorseStatus.setText("");
-    morseEngine.applyMorseTextStyle();
-    morseEngine.applyLockIconStyle();
-    morseEngine.updateLockIconPosition();
-    morseEngine.morseContainer.setVisibility(View.VISIBLE);
-    updateVisibility();
-            } else if (action.equals("com.manhmoc.edgebar.MORSE_LOCK_DISMISS")) {
-                isMorseLockActive = false;
-                morseFailCount = 0;
-                currentMorseAttempt = "";
-                lockedPkg = "";
-                hideMorseOverlayAtomic();
-                updateVisibility();
-            // [THÊM] thay bằng — đổi tên biến loop từ i sang j để tránh trùng tham số Intent i:
-} else if (action.equals("com.manhmoc.edgebar.UNINSTALL_DETECTED")) {
-    if (!isUninstallGuardActive && !isMorseLockActive) engageAdminGuard(1);
-} else if (action.equals("com.manhmoc.edgebar.ADMIN_REVOKE_DETECTED")) {
-    if (!isUninstallGuardActive && !isMorseLockActive) engageAdminGuard(2);
-} else if ("com.manhmoc.edgebar.PAUSE_WM_OPS".equals(action)) {
-    // Fix Bug 6: Ẩn tất cả bars — KHÔNG removeView, giữ token WM hợp lệ
-    // Pixel 2XL opt: setVisibility GONE = zero GPU cost trên Adreno 540
-    // QUAN TRỌNG: dùng biến j thay vì i để tránh trùng tên tham số Intent i
-    for (int j = 0; j < 5; j++) if (bars[j] != null) bars[j].setVisibility(View.GONE);
-    for (int j = 0; j < 4; j++) if (corners[j] != null) corners[j].setVisibility(View.GONE);
-    for (int j = 0; j < 8; j++) if (morseEngine.mBars[j] != null) morseEngine.mBars[j].setVisibility(View.GONE);
-    for (int j = 0; j < 4; j++) if (morseEngine.mCorners[j] != null) morseEngine.mCorners[j].setVisibility(View.GONE);
-    if (!isMorseLockActive && morseEngine.morseContainer != null)
-        morseEngine.morseContainer.setVisibility(View.GONE);
+            } else if ("com.manhmoc.edgebar.PAUSE_WM_OPS".equals(action)) {
+                // Fix Bug 6: Ẩn tất cả bars — KHÔNG removeView, giữ token WM hợp lệ
+                // Pixel 2XL opt: setVisibility GONE = zero GPU cost trên Adreno 540
+                for (int j = 0; j < 5; j++) if (bars[j] != null) bars[j].setVisibility(View.GONE);
+                for (int j = 0; j < 4; j++) if (corners[j] != null) corners[j].setVisibility(View.GONE);
             } else if ("com.manhmoc.edgebar.RESUME_WM_OPS".equals(action)) {
-    // Resume: vẽ lại tất cả theo state hiện tại
-    if (i.getBooleanExtra("acc_cache_reset", false)) {
-        accCheckTimestamp = 0; // Reset cache nếu cần
-    }
-    updateVisibility();
-            } else if (action.equals("com.manhmoc.edgebar.TOGGLE_MORSE")) {
-                boolean wasOn = prefs.getBoolean("morse_mode_en", false);
-                boolean newOn = !wasOn;
-                prefs.edit().putBoolean("morse_mode_en", newOn).apply();
-                if (!newOn) {
-                    // [FIX #3] Tắt qua QS Tile -> dọn sạch NGAY mọi trạng thái khoá đang
-                    // dang dở, không chờ app hiện tại tự thoát. Đảm bảo MorseLock biến mất
-                    // tức thì thay vì còn treo lại ở Anima/Recents.
-                    isMorseLockActive = false;
-                    isCoveringRecents = false;
-                    isUninstallGuardActive = false;
-                    uninstallGuardType = 0;
-                    currentMorseAttempt = "";
-                    morseFailCount = 0;
-                    lockedPkg = "";
-                    if (countdownRunnable != null) countdownHandler.removeCallbacks(countdownRunnable);
-                    if (warningAnimator != null) warningAnimator.cancel();
-                    if (morseEngine.morseContainer != null) {
-                        morseEngine.morseContainer.setVisibility(View.GONE);
-                        morseEngine.morseContainer.setOnTouchListener(null);
-                    }
-                    if (morseEngine.tvLockIcon != null) morseEngine.tvLockIcon.setOnTouchListener(null);
+                if (i.getBooleanExtra("acc_cache_reset", false)) {
+                    accCheckTimestamp = 0;
                 }
                 updateVisibility();
-                // [FIX #3] checkSelfStop() sẽ tự stopSelf() nếu không còn lý do gì khác
-                // giữ service sống (oldHomeOn/preview/isMorseLockActive đều false) —
-                // đây chính là "deep sleep" cho cả MorseLock lẫn Homeb cùng lúc, vì cả
-                // hai đều được vẽ bởi chính HomescreenService này.
-                if (!newOn) checkSelfStop();
-} else if (action.equals(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)) {
-    String reason = i.getStringExtra("reason");
-    if ("homekey".equals(reason)) {
-        isForceHome = true;
-        if (isMorseLockActive) scheduleSuicideCheck();
-    } else if ("recentapps".equals(reason)) {
-        if (!prefs.getBoolean("morse_mode_en", false)) return; // [FIX #3]
-        // [YÊU CẦU #7] MorseLock cover Recents screen
-        String locklist = prefs.getString("locklist", "");
-        boolean hasLockedApp = false;
-        if (!lockedPkg.isEmpty() && !locklist.isEmpty()) {
-            for (String pkg : locklist.split(",")) {
-                if (pkg.trim().equals(lockedPkg)) {
-                    hasLockedApp = true;
-                    break;
-                }
+            } else if ("com.manhmoc.edgebar.OPEN_PANEL_REQUEST".equals(action)) {
+                String panelId = i.getStringExtra("panel_id");
+                if (panelEngine != null && panelId != null) panelEngine.togglePanel(panelId);
+            } else if ("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED".equals(action)) {
+                if (panelEngine != null) panelEngine.rebuildAll();
+            } else if ("com.manhmoc.edgebar.PANEL_TEST_TOGGLE".equals(action)) {
+                String panelId = i.getStringExtra("panel_id");
+                if (panelEngine != null && panelId != null) panelEngine.setForceTest(panelId, i.getBooleanExtra("on", false));
             }
         }
-        if (hasLockedApp && !isMorseLockActive) {
-            showMorseOSCover();  // ← COVER Recents
-        }
-    }
-} else if (action.equals("com.manhmoc.edgebar.MORSE_OS_RECENTS_SHOW")) {
-    if (!prefs.getBoolean("morse_mode_en", false)) return; // [FIX #3]
-    String lastPkg = i.getStringExtra("last_pkg");
-    if (lastPkg == null) lastPkg = "";
-    boolean shouldCover = false;
-    String locklist = prefs.getString("locklist", "");
-    
-    if (!lastPkg.isEmpty() && !locklist.isEmpty()) {
-        for (String pkg : locklist.split(",")) {
-            if (pkg.trim().equals(lastPkg)) { 
-                shouldCover = true; 
-                break; 
-            }
-        }
-    }
-    
-    // [FIX-LOGIC] NẾU lastPkg đã được user dismiss/unlock, TUYỆT ĐỐI KHÔNG cover Recents nữa.
-    if (shouldCover && unlockedApps.contains(lastPkg)) {
-        shouldCover = false;
-    }
-
-    if (shouldCover && !isMorseLockActive && !isUninstallGuardActive && !isCoveringRecents) {
-        showMorseOSCover();
-    }
-} else if (action.equals("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE")) {
-    if (isCoveringRecents && !isMorseLockActive && !isPreviewMorse) {
-        isCoveringRecents = false;
-        if (morseEngine.morseContainer != null) {
-            morseEngine.morseContainer.setVisibility(View.GONE);
-            morseEngine.morseContainer.setOnTouchListener(null);
-        }
-        if (morseEngine.tvLockIcon != null) morseEngine.tvLockIcon.setOnTouchListener(null);
-        }
-    } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
-    // [FIX-RELOCK] Không xóa sạch unlockedApps nữa. Chỉ:
-    // 1. Nếu app đang foreground lúc tắt màn là app trong locklist -> tước quyền "đã unlock" của
-    //    RIÊNG app đó (để chắc chắn nó sẽ hỏi lại khi mở màn), các app đã unlock khác giữ nguyên.
-    // 2. Ghi nhớ pkg đó vào pendingRelockOnWakePkg để USER_PRESENT xử lý NGAY, không cần đợi
-    //    accessibility event hay debounce 600ms -> tránh cảm giác "hỏi 2 lần".
-    String fgPkg = currentForegroundPkg;
-    String locklistNow = prefs.getString("locklist", "");
-    boolean fgIsLocked = false;
-    if (!fgPkg.isEmpty() && !locklistNow.isEmpty()) {
-        for (String pkg : locklistNow.split(",")) {
-            if (pkg.trim().equals(fgPkg)) { fgIsLocked = true; break; }
-        }
-    }
-    pendingRelockOnWakePkg = fgIsLocked ? fgPkg : "";
-    if (fgIsLocked) unlockedApps.remove(fgPkg);
-
-    dismissedPkg = "";
-    dismissedTime = 0;
-    lastUnlockedTime = 0;
-    relockHandler.removeCallbacks(relockRunnable);
-    relockScheduledTime = 0;
-    pendingRelockPkg = "";
-    isMorseLockActive = false;
-isUninstallGuardActive = false;
-uninstallGuardType = 0;
-uninstallGuardFailCount = 0;
-isCoveringRecents = false;
-if (morseEngine.morseContainer != null) morseEngine.morseContainer.setOnTouchListener(null);
-if (morseEngine.tvLockIcon != null) morseEngine.tvLockIcon.setOnTouchListener(null);
-lockedPkg = "";
-    currentMorseAttempt = "";
-    morseFailCount = 0;
-    isCountingDown = false;
-    if (countdownRunnable != null) countdownHandler.removeCallbacks(countdownRunnable);
-    if (warningAnimator != null) warningAnimator.cancel();
-
-    if (morseEngine.morseContainer != null) {
-        morseEngine.morseContainer.setVisibility(View.GONE);
-        if (bgView != null) bgView.setBackgroundColor(Color.TRANSPARENT);
-    }
-} else if (action.equals(Intent.ACTION_USER_PRESENT)) {
-    dismissedPkg = "";
-    // [FIX-RELOCK] Xử lý NGAY LẬP TỨC, đồng bộ, không postDelayed 600ms — tránh trùng lặp
-    // với đường engage qua accessibility event, đây chính là nguyên nhân "hỏi 2 lần".
-    final String pendingPkg = pendingRelockOnWakePkg;
-    pendingRelockOnWakePkg = "";
-    if (!pendingPkg.isEmpty() && pendingPkg.equals(currentForegroundPkg)) {
-        isMorseLockActive = true;
-        lockedPkg = pendingPkg;
-        morseFailCount = 0;
-        currentMorseAttempt = "";
-        if (morseEngine.tvMorseStatus != null) morseEngine.tvMorseStatus.setText("");
-        morseEngine.applyMorseTextStyle();
-        morseEngine.applyLockIconStyle();
-        morseEngine.updateLockIconPosition();
-        if (morseEngine.morseContainer != null) morseEngine.morseContainer.setVisibility(View.VISIBLE);
-        updateVisibility();
-    }
-    // Nếu không đủ điều kiện relock tức thì (VD: giữa lúc màn tắt user đã lỡ về Home rồi mới
-    // mở màn), giữ lại đường dự phòng cũ để bắt các trường hợp lệch nhịp accessibility event:
-    else {
-        new Handler().postDelayed(() -> {
-            String activePkg = currentForegroundPkg;
-            boolean isRealHome = activePkg.isEmpty()
-                    || activePkg.contains("launcher")
-                    || activePkg.contains("nexuslauncher")
-                    || activePkg.contains("quickstep")
-                    || activePkg.contains("systemui");
-            if (!isRealHome && !unlockedApps.contains(activePkg) && !isMorseLockActive) {
-                String locklist = prefs.getString("locklist", "");
-                if (!locklist.isEmpty()) {
-                    for (String pkg : locklist.split(",")) {
-                        if (pkg.trim().equals(activePkg)) {
-                            Intent engage = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
-                            engage.putExtra("pkg", activePkg);
-                            sendBroadcast(engage);
-                            break;
-                        }
-                    }
-                }
-            }
-        }, 600);
-    }
-} else if ("com.manhmoc.edgebar.OPEN_PANEL_REQUEST".equals(action)) {
-    String panelId = i.getStringExtra("panel_id");
-    if (panelEngine != null && panelId != null) panelEngine.togglePanel(panelId);
-} else if ("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED".equals(action)) {
-    if (panelEngine != null) panelEngine.rebuildAll();
-} else if ("com.manhmoc.edgebar.PANEL_TEST_TOGGLE".equals(action)) {
-    String panelId = i.getStringExtra("panel_id");
-    if (panelEngine != null && panelId != null) panelEngine.setForceTest(panelId, i.getBooleanExtra("on", false));
-}
-    } // đóng onReceive()
-};
+    };
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         isRunning = true;
@@ -624,15 +291,7 @@ lockedPkg = "";
      * Service chỉ cần chạy khi: old Home overlay ON, HOẶC MorseLock ON.
      * Nếu cả hai đều OFF → tự dừng để giải phóng RAM (Pixel 2XL opt).
      */
-    private void checkSelfStop() {
-    boolean morseOn = prefs.getBoolean("morse_mode_en", false);
-    boolean oldHomeOn = prefs.getBoolean("shortcut_home_on", false);
-    boolean previewHomeOn = prefs.getBoolean("preview_home", false);
-    if (!morseOn && !oldHomeOn && !isMorseLockActive && !previewHomeOn) {
-        stopSelf();
-    }
-}
-private boolean isAccEnabled() {
+    private boolean isAccEnabled() {
     String s = android.provider.Settings.Secure.getString(getContentResolver(),
         android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
     return s != null && s.contains(getPackageName() + "/" + EdgeBarService.class.getName());
@@ -652,7 +311,6 @@ private boolean isAccEnabled() {
 // giá trị true vĩnh viễn gây overlay không tương tác được. Zero cost: 1 lần ghi.
 prefs.edit()
     .putBoolean("preview_lock", false)
-    .putBoolean("preview_morse", false)
     .putBoolean("preview_homacc", false)
     .putBoolean("preview_home", false)
     .apply();
@@ -677,14 +335,6 @@ filter.addAction("com.manhmoc.edgebar.TEST_ANIM");
 // [THÊM] 2 dòng ngay sau:
 filter.addAction("com.manhmoc.edgebar.PAUSE_WM_OPS");
 filter.addAction("com.manhmoc.edgebar.RESUME_WM_OPS");
-// IPC_ACTION xử lý trong EdgeBarService, không cần ở HomescreenService
-filter.addAction("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
-filter.addAction("com.manhmoc.edgebar.MORSE_LOCK_DISMISS");
-filter.addAction("com.manhmoc.edgebar.TOGGLE_MORSE");
-filter.addAction("com.manhmoc.edgebar.UNINSTALL_DETECTED");
-filter.addAction("com.manhmoc.edgebar.ADMIN_REVOKE_DETECTED");
-filter.addAction("com.manhmoc.edgebar.MORSE_OS_RECENTS_SHOW");
-filter.addAction("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE");
 // CODE MỚI — thêm 2 dòng:
 filter.addAction("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
 filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
@@ -767,55 +417,29 @@ WindowManager.LayoutParams p = new WindowManager.LayoutParams(
         // CODE MỚI — thêm dòng này:
 panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ false); // HomescreenService = IAO
         panelEngine.rebuildAll();
-  morseEngine = new MorseLockEngine(this, wm, prefs, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY);
-morseEngine.build();
-        // V19.12.3.6.7 BUG FIX: Sync biến RAM trước khi morseEngine.reloadBackground()
-        // Nếu không sync, cachedBgAlpha = 180 mặc định dù user đã chỉnh khác
-        // → onDraw() vẽ sai alpha, ảnh nền không hiển thị đúng
         updateVisibility();
         sendSyncState();
     }
-
     private final Handler debounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable debounceRunnable = null;
 private final Handler panelDebounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable panelDebounceRunnable = null;
-
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     if (k == null) return;
 
-    // V19.12.3.6.6: Whitelist — bỏ qua key lạ của Zalo/Messenger/app bên thứ ba
     boolean isOurKey = false;
     String[] ourPrefixes =
-    {"lock_","home_","morse_","homacc_","anim_","vib_","hold_",
-     // [FIX] Key thật của Panel là "pack_panel_<id>_..." — "panel" không khớp,
-     // khiến mọi thay đổi slider Panel bị chặn ngay ở whitelist trong service này.
+    {"lock_","home_","homacc_","anim_","vib_","hold_",
      "pack_panel_",
      "blacklist","locklist","avoid_kbd","shortcut_","preview_","lang_","ytdl_",
      "intent_","tile_","macro_","i1_","i2_","i3_","i4_","i5_","i6_","i7_",
      "i8_","i9_","i10_","i11_","i12_","i13_","i14_","i15_"};
     for (String prefix : ourPrefixes)
         if (k.startsWith(prefix) || k.equals(prefix)) { isOurKey = true; break; }
-    if (!isOurKey) return; // Bỏ qua hoàn toàn, không tốn thêm CPU
+    if (!isOurKey) return;
 
-    // V19.12.3.6.6 FIX: morse_mode_en thay đổi → updateVisibility NGAY, không debounce
-    // Đảm bảo MorseLock hiện/ẩn tức thì khi QS Tile bật/tắt
-    if (k.equals("morse_mode_en")) { updateVisibility(); return; }
-
-    // Xử lý ngay các key cần phản hồi tức thì (không debounce)
-    if (k.equals("morse_bg_type") || k.equals("morse_bg_image")) { morseEngine.reloadBackground(); return; }
-    if (k.equals("morse_bg_alpha") && bgView != null) {
-        cachedBgAlpha = p.getInt("morse_bg_alpha", 180);
-        bgView.invalidate();
-        return;
-    }
-    if (k.equals("anim_color") || k.equals("morse_text_blur") || k.equals("morse_text_neon")) {
-        morseEngine.applyMorseTextStyle(); morseEngine.applyLockIconStyle(); return;
-    }
-    if (k.equals("morse_lock_icon_y")) { morseEngine.updateLockIconPosition(); return; }
     if (k.startsWith("anim_") && fV != null) { fV.updateStyle(); return; }
 
-    // panel_ → debounce ngắn, update tại chỗ, KHÔNG chạy updateVisibility() nặng
     if (k.startsWith("pack_panel_")) {
         if (panelEngine == null) return;
         if (panelDebounceRunnable != null) panelDebounceHandler.removeCallbacks(panelDebounceRunnable);
@@ -823,7 +447,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         panelDebounceHandler.postDelayed(panelDebounceRunnable, 120);
         return;
     }
-if (k != null && k.startsWith("shortcut_") && k.endsWith("_icon_override")) {
+    if (k.startsWith("shortcut_") && k.endsWith("_icon_override")) {
         if (panelEngine == null) return;
         final String key = k;
         if (panelDebounceRunnable != null) panelDebounceHandler.removeCallbacks(panelDebounceRunnable);
@@ -831,7 +455,7 @@ if (k != null && k.startsWith("shortcut_") && k.endsWith("_icon_override")) {
         panelDebounceHandler.postDelayed(panelDebounceRunnable, 120);
         return;
     }
-    // Debounce 500ms cho updateVisibility — debounceRunnable tự xóa sau khi fire
+
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> {
         debounceRunnable = null;
@@ -844,346 +468,93 @@ if (k != null && k.startsWith("shortcut_") && k.endsWith("_icon_override")) {
      *  chính là nguyên nhân nền đen biến mất trước, bar/corner biến mất trễ hoặc
      *  thấp thoáng hiện lại trên Home). Zero RAM thêm: chỉ lặp lại View đã có sẵn.
      */
-    private void hideMorseOverlayAtomic() {
-        if (morseEngine.morseContainer != null) morseEngine.morseContainer.setVisibility(View.GONE);
-        for (int i = 0; i < 8; i++) if (morseEngine.mBars[i] != null) morseEngine.mBars[i].setVisibility(View.GONE);
-        for (int i = 0; i < 4; i++) if (morseEngine.mCorners[i] != null) morseEngine.mCorners[i].setVisibility(View.GONE);
-    }
-
-private void showMorseOSCover() {
-        if (morseEngine.morseContainer == null) return;
-        if (isMorseLockActive || isPreviewMorse || isUninstallGuardActive) return; 
-
-        isCoveringRecents = true;
-        morseEngine.morseContainer.setVisibility(View.VISIBLE);
-        morseEngine.updateLockIconPosition();
-        morseEngine.applyLockIconStyle();
-        if (morseEngine.tvLockIcon != null) morseEngine.tvLockIcon.setVisibility(View.VISIBLE);
-
-        // [FIX-BUG-2] BỎ FLAG_NOT_TOUCHABLE — cờ này chặn TOÀN BỘ window, khiến morseEngine.tvLockIcon
-        // bên trong (dù có OnTouchListener riêng) không bao giờ nhận được sự kiện chạm.
-        // Đây là nguyên nhân icon ổ khóa "chết", không tắt được overlay che Recents.
-        WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseEngine.morseContainer.getLayoutParams();
-        p.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-        wm.updateViewLayout(morseEngine.morseContainer, p);
-        // Container tự "nuốt" mọi chạm KHÔNG trúng icon (return true) để không lộ/tương tác
-        // xuyên xuống Recents thật bên dưới — nhưng vẫn cho phép morseEngine.tvLockIcon (view con, được
-        // hit-test trước) nhận đúng sự kiện của riêng nó.
-        morseEngine.morseContainer.setOnTouchListener((v, e) -> true);
-
-        if (morseEngine.tvLockIcon != null) {
-            morseEngine.tvLockIcon.setOnTouchListener((v, e) -> {
-                if (e.getAction() == MotionEvent.ACTION_UP) {
-                    dismissMorseOSCover();
-                }
-                return true;
-            });
-        }
-    }
-   private void dismissMorseOSCover() {
-        isCoveringRecents = false;
-        if (morseEngine.morseContainer != null) {
-            morseEngine.morseContainer.setOnTouchListener(null);
-        }
-        // [FIX #2] Ẩn atomic — trước đây bar/corner vẫn còn VISIBLE ở nhánh này,
-        // chỉ được dọn khi có 1 sự kiện khác vô tình gọi updateVisibility() sau đó.
-        hideMorseOverlayAtomic();
-        new Handler().postDelayed(() -> {
-            Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-            kick.putExtra("act", "HOME");
-            sendBroadcast(kick);
-        }, 50);
-    }
     private void updateVisibility() {
-        // [FIX-BUG-4-7] ...
-        if (isMorseLockActive) {
-    scheduleSuicideCheck();
-}
-        // SAU:
-if (morseEngine.morseContainer != null && morseEngine.morseContainer.getVisibility() == View.VISIBLE
-        && !isUninstallGuardActive && !isCoveringRecents) {
-    if (morseEngine.tvLockIcon != null) {
-        morseEngine.tvLockIcon.setOnTouchListener((v, event) -> {
-    if (event.getAction() == MotionEvent.ACTION_UP) {
-        // Yêu cầu 10: 1 chạm vào ổ khóa → crash app bị khóa + về HOME
-        // Dùng UsageStats để xác định package đang foreground một cách chính xác
-        String pkgToKill = lockedPkg.isEmpty() ? currentForegroundPkg : lockedPkg;
-        boolean isCurrentlyOnHome =
-            currentForegroundPkg.isEmpty()
-            || currentForegroundPkg.contains("launcher")
-            || currentForegroundPkg.contains("nexuslauncher")
-            || currentForegroundPkg.contains("quickstep")
-            || currentForegroundPkg.contains("systemui")
-            || isForceHome;
+        if (panelEngine != null) panelEngine.rebuildAll();
 
-        if (!isCurrentlyOnHome && !pkgToKill.isEmpty()) {
-            // Bước 1: Về HOME ngay lập tức
-            Intent homeIntent = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-            homeIntent.putExtra("act", "HOME");
-            sendBroadcast(homeIntent);
+        boolean isUnlocked = !km.isKeyguardLocked();
+        boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
+        boolean hideNormal = isBl;
+        boolean pushForKbd = avoidKbd && lastKbdHeight > 0;
 
-            // Bước 2: Force-stop app sau khi đã về HOME (delay nhỏ tránh ANR)
-            new Handler().postDelayed(() -> {
-                try {
-                    android.app.ActivityManager am =
-                        (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
-                    am.killBackgroundProcesses(pkgToKill);
-                    // Dùng usage stats để xác nhận app đã thực sự bị kill
-                    android.app.usage.UsageStatsManager usm =
-                        (android.app.usage.UsageStatsManager)
-                        getSystemService(Context.USAGE_STATS_SERVICE);
-                    long now = System.currentTimeMillis();
-                    // Xóa trạng thái unlock để MorseLock không tái hiện ngay
-                    unlockedApps.remove(pkgToKill);
-                } catch (Exception ignored) {}
-            }, 150);
-
-            // Bước 3: Reset MorseLock state — ổn định sau crash (Yêu cầu 10)
-            // Delay 500ms để chắc chắn HOME đã render xong trước khi reset
-            new Handler().postDelayed(() -> {
-                isMorseLockActive = false;
-                isForceHome = false;
-                morseFailCount = 0;
-                currentMorseAttempt = "";
-                lockedPkg = "";
-                // QUAN TRỌNG: KHÔNG thêm pkg vào unlockedApps
-                // → Khi user mở lại app, MorseLock sẽ hiện đúng
-                hideMorseOverlayAtomic(); // [FIX #2] ẩn nền đen + bar/corner cùng lúc
-                updateVisibility();
-            }, 500);
-} else if (isCurrentlyOnHome) {
-// [FIX-BUG-9] Tap icon trên Home → DISMISS hoàn toàn, không bao giờ hiện lại
-String pkgToDismiss = lockedPkg.isEmpty() ? currentForegroundPkg : lockedPkg;
-if (!pkgToDismiss.isEmpty()
-&& !pkgToDismiss.contains("launcher")
-&& !pkgToDismiss.contains("systemui")
-&& !pkgToDismiss.contains("quickstep")) {
-unlockedApps.add(pkgToDismiss);
-dismissedPkg = pkgToDismiss;
-dismissedTime = System.currentTimeMillis(); // V19.12.3.6.8
-}
-isCoveringRecents = false;
-isMorseLockActive = false;
-isForceHome = false;
-lockedPkg = "";
-currentMorseAttempt = "";
-morseFailCount = 0;
-isCountingDown = false;
-isUnlockCooldown = false;
-unlockCooldownHandler.removeCallbacksAndMessages(null);
-if (countdownRunnable != null) countdownHandler.removeCallbacks(countdownRunnable);
-if (warningAnimator != null) warningAnimator.cancel();
-if (bgView != null) {
-bgView.setBackgroundColor(Color.TRANSPARENT);
-bgView.invalidate();
-}
-// [FIX #2] Ẩn atomic (nền đen + bar/corner CÙNG lúc) thay vì chỉ ẩn
-// morseEngine.morseContainer rồi trông chờ broadcast SYNC_STATE bất đồng bộ mới dọn
-// bar/corner — đây chính là nguyên nhân bar/corner biến mất trễ/thấp
-// thoáng hiện lại trên Home.
-hideMorseOverlayAtomic();
-sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-}
-            }
-            return true;
-        });
-    }
-// CODE MỚI — thêm ngay trước dấu } đóng hàm:
-if (panelEngine != null) panelEngine.rebuildAll();
-} // Khối lệnh trên kết thúc an toàn, hàm updateVisibility() tiếp tục chạy bên dưới
-       boolean isUnlocked = !km.isKeyguardLocked();
-boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
-boolean hideNormal = isBl; // isKbd không ẩn nữa
-// [FIX] Bỏ điều kiện isKbd — chỉ cần lastKbdHeight > 0, giá trị này giờ do
-// WindowInsets.Type.ime() cấp trực tiếp, không còn phụ thuộc event suy luận.
-boolean pushForKbd = avoidKbd && lastKbdHeight > 0;
         // DUAL-SOUL: Chỉ 1 trong 2 động cơ được phép vẽ tại 1 thời điểm
-// → tiết kiệm tuyệt đối RAM/GPU Adreno 540 trên Pixel 2XL
-// [FIX] AccessibleHomeService.isRunning chỉ được set false BÊN TRONG onDestroy() của
-// chính service đó — có độ trễ so với thời điểm Accessibility thực sự bị tắt (vì
-// stopService() là bất đồng bộ). Nếu Homeb được kích hoạt đúng vào khoảng trễ này,
-// cờ cũ khiến shouldRenderOldHome tính sai -> Homeb bị "kẹt ẩn" sau khi về Home.
-// Kiểm tra thêm trạng thái Accessibility THẬT từ Settings (ground truth, không trễ)
-// để loại bỏ hoàn toàn race condition này.
-boolean accHomeRunning = AccessibleHomeService.isRunning && isAccEnabled();
-boolean oldHomeEnabled = HomescreenService.isRunning && prefs.getBoolean("shortcut_home_on", false);
-boolean previewHomeOn = prefs.getBoolean("preview_home", false);
-boolean shouldRenderOldHome = isUnlocked && !hideNormal && !accHomeRunning && (oldHomeEnabled || previewHomeOn);
-// Pixel 2XL: giải phóng SurfaceFlinger layer khi overlay tắt
-if (accHomeRunning) {
-    for (int i = 0; i < 5; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
-    for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
-}
-        isPreviewMorse = prefs.getBoolean("preview_morse", false);
-        // Kiểm tra xem ứng dụng hiện tại có bị khóa không
-        // Kiểm tra phạt theo đúng pkg đang bị khóa — không ảnh hưởng app khác
-long thisLockUntil = perPkgLockUntil.containsKey(lockedPkg)
-    ? perPkgLockUntil.get(lockedPkg) : 0L;
-boolean timeLocked = (System.currentTimeMillis() < thisLockUntil);
-if ((isMorseLockActive && !timeLocked) || isPreviewMorse || isUninstallGuardActive || isCoveringRecents) {
-            if (morseEngine.morseContainer.getVisibility() != View.VISIBLE) {
-    // FIX-TEXT-1: Luôn apply style khi container vừa được hiện
-    morseEngine.applyMorseTextStyle();
-    morseEngine.applyLockIconStyle();
-    morseEngine.updateLockIconPosition();
-    morseEngine.morseContainer.setVisibility(View.VISIBLE);
-}
-            if (isPreviewMorse) {
-                WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseEngine.morseContainer.getLayoutParams();
-                p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                wm.updateViewLayout(morseEngine.morseContainer, p);
-                morseEngine.morseContainer.setOnTouchListener((v, e) -> false);
-            } else if (isCoveringRecents) {
-                // Giữ đúng cấu hình đã set trong showMorseOSCover() — KHÔNG ghi đè lại touchable/listener ở đây.
-            } else {
-                WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseEngine.morseContainer.getLayoutParams();
-                p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                wm.updateViewLayout(morseEngine.morseContainer, p);
-                morseEngine.morseContainer.setOnTouchListener((v, e) -> true);
-            }
+        // → tiết kiệm tuyệt đối RAM/GPU Adreno 540 trên Pixel 2XL
+        boolean accHomeRunning = AccessibleHomeService.isRunning && isAccEnabled();
+        boolean oldHomeEnabled = HomescreenService.isRunning && prefs.getBoolean("shortcut_home_on", false);
+        boolean previewHomeOn = prefs.getBoolean("preview_home", false);
+        boolean shouldRenderOldHome = isUnlocked && !hideNormal && !accHomeRunning && (oldHomeEnabled || previewHomeOn);
 
+        if (accHomeRunning) {
             for (int i = 0; i < 5; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
             for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
+        }
 
-            for (int i = 0; i < 8; i++) {
-                if (morseEngine.mBars[i] == null) continue;
-                boolean en = prefs.getBoolean("morse_" + M_BARS[i] + "_en", false);
-                morseEngine.mBars[i].setVisibility(en ? View.VISIBLE : View.GONE);
-                if (en) {
-                    int alpha = prefs.getInt("morse_" + M_BARS[i] + "_alpha", 50);
-                    int w = prefs.getInt("morse_" + M_BARS[i] + "_w", 300);
-                    int h = prefs.getInt("morse_" + M_BARS[i] + "_h", 60);
-                    int x = prefs.getInt("morse_" + M_BARS[i] + "_x", 0);
-                    int y = prefs.getInt("morse_" + M_BARS[i] + "_y", 0);
-                    int visMode = prefs.getInt("morse_" + M_BARS[i] + "_vis_mode", 0);
-                    int hideDelay = prefs.getInt("morse_corner_hide_dur", 2500);
-                    ((MorseBarView) morseEngine.mBars[i]).updateProps(alpha, visMode, hideDelay);
-                    int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-                    if (isPreviewMorse) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                    else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseEngine.mBars[i].getLayoutParams();
-                    p.flags = baseFlags;
-                    p.width = w;
-                    p.height = h;
-                    p.x = x;
-                    p.y = y;
-                    p.gravity = M_GRAV[i];
-                    updateLayoutIfChanged(morseEngine.mBars[i], p);
-                    if (!isPreviewMorse) applyAntiTapjacking(morseEngine.mBars[i], w, h);
-                }
+        boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
+        for (int i = 0; i < 5; i++) {
+            if (bars[i] == null) continue;
+            boolean en = prefs.getBoolean("home_" + BARS[i] + "_en", false);
+            bars[i].setVisibility((en && shouldRenderOldHome) ? View.VISIBLE : View.GONE);
+            if (en && shouldRenderOldHome) {
+                int alpha = (isPreviewLock && !previewHomeOn) ? 0 : prefs.getInt("home_" + BARS[i] + "_alpha", 50);
+                int w = prefs.getInt("home_" + BARS[i] + "_w", 300);
+                int h = prefs.getInt("home_" + BARS[i] + "_h", 60);
+                int x = prefs.getInt("home_" + BARS[i] + "_x", 0);
+                int y = prefs.getInt("home_" + BARS[i] + "_y", 0);
+                GradientDrawable gd = new GradientDrawable();
+                gd.setColor(Color.argb(alpha, 96, 125, 139));
+                gd.setCornerRadius(24f);
+                bars[i].setBackground(gd);
+                int priMode = prefs.getInt("home_" + BARS[i] + "_pri_mode", 0);
+                int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+                if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+                WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams();
+                p.flags = baseFlags;
+                p.width = w;
+                p.height = h;
+                p.x = x;
+                int pushY = (pushForKbd && (i==0 || i==1)) ? lastKbdHeight : 0;
+                p.y = y + pushY;
+                p.gravity = GRAV[i];
+                updateLayoutIfChanged(bars[i], p);
+                if (priMode == 0) applyAntiTapjacking(bars[i], w, h);
             }
-            for (int i = 0; i < 4; i++) {
-                if (morseEngine.mCorners[i] == null) continue;
-                boolean cornEn = prefs.getBoolean("morse_corner_" + CORNERS[i] + "_en", false);
-                morseEngine.mCorners[i].setVisibility(cornEn ? View.VISIBLE : View.GONE);
-                if (cornEn) {
-                    String ck = "morse_corner_" + CORNERS[i] + "_";
-                    int moonAlpha = prefs.getInt("morse_corner_moon_alpha", 100);
-                    int strokeAlpha = prefs.getInt("morse_corner_stroke_alpha", 200);
-                    int hideDelay = prefs.getInt("morse_corner_hide_dur", 2500);
-                    int visMode = prefs.getInt(ck + "vis_mode", 0);
-                    boolean isAuto = (visMode == 1);
-                    boolean isInv = (visMode == 2);
-                    ((CornerView) morseEngine.mCorners[i]).updateProps(prefs.getInt("morse_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv);
-                    int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-                    if (isPreviewMorse) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                    else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) morseEngine.mCorners[i].getLayoutParams();
-                    p.flags = baseFlags;
-                    p.gravity = C_GRAV[i];
-                    int wPref = prefs.getInt(ck + "w", 100);
-                    int hPref = prefs.getInt(ck + "h", 100);
-                    int mwPref = prefs.getInt(ck + "moon_w", 100);
-                    int mhPref = prefs.getInt(ck + "moon_h", 100);
-                    int mxOffset = Math.abs(prefs.getInt(ck + "moon_x", 1250) - 1250);
-                    int myOffset = Math.abs(prefs.getInt(ck + "moon_y", 1250) - 1250);
-                    p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset);
-                    p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
-                    p.x = prefs.getInt(ck + "x", 0);
-                    p.y = prefs.getInt(ck + "y", 0);
-                    updateLayoutIfChanged(morseEngine.mCorners[i], p);
-                    if (!isPreviewMorse) applyAntiTapjacking(morseEngine.mCorners[i], p.width, p.height);
-                }
-            }
-        } else {
-            if (morseEngine.morseContainer.getVisibility() != View.GONE) {
-                morseEngine.morseContainer.setVisibility(View.GONE);
-            }
-            for (int i = 0; i < 8; i++) if (morseEngine.mBars[i] != null) morseEngine.mBars[i].setVisibility(View.GONE);
-            for (int i = 0; i < 4; i++) if (morseEngine.mCorners[i] != null) morseEngine.mCorners[i].setVisibility(View.GONE);
-
-            boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
-            for (int i = 0; i < 5; i++) { 
-                   if (bars[i] == null) continue; 
-                   boolean en = prefs.getBoolean("home_" + BARS[i] + "_en", false);
-                   bars[i].setVisibility((en && shouldRenderOldHome) ? View.VISIBLE : View.GONE); 
-                    if (en && shouldRenderOldHome) { 
-                    int alpha = (isPreviewLock && !previewHomeOn) ? 0 : prefs.getInt("home_" + BARS[i] + "_alpha", 50);
-                    int w = prefs.getInt("home_" + BARS[i] + "_w", 300);
-                    int h = prefs.getInt("home_" + BARS[i] + "_h", 60);
-                    int x = prefs.getInt("home_" + BARS[i] + "_x", 0);
-                    int y = prefs.getInt("home_" + BARS[i] + "_y", 0);
-                    GradientDrawable gd = new GradientDrawable();
-                    gd.setColor(Color.argb(alpha, 96, 125, 139));
-                    gd.setCornerRadius(24f);
-                    bars[i].setBackground(gd);
-                    int priMode = prefs.getInt("home_" + BARS[i] + "_pri_mode", 0);
-                    int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-                    if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                    else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams();
-                    p.flags = baseFlags;
-                    // Đã xóa toàn bộ logic Hybrid Type check - Tiết kiệm RAM và chu kỳ CPU
-                    p.width = w;
-                    p.height = h;
-                    p.x = x;
-                    int pushY = (pushForKbd && (i==0 || i==1)) ? lastKbdHeight : 0; // r,l = 2 bar đáy
-                    p.y = y + pushY;
-                    p.gravity = GRAV[i];
-                    updateLayoutIfChanged(bars[i], p);
-                    if (priMode == 0) applyAntiTapjacking(bars[i], w, h);
-                }
-            }
-            for (int i = 0; i < 4; i++) { 
-                    if (corners[i] == null) continue; 
-                    boolean cornEn = prefs.getBoolean("home_corner_" + CORNERS[i] + "_en", false);
-                    corners[i].setVisibility((cornEn && shouldRenderOldHome) ? View.VISIBLE : View.GONE); 
-                    if (cornEn && shouldRenderOldHome) { 
-                    String ck = "home_corner_" + CORNERS[i] + "_";
-                    int moonAlpha = isPreviewLock ? 0 : prefs.getInt("home_corner_moon_alpha", 100);
-                    int strokeAlpha = isPreviewLock ? 0 : prefs.getInt("home_corner_stroke_alpha", 200);
-                    int hideDelay = prefs.getInt("home_corner_hide_dur", 2500);
-                    int visMode = prefs.getInt(ck + "vis_mode", 0);
-                    boolean isAuto = (visMode == 1);
-                    boolean isInv = (visMode == 2);
-                    ((CornerView) corners[i]).updateProps(prefs.getInt("home_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv);
-                    int priMode = prefs.getInt(ck + "pri_mode", 0);
-                    int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-                    if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                    else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams();
-                    p.flags = baseFlags;
-                    p.gravity = C_GRAV[i];
-                    int wPref = prefs.getInt(ck + "w", 100);
-                    int hPref = prefs.getInt(ck + "h", 100);
-                    int mwPref = prefs.getInt(ck + "moon_w", 100);
-                    int mhPref = prefs.getInt(ck + "moon_h", 100);
-                    int mxOffset = Math.abs(prefs.getInt(ck + "moon_x", 1250) - 1250);
-                    int myOffset = Math.abs(prefs.getInt(ck + "moon_y", 1250) - 1250);
-                    p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset);
-                    p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
-                    int pushYc = (pushForKbd && (i==0 || i==1)) ? lastKbdHeight : 0; // br,bl = 2 góc đáy
-                    p.x = prefs.getInt(ck + "x", 0);
-                    p.y = prefs.getInt(ck + "y", 0) + pushYc;
-                    updateLayoutIfChanged(corners[i], p);
-                    if (priMode == 0) applyAntiTapjacking(corners[i], p.width, p.height);
-                }
+        }
+        for (int i = 0; i < 4; i++) {
+            if (corners[i] == null) continue;
+            boolean cornEn = prefs.getBoolean("home_corner_" + CORNERS[i] + "_en", false);
+            corners[i].setVisibility((cornEn && shouldRenderOldHome) ? View.VISIBLE : View.GONE);
+            if (cornEn && shouldRenderOldHome) {
+                String ck = "home_corner_" + CORNERS[i] + "_";
+                int moonAlpha = isPreviewLock ? 0 : prefs.getInt("home_corner_moon_alpha", 100);
+                int strokeAlpha = isPreviewLock ? 0 : prefs.getInt("home_corner_stroke_alpha", 200);
+                int hideDelay = prefs.getInt("home_corner_hide_dur", 2500);
+                int visMode = prefs.getInt(ck + "vis_mode", 0);
+                boolean isAuto = (visMode == 1);
+                boolean isInv = (visMode == 2);
+                ((CornerView) corners[i]).updateProps(prefs.getInt("home_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv);
+                int priMode = prefs.getInt(ck + "pri_mode", 0);
+                int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+                if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+                WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams();
+                p.flags = baseFlags;
+                p.gravity = C_GRAV[i];
+                int wPref = prefs.getInt(ck + "w", 100);
+                int hPref = prefs.getInt(ck + "h", 100);
+                int mwPref = prefs.getInt(ck + "moon_w", 100);
+                int mhPref = prefs.getInt(ck + "moon_h", 100);
+                int mxOffset = Math.abs(prefs.getInt(ck + "moon_x", 1250) - 1250);
+                int myOffset = Math.abs(prefs.getInt(ck + "moon_y", 1250) - 1250);
+                p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset);
+                p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
+                int pushYc = (pushForKbd && (i==0 || i==1)) ? lastKbdHeight : 0;
+                p.x = prefs.getInt(ck + "x", 0);
+                p.y = prefs.getInt(ck + "y", 0) + pushYc;
+                updateLayoutIfChanged(corners[i], p);
+                if (priMode == 0) applyAntiTapjacking(corners[i], p.width, p.height);
             }
         }
     }
-
     private void playAnim() {
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams();
         fp.width = WindowManager.LayoutParams.MATCH_PARENT;
@@ -1263,10 +634,6 @@ for (String a : acts) {
         if (a == null || a.equals("NONE")) return;
         try {
             switch (a) {
-                    case "TOGGLE_MORSE":
-                    Intent m = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE");
-                    sendBroadcast(m);
-                    break;
                 case "YTDL_DOWNLOAD":
                     try {
                         android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
@@ -1392,30 +759,7 @@ public SidebarTouchListener(String keyBase, View v) {
 }
         @Override
         public boolean onTouch(View v, MotionEvent e) {
-            if (isMorseLockActive || isPreviewMorse || isUninstallGuardActive) {
-                String mapped = morseEngine.mapComponentToNumber(prefKeyBase);
-                if (e.getAction() == MotionEvent.ACTION_DOWN) {
-                    if (mapped.equals("X")) {
-                        longPressTriggered = false;
-                        longPressHandler.postDelayed(() -> {
-                            longPressTriggered = true;
-                            morseEngine.handleMorseTap(prefKeyBase, myView, true);
-                        }, 600);
-                    } else {
-                        morseEngine.handleMorseTap(prefKeyBase, myView, false);
-                    }
-                } else if (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL) {
-                    if (mapped.equals("X")) {
-                        longPressHandler.removeCallbacksAndMessages(null);
-                        if (!longPressTriggered) {
-                            morseEngine.handleMorseTap(prefKeyBase, myView, false);
-                        }
-                    }
-                }
-                return true;
-            }
             if (myView != null && myView instanceof CornerView) ((CornerView) myView).triggerFlash();
-else if (myView != null && myView instanceof MorseBarView) ((MorseBarView) myView).triggerFlash();
 
 switch (e.getAction()) {
     case MotionEvent.ACTION_MOVE: {
@@ -1524,50 +868,6 @@ private void fireIntentById(String id) {
         }
     } catch (Exception e) {}
 }
-    private void scheduleSuicideCheck() {
-    // V19.12.3.6.6 THE FINAL JUDGMENT: Guard flag — nếu đã có check pending, KHÔNG đặt thêm
-    // Trước đây: updateVisibility() gọi scheduleSuicideCheck() → mỗi SYNC_STATE tạo thêm 1 runnable
-    // → hàng chục runnable chồng nhau → CPU wakelock không ngủ được khi dùng Zalo
-    if (suicideCheckPending) return;
-    suicideCheckPending = true;
-
-    if (suicideRunnable != null) suicideHandler.removeCallbacks(suicideRunnable);
-    suicideRunnable = () -> {
-        suicideCheckPending = false; // reset guard để lần sau có thể schedule lại
-
-        boolean foregroundIsLocked = false;
-        boolean foregroundIsHome = isForceHome
-                || currentForegroundPkg.isEmpty()
-                || currentForegroundPkg.contains("launcher")
-                || currentForegroundPkg.contains("nexuslauncher")
-                || currentForegroundPkg.contains("quickstep")
-                || currentForegroundPkg.contains("systemui");
-        String locklist = prefs.getString("locklist", "");
-        if (!currentForegroundPkg.isEmpty() && !locklist.isEmpty()) {
-            for (String pkg : locklist.split(",")) {
-                if (pkg.trim().equals(currentForegroundPkg)) { foregroundIsLocked = true; break; }
-            }
-        }
-        if (!foregroundIsLocked || foregroundIsHome) {
-            isForceHome = false;
-            isMorseLockActive = false;
-            if (morseEngine.morseContainer != null) morseEngine.morseContainer.setVisibility(View.GONE);
-            currentMorseAttempt = "";
-            morseFailCount = 0;
-            isCountingDown = false;
-            if (countdownRunnable != null) countdownHandler.removeCallbacks(countdownRunnable);
-            if (warningAnimator != null) warningAnimator.cancel();
-            if (bgView != null) {
-                bgView.setBackgroundColor(Color.TRANSPARENT);
-                bgView.invalidate();
-            }
-        }
-    };
-    // Tăng delay 250ms → 400ms: ổn định hơn, ít false-positive, CPU ngủ sâu hơn
-    suicideHandler.postDelayed(suicideRunnable, 400);
-}
-
-
     @Override
     public void onDestroy() {
         super.onDestroy();
@@ -1575,17 +875,7 @@ private void fireIntentById(String id) {
         try { unregisterReceiver(syncReceiver); } catch (Exception e) {}
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
         for (int i = 0; i < 5; i++) if (bars[i] != null) wm.removeView(bars[i]);
-        for (int i = 0; i < 8; i++) if (morseEngine.mBars[i] != null) wm.removeView(morseEngine.mBars[i]);
-        for (int i = 0; i < 4; i++) {
-            if (corners[i] != null) wm.removeView(corners[i]);
-            if (morseEngine.mCorners[i] != null) wm.removeView(morseEngine.mCorners[i]);
-        }
-        if (morseEngine.morseContainer != null) wm.removeView(morseEngine.morseContainer);
+        for (int i = 0; i < 4; i++) if (corners[i] != null) wm.removeView(corners[i]);
         if (fV != null) wm.removeView(fV);
-        if (bgBitmap != null && !bgBitmap.isRecycled()) { 
-            bgBitmap.recycle(); 
-            bgBitmap = null; // ← quan trọng: null để GC thu hồi ngay 
-         }
-if (morseEngine != null) morseEngine.destroy();
-      } 
+    }
 }  // ← đây là dấu } cuối cùng đóng class HomescreenService, KHÔNG XÓA

@@ -98,7 +98,6 @@ case "CAMERA": return 3; // camera
 case "NOTIFICATIONS": return 8; // share
 case "TOGGLE_ACC": return 10; // manage
 case "TOGGLE_OVERLAY": return 17; // view
-case "TOGGLE_MORSE": return 2; // lock
 case "YTDL_DOWNLOAD": return 16; // upload
 case "VOICE_RECORD": return 6; // send
 case "SPLIT_SCREEN": return 12; // edit

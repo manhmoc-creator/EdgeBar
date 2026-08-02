@@ -568,6 +568,13 @@ isKbd = newIsKbd;
 isBl = newIsBl;
 cachedKbdHeight = newKbdHeight;
 
+// [MỚI] Lưới an toàn: Accessibility đang bật (service này đang sống) thì Homeb
+// TUYỆT ĐỐI không được sống cùng lúc. Chỉ kiểm tra khi có sự kiện thật (đã
+// throttle 200ms bên trên) — zero cost polling, không phải vòng lặp định kỳ.
+if (HomescreenService.isRunning) {
+    stopService(new Intent(this, HomescreenService.class));
+}
+
 if (!stateChanged) return;
     lastEventPkg = pName;
     lastIsKbd_cache = newIsKbd;

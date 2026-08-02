@@ -3165,14 +3165,6 @@ private String getActionLabelSmart(String actionKey, String launchPkg) {
         });
         d.setContentView(root); d.show();
     }
-private static final int[] ACT_AUTO_ICON = {
-    // NONE,BACK,HOME,RECENTS,SCREEN_OFF,FLASH,POWER_DIALOG,VOLUME,
-    // SCREENSHOT,CAMERA,NOTIFICATIONS,TOGGLE_ACC,TOGGLE_OVERLAY,
-    // TOGGLE_MORSE,YTDL_DOWNLOAD,VOICE_RECORD,LAUNCH_APP
-    0, 4, 4, 5, 2, 18, 10, 7, 17, 3, 9, 2, 16, 2, 8, 6, 19,
-    11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,
-    10,10,10,10,10
-};
 // Pool 20 icon: index phải khớp với ICON_POOL trong Tile1..15.java
 private static final String[] TILE_ICON_NAMES = {
     "La Bàn 🧭", "Kính Lúp 🔍", "Ổ Khóa 🔒", "Camera 📷", "Home 🏠",

@@ -32,7 +32,6 @@ static {
     ACT_LABEL_MAP.put("VOLUME","Âm lượng"); ACT_LABEL_MAP.put("NOTIFICATIONS","Thông báo");
     ACT_LABEL_MAP.put("BACK","Quay lại"); ACT_LABEL_MAP.put("HOME","Màn chính");
     ACT_LABEL_MAP.put("RECENTS","Đa nhiệm"); ACT_LABEL_MAP.put("VOICE_RECORD","Ghi âm");
-    ACT_LABEL_MAP.put("TOGGLE_MORSE","Khóa Morse");
     // [FIX] Thiếu 4 key này khiến label fallback về nguyên key viết hoa (VD: "POWER_DIALOG")
     ACT_LABEL_MAP.put("POWER_DIALOG","Menu nguồn");
     ACT_LABEL_MAP.put("TOGGLE_OVERLAY","Bật/Tắt Trợ Năng");
@@ -53,7 +52,6 @@ static {
         ACT_ICON_RES.put("CAMERA", android.R.drawable.ic_menu_camera);
         ACT_ICON_RES.put("NOTIFICATIONS", android.R.drawable.ic_dialog_email);
         ACT_ICON_RES.put("VOICE_RECORD", android.R.drawable.ic_btn_speak_now);
-        ACT_ICON_RES.put("TOGGLE_MORSE", android.R.drawable.ic_lock_idle_lock);
         ACT_ICON_RES.put("TOGGLE_ACC", android.R.drawable.ic_menu_manage);
 ACT_ICON_RES.put("TOGGLE_OVERLAY", android.R.drawable.ic_menu_view);
 ACT_ICON_RES.put("YTDL_DOWNLOAD", android.R.drawable.ic_menu_upload);
@@ -913,7 +911,7 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
             case "FLASH": return "🔦"; case "SCREEN_OFF": return "📴"; case "SCREENSHOT": return "📸";
             case "CAMERA": return "📷"; case "VOLUME": return "🔊"; case "NOTIFICATIONS": return "🔔";
             case "BACK": return "⬅️"; case "HOME": return "🏠"; case "RECENTS": return "🗂️";
-            case "VOICE_RECORD": return "🎙️"; case "TOGGLE_MORSE": return "🔐"; default: return "⚡";
+            case "VOICE_RECORD": return "🎙️"; default: return "⚡";
         }
     }
 
