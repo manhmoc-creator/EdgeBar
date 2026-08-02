@@ -3549,6 +3549,7 @@ if (designTabState == 5) { renderPanelDesign(); return; }
             designSliderContainer.addView(createSlider("Chiều ngang Hiệu ứng (0=Full)", "anim_w", 2000, 0)); designSliderContainer.addView(createSlider("Chiều dọc Hiệu ứng (0=Full)", "anim_h", 3500, 0)); designSliderContainer.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255)); designSliderContainer.addView(createSlider("Độ dày viền", "anim_thick", 50, 12)); designSliderContainer.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500)); designSliderContainer.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600)); designSliderContainer.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30));
     renderAppliedPacksForSpace(designTabState); // Vẫn giữ — Morse/Panel vẫn có thể gọi PIECE
     }
+ }
 private void renderPanelDesign() {
         designSliderContainer.removeAllViews();
         TextView tvHeader = createSectionTitle("📦 KHO LƯU BIẾN LENAP (DATA PACKS)");
