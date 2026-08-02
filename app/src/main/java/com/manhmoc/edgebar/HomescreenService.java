@@ -372,14 +372,18 @@ filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
         // EdgeBarService. Vẫn chỉ 1 View trong suốt, không thêm chi phí pin/RAM nào.
         kbdSensorView = new View(this);
         kbdSensorView.setAlpha(0f);
+        // [GIẢM VÙNG PHỦ TAPJACKING] Chỉ neo ở nửa dưới màn hình (nơi IME thực sự
+        // xuất hiện) thay vì MATCH_PARENT toàn màn — giảm diện tích "obscure" gây
+        // cảnh báo tapjacking ở các app khác (Play Store, ngân hàng...) khi Homeb sống.
+        int screenH = getResources().getDisplayMetrics().heightPixels;
         WindowManager.LayoutParams kp = new WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT, (int)(screenH * 0.5f),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT);
+        kp.gravity = Gravity.BOTTOM;
         try { wm.addView(kbdSensorView, kp); } catch (Exception e) {}
-
         // [FIX PUSH-AWAY BÀN PHÍM] Homeb chạy độc lập không cần Accessibility —
         // gắn thẳng WindowInsets.Type.ime() lên overlay của CHÍNH service này,
         // không còn phụ thuộc broadcast từ EdgeBarService (nguồn không tồn tại

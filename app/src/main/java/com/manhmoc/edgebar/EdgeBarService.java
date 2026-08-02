@@ -62,7 +62,6 @@ private boolean fpRegistered = false;
     private WindowManager wm;
     private View[] bars = new View[5];
     private View[] corners = new View[4];
-    private View kbdSensorView;
     private FlashView fV;
     private CameraManager cm;
     private String cId;
@@ -1031,41 +1030,6 @@ private void refreshFingerprintRegistration() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
         try { wm.addView(fV, fp); } catch(Exception e){}
 
-        // [FIX PUSH-AWAY BÀN PHÍM v2] fV có kích thước 0x0 ngoài lúc chạy hiệu ứng
-        // Flash -> không phủ vùng bàn phím -> hệ thống không đảm bảo gửi insets update.
-        // Tạo 1 View cảm biến RIÊNG, luôn giữ MATCH_PARENT, trong suốt (alpha=0),
-        // không nhận cảm ứng — chỉ để đo insets bàn phím một cách đáng tin cậy.
-        kbdSensorView = new View(this);
-        kbdSensorView.setAlpha(0f);
-        // [FIX PUSH-AWAY BÀN PHÍM] Đổi TYPE_ACCESSIBILITY_OVERLAY -> TYPE_APPLICATION_OVERLAY
-        // và bỏ FLAG_LAYOUT_NO_LIMITS. Cửa sổ accessibility-overlay được OS coi là luôn nổi
-        // trên IME nên hệ thống không buồn tính lại/gửi WindowInsets.Type.ime() cho nó —
-        // đây là lý do listener bên dưới gần như không bao giờ được gọi. TYPE_APPLICATION_OVERLAY
-        // (chỉ cần quyền SYSTEM_ALERT_WINDOW đã có sẵn) tham gia đúng vòng tính insets chuẩn.
-        // Zero thêm chi phí pin/RAM: vẫn 1 View trong suốt, 1 listener, không thêm timer nào.
-        WindowManager.LayoutParams kp = new WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT);
-        try { wm.addView(kbdSensorView, kp); } catch (Exception e) {}
-        if (Build.VERSION.SDK_INT >= 30) {
-            kbdSensorView.setOnApplyWindowInsetsListener((v, insets) -> {
-                int imeH = insets.getInsets(android.view.WindowInsets.Type.ime()).bottom;
-                if (Math.abs(imeH - cachedKbdHeight) >= KBD_HEIGHT_CHANGE_THRESHOLD) {
-                    cachedKbdHeight = imeH;
-                    isKbd = imeH > 0;
-                    updateVisibility();
-                    Intent syncIntent = new Intent("com.manhmoc.edgebar.SYNC_STATE");
-                    syncIntent.putExtra("isKbd", isKbd);
-                    syncIntent.putExtra("isBl", isBl);
-                    syncIntent.putExtra("kbd_height", cachedKbdHeight);
-                    sendBroadcast(syncIntent);
-                }
-                return insets;
-            });
-        }
         for (int i=0;i<5;i++) {
             bars[i] = new View(this);
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,0,PixelFormat.TRANSLUCENT);
@@ -1290,8 +1254,6 @@ try {
         for (int i=0;i<5;i++) if (bars[i]!=null) wm.removeView(bars[i]);
         for (int i=0;i<4;i++) if (corners[i]!=null) wm.removeView(corners[i]);
         if (fV != null) wm.removeView(fV);
-        // [FIX TAPJACKING GỐC] Cùng lỗi mồ côi như HomescreenService — gỡ triệt để.
-        if (kbdSensorView != null) { try { wm.removeView(kbdSensorView); } catch (Exception ignored) {} kbdSensorView = null; }
         removeAccessibleHome(); 
     }
     // SAU (code thay thế):
