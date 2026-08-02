@@ -1290,6 +1290,8 @@ try {
         for (int i=0;i<5;i++) if (bars[i]!=null) wm.removeView(bars[i]);
         for (int i=0;i<4;i++) if (corners[i]!=null) wm.removeView(corners[i]);
         if (fV != null) wm.removeView(fV);
+        // [FIX TAPJACKING GỐC] Cùng lỗi mồ côi như HomescreenService — gỡ triệt để.
+        if (kbdSensorView != null) { try { wm.removeView(kbdSensorView); } catch (Exception ignored) {} kbdSensorView = null; }
         removeAccessibleHome(); 
     }
     // SAU (code thay thế):

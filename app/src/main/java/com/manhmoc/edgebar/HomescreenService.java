@@ -872,13 +872,19 @@ private void fireIntentById(String id) {
     } catch (Exception e) {}
 }
     @Override
-    public void onDestroy() {
-        super.onDestroy();
-        isRunning = false;
-        try { unregisterReceiver(syncReceiver); } catch (Exception e) {}
-        prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
-        for (int i = 0; i < 5; i++) if (bars[i] != null) wm.removeView(bars[i]);
-        for (int i = 0; i < 4; i++) if (corners[i] != null) wm.removeView(corners[i]);
-        if (fV != null) wm.removeView(fV);
-    }
+   public void onDestroy() {
+    super.onDestroy();
+    isRunning = false;
+    try { unregisterReceiver(syncReceiver); } catch (Exception e) {}
+    prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
+    for (int i = 0; i < 5; i++) if (bars[i] != null) wm.removeView(bars[i]);
+    for (int i = 0; i < 4; i++) if (corners[i] != null) wm.removeView(corners[i]);
+    if (fV != null) wm.removeView(fV);
+    // [FIX TAPJACKING GỐC] kbdSensorView trước đây KHÔNG bao giờ được gỡ khi
+    // Service bị stopService() — trở thành cửa sổ full-màn-hình mồ côi tồn tại
+    // vĩnh viễn trên WindowManager dù Service đã chết, khiến Android/Play Protect
+    // luôn coi mọi UI hệ thống (kể cả lúc Trợ năng đang chạy sạch) là đang bị
+    // 1 app khác che phủ → báo "ứng dụng khác đang chặn màn hình" liên tục.
+    if (kbdSensorView != null) { try { wm.removeView(kbdSensorView); } catch (Exception ignored) {} kbdSensorView = null; }
+  }
 }  // ← đây là dấu } cuối cùng đóng class HomescreenService, KHÔNG XÓA
