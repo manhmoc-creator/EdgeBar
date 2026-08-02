@@ -807,7 +807,7 @@ case "SCREEN_ON":
                     break;
                 case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break;
                 case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break;
-                case "NOTIFICATIONS": performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); break;
+                case "QUICK_SETTINGS": performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS); break;
                 case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break;
                 case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break;
                 case "VOLUME": ((AudioManager) getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break;
@@ -1228,7 +1228,11 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                     return true;
                 }
                 long now = System.currentTimeMillis();
-                if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
+                boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
+                if (!hasDtap) {
+                    lastTapUpTime = 0;
+                    handleAction(prefKeyBase + "_tap");
+                } else if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
                     lastTapUpTime = 0;
                     handleAction(prefKeyBase + "_dtap");
                 } else {

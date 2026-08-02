@@ -837,7 +837,11 @@ switch (e.getAction()) {
             return true;
         }
         long now = System.currentTimeMillis();
-        if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
+        boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
+        if (!hasDtap) {
+            lastTapUpTime = 0;
+            handleAction(prefKeyBase + "_tap");
+        } else if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
             lastTapUpTime = 0;
             handleAction(prefKeyBase + "_dtap");
         } else {
@@ -850,8 +854,6 @@ switch (e.getAction()) {
                 }
             }, DTAP_WINDOW_MS + 20);
         }
-        return true;
-    }
     case MotionEvent.ACTION_CANCEL: {
         longPressHandler.removeCallbacksAndMessages(null);
         if (!longPressTriggered) {

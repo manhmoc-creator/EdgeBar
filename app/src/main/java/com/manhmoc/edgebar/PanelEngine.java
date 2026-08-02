@@ -37,6 +37,7 @@ static {
     ACT_LABEL_MAP.put("TOGGLE_OVERLAY","Bật/Tắt Trợ Năng");
     ACT_LABEL_MAP.put("YTDL_DOWNLOAD","Tải video");
     ACT_LABEL_MAP.put("SPLIT_SCREEN","Chia đôi màn hình");
+    ACT_LABEL_MAP.put("QUICK_SETTINGS","Cài đặt nhanh");
 }
     // [MỚI] Icon hệ thống gần đúng nhất với màn "Chỉnh sửa lối tắt" của Android (ảnh mẫu).
     // Dùng thẳng android.R.drawable có sẵn trong OS — 0 tài nguyên thêm, 0 dung lượng APK.
@@ -55,6 +56,7 @@ static {
         ACT_ICON_RES.put("TOGGLE_ACC", android.R.drawable.ic_menu_manage);
 ACT_ICON_RES.put("TOGGLE_OVERLAY", android.R.drawable.ic_menu_view);
 ACT_ICON_RES.put("YTDL_DOWNLOAD", android.R.drawable.ic_menu_upload);
+ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
     }
     // [MỚI] Bộ icon nội bộ cho user tự gán vào từng Action.
     // TODO: thay các android.R.drawable.* dưới đây bằng @drawable/ic_custom_XX
@@ -911,7 +913,7 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
             case "FLASH": return "🔦"; case "SCREEN_OFF": return "📴"; case "SCREENSHOT": return "📸";
             case "CAMERA": return "📷"; case "VOLUME": return "🔊"; case "NOTIFICATIONS": return "🔔";
             case "BACK": return "⬅️"; case "HOME": return "🏠"; case "RECENTS": return "🗂️";
-            case "VOICE_RECORD": return "🎙️"; default: return "⚡";
+            case "VOICE_RECORD": return "🎙️"; case "QUICK_SETTINGS": return "⚙️"; default: return "⚡";
         }
     }
 
