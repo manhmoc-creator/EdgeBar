@@ -3906,7 +3906,7 @@ previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_alpha"
         content.addView(createSlider("Chiều ngang", prefix + id + "_w", 3000, 300));
         content.addView(createSlider("Chiều dọc", prefix + id + "_h", 3000, 60));
         content.addView(createSlider("Tọa độ X", prefix + id + "_x", 1000, 0));
-        content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 2500, 0));
+        content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 3000, 0));
     } else if (type == 1) {
     String[] cKeys = {"br", "bl", "tr", "tl"};
     // [BỎ UI PREVIEW] Không còn checkbox — Corner luôn xem-trước-sẵn đúng
