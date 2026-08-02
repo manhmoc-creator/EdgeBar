@@ -226,7 +226,6 @@ canvas.drawPath(strokePath, pStroke);
             float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
             canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill); canvas.restore();
         }
-      }
     }
     private BroadcastReceiver syncReceiver = new BroadcastReceiver() {
         @Override

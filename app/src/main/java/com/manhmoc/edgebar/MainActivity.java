@@ -5161,7 +5161,6 @@ private String formatPruleActionLabel(String rId) {
             canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill); canvas.restore();
         }
     }
-
     private void updateLivePreviewCorner(int cornerIdx, String ck) {
         if (!Settings.canDrawOverlays(this)) return;
         WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
