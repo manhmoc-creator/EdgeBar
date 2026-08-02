@@ -67,12 +67,10 @@ private boolean fpRegistered = false;
     private CameraManager cm;
     private String cId;
     private boolean fOn = false, isKbd = false, isBl = false;
-    private boolean isInRecents = false;
-    private String lastForegroundPkg = ""; 
     private KeyguardManager km;
     private SharedPreferences prefs;
     private Vibrator vibrator;
-    private PanelEngine panelEngine; 
+    private PanelEngine panelEngine;
     private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
     private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
@@ -118,18 +116,11 @@ private boolean lastIsKbd_cache = false;
 private int cachedKbdHeight = 0;
 private static final int KBD_HEIGHT_CHANGE_THRESHOLD = 20;
 private boolean lastIsBl_cache = false;
-// V19.12.3.6.8: Pipeline A riêng cho MorseLock — throttle nhanh hơn SYNC_STATE
-private long lastMorseLockCheckMs = 0;
-private static final long MORSE_LOCK_CHECK_THROTTLE = 250;
-private long lastUninstallCheckMs = 0;
-private static final long UNINSTALL_CHECK_THROTTLE = 400;
-private long lastAdminRevokeCheckMs = 0;
-private static final long ADMIN_REVOKE_CHECK_THROTTLE = 400;
 // V19.12.3.6.6 — Whitelist key của EdgeBar, chặn key lạ của Zalo/Messenger
 private static final java.util.Set<String> EB_KEY_PREFIXES =
     new java.util.HashSet<>(java.util.Arrays.asList(
         "lock_","home_","morse_","homacc_","anim_","vib_","hold_",
-        "blacklist","locklist","avoid_kbd","shortcut_","preview_",
+        "blacklist","avoid_kbd","shortcut_","preview_",
         "lang_","ytdl_","intent_","tile_","macro_",
         // [FIX] Khóa thật của Panel là "pack_panel_<id>_..." — không phải "panel".
         // Thiếu tiền tố đúng khiến isOurKey() chặn TOÀN BỘ thay đổi live của Panel
@@ -458,13 +449,12 @@ if (inv) {
         filter.addAction(Intent.ACTION_SCREEN_ON);
         filter.addAction(Intent.ACTION_USER_PRESENT);
         filter.addAction("com.manhmoc.edgebar.TEST_ANIM");
-        filter.addAction("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS");
         // CODE MỚI — thêm ngay dưới dòng addAction cuối:
 filter.addAction("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
 filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
 filter.addAction("com.manhmoc.edgebar.PANEL_TEST_TOGGLE");
 filter.addAction("com.manhmoc.edgebar.PAUSE_WM_OPS");
-filter.addAction("com.manhmoc.edgebar.RESUME_WM_OPS");
+        filter.addAction("com.manhmoc.edgebar.RESUME_WM_OPS");
         registerReceiver(stateReceiver, filter);
         if (Build.VERSION.SDK_INT >= 33)
             registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"), Context.RECEIVER_NOT_EXPORTED);
@@ -525,9 +515,6 @@ prefs.edit().putBoolean("shortcut_home_on", false).apply();
 createFloatingBars();
 checkAndKickBlacklistOnAccEnable(); // [MỚI] tự thoát app Blacklist nếu đang mở lúc bật Acc
         panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ true);
-// [MỚI] Không tin bất kỳ trạng thái nào có sẵn — mỗi lần Service này
-// thật sự khởi động (dù do mở app, reboot, hay Android rebind sau cập
-// nhật), luôn đọc lại 100% từ SharedPreferences hiện tại làm chuẩn.
 panelEngine.rebuildAll();
 // V19.12.3.6.13: Set tường minh flag — một số ROM không parse đúng
 // canRequestFingerprintGestures từ XML, gây fpController không bao giờ
@@ -549,38 +536,6 @@ refreshFingerprintRegistration();
 
     String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
     String cName = event.getClassName() != null ? event.getClassName().toString() : "";
-    String locklist = prefs.getString("locklist", "");
-    if (!locklist.isEmpty()) {
-        long nowA = System.currentTimeMillis();
-        if (nowA - lastMorseLockCheckMs >= MORSE_LOCK_CHECK_THROTTLE) {
-            lastMorseLockCheckMs = nowA;
-            String foregroundFromWindows = getForegroundPackageFromWindows();
-            if (foregroundFromWindows != null && !foregroundFromWindows.isEmpty()) {
-                checkAndEngageMorseLock(foregroundFromWindows, locklist);
-            }
-        }
-    }
-    if (pName.contains("packageinstaller") || pName.contains("vending")
-        || pName.contains("permissioncontroller") || pName.equals("android")) {
-        long nowU = System.currentTimeMillis();
-        if (nowU - lastUninstallCheckMs >= UNINSTALL_CHECK_THROTTLE) {
-            lastUninstallCheckMs = nowU;
-            if (uninstallTargetsSelf()) {
-                sendBroadcast(new Intent("com.manhmoc.edgebar.UNINSTALL_DETECTED"));
-            }
-        }
-    }
-// [MỚI] Phát hiện màn hình "Vô hiệu hoá quyền Admin thiết bị" trong Settings.
-// Throttle riêng 400ms — cùng cơ chế Zero-overhead như Uninstall check.
-if (pName.contains("settings")) {
-    long nowR = System.currentTimeMillis();
-    if (nowR - lastAdminRevokeCheckMs >= ADMIN_REVOKE_CHECK_THROTTLE) {
-        lastAdminRevokeCheckMs = nowR;
-        if (adminRevokeTargetsSelf()) {
-            sendBroadcast(new Intent("com.manhmoc.edgebar.ADMIN_REVOKE_DETECTED"));
-        }
-    }
-}
     long nowMs = System.currentTimeMillis();
     if (nowMs - lastEventMs < EVENT_THROTTLE_MS) return;
     lastEventMs = nowMs;
@@ -619,23 +574,6 @@ if (!stateChanged) return;
     lastIsBl_cache = newIsBl;
 
     updateVisibility();
-    // [FIX BUG 2] Trước đây chỉ cần pName chứa "systemui" (kéo thanh thông báo, mở
-// Volume panel, chụp màn hình...) là đã bị hiểu nhầm thành Recents → MorseLock che
-// nhầm dù không hề mở đa nhiệm. Giờ bắt buộc khớp đúng tên class Recents/Overview.
-boolean nowInRecents = cName.contains("RecentsActivity") || cName.contains("RecentTasksActivity")
-        || cName.contains("Recents") || cName.contains("Overview")
-        || (pName.contains("quickstep") && cName.toLowerCase().contains("recent"));
-    if (nowInRecents && !isInRecents) {
-        isInRecents = true;
-        Intent coverIntent = new Intent("com.manhmoc.edgebar.MORSE_OS_RECENTS_SHOW");
-        coverIntent.putExtra("last_pkg", lastForegroundPkg);
-        sendBroadcast(coverIntent);
-    } else if (!nowInRecents && isInRecents) {
-        isInRecents = false;
-        sendBroadcast(new Intent("com.manhmoc.edgebar.MORSE_OS_RECENTS_HIDE"));
-    }
-    if (!nowInRecents && !pName.isEmpty() && !isKbd) lastForegroundPkg = pName;
-
     Intent syncIntent = new Intent("com.manhmoc.edgebar.SYNC_STATE");
     syncIntent.putExtra("isKbd", isKbd);
     syncIntent.putExtra("isBl", isBl);
@@ -691,31 +629,6 @@ private String getOwnAppLabel() {
     }
     return cachedOwnAppLabel;
 }
-private boolean uninstallTargetsSelf() {
-    android.view.accessibility.AccessibilityNodeInfo root = getRootInActiveWindow();
-    if (root == null) return false;
-    boolean hasAppName = containsText(root, getOwnAppLabel(), 0);
-    boolean hasUninstallKeyword = hasAppName && (
-        containsText(root, "Uninstall", 0) || containsText(root, "Gỡ cài đặt", 0)
-        || containsText(root, "gỡ cài đặt", 0) || containsText(root, "GỠ CÀI ĐẶT", 0)
-    );
-    root.recycle();
-    return hasUninstallKeyword;
-}
-/** [MỚI] Tái sử dụng containsText() đã có sẵn cho Uninstall — không cấp phát thêm gì,
- *  chỉ duyệt lại đúng cây node hiện có, đã throttle 400ms nên không tốn CPU liên tục. */
-private boolean adminRevokeTargetsSelf() {
-    android.view.accessibility.AccessibilityNodeInfo root = getRootInActiveWindow();
-    if (root == null) return false;
-    boolean hasAppName = containsText(root, getOwnAppLabel(), 0);
-    boolean hasRevokeKeyword = hasAppName && (
-        containsText(root, "Deactivate", 0) || containsText(root, "deactivate", 0)
-        || containsText(root, "Vô hiệu hoá", 0) || containsText(root, "Vô hiệu hóa", 0)
-        || containsText(root, "device admin app", 0)
-    );
-    root.recycle();
-    return hasRevokeKeyword;
-}
 private boolean containsText(android.view.accessibility.AccessibilityNodeInfo node, String needle, int depth) {
     if (node == null || depth > 12) return false;
     CharSequence t = node.getText();
@@ -730,28 +643,6 @@ private boolean containsText(android.view.accessibility.AccessibilityNodeInfo no
         }
     }
     return false;
-}
-private void checkAndEngageMorseLock(String pkg, String locklist) {
-    // [FIX #3] Tôn trọng QS Tile tuyệt đối — nếu MorseLock đang TẮT, không bao giờ
-    // được phép tự động engage cho bất kỳ app nào trong Locklist.
-    if (!prefs.getBoolean("morse_mode_en", false)) return;
-    // Throttle đã xử lý tại nơi gọi (trước getWindows()), hàm này chỉ còn
-    // logic đối chiếu package.
-    if (pkg.contains("launcher") || pkg.contains("nexuslauncher")
-            || pkg.contains("quickstep") || pkg.contains("systemui")
-            || pkg.equals("android") || pkg.contains("inputmethod")
-            || pkg.contains("recents") || pkg.contains("packageinstaller")) {
-        return;
-    }
-    for (String locked : locklist.split(",")) {
-        if (locked.trim().equals(pkg)) {
-            Intent lockIntent = new Intent("com.manhmoc.edgebar.MORSE_LOCK_ENGAGE");
-            lockIntent.putExtra("pkg", pkg);
-            lockIntent.putExtra("from_windows_api", true);
-            sendBroadcast(lockIntent);
-            return;
-        }
-    }
 }
 /**
  * [MỚI] Đối xứng với triggerBlacklistAutoHomeb(): khi Accessibility vừa được BẬT LẠI
@@ -836,9 +727,6 @@ private void triggerBlacklistAutoHomeb() {
         if (a == null || a.equals("NONE")) return;
         try {
             switch (a) {
-                    case "TOGGLE_MORSE":
-                    Intent m = new Intent("com.manhmoc.edgebar.TOGGLE_MORSE");
-                    sendBroadcast(m); break;
                 case "YTDL_DOWNLOAD":
 try{
     // [FIX] Ưu tiên đọc đúng nội dung người dùng đã gõ/lưu trong ô nhập YTDLnis

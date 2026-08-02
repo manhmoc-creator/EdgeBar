@@ -45,6 +45,46 @@ public class MorseLockEngine {
     private MorseBackgroundView bgView;
     public MorseBarView[] mBars = new MorseBarView[8];
     public View[] mCorners = new View[4];
+    private boolean isMorseLockActive = false;
+    private String currentMorseAttempt = "";
+    private int morseFailCount = 0;
+    private String lockedPkg = "";
+    private String dismissedPkg = "";
+    private String pendingRelockOnWakePkg = "";
+    private long dismissedTime = 0; // V19.12.3.6.8: dismissedPkg có thời hạn 3 giây
+
+    private boolean isCountingDown = false;
+    private Handler countdownHandler = new Handler();
+    private Runnable countdownRunnable = null;
+    private ValueAnimator warningAnimator = null;
+    private boolean isPreviewMorse = false;
+    private boolean isCoveringRecents = false;
+    private String currentForegroundPkg = "";
+    private boolean isUnlockCooldown = false;
+    private boolean isUninstallGuardActive = false; // dùng chung cho cả Uninstall (type=1) và Admin Revoke (type=2)
+private int uninstallGuardFailCount = 0;
+private int uninstallGuardType = 0; // 0=none, 1=uninstall, 2=admin_revoke
+    // V19.12.3.6.6: Throttle SYNC_STATE — chặn broadcast storm từ Zalo/Messenger
+    private long lastSyncMs = 0;
+    private static final long SYNC_THROTTLE_MS = 150;
+    private static final int KBD_HEIGHT_CHANGE_THRESHOLD = 20;
+    // HYBRID: cache trạng thái Accessibility, tránh đọc Settings mỗi frame
+    private boolean accCacheValue = false;
+    private long accCheckTimestamp = 0;
+    private WindowManager.LayoutParams currentOverlayParams = null;
+
+    
+    private boolean isForceHome = false; // FIX 4: flag tức thì khi nhấn Home
+
+    // HYBRID HOME V2: ContentObserver thay vì polling Settings DB
+    // Chi phí = 0 CPU khi không có thay đổi, chỉ fire khi user thực sự toggle Accessibility
+    private final Handler suicideHandler = new Handler(android.os.Looper.getMainLooper());
+    private Runnable suicideRunnable = null;
+    // V19.12.3.6.6: Guard chặn loop — scheduleSuicideCheck chỉ được có 1 pending tại 1 thời điểm
+    private boolean suicideCheckPending = false;
+    private Handler unlockCooldownHandler = new Handler(); 
+    // Mỗi app bị khóa riêng — sai 5 lần ở Zalo không ảnh hưởng Messenger
+private java.util.Map<String, Long> perPkgLockUntil = new java.util.HashMap<>();
 
     private int bgType = 0;
     private String bgImagePath = "";
@@ -201,6 +241,300 @@ public class MorseLockEngine {
         if (val.matches("\\d")) return val;
         return "*";
     }
+    private void doMorseVibrate() {
+        if (prefs.getBoolean("morse_vib_en", true)) {
+            int dur = prefs.getInt("morse_vib_dur", 30);
+            if (dur <= 0) return;
+            try {
+                if (Build.VERSION.SDK_INT >= 26)
+                    vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE));
+                else vibrator.vibrate(dur);
+            } catch (Exception e) {}
+        }
+    }
+    private void startFailCountdown(int failCount, Runnable onFinished) {
+        if (isCountingDown) return;
+        boolean isHome = currentForegroundPkg.isEmpty()
+                || currentForegroundPkg.contains("launcher")
+                || currentForegroundPkg.contains("nexuslauncher");
+        if (isHome) { onFinished.run(); return; }
+
+        isCountingDown = true;
+        String prefKey = (failCount == 3) ? "morse_lock3_seconds" : "morse_lock4_seconds";
+        int totalSeconds = prefs.getInt(prefKey, (failCount == 3) ? 10 : 30);
+
+        if (warningAnimator != null) warningAnimator.cancel();
+        warningAnimator = ValueAnimator.ofFloat(0f, 1f, 0f, 1f, 0f);
+        warningAnimator.setDuration(1200);
+        warningAnimator.addUpdateListener(anim -> {
+            float val = (float) anim.getAnimatedValue();
+            int red = (int)(180 * val);
+            if (bgView != null) {
+                bgView.setBackgroundColor(Color.argb((int)(80 * val), 255, 20, 60));
+                bgView.invalidate();
+            }
+        });
+        warningAnimator.start();
+
+        final int[] remaining = {totalSeconds};
+        if (tvMorseStatus != null)
+            tvMorseStatus.setText("⏳ Chờ " + remaining[0] + "s");
+
+        // [FIX-BUG-5] Bổ sung điều kiện kiểm tra vòng lặp: Nếu đã thoát ra HOME, lập tức hủy bộ đếm hoạt cảnh
+        countdownRunnable = new Runnable() {
+            @Override public void run() {
+                boolean isCurrentHome = currentForegroundPkg.isEmpty() 
+                        || currentForegroundPkg.contains("launcher") 
+                        || currentForegroundPkg.contains("nexuslauncher")
+                        || currentForegroundPkg.contains("quickstep");
+
+                if (isCurrentHome || !isMorseLockActive) {
+                    // Nếu kẻ trộm thoát ra Home, lập tức xóa sạch hoạt cảnh nháy đỏ đếm ngược
+                    isCountingDown = false;
+                    if (tvMorseStatus != null) tvMorseStatus.setText("");
+                    if (bgView != null) {
+                        bgView.setBackgroundColor(Color.TRANSPARENT);
+                        bgView.invalidate();
+                    }
+                    countdownHandler.removeCallbacks(this);
+                    return;
+                }
+
+                remaining[0]--;
+                if (remaining[0] > 0) {
+                    if (tvMorseStatus != null)
+                        tvMorseStatus.setText("⏳ Chờ " + remaining[0] + "s");
+                    countdownHandler.postDelayed(this, 1000);
+                } else {
+                    isCountingDown = false;
+                    if (tvMorseStatus != null) tvMorseStatus.setText("");
+                    if (bgView != null) {
+                        bgView.setBackgroundColor(Color.TRANSPARENT);
+                        bgView.invalidate();
+                    }
+                    onFinished.run();
+                }
+            }
+        };
+        countdownHandler.postDelayed(countdownRunnable, 1000);
+    }
+    public void handleMorseTap(String comp, View v, boolean isLongPress) {
+        if (isUninstallGuardActive) {
+        doMorseVibrate();
+        if (v != null) {
+            if (v instanceof CornerView) ((CornerView) v).triggerFlash();
+            else if (v instanceof MorseBarView) ((MorseBarView) v).triggerFlash();
+        }
+        String mappedKey = mapComponentToNumber(comp);
+        String masterPass = prefs.getString("morse_master_pass", "");
+
+        if (mappedKey.equals("X")) {
+            if (!currentMorseAttempt.isEmpty())
+                currentMorseAttempt = currentMorseAttempt.substring(0, currentMorseAttempt.length() - 1);
+            tvMorseStatus.setText(currentMorseAttempt.isEmpty() ? "🔒 XÁC NHẬN GỠ CÀI ĐẶT" : currentMorseAttempt);
+            return;
+        }
+        if (mappedKey.equals(">")) {
+    if (!masterPass.isEmpty() && currentMorseAttempt.equals(masterPass)) {
+        int doneType = uninstallGuardType;
+        try {
+            android.app.admin.DevicePolicyManager dpm =
+    (android.app.admin.DevicePolicyManager) ctx.getSystemService(Context.DEVICE_POLICY_SERVICE);
+            android.content.ComponentName adminComp =
+    new android.content.ComponentName(ctx, EdgeAdminReceiver.class);
+            if (dpm.isAdminActive(adminComp)) dpm.removeActiveAdmin(adminComp);
+        } catch (Exception ignored) {}
+        isUninstallGuardActive = false;
+        uninstallGuardType = 0;
+        currentMorseAttempt = "";
+        morseContainer.setVisibility(View.GONE);
+        morseContainer.setOnTouchListener(null);
+        if (tvLockIcon != null) tvLockIcon.setOnTouchListener(null);
+        if (doneType == 1) {
+            new Handler().postDelayed(() -> {
+                try {
+                    Intent uninstallIntent = new Intent(Intent.ACTION_DELETE);
+                    uninstallIntent.setData(Uri.parse("package:" + ctx.getPackageName()));
+                    uninstallIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    ctx.startActivity(uninstallIntent);
+                } catch (Exception e) {
+                    Toast.makeText(ctx, "Đã gỡ quyền Admin. Vui lòng gỡ cài đặt lại.", Toast.LENGTH_LONG).show();
+                }
+            }, 400);
+        } else {
+            Toast.makeText(ctx, "Đã xác nhận. Quyền Admin đã được tắt.", Toast.LENGTH_SHORT).show();
+        }
+        updateVisibility();
+    } else {
+        uninstallGuardFailCount++;
+        currentMorseAttempt = "";
+        if (uninstallGuardFailCount >= 5) {
+            tvMorseStatus.setText("Sai quá nhiều lần, thử lại sau");
+            new Handler().postDelayed(() -> {
+                isUninstallGuardActive = false;
+                uninstallGuardType = 0;
+                uninstallGuardFailCount = 0;
+                morseContainer.setVisibility(View.GONE);
+                morseContainer.setOnTouchListener(null);
+                if (tvLockIcon != null) tvLockIcon.setOnTouchListener(null);
+                Intent home = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+                home.putExtra("act", "HOME");
+                ctx.ctx.sendBroadcast(home);
+            }, 2500);
+        } else {
+            tvMorseStatus.setText("Sai! Còn " + (5 - uninstallGuardFailCount) + " lần");
+        }
+    }
+    return;
+}
+        if (mappedKey.matches("\\d") && currentMorseAttempt.length() < 20) {
+            currentMorseAttempt += mappedKey;
+            tvMorseStatus.setText(currentMorseAttempt);
+        }
+        return;
+    }
+    // ... phần code MorseLock app thường giữ nguyên như cũ ...
+        String mappedKey = mapComponentToNumber(comp);
+        String masterPass = prefs.getString("morse_master_pass", "");
+        int realMaxLen = masterPass.length();
+
+        if (mappedKey.equals("X")) {
+    if (isLongPress) {
+        // Long press X = xóa toàn bộ
+        // V19.12.3.6.8: Cancel runnable TRƯỚC khi reset tránh race condition
+        if (hideNumberRunnable != null) {
+            numberDisplayHandler.removeCallbacks(hideNumberRunnable);
+            hideNumberRunnable = null;
+        }
+        currentMorseAttempt = "";
+        tvMorseStatus.setText("");
+    } else {
+        if (currentMorseAttempt.length() > 0) {
+            // V19.12.3.6.8 THE ETERNAL EGO — Fix Bug 3: xóa ký tự không hiện lại số
+            // Cancel runnable CŨ trước khi cắt attempt
+            // Tránh race: runnable cũ chạy SAU khi đã cắt → setText sai nội dung
+            if (hideNumberRunnable != null) {
+                numberDisplayHandler.removeCallbacks(hideNumberRunnable);
+                hideNumberRunnable = null;
+            }
+            currentMorseAttempt = currentMorseAttempt.substring(
+                0, currentMorseAttempt.length() - 1);
+            if (currentMorseAttempt.isEmpty()) {
+                tvMorseStatus.setText("");
+            } else {
+                // SAU KHI XÓA: rebuild dot-string hoàn toàn
+                // TẤT CẢ ký tự còn lại = dấu chấm, KHÔNG có số nào
+                // Lý do: ký tự "mới nhất" sau khi xóa đã từng bị hide thành chấm
+                // → hiện lại dưới dạng số là SAI về mặt UX
+                // KHÔNG schedule hideNumberRunnable mới — không có số nào để hide
+                StringBuilder dots = new StringBuilder();
+                for (int di = 0; di < currentMorseAttempt.length(); di++) {
+                    dots.append("• ");
+                }
+                tvMorseStatus.setText(dots.toString().trim());
+            }
+        }
+    }
+    return;
+}
+        else if (mappedKey.equals(">")) {
+            if (currentMorseAttempt.isEmpty() || masterPass.isEmpty()) return;
+            if (currentMorseAttempt.equals(masterPass)) {
+    isUnlockCooldown = true;
+    unlockCooldownHandler.removeCallbacksAndMessages(null);
+    unlockCooldownHandler.postDelayed(() -> {
+        isUnlockCooldown = false;
+    }, 1000);
+
+    unlockedApps.add(lockedPkg);
+    lastUnlockedTime = System.currentTimeMillis();
+    isMorseLockActive = false;
+    morseFailCount = 0;
+    perPkgLockUntil.remove(lockedPkg); // Unlock xong → xóa phạt của app đó
+    currentMorseAttempt = "";
+    morseContainer.setVisibility(View.GONE);
+
+    Intent success = new Intent("com.manhmoc.edgebar.MORSE_UNLOCK_SUCCESS");
+    success.putExtra("pkg", lockedPkg);
+    ctx.sendBroadcast(success);
+    updateVisibility();
+} else {
+                morseFailCount++;
+                doMorseVibrate();
+                String insult = prefs.getString("morse_insult_" + Math.min(morseFailCount, 5), "Saiii!");
+                currentMorseAttempt = "";
+
+                // [FIX-5] Điều hướng kích hoạt bộ đếm thời gian nháy đỏ tại app bị khóa tùy biến theo số lần sai
+                if (morseFailCount == 3 || morseFailCount == 4) {
+                    tvMorseStatus.setText(insult);
+                    startFailCountdown(morseFailCount, () -> {
+                        if (isMorseLockActive && tvMorseStatus != null) tvMorseStatus.setText("");
+                    });
+               } else if (morseFailCount >= 5) {
+    tvMorseStatus.setText(insult);
+    int lockMinutes = prefs.getInt("morse_lock_minutes", 30);
+    // Chỉ phạt ĐÚNG app vừa nhập sai — Zalo phạt thì Messenger vẫn hỏi mật khẩu bình thường
+String punishedPkg = lockedPkg;
+long lockUntil = System.currentTimeMillis() + lockMinutes * 60 * 1000L;
+perPkgLockUntil.put(punishedPkg, lockUntil);
+
+isMorseLockActive = false;
+lockedPkg = "";
+morseFailCount = 0;
+currentMorseAttempt = "";
+Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+kick.putExtra("act", "HOME");
+ctx.sendBroadcast(kick);
+new Handler().postDelayed(() -> updateVisibility(), 500);
+} else {
+                    tvMorseStatus.setText(insult);
+                }
+            }
+            return;
+        }
+
+        if (currentMorseAttempt.length() >= realMaxLen && realMaxLen > 0) {
+            morseFailCount++;
+            doMorseVibrate();
+            String insult = prefs.getString("morse_insult_" + Math.min(morseFailCount,5), "Quá dài!");
+            tvMorseStatus.setText(insult);
+            currentMorseAttempt = "";
+            if (morseFailCount >= 5) {
+    int lockMinutes = prefs.getInt("morse_lock_minutes", 30);
+    String punishedPkg = lockedPkg;
+long lockUntil = System.currentTimeMillis() + lockMinutes * 60 * 1000L;
+perPkgLockUntil.put(punishedPkg, lockUntil);
+    isMorseLockActive = false;
+    lockedPkg = "";
+    morseFailCount = 0;
+    currentMorseAttempt = "";
+    Intent kick = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+    kick.putExtra("act", "HOME");
+    ctx.sendBroadcast(kick);
+}
+            return;
+        }
+
+        currentMorseAttempt += mappedKey;
+// FIX-DOT-2: Hiện dạng "••• 5" — các số cũ đã thành dấu chấm,
+// chỉ số mới nhất hiện rõ, không bao giờ hiện lại số cũ
+if (hideNumberRunnable != null) numberDisplayHandler.removeCallbacks(hideNumberRunnable);
+int showNumberMs = prefs.getInt("morse_show_number_ms", 800);
+// Tạo chuỗi hiển thị: dấu chấm cho các ký tự cũ + số mới nhất
+StringBuilder displayStr = new StringBuilder();
+for (int i = 0; i < currentMorseAttempt.length() - 1; i++) displayStr.append("• ");
+displayStr.append(mappedKey); // chỉ số mới nhất hiện dạng số
+tvMorseStatus.setText(displayStr.toString());
+// Sau showNumberMs: đổi số mới nhất thành dấu chấm
+hideNumberRunnable = () -> {
+    StringBuilder dots = new StringBuilder();
+    for (int i = 0; i < currentMorseAttempt.length(); i++) dots.append("• ");
+    tvMorseStatus.setText(dots.toString());
+};
+numberDisplayHandler.postDelayed(hideNumberRunnable, showNumberMs);
+    }
+
+
 
     // ==================== INNER VIEWS ====================
 
@@ -332,4 +666,23 @@ public class MorseLockEngine {
             }
         }
     }
+    public void engage(String pkg) {
+        isMorseLockActive = true;
+        lockedPkg = pkg;
+        morseFailCount = 0;
+        currentMorseAttempt = "";
+        if (tvMorseStatus != null) tvMorseStatus.setText("");
+        applyMorseTextStyle();
+        applyLockIconStyle();
+        updateLockIconPosition();
+        morseContainer.setVisibility(View.VISIBLE);
+    }
+    public void dismiss() {
+        isMorseLockActive = false;
+        morseFailCount = 0;
+        currentMorseAttempt = "";
+        lockedPkg = "";
+        morseContainer.setVisibility(View.GONE);
+    }
+    public boolean isActive() { return isMorseLockActive; }
 }

@@ -34,11 +34,9 @@
         </activity>
 
         <activity android:name=".ScannerHelper" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:exported="true" />
-
-        <receiver android:name=".ToggleReceiver" android:exported="true">
+                <receiver android:name=".ToggleReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="com.manhmoc.edgebar.TOGGLE_ACC" />
-                <action android:name="com.manhmoc.edgebar.TOGGLE_MORSE" />
                 <action android:name="com.manhmoc.edgebar.TOGGLE_APP" />
             </intent-filter>
         </receiver>
@@ -83,16 +81,6 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
-
-        <service android:name=".QsMorseTile"
-    android:label="EB MorseLock"
-    android:icon="@android:drawable/ic_menu_compass"
-    android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-    android:exported="true">
-    <intent-filter>
-        <action android:name="android.service.quicksettings.action.QS_TILE" />
-    </intent-filter>
-</service>
         <service android:name=".Tile1" android:label="Tile 1" android:icon="@drawable/ic_launcher_fg" android:enabled="false" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
         <service android:name=".Tile2" android:label="Tile 2" android:icon="@drawable/ic_launcher_fg" android:enabled="false" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
         <service android:name=".Tile3" android:label="Tile 3" android:icon="@drawable/ic_launcher_fg" android:enabled="false" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
@@ -123,19 +111,5 @@
         <service android:name=".Tile28" android:label="Tile 28" android:icon="@drawable/ic_launcher_fg" android:enabled="false" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
         <service android:name=".Tile29" android:label="Tile 29" android:icon="@drawable/ic_launcher_fg" android:enabled="false" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
         <service android:name=".Tile30" android:label="Tile 30" android:icon="@drawable/ic_launcher_fg" android:enabled="false" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
-
-<receiver
-            android:name=".EdgeAdminReceiver"
-            android:permission="android.permission.BIND_DEVICE_ADMIN"
-            android:exported="true">
-            <meta-data
-                android:name="android.app.device_admin"
-                android:resource="@xml/device_admin" />
-            <intent-filter>
-                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
-            </intent-filter>
-        </receiver>
-
-
     </application>
 </manifest>

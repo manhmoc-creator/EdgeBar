@@ -58,7 +58,7 @@ private String[] PANEL_COLOR_KEYS = {"SLATE","STEEL","MIST","GRAPHITE","INDIGO_M
 private String[] PANEL_COLOR_HEX  = {"#607D8B","#78909C","#90A4AE","#455A64","#5C6BC0","#4DB6AC","#B0BEC5","#37474F"};
 private String[] PANEL_COLOR_NAMES; // set trong reloadActionLabels()
 private String[] PANEL_POS_NAMES;   // 9 vị trí, set trong reloadActionLabels()
-private Button btnVolKey, btnEditMorse, btnEditAnim, btnEditPanel;
+private Button btnVolKey, btnEditAnim, btnEditPanel;
 private int currentPanelIdx = 1; // 1-3, panel nào đang được chỉnh trong tab PANEL
 private boolean panelSelectMode = false;
 private boolean trashSelectMode = false;
@@ -75,7 +75,7 @@ private WindowManager.LayoutParams livePreviewLp;
     // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "V19.12.3.6.34";
+    private final String CURRENT_VERSION = "V19.12.3.6.35";
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -126,26 +126,24 @@ private List<String[]> getAppListCached() {
     boolean inFrontierHomacc = currentMainTab==1 && currentGesTab==5 && frontierSubTab==2;
     boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0)
         || (currentMainTab==1 && currentGesTab==0) || inFrontierLock; 
-    boolean pMorse = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==2);
-    boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4) || inFrontierHomacc;
-prefs.edit().putBoolean("preview_lock", pLock).putBoolean("preview_morse", pMorse)
+        boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4) || inFrontierHomacc;
+prefs.edit().putBoolean("preview_lock", pLock)
     .putBoolean("preview_homacc", pHomacc)
     .putBoolean("preview_home", inFrontierHome).apply();
     Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); 
 }
     @Override protected void onResume() { super.onResume(); refreshPreview(); }
-    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_morse", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
+    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
     private void reloadActionLabels() {
 // [XÓA] OPEN_PANEL_1/2/3 — Panel giờ liệt kê động qua nút "PANEL" (buildDynamicPackItems).
 String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
         "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA",
-        "NOTIFICATIONS", "TOGGLE_OVERLAY",
-        "TOGGLE_MORSE", "YTDL_DOWNLOAD", "VOICE_RECORD",
+        "NOTIFICATIONS", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "VOICE_RECORD",
         "LAUNCH_APP", "SPLIT_SCREEN"};
         // [TỐI ƯU PIXEL 2XL] Thêm màu sắc (Emoji) cho TẤT CẢ các Action cơ bản để hiển thị đồng bộ và có màu trong Lenap Panel
         String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
-        T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), T("Lock App (Morse)", "Khóa App (Morse)"), "YTDLnis", T("Voice Record", "Ghi âm"),
+        T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Voice Record", "Ghi âm"),
         T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình")};
         for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
@@ -217,11 +215,6 @@ private String[] getVolKeyActLabs() {
                         else if (v instanceof String) ed.putString(key, (String)v);
                     }
                     ed.commit(); Toast.makeText(this, T("Restored Successfully!", "Đã Khôi Phục Cấu Hình!"), Toast.LENGTH_LONG).show(); recreate();
-               } else if (req == 103 && data.getData() != null) {
-                    String imagePath = data.getData().toString();
-                    prefs.edit().putString("morse_bg_image", imagePath).apply();
-                    prefs.edit().putInt("morse_bg_type", 1).apply();
-                    Toast.makeText(this, "Đã chọn ảnh nền cho lớp phủ Morse!", Toast.LENGTH_SHORT).show();
                 } else if (req == 104) {
                     try {
                         Intent shortcutIntent = data.getParcelableExtra(Intent.EXTRA_SHORTCUT_INTENT);
@@ -278,12 +271,7 @@ private String[] getVolKeyActLabs() {
     @Override public void onBackPressed() { if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); Button btnD = rootLayout.findViewWithTag("btnDesign"); if(btnD!=null){btnD.setText("⚙️"); btnD.setBackground(getRounded("#333333", 100f));} } else super.onBackPressed(); }
     private void closeDesignSpace() { 
     currentMainTab = 1; pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(View.VISIBLE); updateFabVisibility(); refreshPreview();
-    boolean morseOn = prefs.getBoolean("morse_mode_en", false);
-    boolean oldHomeOn = prefs.getBoolean("shortcut_home_on", false);
-    if (!morseOn && !oldHomeOn && HomescreenService.isRunning) {
-        stopService(new Intent(this, HomescreenService.class));
     }
-}
 private void openDesignSpace() { currentMainTab = 0; refreshPreview(); navMain.setVisibility(View.GONE); pageConditions.setVisibility(View.GONE); pageEcosystem.setVisibility(View.GONE); pageDesign.setVisibility(View.VISIBLE); updateFabVisibility(); }
     // V19.12.3.6.10: FAB "+NEW EB" hiện ở mọi tab Điều kiện (kể cả LOCK) —
 // riêng option vân tay đã bị loại khỏi component list của LOCK ngay trong
@@ -376,7 +364,7 @@ if (currentMainTab == 0) {
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);syncVolumeService();updateFabVisibility();isVi = prefs.getBoolean("lang_vi", true); reloadActionLabels();syncAllTileComponentsOnBoot();HomebWatchdogReceiver.scheduleRepeating(this);
+        super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);syncVolumeService();updateFabVisibility();isVi = prefs.getBoolean("lang_vi", true); reloadActionLabels();syncAllTileComponentsOnBoot();
         // Tối ưu OLED: Nền đen tuyệt đối #000000 tắt hoàn toàn bóng LED trên Pixel 2XL
     rootLayout = new RelativeLayout(this);
     rootLayout.setBackgroundColor(Color.parseColor("#000000"));
@@ -479,31 +467,6 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
     });
     main.addView(btnBattery);
 }
-// --- DEVICE ADMIN ---
-android.app.admin.DevicePolicyManager dpm =
-(android.app.admin.DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
-        ComponentName adminComp = new ComponentName(this, EdgeAdminReceiver.class);
-        if (!dpm.isAdminActive(adminComp)) {
-            Button btnAdmin = new Button(this);
-            btnAdmin.setText("⚠️ CẤP QUYỀN ADMIN DEVICE (Bảo vệ lớp phủ Morse)");
-            btnAdmin.setBackground(getRounded("#D32F2F", 25f));
-            btnAdmin.setTextColor(Color.WHITE);
-            LinearLayout.LayoutParams adminLp = new LinearLayout.LayoutParams(-1, -2);
-            adminLp.setMargins(0, 10, 0, 0);
-            btnAdmin.setLayoutParams(adminLp);
-            btnAdmin.setOnClickListener(v -> {
-                Intent adminIntent = new Intent(
-                    android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
-                adminIntent.putExtra(
-                    android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComp);
-                adminIntent.putExtra(
-                    android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION,
-                    "Bảo vệ lớp phủ Morse khỏi bị gỡ và chống gỡ cài đặt nhanh từ Home.");
-                startActivity(adminIntent);
-            });
-            main.addView(btnAdmin);
-        }
-
         // --- USAGE STATS ---
         try {
             android.app.AppOpsManager aom =
@@ -900,24 +863,6 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
     }
 }
     private void openRuleBuilderDialog(String editKey, int preComp, int preGes, String copyActs) { Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen); d.setContentView(buildRuleEditor(d, editKey, preComp, preGes, copyActs)); d.show(); }
-
-    // [TỐI ƯU PIXEL 2XL] Thuật toán hiển thị các pack PIECE đã lưu vào không gian
-    private void renderAppliedPacksForSpace(int tabState) {
-    // Chỉ MORSE (designTabState==2) có khái niệm gọi Pack Bar/Corner từ PIECE.
-    // ANIMA (designTabState==3) không có Bar/Corner nào để áp Pack lên
-    // -> return ngay, KHÔNG addView() gì cả (Zero-RAM Pixel 2XL: tránh
-    // inflate + đọc SharedPreferences thừa cho 1 danh sách không dùng đến).
-    if (tabState != 2) return;
-
-    // Dùng ĐÚNG prefix "morse_" của chính Morse — trước đây bị rơi vào
-    // nhánh else nên tính nhầm thành "homacc_", khiến Switch/Xóa Pack ở
-    // màn Morse thao tác trực tiếp lên dữ liệu của không gian Homacc.
-    // Giờ mỗi không gian đọc/ghi đúng danh sách riêng của nó:
-    //   lock_applied_packs / home_applied_packs / homacc_applied_packs (qua Frontier)
-    //   morse_applied_packs (qua đây)
-    // -> không còn khả năng 1 lần bấm ảnh hưởng >1 không gian cùng lúc.
-    renderAppliedPacksForSpaceInto(designSliderContainer, "morse_", tabState, false); // false = không phải Frontier
-}
 private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState, boolean isFrontier) {
     String listKey = prefix + "applied_packs";
     java.util.List<String> appliedPacks = getDynamicIds(listKey);
@@ -929,7 +874,7 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
     }
 
     if (appliedPacks.isEmpty()) {
-        if (!isFrontier) return; // Morse: giữ nguyên hành vi cũ — không hiện gì nếu rỗng
+        if (!isFrontier) return; 
         TextView empty = new TextView(this);
         empty.setText(T("No Data Pack yet.\nTap 'NEW EB' to create Bar/Corner.", "Chưa có Data Pack nào.\nBấm 'NEW EB' để tạo Bar/Corner."));
         empty.setTextColor(Color.parseColor("#777777"));
@@ -1068,7 +1013,6 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
 });
         // [ĐỔI HÀNH VI] Frontier: nút này đổi thành "PATTERN" -> mở kho biến con
         // (openPackRuleSpace), vì giờ chạm 1 lần vào card đã mở thẳng Editor cha rồi.
-        // Morse: giữ nguyên "SỬA" -> mở Editor cha (card Morse vẫn tap để mở Pattern như cũ).
         final boolean fIsBar = isBar; final String fId = id;
         Button btnEdit = new Button(this);
         btnEdit.setBackground(getRounded("#00E5FF", 14f));
@@ -1779,7 +1723,7 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
         : new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "SPLIT_SCREEN"};
     List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeysForPack, ACT_KEYS, ACT_LABS);
     List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
-    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", "YTDL_DOWNLOAD"}, ACT_KEYS, ACT_LABS);
+    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "VOICE_RECORD", "YTDL_DOWNLOAD"}, ACT_KEYS, ACT_LABS);
     List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
     List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
     vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
@@ -2196,7 +2140,7 @@ for (String sa : savedArray) {
             shortcutSelected[0] = false;
         }
         if (!isVolKeyMode) {
-            List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_MORSE", "VOICE_RECORD", "YTDL_DOWNLOAD"}, actKeysUsed, actLabsUsed);
+            List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "VOICE_RECORD", "YTDL_DOWNLOAD"}, actKeysUsed, actLabsUsed);
             List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
             List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
             vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
@@ -2981,8 +2925,6 @@ btnCopy.setOnClickListener(v -> {
     btnPickBlacklist.setText("🚫 BLACKLIST"); btnPickBlacklist.setBackground(getRounded("#D32F2F", 20f)); btnPickBlacklist.setTextColor(Color.WHITE);
     btnPickBlacklist.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
     btnPickBlacklist.setOnClickListener(v -> showPanelMultiPicker("blacklist", true));
-
-    // [THAY] LOCKLIST đã dời sang MOROS (vì Locklist = danh sách app bị MorseLock khóa,
     // thuộc về cấu hình Morse, không thuộc Ecosystem). Chỗ trống thay bằng nút YTDL GỌN
     // (Dialog thay Drawer) — Dialog chỉ cấp phát View lúc mở, GC thu hồi ngay khi đóng,
     // khác Drawer cũ luôn giữ EditText+2 Button trong RAM (chỉ setVisibility GONE khi đóng).
@@ -3482,7 +3424,7 @@ private void openTileEditorV2(String id) {
     }));
 
     List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME","SCREENSHOT","CAMERA","NOTIFICATIONS","SPLIT_SCREEN"}, ACT_KEYS, ACT_LABS);
-    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_ACC","TOGGLE_OVERLAY","TOGGLE_MORSE","VOICE_RECORD","YTDL_DOWNLOAD"}, ACT_KEYS, ACT_LABS);
+    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_ACC","TOGGLE_OVERLAY","VOICE_RECORD","YTDL_DOWNLOAD"}, ACT_KEYS, ACT_LABS);
     List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids","intent_","INTENT_","Intent");
     List<String[]> MACRO_ITEMS  = buildDynamicPackItems("macro_ids","macro_","MACRO_","Macro");
 
@@ -3571,25 +3513,21 @@ private void openTileEditorV2(String id) {
     pageDesign.addView(createSectionTitle(T("CORE DESIGN (COLOR/SIZE)", "THIẾT KẾ CỐT LÕI (MÀU/KÍCH THƯỚC)")));
     designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
 
-    // HÀNG 1 (duy nhất) - MORSE, ANIMA, PANEL và CẤU HÌNH DESIGN
+    // HÀNG 1 (duy nhất) ANIMA, PANEL và CẤU HÌNH DESIGN
     LinearLayout toggleRow2 = new LinearLayout(this);
     toggleRow2.setOrientation(LinearLayout.HORIZONTAL);
     toggleRow2.setPadding(0, 0, 0, 0);
 
-    btnEditMorse = new Button(this); btnEditMorse.setText("MOROS");
-    btnEditMorse.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
     btnEditAnim = new Button(this); btnEditAnim.setText("ANIMA");
     LinearLayout.LayoutParams mP2 = new LinearLayout.LayoutParams(0, -2, 1f);
     mP2.setMargins(5, 0, 5, 0);
     btnEditAnim.setLayoutParams(mP2);
 
-    btnEditMorse.setOnClickListener(v -> { designTabState=2; refreshPreview(); updateVisTabs(); renderSliders(); });
     btnEditAnim.setOnClickListener(v -> { designTabState=3; ensureHomeServiceForPreview(); refreshPreview(); updateVisTabs(); renderSliders(); });
 btnEditPanel = new Button(this); btnEditPanel.setText("LENAP");
 btnEditPanel.setLayoutParams(mP2);
 btnEditPanel.setOnClickListener(v -> { designTabState = 5; refreshPreview();
 updateVisTabs(); renderSliders(); });
-toggleRow2.addView(btnEditMorse);
 toggleRow2.addView(btnEditPanel);
         // ANIMA chuyển ra ngoài cùng bên phải — CHỈ đổi thứ tự addView(),
         // không đổi designTabState (vẫn giữ = 3) và không đổi bất kỳ
@@ -3600,12 +3538,9 @@ toggleRow2.addView(btnEditPanel);
         
         pageDesign.addView(toggleRow2);
         pageDesign.addView(designSliderContainer);
-        btnEditMorse.performClick();
     }
     private void updateVisTabs() {
         updateFabVisibility(); 
-        btnEditMorse.setBackground(getRounded(designTabState == 2 ? "#00E5FF" : "#222222", 20f));
-        btnEditMorse.setTextColor(designTabState == 2 ? Color.BLACK : Color.WHITE);
         btnEditAnim.setBackground(getRounded(designTabState == 3 ? "#00E5FF" : "#222222", 20f));
         btnEditAnim.setTextColor(designTabState == 3 ? Color.BLACK : Color.WHITE);
         btnEditPanel.setBackground(getRounded(designTabState == 5 ? "#00E5FF" : "#222222", 20f));
@@ -3619,203 +3554,7 @@ if (designTabState == 5) { renderPanelDesign(); return; }
             Button btnTest = new Button(this); btnTest.setText("▶ THỬ NGAY HIỆU ỨNG"); btnTest.setBackground(getRounded("#FFC107", 20f)); btnTest.setTextColor(Color.BLACK); btnTest.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(-1,-2); testLp.setMargins(0,0,0,20); btnTest.setLayoutParams(testLp); btnTest.setOnClickListener(v -> { Intent i = new Intent("com.manhmoc.edgebar.TEST_ANIM"); i.setPackage(getPackageName()); sendBroadcast(i); Toast.makeText(this, "Playing Animation...", Toast.LENGTH_SHORT).show(); }); designSliderContainer.addView(btnTest);
             LinearLayout lC = new LinearLayout(this); lC.setOrientation(LinearLayout.HORIZONTAL); lC.setPadding(0,10,0,10); TextView tC = new TextView(this); tC.setText("Chủ đề:"); tC.setTextColor(Color.WHITE); tC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sC = createSpinner(); sC.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, COLOR_NAMES)); String curC = prefs.getString("anim_color", "WHITE"); for(int i=0;i<COLOR_KEYS.length;i++) if(COLOR_KEYS[i].equals(curC)) sC.setSelection(i); sC.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putString("anim_color",COLOR_KEYS[pos]).apply();}public void onNothingSelected(AdapterView<?> p){}}); sC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lC.addView(tC); lC.addView(sC); designSliderContainer.addView(lC); 
             LinearLayout lS = new LinearLayout(this); lS.setOrientation(LinearLayout.HORIZONTAL); lS.setPadding(0,10,0,10); TextView tS = new TextView(this); tS.setText("Kiểu chạy:"); tS.setTextColor(Color.WHITE); tS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sS = createSpinner(); sS.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Nhấp Nháy", "1 Tia sáng nối đuôi", "2 Tia sáng đối xứng", "3 Tia sáng đều nhau"})); sS.setSelection(prefs.getInt("anim_style", 0)); sS.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt("anim_style", pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lS.addView(tS); lS.addView(sS); designSliderContainer.addView(lS); 
-            designSliderContainer.addView(createSlider("Chiều ngang Hiệu ứng (0=Full)", "anim_w", 2000, 0)); designSliderContainer.addView(createSlider("Chiều dọc Hiệu ứng (0=Full)", "anim_h", 3500, 0)); designSliderContainer.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255)); designSliderContainer.addView(createSlider("Độ dày viền", "anim_thick", 50, 12)); designSliderContainer.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500)); designSliderContainer.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600)); designSliderContainer.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30)); 
-        } else { 
-            // Nhánh này giờ CHỈ còn phục vụ MORSE (designTabState == 2) —
-            // Lock (0) và Home (1) đã chuyển hẳn sang FRONTIER, hai giá trị này
-            // không còn con đường UI nào dẫn tới đây nữa (không có nút nào set
-            // designTabState = 0 hoặc 1 trong buildDesignSpace() sau khi dọn).
-            // => Bỏ hẳn 2 phép so sánh 3 ngôi (ternary) và điều kiện if bọc ngoài,
-            //    trình biên dịch/JIT không còn phải re-evaluate 2 nhánh rẽ chết
-            //    mỗi lần renderSliders() chạy lại (mỗi 400-500ms khi kéo slider debounce)
-            //    => giảm nhẹ chu kỳ CPU trên Adreno 540/Snapdragon 835.
-            String prefix = "morse_"; 
-            String[] bKeys = M_BARS;
-            String[] bNames = M_BAR_NAMES;
-            {
-                // [XÓA] Nút toggle "Bật/Tắt Morse OS" — thừa vì đã có QsMorseTile phụ trách
-                // đúng việc này rồi. Dồn Locklist lên chung hàng với Map Keys.
-                LinearLayout mRow = new LinearLayout(this); mRow.setOrientation(LinearLayout.HORIZONTAL);
-
-                Button btnLocklist = new Button(this);
-                btnLocklist.setText("🔒 LOCKLIST");
-                btnLocklist.setBackground(getRounded("#00E5FF", 20f));
-                btnLocklist.setTextColor(Color.BLACK);
-                LinearLayout.LayoutParams lockLp = new LinearLayout.LayoutParams(0,-2,1f);
-                lockLp.setMargins(0,0,10,20);
-                btnLocklist.setLayoutParams(lockLp);
-                btnLocklist.setOnClickListener(v -> showAppPickerDialog());
-
-                Button btnMap = new Button(this); btnMap.setText("🔢 MAP KEYS"); btnMap.setBackground(getRounded("#E91E63", 20f)); btnMap.setTextColor(Color.WHITE);
-                LinearLayout.LayoutParams mk = new LinearLayout.LayoutParams(0,-2,1f); mk.setMargins(10,0,0,20); btnMap.setLayoutParams(mk);
-                btnMap.setOnClickListener(v -> openMorseMapDialog());
-
-                mRow.addView(btnLocklist); mRow.addView(btnMap); designSliderContainer.addView(mRow);
-                LinearLayout passRow = new LinearLayout(this); passRow.setOrientation(LinearLayout.HORIZONTAL); passRow.setPadding(0,20,0,10);	
-                EditText etMasterPass = new EditText(this); etMasterPass.setHint("Mật khẩu Master"); etMasterPass.setText(prefs.getString("morse_master_pass", ""));
-                etMasterPass.setBackground(getRounded("#2C2C2C", 20f)); etMasterPass.setPadding(30,30,30,30); etMasterPass.setTextColor(Color.WHITE);
-                etMasterPass.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-                Button btnFloatingSave = new Button(this); btnFloatingSave.setText("🔒"); btnFloatingSave.setBackground(getRounded("#00E5FF", 100f)); btnFloatingSave.setTextColor(Color.BLACK);
-                btnFloatingSave.setLayoutParams(new LinearLayout.LayoutParams(100, -2));
-                final Handler longPressHandler = new Handler();
-                final Runnable longPressRunnable = new Runnable() {
-                    @Override
-                    public void run() {
-                        btnFloatingSave.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
-                        showChangePasswordDialog();
-                    }
-                };
-                btnFloatingSave.setOnTouchListener((v, event) -> {
-                    if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                        longPressHandler.postDelayed(longPressRunnable, 30000);
-                    } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
-                        longPressHandler.removeCallbacks(longPressRunnable);
-                    }
-                    return false;
-                });
-                btnFloatingSave.setOnClickListener(v -> {
-                    String newPass = etMasterPass.getText().toString();
-                    if (!newPass.isEmpty()) {
-                        prefs.edit().putString("morse_master_pass", newPass).apply();
-                        Toast.makeText(this, "Đã lưu mật khẩu vào kho bảo mật!", Toast.LENGTH_SHORT).show();
-                    } else {
-                        Toast.makeText(this, "Mật khẩu không được để trống!", Toast.LENGTH_SHORT).show();
-                    }
-                });
-                passRow.addView(etMasterPass); passRow.addView(btnFloatingSave);
-                designSliderContainer.addView(passRow);
-
-                LinearLayout sliderDrawerContent = new LinearLayout(this);
-                sliderDrawerContent.setOrientation(LinearLayout.VERTICAL);
-                CheckBox cbVibEn = new CheckBox(this);
-                cbVibEn.setText("Bật rung bàn phím Morse");
-                cbVibEn.setTextColor(Color.WHITE);
-                cbVibEn.setChecked(prefs.getBoolean("morse_vib_en", true));
-                cbVibEn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("morse_vib_en", c).apply());
-                sliderDrawerContent.addView(cbVibEn);
-                sliderDrawerContent.addView(createSlider("Độ rung khi gõ (ms)", "morse_vib_dur", 200, 30));
-                sliderDrawerContent.addView(createComboDropdown("Nền lớp phủ", "morse_bg_type", new String[]{"Hiệu ứng Glitch", "Ảnh tùy chọn"}, prefs.getInt("morse_bg_type", 0)));
-                Button btnPickBg = new Button(this);
-                btnPickBg.setText("📁 CHỌN ẢNH NỀN");
-                btnPickBg.setBackground(getRounded("#2196F3", 20f));
-                btnPickBg.setTextColor(Color.WHITE);
-                btnPickBg.setOnClickListener(v -> {
-                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                    intent.addCategory(Intent.CATEGORY_OPENABLE);
-                    intent.setType("image/*");
-                    startActivityForResult(intent, 103);
-                });
-                sliderDrawerContent.addView(btnPickBg);
-                sliderDrawerContent.addView(createInput("Text nhập sai lần 1", "morse_insult_1"));
-                sliderDrawerContent.addView(createInput("Text nhập sai lần 2", "morse_insult_2"));
-                sliderDrawerContent.addView(createInput("Text nhập sai lần 3", "morse_insult_3"));
-                sliderDrawerContent.addView(createInput("Text nhập sai lần 4", "morse_insult_4"));
-                sliderDrawerContent.addView(createInput("Text nhập sai lần 5", "morse_insult_5"));
-                sliderDrawerContent.addView(createSlider("Độ dài tối đa mật khẩu", "morse_max_len", 20, 10));
-                sliderDrawerContent.addView(createSlider("Thời gian khóa sau 5 lần sai (phút)", "morse_lock_minutes", 60, 30));
-                sliderDrawerContent.addView(createSlider("Thời gian khoá sau 3 lần sai (giây)", "morse_lock3_seconds", 1800, 10));
-                sliderDrawerContent.addView(createSlider("Thời gian khoá sau 4 lần sai (giây)", "morse_lock4_seconds", 1800, 30));
-
-LinearLayout relockRow = new LinearLayout(this);
-relockRow.setOrientation(LinearLayout.VERTICAL);
-relockRow.setPadding(0, 10, 0, 10);
-
-int curRelockMs = prefs.getInt("morse_relock_ms", 5000);
-String relockLabel = formatRelockTime(curRelockMs);
-
-TextView tvRelock = new TextView(this);
-tvRelock.setTextColor(Color.WHITE);
-tvRelock.setText("Relock sau khi thoát app: " + relockLabel);
-relockRow.addView(tvRelock);
-
-LinearLayout relockBtnRow = new LinearLayout(this);
-relockBtnRow.setOrientation(LinearLayout.HORIZONTAL);
-relockBtnRow.setGravity(Gravity.CENTER_VERTICAL);
-
-Button btnRelockM = new Button(this); btnRelockM.setText("-");
-btnRelockM.setTextColor(Color.parseColor("#BBBBBB"));
-btnRelockM.setBackgroundColor(Color.TRANSPARENT); btnRelockM.setTextSize(20);
-
-Button btnRelockP = new Button(this); btnRelockP.setText("+");
-btnRelockP.setTextColor(Color.parseColor("#BBBBBB"));
-btnRelockP.setBackgroundColor(Color.TRANSPARENT); btnRelockP.setTextSize(20);
-
-SeekBar sbRelock = new SeekBar(this);
-sbRelock.setMax(1800);
-sbRelock.setProgress(curRelockMs / 1000);
-sbRelock.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-sbRelock.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-    public void onProgressChanged(SeekBar s, int p, boolean b) {
-        int ms = Math.max(1000, p * 1000);
-        prefs.edit().putInt("morse_relock_ms", ms).apply();
-        tvRelock.setText("Relock sau khi thoát app: " + formatRelockTime(ms));
-    }
-    public void onStartTrackingTouch(SeekBar s) {}
-    public void onStopTrackingTouch(SeekBar s) {}
-});
-btnRelockM.setOnClickListener(v -> { if(sbRelock.getProgress()>1) sbRelock.setProgress(sbRelock.getProgress()-1); });
-btnRelockP.setOnClickListener(v -> { if(sbRelock.getProgress()<1800) sbRelock.setProgress(sbRelock.getProgress()+1); });
-
-relockBtnRow.addView(btnRelockM); relockBtnRow.addView(sbRelock); relockBtnRow.addView(btnRelockP);
-relockRow.addView(relockBtnRow);
-designSliderContainer.addView(relockRow);
-
-                sliderDrawerContent.addView(createSlider("Độ mờ màn chắn Morse (Alpha Đen)", "morse_bg_alpha", 255, 180));
-                sliderDrawerContent.addView(createSlider("Vị trí dọc Icon Ổ Khoá (0=Trên, 3000=Dưới)", "morse_lock_icon_y", 3000, 600));
-                sliderDrawerContent.addView(createSlider("Kích thước cấu hình Icon Ổ Khoá", "morse_lock_icon_size", 150, 48));
-                sliderDrawerContent.addView(createSlider("Độ nét Neon (Blur) của text/mật khẩu", "morse_text_blur", 60, 20));
-                sliderDrawerContent.addView(createSlider("Cỡ chữ mật khẩu (sp)", "morse_text_size", 60, 30));
-                CheckBox cbNeon = new CheckBox(this);
-                cbNeon.setText("Bật hiệu ứng Neon cho text nhập mật khẩu");
-                cbNeon.setTextColor(Color.WHITE);
-                cbNeon.setChecked(prefs.getBoolean("morse_text_neon", true));
-                cbNeon.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("morse_text_neon", c).apply());
-                sliderDrawerContent.addView(cbNeon);
-
-                sliderDrawerContent.addView(createSlider("Cỡ chữ số hiển thị trên Bar/Corner", "morse_map_label_size", 60, 20));
-                sliderDrawerContent.addView(createSlider("Thời gian hiện dấu chấm (ms)", "morse_dot_delay", 2000, 500));
-                sliderDrawerContent.addView(createSlider("Thời gian hiện số (ms) trước khi thành dấu chấm", "morse_show_number_ms", 3000, 800));
-                sliderDrawerContent.addView(createSlider("Độ rung khi nhập sai (ms)", "morse_fail_vib", 1500, 500));
-                designSliderContainer.addView(createDrawer("CÀI ĐẶT MORSE NÂNG CAO", sliderDrawerContent));
-            }
-            designSliderContainer.addView(createSectionTitle("⚙️ MORSE OS - LỚP PHỦ TUỲ CHỈNH")); 
-            designSliderContainer.addView(createSectionTitle("EDGE BARS (" + bKeys.length + " THANH)"));
-            for(int i=0; i < bKeys.length; i++) { 
-                LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); 
-                CheckBox cb = new CheckBox(this); cb.setText("BẬT: " + bNames[i]); cb.setTextColor(Color.parseColor("#4CAF50")); cb.setChecked(prefs.getBoolean(prefix+bKeys[i]+"_en", false)); final int idx = i; cb.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+bKeys[idx]+"_en", c).apply()); drawerContent.addView(cb); 
-                // Không còn cần "if (designTabState == 2)" bọc ngoài — nhánh này CHỈ
-                // chạy cho Morse rồi, thêm luôn mà không tốn 1 phép so sánh mỗi vòng lặp.
-                drawerContent.addView(createComboDropdown("Hiển thị", prefix+bKeys[i]+"_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình (Nháy sáng)", "Ẩn hoàn toàn (Vô hình)"}, 0));
-                drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+bKeys[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0));
-                drawerContent.addView(createSlider("Độ trong suốt", prefix+bKeys[i]+"_alpha", 255, 50));
-                drawerContent.addView(createSlider("Chiều ngang", prefix+bKeys[i]+"_w", 3000, 300));
-                drawerContent.addView(createSlider("Chiều dọc", prefix+bKeys[i]+"_h", 3000, 60));
-                drawerContent.addView(createSlider("Toạ độ X", prefix+bKeys[i]+"_x", 1000, 0));
-                drawerContent.addView(createSlider("Toạ độ Y", prefix+bKeys[i]+"_y", 2500, 0));
-                designSliderContainer.addView(createDrawer(bNames[i], drawerContent));
-            } 
-            designSliderContainer.addView(createSectionTitle("4 FRAME CORNERS"));
-            for(int i=0; i<4; i++) { 
-                LinearLayout drawerContent = new LinearLayout(this); drawerContent.setOrientation(LinearLayout.VERTICAL); drawerContent.setPadding(30,10,30,30); 
-                CheckBox cbEn = new CheckBox(this); cbEn.setText(T("ENABLE: ", "BẬT: ") + CORNER_NAMES[i]); cbEn.setTextColor(Color.parseColor("#4CAF50")); cbEn.setChecked(prefs.getBoolean(prefix+"corner_"+CORNERS[i]+"_en", false)); final int idx = i; cbEn.setOnCheckedChangeListener((v,c) -> prefs.edit().putBoolean(prefix+"corner_"+CORNERS[idx]+"_en", c).apply()); drawerContent.addView(cbEn);
-                drawerContent.addView(createComboDropdown("Hiển thị", prefix+"corner_"+CORNERS[i]+"_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình (Nháy sáng)", "Ẩn hoàn toàn (Vô hình)"}, 0));
-                drawerContent.addView(createComboDropdown("Chế độ Cảm ứng", prefix+"corner_"+CORNERS[i]+"_pri_mode", new String[]{"Ưu tiên Edge Bar (Khoá cứng)", "Nhường OS (Xuyên thấu)"}, 0));
-                drawerContent.addView(createComboDropdown("Hình dáng Góc", prefix+"corner_"+CORNERS[i]+"_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0));
-                drawerContent.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix+"corner_"+CORNERS[i]+"_w", 2500, 100));
-                drawerContent.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix+"corner_"+CORNERS[i]+"_h", 2500, 100));
-                drawerContent.addView(createSlider("Di chuyển Ngang (X)", prefix+"corner_"+CORNERS[i]+"_x", 2500, 0));
-                drawerContent.addView(createSlider("Di chuyển Dọc (Y)", prefix+"corner_"+CORNERS[i]+"_y", 2500, 0));
-                drawerContent.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix+"corner_"+CORNERS[i]+"_moon_w", 2500, 100));
-                drawerContent.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix+"corner_"+CORNERS[i]+"_moon_h", 2500, 100));
-                drawerContent.addView(createSlider("Di chuyển Trăng Non Ngang (X) (1250=Giữa)", prefix+"corner_"+CORNERS[i]+"_moon_x", 2500, 1250));
-                drawerContent.addView(createSlider("Di chuyển Trăng Non Dọc (Y) (1250=Giữa)", prefix+"corner_"+CORNERS[i]+"_moon_y", 2500, 1250));
-                drawerContent.addView(createSlider("Độ cong BO VIỀN (Vỏ) (1000=Thẳng)", prefix+"corner_"+CORNERS[i]+"_rad", 1000, 80));
-                drawerContent.addView(createSlider("Độ cong TRĂNG NON (Lõi) (1000=Thẳng)", prefix+"corner_"+CORNERS[i]+"_moon_rad", 1000, 80));
-                designSliderContainer.addView(createDrawer(CORNER_NAMES[i], drawerContent));
-            }
-            LinearLayout globalDrawer = new LinearLayout(this); globalDrawer.setOrientation(LinearLayout.VERTICAL); globalDrawer.setPadding(30,10,30,30); globalDrawer.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500)); globalDrawer.addView(createSlider("Độ mờ vùng TRĂNG NON (Đậm/Nhạt)", prefix+"corner_moon_alpha", 255, 100)); globalDrawer.addView(createSlider("Độ mờ VIỀN GÓC (Đậm/Nhạt)", prefix+"corner_stroke_alpha", 255, 200)); globalDrawer.addView(createSlider("Độ đậm viền (Dày/Mỏng)", prefix+"corner_thick", 50, 8));
-    designSliderContainer.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIÊN", globalDrawer));
-    }
+            designSliderContainer.addView(createSlider("Chiều ngang Hiệu ứng (0=Full)", "anim_w", 2000, 0)); designSliderContainer.addView(createSlider("Chiều dọc Hiệu ứng (0=Full)", "anim_h", 3500, 0)); designSliderContainer.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255)); designSliderContainer.addView(createSlider("Độ dày viền", "anim_thick", 50, 12)); designSliderContainer.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500)); designSliderContainer.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600)); designSliderContainer.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30));
     renderAppliedPacksForSpace(designTabState); // Vẫn giữ — Morse/Panel vẫn có thể gọi PIECE
     }
 private void renderPanelDesign() {
@@ -4403,7 +4142,7 @@ handleCfgHeader.setOnClickListener(v -> {
     d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     d.setContentView(root); d.show();
 }
-// Yêu cầu 1: Hàm tạo viên thuốc rỗng ruột cho không gian Lock/Homeb/Homacc/Anima/Morsos (Zero RAM)
+// Yêu cầu 1: Hàm tạo viên thuốc rỗng ruột cho không gian Lock/Homeb/Homacc/Anima (Zero RAM)
 private void openEmptyPillDialog() {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
@@ -4890,85 +4629,6 @@ private void loadAppIconInto(String pkg, ImageView iv) {
     }).start();
 }
     // ==================== CÁC HÀM PHỤ TRỢ CHUNG ====================
-    private void showAppPickerDialog() {
-    List<String[]> combined = getAppListCached();
-    String currentLocklist = prefs.getString("locklist", "");
-    final java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>();
-    for (String s : currentLocklist.split(",")) if (!s.trim().isEmpty()) selected.add(s.trim());
-
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
-    LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
-    root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
-
-    TextView title = new TextView(this); title.setText(T("Choose App to Lock", "Chọn ứng dụng cần khóa"));
-    title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(18); title.setPadding(0,0,0,20);
-    root.addView(title);
-
-    EditText etSearch = new EditText(this);
-    etSearch.setHint("🔍 " + T("Search...","Tìm kiếm..."));
-    etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
-    etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
-    root.addView(etSearch);
-
-    ListView lv = new ListView(this);
-    lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-    root.addView(lv);
-
-    final List<String[]> shown = new ArrayList<>(combined);
-    BaseAdapter adapter = new BaseAdapter() {
-        @Override public int getCount() { return shown.size(); }
-        @Override public Object getItem(int p) { return shown.get(p); }
-        @Override public long getItemId(int p) { return p; }
-        @Override public View getView(int p, View cv, ViewGroup parent) {
-            LinearLayout row = new LinearLayout(MainActivity.this);
-            row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(20,22,20,22);
-            String[] item = shown.get(p);
-            CheckBox cb = new CheckBox(MainActivity.this);
-            cb.setChecked(selected.contains(item[1])); cb.setClickable(false);
-            TextView tv = new TextView(MainActivity.this);
-            tv.setText(item[0]); tv.setTextColor(Color.WHITE);
-            tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-            row.addView(cb); row.addView(tv);
-            row.setOnClickListener(v -> {
-                if (selected.contains(item[1])) selected.remove(item[1]); else selected.add(item[1]);
-                cb.setChecked(selected.contains(item[1]));
-            });
-            return row;
-        }
-    };
-    lv.setAdapter(adapter);
-
-    etSearch.addTextChangedListener(new android.text.TextWatcher(){
-        public void afterTextChanged(android.text.Editable s){
-            String q = s.toString().trim().toLowerCase();
-            shown.clear();
-            for (String[] it : combined) if (q.isEmpty() || it[0].toLowerCase().contains(q)) shown.add(it);
-            adapter.notifyDataSetChanged();
-        }
-        public void beforeTextChanged(CharSequence s,int a,int b,int c){}
-        public void onTextChanged(CharSequence s,int a,int b,int c){}
-    });
-
-    LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,20,0,0);
-    Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY")); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-    Button bSave = new Button(this); bSave.setText(T("SAVE","LƯU")); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0); bSave.setLayoutParams(slp);
-    footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
-
-    bCancel.setOnClickListener(v -> d.dismiss());
-    bSave.setOnClickListener(v -> {
-        String newLocklist = TextUtils.join(",", selected);
-        prefs.edit().putString("locklist", newLocklist).apply();
-        try {
-            ViewGroup rootView = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
-            EditText et = rootView.findViewWithTag("locklist_input");
-            if (et != null) et.setText(newLocklist);
-        } catch (Exception ignored) {}
-        d.dismiss();
-    });
-
-    d.setContentView(root); d.show();
-}
     // GIỮ NGUYÊN bản cũ showSingleAppPickerDialog(EditText target) để không phá VOLKEY/TILE cũ,
 // nhưng đổi phần thân để dùng cache thay vì quét lại mỗi lần:
 private void showSingleAppPickerDialog(EditText target) {
@@ -5126,42 +4786,6 @@ private void deleteShortcutGlobally(String id) {
     ed.putString("shortcut_ids", TextUtils.join(",", normalIds));
     ed.apply();
 }
-    private void openMorseMapDialog() {
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
-        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40, 120, 40, 40);
-        TextView title = new TextView(this); title.setText("🔢 MORSE NUMPAD MAPPING"); title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(20); title.setPadding(0,0,0,40); root.addView(title);
-        ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
-        LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); scroll.addView(content); root.addView(scroll);
-        String[] mKeys = {"t_l", "m_mid_t", "t_r", "l", "t_c", "r", "corner_tl", "corner_tr", "corner_bl", "corner_br", "m_b_c", "m_mid_b"};
-        String[] mNames = {"Cạnh Trái", "Trung Tâm Trên", "Cạnh Phải", "Đáy Trái", "Đỉnh Giữa", "Đáy Phải", "Góc Đỉnh Trái", "Góc Đỉnh Phải", "Góc Đáy Trái", "Góc Đáy Phải", "Đáy Giữa", "Trung Tâm Dưới"};
-        String[] mapOptions = {"* (Bỏ qua)", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "X (Xóa)", "> (Mở khóa)"};
-        ArrayList<Spinner> spinners = new ArrayList<>();
-        for(int i=0; i<mKeys.length; i++) {
-            LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(0,10,0,10);
-            TextView tv = new TextView(this); tv.setText(mNames[i]); tv.setTextColor(Color.WHITE); tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-            Spinner sp = createSpinner(); sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, mapOptions));
-            String cur = prefs.getString("morse_map_" + mKeys[i], "*");
-            int sel = 0; for(int j=0; j<mapOptions.length; j++) if(mapOptions[j].startsWith(cur)) sel = j;
-            sp.setSelection(sel);
-            sp.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.2f));
-            row.addView(tv); row.addView(sp); content.addView(row); spinners.add(sp);
-        }
-        LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
-        Button bCancel = new Button(this); bCancel.setText(T("CANCEL", "HỦY")); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-        Button bSave = new Button(this); bSave.setText(T("SAVE", "LƯU")); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); bSave.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-        footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
-        bCancel.setOnClickListener(v -> d.dismiss());
-        bSave.setOnClickListener(v -> {
-            for(int i=0; i<mKeys.length; i++) {
-                String val = mapOptions[spinners.get(i).getSelectedItemPosition()].substring(0,1);
-                prefs.edit().putString("morse_map_" + mKeys[i], val).apply();
-            }
-            Toast.makeText(this, "Đã lưu ma trận bàn phím Morse!", Toast.LENGTH_SHORT).show();
-            d.dismiss();
-        });
-        d.setContentView(root); d.show();
-    }
-
     private void addYTDLDesign(LinearLayout parent) {
         LinearLayout ytdlDrawer = new LinearLayout(this); ytdlDrawer.setOrientation(LinearLayout.VERTICAL);
         ytdlDrawer.setPadding(30, 20, 30, 20); ytdlDrawer.setBackground(getRounded("#222222", 20f));
@@ -5293,26 +4917,6 @@ private void showPanelAppPicker() {
             sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
         }).setNegativeButton("HỦY", null).show();
 }
-    private void showChangePasswordDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Đổi mật khẩu Morse");
-        LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL); layout.setPadding(40,40,40,40);
-        EditText etNew = new EditText(this); etNew.setHint("Mật khẩu mới"); etNew.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        layout.addView(etNew);
-        builder.setView(layout);
-        builder.setPositiveButton("Lưu", (d,w) -> {
-            String newPass = etNew.getText().toString().trim();
-            if (!newPass.isEmpty()) {
-                prefs.edit().putString("morse_master_pass", newPass).apply();
-                Toast.makeText(this, "Đã đổi mật khẩu thành công!", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, "Mật khẩu không hợp lệ!", Toast.LENGTH_SHORT).show();
-            }
-        });
-        builder.setNegativeButton("Hủy", null);
-        builder.show();
-    }
-
     private void showPremiumDialog() { 
         String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow", 
         "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần trọn đời):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 TĂNG TỐC BẰNG ADB (chạy 1 lần):\nadb shell settings put global window_animation_scale 0\nadb shell settings put global transition_animation_scale 0\nadb shell settings put global animator_duration_scale 0"); 
@@ -5449,11 +5053,6 @@ private String formatPruleActionLabel(String rId) {
         }
     }
     return sb.length() == 0 ? T("Error","Lỗi") : sb.toString();
-}
-    private String formatRelockTime(int ms) {
-    if (ms < 60000) return (ms / 1000) + " giây";
-    else if (ms < 3600000) return (ms / 60000) + " phút " + ((ms % 60000) / 1000) + "s";
-    else return "30 phút";
 }
     private LinearLayout createSlider(String t, String k, int max, int def) { 
         LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); 
