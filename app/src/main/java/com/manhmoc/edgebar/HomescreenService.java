@@ -854,6 +854,8 @@ switch (e.getAction()) {
                 }
             }, DTAP_WINDOW_MS + 20);
         }
+        return true;      // ← THÊM DÒNG NÀY
+    }                     // ← THÊM DẤU ĐÓNG NÀY (đóng case ACTION_UP)
     case MotionEvent.ACTION_CANCEL: {
         longPressHandler.removeCallbacksAndMessages(null);
         if (!longPressTriggered) {
