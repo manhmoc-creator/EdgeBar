@@ -164,6 +164,37 @@ private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, p);
     }
 }
+   private class BarView extends View {
+    private int baseAlpha, hideDelay;
+    private boolean isAutoHiding = false, isInv = false;
+    private Handler autoHideHandler = new Handler();
+    private GradientDrawable gd = new GradientDrawable();
+    public BarView(Context c) { super(c); gd.setCornerRadius(24f); setBackground(gd); }
+    public void updateProps(int alpha, boolean autoHide, int delay, boolean inv) {
+        this.baseAlpha = alpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
+        autoHideHandler.removeCallbacksAndMessages(null);
+        if (inv) gd.setColor(Color.argb(0, 96, 125, 139));
+        else if (!autoHide) gd.setColor(Color.argb(alpha, 96, 125, 139));
+        else gd.setColor(Color.argb(0, 96, 125, 139));
+        invalidate();
+    }
+    public void triggerFlash() {
+        if (!isAutoHiding || isInv) return;
+        autoHideHandler.removeCallbacksAndMessages(null);
+        gd.setColor(Color.argb(Math.min(255, baseAlpha + 50), 96, 125, 139));
+        invalidate();
+        autoHideHandler.postDelayed(() -> {
+            ValueAnimator a = ValueAnimator.ofFloat(1f, 0f);
+            a.setDuration(1500);
+            a.addUpdateListener(anim -> {
+                float val = (float) anim.getAnimatedValue();
+                gd.setColor(Color.argb((int) (baseAlpha * val), 96, 125, 139));
+                invalidate();
+            });
+            a.start();
+        }, hideDelay);
+    }
+}
     private class CornerView extends View {
         private Paint pFill, pStroke; private int type; private String prefix;
         private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
@@ -400,16 +431,12 @@ filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
                 return insets;
             });
         }
-
         for (int i = 0; i < 5; i++) {
-            bars[i] = new View(this);
-            // HYBRID HOME V2: dùng accStateCached đã đọc sẵn ở trên — ZERO I/O thêm
-            // [DUAL-SOUL] Luôn TYPE_APPLICATION_OVERLAY — không còn đổi type theo
-// Accessibility (đây là nguồn gốc race condition gây crash cũ).
-WindowManager.LayoutParams p = new WindowManager.LayoutParams(
+            bars[i] = new BarView(this);
+            WindowManager.LayoutParams p = new WindowManager.LayoutParams(
     1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
             try { wm.addView(bars[i], p); } catch (Exception e) {}
-            bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], null));
+            bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], bars[i]));
         }
         for (int i = 0; i < 4; i++) {
             corners[i] = new CornerView(this, i, "home_");
@@ -506,10 +533,8 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
                 int h = prefs.getInt("home_" + BARS[i] + "_h", 60);
                 int x = prefs.getInt("home_" + BARS[i] + "_x", 0);
                 int y = prefs.getInt("home_" + BARS[i] + "_y", 0);
-                GradientDrawable gd = new GradientDrawable();
-                gd.setColor(Color.argb(alpha, 96, 125, 139));
-                gd.setCornerRadius(24f);
-                bars[i].setBackground(gd);
+                int visMode = prefs.getInt("home_" + BARS[i] + "_vis_mode", 0);
+                ((BarView)bars[i]).updateProps(alpha, visMode==1, 2500, visMode==2);
                 int priMode = prefs.getInt("home_" + BARS[i] + "_pri_mode", 0);
                 int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                 if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
