@@ -75,7 +75,7 @@ private WindowManager.LayoutParams livePreviewLp;
     // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "V19.12.3.6.35";
+    private final String CURRENT_VERSION = "V19.12.3.6.36";
     private RelativeLayout rootLayout;
 
     private int ecoType = 0;
@@ -793,8 +793,9 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
     LinearLayout bd = new LinearLayout(this);
     bd.setOrientation(LinearLayout.VERTICAL); bd.setPadding(30,10,30,30);
     bd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"bar_hide_dur", 5000, 2500));
+    bd.addView(createSlider(T("Icon Thickness on Bar","Độ đậm Icon trên Bar"), prefix+"bar_icon_alpha", 255, 255));
+bd.addView(createSlider(T("Icon Size on Bar","Kích thước Icon trên Bar"), prefix+"bar_icon_size", 120, 40));
     container.addView(createDrawer("TÙY CHỈNH CHUNG THANH CẠNH", bd));
-
     // [MỚI] Icon cho 13 cử chỉ — CHỈ hiện ở không gian Homacc, áp dụng CHUNG cho mọi
     // Bar/Corner của Homacc (giống Homeb). Thuật toán vẽ animation kéo icon ra theo
     // sóng làm sau — hiện tại chỉ lưu lựa chọn vào prefs.
@@ -828,8 +829,10 @@ private LinearLayout buildGestureIconDrawer() {
         boolean willOpen = body.getVisibility() == View.GONE;
         if (willOpen && !inflated[0]) {
             inflated[0] = true;
-            body.addView(createSlider(T("Icon Opacity (all bars)", "Độ mờ Icon (mọi thanh)"), "homacc_bar_icon_alpha", 255, 255));
-            body.addView(createSlider(T("Icon Size (all bars)", "Kích thước Icon (mọi thanh)"), "homacc_bar_icon_size", 120, 40));
+            body.addView(createSlider(T("Jump Icon Size", "Kích thước Icon Nhảy"), "homacc_jump_icon_size", 160, 90));
+body.addView(createSlider(T("Jump Icon Opacity", "Độ đậm Icon Nhảy"), "homacc_jump_icon_alpha", 255, 255));
+            body.addView(createSlider(T("Jump Up/Fall Duration (ms)", "Thời gian nhảy lên/rơi (ms)"), "homacc_jump_anim_dur", 3000, 1000));
+            body.addView(createSlider(T("Jump Hold Duration (ms)","Thời gian giữ trên đỉnh (ms)"), "homacc_jump_hold_ms", 3000, 2000));
             for (int i = 0; i < C_GESTURES.length; i++) {
                 final String gKey = "homacc_gesture_icon_" + C_GESTURES[i];
                 LinearLayout row = new LinearLayout(this);
@@ -859,8 +862,8 @@ private LinearLayout buildGestureIconDrawer() {
         }
         body.setVisibility(willOpen ? View.VISIBLE : View.GONE);
         header.setText((willOpen ? "📂 " : "📁 ")
-            + T("ICON FOR 13 GESTURES (Homacc)", "ICON CHO 13 CỬ CHỈ (Chung Homacc)")
-            + (willOpen ? " (Chạm để đóng ▲)" : " (Chạm để mở ▼)"));
+            + T("ICON FOR 13 GESTURES", "ICON CHO 13 CỬ CHỈ")
+            + (willOpen ? " (Đóng ▲)" : " (Mở ▼)"));
         header.setBackground(getRounded(willOpen ? "#333333" : "#202124", 25f));
     });
 
@@ -4993,40 +4996,42 @@ private void showSingleAppPickerDialogCallback(java.util.function.Consumer<Strin
     etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
     etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
     root.addView(etSearch);
-
-    ListView lv = new ListView(this);
-    lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-    root.addView(lv);
+    ScrollView gridScroll = new ScrollView(this);
+    gridScroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    LinearLayout gridBox = new LinearLayout(this);
+    gridBox.setOrientation(LinearLayout.VERTICAL);
+    gridBox.setPadding(0, 10, 0, 10);
+    gridScroll.addView(gridBox);
+    root.addView(gridScroll);
 
     final List<String[]> shown = new ArrayList<>(combined);
-    BaseAdapter adapter = new BaseAdapter() {
-        @Override public int getCount() { return shown.size(); }
-        @Override public Object getItem(int p) { return shown.get(p); }
-        @Override public long getItemId(int p) { return p; }
-        @Override public View getView(int p, View cv, ViewGroup parent) {
-            TextView tv = new TextView(MainActivity.this);
-            tv.setText(shown.get(p)[0]); tv.setTextColor(Color.WHITE); tv.setTextSize(15);
-            tv.setPadding(20,26,20,26);
-            return tv;
+    Runnable[] refreshGridHolder = new Runnable[1];
+    java.util.Set<String> dummySel = new java.util.HashSet<>(); // single-select: không giữ trạng thái
+    refreshGridHolder[0] = () -> {
+        gridBox.removeAllViews();
+        LinearLayout row = null;
+        for (int i = 0; i < shown.size(); i++) {
+            String[] app = shown.get(i);
+            if (i % 5 == 0) { row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); gridBox.addView(row); }
+            String ref = "app:" + app[1];
+            FrameLayout cell = buildIconGridCell(ref, () -> { ImageView iv = new ImageView(this); loadAppIconInto(app[1], iv); return iv; },
+                dummySel, () -> {});
+            cell.setOnClickListener(v -> { onPicked.accept(app[1]); d.dismiss(); });
+            row.addView(cell);
         }
     };
-    lv.setAdapter(adapter);
-    lv.setOnItemClickListener((parent, v, position, id) -> {
-        onPicked.accept(shown.get(position)[1]);
-        d.dismiss();
-    });
+    refreshGridHolder[0].run();
 
     etSearch.addTextChangedListener(new android.text.TextWatcher(){
         public void afterTextChanged(android.text.Editable s){
             String q = s.toString().trim().toLowerCase();
             shown.clear();
             for (String[] it : combined) if (q.isEmpty() || it[0].toLowerCase().contains(q)) shown.add(it);
-            adapter.notifyDataSetChanged();
+            refreshGridHolder[0].run();
         }
         public void beforeTextChanged(CharSequence s,int a,int b,int c){}
         public void onTextChanged(CharSequence s,int a,int b,int c){}
     });
-
     Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY"));
     bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE);
     bCancel.setOnClickListener(v -> d.dismiss());

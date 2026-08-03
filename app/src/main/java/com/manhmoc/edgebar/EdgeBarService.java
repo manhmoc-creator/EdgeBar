@@ -424,6 +424,7 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
 
         private Bitmap jumpIconBmp = null;
         private float jumpX = -1, jumpY = -1;
+        private float jumpOffsetX = 0f;
         private float jumpOffsetY = 0f;
         private float jumpRotation = 0f;
         private float jumpAlpha = 0f;
@@ -457,42 +458,46 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
             popAnim.start();
         }
 
-        public void jumpIcon(float x, float y, String gestureKey, int color) {
+        public void jumpIcon(float x, float y, String gestureKey, int color, float dxDir, float dyDir) {
             jumpHandler.removeCallbacksAndMessages(null);
             if (jumpUpAnim != null) jumpUpAnim.cancel();
             if (fallAnim != null) fallAnim.cancel();
-            jumpIconBmp = resolveGestureIconBitmap(gestureKey, 90);
+            int jSize = prefs.getInt("homacc_jump_icon_size", 90);
+jumpIconBmp = resolveGestureIconBitmap(gestureKey, jSize);
             if (jumpIconBmp == null) return;
             jumpX = x; jumpY = y;
-            jumpOffsetY = 0f; jumpRotation = 0f; jumpAlpha = 1f;
+            jumpOffsetX = 0f; jumpOffsetY = 0f; jumpRotation = 0f; jumpAlpha = 1f;
             setVisibility(View.VISIBLE);
             invalidate();
-
+            int jumpTotalDur = Math.max(60, prefs.getInt("homacc_jump_anim_dur", 1000));
             jumpUpAnim = ValueAnimator.ofFloat(0f, 1f);
-            jumpUpAnim.setDuration(450);
+            jumpUpAnim.setDuration((long) (jumpTotalDur * 0.45f));
             jumpUpAnim.setInterpolator(new android.view.animation.OvershootInterpolator(1.2f));
             jumpUpAnim.addUpdateListener(a -> {
                 float v = (float) a.getAnimatedValue();
-                jumpOffsetY = -180f * v;
+                jumpOffsetY = -180f * v + dyDir * 70f * v;
+                jumpOffsetX = dxDir * 70f * v;
                 jumpRotation = 360f * v;
                 invalidate();
             });
             jumpUpAnim.addListener(new AnimatorListenerAdapter() {
                 @Override public void onAnimationEnd(Animator a) {
-                    jumpHandler.postDelayed(() -> startFall(), 2000);
+                    jumpHandler.postDelayed(() -> startFall(), prefs.getInt("homacc_jump_hold_ms", 2000));
                 }
             });
             jumpUpAnim.start();
         }
-
         private void startFall() {
+            int fallDur = Math.max(60, prefs.getInt("homacc_jump_anim_dur", 1000));
             fallAnim = ValueAnimator.ofFloat(0f, 1f);
-            fallAnim.setDuration(550);
+            fallAnim.setDuration((long) (fallDur * 0.55f));
             fallAnim.setInterpolator(new android.view.animation.AccelerateInterpolator(1.4f));
             float startOffset = jumpOffsetY;
+            float startOffsetX = jumpOffsetX;
             fallAnim.addUpdateListener(a -> {
                 float v = (float) a.getAnimatedValue();
                 jumpOffsetY = startOffset + (140f - startOffset) * v;
+                jumpOffsetX = startOffsetX * (1f - v);
                 jumpAlpha = 1f - v;
                 invalidate();
             });
@@ -513,9 +518,10 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
             }
             if (jumpIconBmp != null) {
                 canvas.save();
-                float cx = jumpX, cy = jumpY + jumpOffsetY;
+                float cx = jumpX + jumpOffsetX, cy = jumpY + jumpOffsetY;
                 canvas.rotate(jumpRotation, cx, cy);
-                iconPaint.setAlpha((int) (jumpAlpha * 255));
+                int jAlpha = prefs.getInt("homacc_jump_icon_alpha", 255);
+iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
                 canvas.drawBitmap(jumpIconBmp, cx - jumpIconBmp.getWidth()/2f, cy - jumpIconBmp.getHeight()/2f, iconPaint);
                 canvas.restore();
             }
@@ -625,7 +631,7 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
 
         public CornerView(Context c, int type) { this(c, type, "lock_"); }
     public CornerView(Context c, int type, String prefix) { super(c); this.type = type; this.prefix = prefix; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
-
+public int getCornerType() { return type; }
     public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) {
         pStroke.setStrokeWidth(thick);
         this.baseMoonAlpha = moonAlpha;
@@ -1345,9 +1351,9 @@ for (int i=0;i<5;i++) {
                 int visMode = prefs.getInt("lock_"+BARS[i]+"_vis_mode",0);
                 int barHideDur = prefs.getInt("lock_bar_hide_dur", 2500);
                 ((BarView)bars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2);
-                int iconSize = prefs.getInt("lock_"+BARS[i]+"_icon_size", 40);
-                int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", 255);
-                ((BarView)bars[i]).setIcons(resolveBarIcons(prefs.getString("lock_"+BARS[i]+"_icons",""), iconSize), iconAlpha);
+                int iconSize = prefs.getInt("lock_"+BARS[i]+"_icon_size", prefs.getInt("lock_bar_icon_size", 40));
+int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", prefs.getInt("lock_bar_icon_alpha", 255));
+((BarView)bars[i]).setIcons(resolveBarIcons(prefs.getString("lock_"+BARS[i]+"_icons",""), iconSize), iconAlpha);
                 int priMode = prefs.getInt("lock_"+BARS[i]+"_pri_mode",0);
                 int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                 if (priMode==1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -1402,7 +1408,7 @@ if (panelEngine != null) panelEngine.rebuildAll();
     private final Runnable longPressRunnable = () -> {
         longFired = true;
         handleAction(prefKeyBase + "_long");
-        if (rippleView != null) rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139));
+        if (rippleView != null) { float[] dir = computeJumpDir(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
     };
     private long lastTapUpTime = 0;
 private static final long DTAP_WINDOW_MS = 300;
@@ -1413,6 +1419,18 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
     public SidebarTouchListener(String keyBase, View v) {
         this.prefKeyBase = keyBase;
         this.myView = v;
+    }
+private float[] computeJumpDir() {
+        float dxDir = 0f, dyDir = 0f;
+        if (myView instanceof CornerView) {
+            int idx = ((CornerView) myView).getCornerType(); // 0=BR,1=BL,2=TR,3=TL
+            dxDir = (idx == 0 || idx == 2) ? -1f : 1f;
+            dyDir = (idx == 0 || idx == 1) ? -1f : 1f;
+        } else {
+            if (prefKeyBase.contains("_r_") || prefKeyBase.endsWith("_r")) dxDir = -1f;
+            else if (prefKeyBase.contains("_l_") || prefKeyBase.endsWith("_l")) dxDir = 1f;
+        }
+        return new float[]{dxDir, dyDir};
     }
     @Override public boolean onTouch(View v, MotionEvent e) {
         if (myView != null && myView instanceof CornerView) ((CornerView)myView).triggerFlash();
@@ -1453,10 +1471,9 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                     handleAction(prefKeyBase + "_" + actionName);
                     if (rippleView != null) {
                         rippleView.popRipple();
-                        rippleView.jumpIcon(e.getRawX(), e.getRawY(), actionName, Color.argb(180, 96, 125, 139));
+                        float[] dir = computeJumpDir();
+                        rippleView.jumpIcon(e.getRawX(), e.getRawY(), actionName, Color.argb(180, 96, 125, 139), dir[0], dir[1]);
                     }
-                    return true;
-                }
                 if (longFired) return true;
                 // [FIX LONG-PRESS] Dự phòng: nếu Handler.postDelayed(longPressRunnable) chưa
                 // kịp tự bắn trước khi ACTION_UP tới (main thread bận, hoặc buông tay đúng lúc
@@ -1471,14 +1488,15 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                 long now = System.currentTimeMillis();
                 final float upX = e.getRawX(), upY = e.getRawY();
                 boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
+                float[] dirTap = computeJumpDir();
                 if (!hasDtap) {
                     lastTapUpTime = 0;
                     handleAction(prefKeyBase + "_tap");
-                    if (rippleView != null) rippleView.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139));
+                    if (rippleView != null) rippleView.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                 } else if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
                     lastTapUpTime = 0;
                     handleAction(prefKeyBase + "_dtap");
-                    if (rippleView != null) rippleView.jumpIcon(upX, upY, "dtap", Color.argb(180, 96, 125, 139));
+                    if (rippleView != null) rippleView.jumpIcon(upX, upY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                 } else {
                     lastTapUpTime = now;
                     final long myUpTs = now;
@@ -1486,7 +1504,7 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                         if (lastTapUpTime == myUpTs) {
                             lastTapUpTime = 0;
                             handleAction(prefKeyBase + "_tap");
-                            if (rippleView != null) rippleView.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139));
+                            if (rippleView != null) rippleView.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                         }
                     }, DTAP_WINDOW_MS + 20);
                 }
@@ -1502,7 +1520,7 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                             && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
                         longFired = true;
                         handleAction(prefKeyBase + "_long");
-                        if (rippleView != null) rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139));
+                        if (rippleView != null) { float[] dir = computeJumpDir(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
                     }
                 }
                 return true;
@@ -1576,8 +1594,8 @@ int baseF = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         int visMode = p.getInt(px + BARS[i] + "_vis_mode", 0);
         int barHideDur = p.getInt(px + "bar_hide_dur", 2500);
         bar.updateProps(alpha, visMode == 1, barHideDur, visMode == 2);
-        int iconSizeH = p.getInt(px + BARS[i] + "_icon_size", 40);
-        int iconAlphaH = p.getInt(px + BARS[i] + "_icon_alpha", 255);
+        int iconSizeH = p.getInt(px + BARS[i] + "_icon_size", p.getInt(px+"bar_icon_size", 40));
+int iconAlphaH = p.getInt(px + BARS[i] + "_icon_alpha", p.getInt(px+"bar_icon_alpha", 255));
         bar.setIcons(resolveBarIcons(p.getString(px + BARS[i] + "_icons",""), iconSizeH), iconAlphaH);
         int f = baseF;
         // priMode==1: xuyên thấu hoàn toàn — KHÔNG nhận touch
@@ -1690,8 +1708,8 @@ boolean pushForKbd = avoidKbd && cachedKbdHeight > 0;
         int visMode = p.getInt(px + BARS[i] + "_vis_mode", 0);
         int barHideDur = p.getInt(px + "bar_hide_dur", 2500);
         ((BarView)accHomeBars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2);
-        int iconSizeL = p.getInt(px + BARS[i] + "_icon_size", 40);
-        int iconAlphaL = p.getInt(px + BARS[i] + "_icon_alpha", 255);
+        int iconSizeL = p.getInt(px + BARS[i] + "_icon_size", p.getInt(px+"bar_icon_size", 40));
+        int iconAlphaL = p.getInt(px + BARS[i] + "_icon_alpha", p.getInt(px+"bar_icon_alpha", 255)); 
         ((BarView)accHomeBars[i]).setIcons(resolveBarIcons(p.getString(px + BARS[i] + "_icons",""), iconSizeL), iconAlphaL);
 int f = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
               | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
