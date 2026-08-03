@@ -1100,7 +1100,6 @@ switch (e.getAction()) {
         if (rippleView != null) rippleView.popRipple();
         return true;
     }
-}	
     case MotionEvent.ACTION_CANCEL: {
         longPressHandler.removeCallbacksAndMessages(null);
         if (!longPressTriggered) {
