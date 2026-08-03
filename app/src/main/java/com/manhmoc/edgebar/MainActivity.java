@@ -794,6 +794,78 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
     bd.setOrientation(LinearLayout.VERTICAL); bd.setPadding(30,10,30,30);
     bd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"bar_hide_dur", 5000, 2500));
     container.addView(createDrawer("TÙY CHỈNH CHUNG THANH CẠNH", bd));
+
+    // [MỚI] Icon cho 13 cử chỉ — CHỈ hiện ở không gian Homacc, áp dụng CHUNG cho mọi
+    // Bar/Corner của Homacc (giống Homeb). Thuật toán vẽ animation kéo icon ra theo
+    // sóng làm sau — hiện tại chỉ lưu lựa chọn vào prefs.
+    if (isHomaccStyle) {
+        container.addView(buildGestureIconDrawer());
+    }
+}
+// [MỚI] UI rỗng chọn icon cho 13 cử chỉ, dùng CHUNG cho mọi Bar/Corner của Homacc.
+// Lazy-inflate (giống Panel Config/Handle Config) — 13 dòng chỉ thực sự dựng View
+// khi người dùng bấm mở lần đầu, Zero-RAM khi đóng, tiết kiệm cho Pixel 2XL.
+private LinearLayout buildGestureIconDrawer() {
+    LinearLayout body = new LinearLayout(this);
+    body.setOrientation(LinearLayout.VERTICAL);
+    body.setPadding(20, 10, 20, 20);
+    body.setVisibility(View.GONE);
+
+    TextView header = new TextView(this);
+    header.setText("📁 " + T("ICON FOR 13 GESTURES (Homacc)", "ICON CHO 13 CỬ CHỈ (Chung Homacc)") + " (Chạm để mở ▼)");
+    header.setTextColor(Color.parseColor("#00E5FF"));
+    header.setPadding(30, 30, 30, 30);
+    header.setTextSize(16);
+    header.setBackground(getRounded("#202124", 25f));
+
+    LinearLayout drawer = new LinearLayout(this);
+    drawer.setOrientation(LinearLayout.VERTICAL);
+    LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1, -2);
+    dlp.setMargins(0, 15, 0, 5);
+    drawer.setLayoutParams(dlp);
+    drawer.addView(header);
+    drawer.addView(body);
+
+    final boolean[] inflated = {false};
+    header.setOnClickListener(v -> {
+        boolean willOpen = body.getVisibility() == View.GONE;
+        if (willOpen && !inflated[0]) {
+            inflated[0] = true;
+            for (int i = 0; i < C_GESTURES.length; i++) {
+                final String gKey = "homacc_gesture_icon_" + C_GESTURES[i];
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(0, 10, 0, 10);
+                TextView tv = new TextView(this);
+                tv.setText(C_GESTURE_NAMES[i]);
+                tv.setTextColor(Color.WHITE);
+                tv.setTextSize(13f);
+                tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+                Button btnPick = new Button(this);
+                btnPick.setBackground(getRounded("#303134", 16f));
+                btnPick.setTextColor(Color.parseColor("#00E5FF"));
+                btnPick.setTextSize(12f);
+                btnPick.setPadding(20, 12, 20, 12);
+                Runnable updateLabel = () -> {
+                    String v2 = prefs.getString(gKey, "");
+                    btnPick.setText(v2.isEmpty() ? T("Choose icon", "Chọn icon") : T("Icon set ✓", "Đã chọn ✓"));
+                };
+                updateLabel.run();
+                // Tái dùng nguyên hàm showIconPickerDialog() đã có sẵn (Apps / System 20 / Custom 100)
+                btnPick.setOnClickListener(v2 -> showIconPickerDialog(gKey, updateLabel));
+                row.addView(tv); row.addView(btnPick);
+                body.addView(row);
+            }
+        }
+        body.setVisibility(willOpen ? View.VISIBLE : View.GONE);
+        header.setText((willOpen ? "📂 " : "📁 ")
+            + T("ICON FOR 13 GESTURES (Homacc)", "ICON CHO 13 CỬ CHỈ (Chung Homacc)")
+            + (willOpen ? " (Chạm để đóng ▲)" : " (Chạm để mở ▼)"));
+        header.setBackground(getRounded(willOpen ? "#333333" : "#202124", 25f));
+    });
+
+    return drawer;
 }
 private void renderVolKeyRules() {
     listRules.removeAllViews();
@@ -2384,8 +2456,15 @@ private String resolveTileActionLabel(String act, String pkg, String scId) {
 // y hệt pattern showPanelMultiPicker() đã có sẵn, để đồng bộ trải nghiệm.
 private void showActionCategoryPicker(String title, List<String[]> items,
         java.util.LinkedHashSet<String> selectedSet, Runnable onChange) {
-    // Làm việc trên bản sao — chỉ apply khi bấm LƯU, tránh sửa dở dang khi HỦY
-    final java.util.LinkedHashSet<String> working = new java.util.LinkedHashSet<>(selectedSet);
+    // [GIỚI HẠN 1 ACTION/NÚT] Trước đây "working" là bản sao TOÀN BỘ selectedSet (đa chọn
+    // trong cùng 1 category). Giờ chỉ giữ lại tối đa 1 item thuộc CHÍNH category này —
+    // các item của category khác (đã có sẵn trong selectedSet nhưng không nằm trong "items"
+    // của lần gọi này) không hề bị đụng tới, nên vẫn kết hợp được giữa các nút
+    // (VD: SYSTEM + PANEL + INTENTS) như trước, chỉ riêng BÊN TRONG 1 nút là giới hạn 1.
+    java.util.Set<String> categoryKeys = new java.util.HashSet<>();
+    for (String[] it : items) categoryKeys.add(it[1]);
+    final String[] workingSingle = new String[1];
+    for (String s : selectedSet) if (categoryKeys.contains(s)) { workingSingle[0] = s; break; }
 
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
@@ -2394,6 +2473,11 @@ private void showActionCategoryPicker(String title, List<String[]> items,
     TextView tvTitle = new TextView(this); tvTitle.setText(title);
     tvTitle.setTextColor(Color.parseColor("#00E5FF")); tvTitle.setTextSize(18); tvTitle.setPadding(0, 0, 0, 20);
     root.addView(tvTitle);
+
+    TextView tvHint = new TextView(this);
+    tvHint.setText(T("Only 1 action allowed in this button", "Chỉ được chọn 1 hành động trong nút này"));
+    tvHint.setTextColor(Color.parseColor("#9AA0A6")); tvHint.setTextSize(11f); tvHint.setPadding(0, 0, 0, 10);
+    root.addView(tvHint);
 
     EditText etSearch = new EditText(this);
     etSearch.setHint("🔍 " + T("Search...", "Tìm kiếm..."));
@@ -2416,14 +2500,16 @@ private void showActionCategoryPicker(String title, List<String[]> items,
             row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(20, 22, 20, 22);
             String[] item = shown.get(p);
-            CheckBox cb = new CheckBox(MainActivity.this);
-            cb.setChecked(working.contains(item[1])); cb.setClickable(false);
+            // [ĐỔI] RadioButton thay CheckBox — đúng ngữ nghĩa "chỉ chọn 1 trong nhóm"
+            RadioButton cb = new RadioButton(MainActivity.this);
+            cb.setChecked(item[1].equals(workingSingle[0])); cb.setClickable(false);
             TextView tv = new TextView(MainActivity.this);
             tv.setText(item[0]); tv.setTextColor(Color.WHITE);
             tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
             row.addView(cb); row.addView(tv);
             row.setOnClickListener(v -> {
-                if (working.contains(item[1])) working.remove(item[1]); else working.add(item[1]);
+                // Bấm lại đúng item đang chọn -> bỏ chọn; bấm item khác -> THAY THẾ (single-select)
+                workingSingle[0] = item[1].equals(workingSingle[0]) ? null : item[1];
                 refreshHolder[0].run();
             });
             return row;
@@ -2438,7 +2524,7 @@ private void showActionCategoryPicker(String title, List<String[]> items,
         List<String[]> rest = new ArrayList<>();
         for (String[] it : items) {
             if (!q.isEmpty() && !it[0].toLowerCase().contains(q)) continue;
-            if (working.contains(it[1])) selSorted.add(it); else rest.add(it);
+            if (it[1].equals(workingSingle[0])) selSorted.add(it); else rest.add(it);
         }
         shown.addAll(selSorted); shown.addAll(rest);
         adapter.notifyDataSetChanged();
@@ -2458,8 +2544,10 @@ private void showActionCategoryPicker(String title, List<String[]> items,
 
     bCancel.setOnClickListener(v -> d.dismiss());
     bSave.setOnClickListener(v -> {
-        selectedSet.clear();
-        selectedSet.addAll(working);
+        // Xoá hết item CỦA CATEGORY NÀY khỏi selectedSet (không đụng category khác),
+        // rồi thêm đúng 1 item vừa chọn (nếu có) — đảm bảo mỗi nút tối đa 1 action.
+        selectedSet.removeAll(categoryKeys);
+        if (workingSingle[0] != null) selectedSet.add(workingSingle[0]);
         onChange.run();
         d.dismiss();
     });
