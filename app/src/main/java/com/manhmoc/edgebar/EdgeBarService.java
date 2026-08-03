@@ -1474,6 +1474,8 @@ private float[] computeJumpDir() {
                         float[] dir = computeJumpDir();
                         rippleView.jumpIcon(e.getRawX(), e.getRawY(), actionName, Color.argb(180, 96, 125, 139), dir[0], dir[1]);
                     }
+                    return true;
+                }
                 if (longFired) return true;
                 // [FIX LONG-PRESS] Dự phòng: nếu Handler.postDelayed(longPressRunnable) chưa
                 // kịp tự bắn trước khi ACTION_UP tới (main thread bận, hoặc buông tay đúng lúc
@@ -1511,7 +1513,6 @@ private float[] computeJumpDir() {
                 if (rippleView != null) rippleView.popRipple();
                 return true;
        }
-}
             case MotionEvent.ACTION_CANCEL: {
                 lpHandler.removeCallbacks(longPressRunnable);
                 if (!longFired) {
