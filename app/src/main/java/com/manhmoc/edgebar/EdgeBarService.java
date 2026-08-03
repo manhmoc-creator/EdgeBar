@@ -444,21 +444,34 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
         int w = getWidth(), h = getHeight();
         if (w <= 0 || h <= 0) return;
         int n = icons.size();
-        int iconSize = icons.get(0).getWidth();
+        int gap = 8;
         boolean horizontal = w >= h;
-        if (horizontal) {
-            int totalW = n * iconSize + (n - 1) * 8;
-            int startX = (w - totalW) / 2;
-            int y = (h - iconSize) / 2;
-            for (int i = 0; i < n; i++) canvas.drawBitmap(icons.get(i), startX + i * (iconSize + 8), y, iconPaint);
-        } else {
-            int totalH = n * iconSize + (n - 1) * 8;
-            int startY = (h - totalH) / 2;
-            int x = (w - iconSize) / 2;
-            for (int i = 0; i < n; i++) canvas.drawBitmap(icons.get(i), x, startY + i * (iconSize + 8), iconPaint);
+        int mainDim = horizontal ? w : h;
+        int crossDim = horizontal ? h : w;
+        int userIconSize = icons.get(0).getWidth(); // kích thước user đã chọn ở slider
+
+        // [MỚI] Tự động lấp đầy thanh: nếu tổng chiều dài các icon (theo size user
+        // chọn) vượt quá chiều dài Bar, tự co đều lại để vừa khít — không tràn ra
+        // ngoài. Nếu đủ chỗ thì giữ nguyên kích thước user đã chọn (không phóng to
+        // thêm, tránh vỡ nét). Dùng drawBitmap(bitmap, null, destRect, paint) để co
+        // giãn ngay trên GPU khi vẽ — KHÔNG tạo Bitmap mới, Zero cấp phát thêm,
+        // tối ưu pin/RAM cho Pixel 2XL vì đây là hàm onDraw() gọi liên tục.
+        int maxFit = Math.max(8, (mainDim - (n - 1) * gap) / n);
+        int drawSize = Math.min(userIconSize, maxFit);
+        drawSize = Math.min(drawSize, crossDim); // không vượt bề dày thanh
+
+        int totalMain = n * drawSize + (n - 1) * gap;
+        int startMain = (mainDim - totalMain) / 2; // luôn căn giữa khối icon trong thanh
+        int crossOffset = (crossDim - drawSize) / 2;
+
+        for (int i = 0; i < n; i++) {
+            int pos = startMain + i * (drawSize + gap);
+            android.graphics.Rect dst = horizontal
+                ? new android.graphics.Rect(pos, crossOffset, pos + drawSize, crossOffset + drawSize)
+                : new android.graphics.Rect(crossOffset, pos, crossOffset + drawSize, pos + drawSize);
+            canvas.drawBitmap(icons.get(i), null, dst, iconPaint);
         }
     }
-}
         private class CornerView extends View {
         private Paint pFill, pStroke; private int type; private String prefix = "lock_";
         private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
