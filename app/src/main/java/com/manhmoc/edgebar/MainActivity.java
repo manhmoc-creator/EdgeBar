@@ -146,16 +146,12 @@ prefs.edit().putBoolean("preview_lock", pLock)
     @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
     private void reloadActionLabels() {
 // [XÓA] OPEN_PANEL_1/2/3 — Panel giờ liệt kê động qua nút "PANEL" (buildDynamicPackItems).
-String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
-        "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA",
-        "NOTIFICATIONS", "QUICK_SETTINGS", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "VOICE_RECORD",
-        "LAUNCH_APP", "SPLIT_SCREEN", "ACC_BUTTON_CHOOSER", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE",
-        "LOCATION_SETTINGS_OPEN", "QUICK_SHARE_SETTINGS_OPEN"};
-        String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
+String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Voice Record", "Ghi âm"),
         T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình"), T("Accessibility Shortcut Menu", "Bảng Trợ Năng Nhanh"), T("Bật/Tắt Island", "Không gian làm việc"),
         T("Screen Record", "Quay màn hình"), T("Auto-Rotate Toggle", "Bật/Tắt Tự Động Xoay"),
+        T("Open Location Settings", "Mở Cài Đặt Vị Trí"), T("Open Quick Share Settings", "Mở Cài Đặt Chia Sẻ Nhanh")};
         for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
 // LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
