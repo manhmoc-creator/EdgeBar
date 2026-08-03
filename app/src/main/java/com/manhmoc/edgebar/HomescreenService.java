@@ -214,7 +214,14 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
     private boolean isAutoHiding = false, isInv = false;
     private Handler autoHideHandler = new Handler();
     private GradientDrawable gd = new GradientDrawable();
+    private java.util.List<android.graphics.Bitmap> icons = new java.util.ArrayList<>();
+    private Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     public BarView(Context c) { super(c); gd.setCornerRadius(24f); setBackground(gd); }
+    public void setIcons(java.util.List<android.graphics.Bitmap> newIcons, int alpha) {
+        this.icons = newIcons != null ? newIcons : new java.util.ArrayList<>();
+        iconPaint.setAlpha(alpha);
+        invalidate();
+    }
     public void updateProps(int alpha, boolean autoHide, int delay, boolean inv) {
         this.baseAlpha = alpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
         autoHideHandler.removeCallbacksAndMessages(null);
@@ -238,6 +245,26 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
             });
             a.start();
         }, hideDelay);
+    }
+    @Override protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        if (icons.isEmpty()) return;
+        int w = getWidth(), h = getHeight();
+        if (w <= 0 || h <= 0) return;
+        int n = icons.size();
+        int iconSize = icons.get(0).getWidth();
+        boolean horizontal = w >= h;
+        if (horizontal) {
+            int totalW = n * iconSize + (n - 1) * 8;
+            int startX = (w - totalW) / 2;
+            int y = (h - iconSize) / 2;
+            for (int i = 0; i < n; i++) canvas.drawBitmap(icons.get(i), startX + i * (iconSize + 8), y, iconPaint);
+        } else {
+            int totalH = n * iconSize + (n - 1) * 8;
+            int startY = (h - totalH) / 2;
+            int x = (w - iconSize) / 2;
+            for (int i = 0; i < n; i++) canvas.drawBitmap(icons.get(i), x, startY + i * (iconSize + 8), iconPaint);
+        }
     }
 }
     private class CornerView extends View {
