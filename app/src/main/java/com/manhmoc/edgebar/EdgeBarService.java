@@ -459,31 +459,7 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
         }
     }
 }
-    // [MỚI] Icon LUÔN vẽ ở lớp riêng, KHÔNG phụ thuộc alpha của nền GradientDrawable —
-    // dù nền đang tàng hình (alpha=0), icon vẫn hiện trắng rõ nét vì đây là 1 lớp canvas
-    // độc lập, chỉ tắt icon nếu người dùng chủ động không gán icon nào.
-    @Override protected void onDraw(Canvas canvas) {
-        super.onDraw(canvas);
-        if (icons.isEmpty()) return;
-        int w = getWidth(), h = getHeight();
-        if (w <= 0 || h <= 0) return;
-        int n = icons.size();
-        int iconSize = icons.get(0).getWidth();
-        boolean horizontal = w >= h;
-        if (horizontal) {
-            int totalW = n * iconSize + (n - 1) * 8;
-            int startX = (w - totalW) / 2;
-            int y = (h - iconSize) / 2;
-            for (int i = 0; i < n; i++) canvas.drawBitmap(icons.get(i), startX + i * (iconSize + 8), y, iconPaint);
-        } else {
-            int totalH = n * iconSize + (n - 1) * 8;
-            int startY = (h - totalH) / 2;
-            int x = (w - iconSize) / 2;
-            for (int i = 0; i < n; i++) canvas.drawBitmap(icons.get(i), x, startY + i * (iconSize + 8), iconPaint);
-        }
-    }
-}
-    private class CornerView extends View {
+        private class CornerView extends View {
         private Paint pFill, pStroke; private int type; private String prefix = "lock_";
         private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
         private boolean isInv = false;
