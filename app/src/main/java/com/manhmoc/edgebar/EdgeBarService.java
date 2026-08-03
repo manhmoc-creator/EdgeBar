@@ -517,8 +517,6 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
     }
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        @Override protected void onDraw(Canvas canvas) {
-        super.onDraw(canvas);
         iconPaint.setAlpha((int) (userIconAlpha * (iconAlphaFactor / 255f)));
         if (icons.isEmpty()) return;
         int w = getWidth(), h = getHeight();
@@ -550,7 +548,6 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
                 ? new android.graphics.Rect(pos, crossOffset, pos + drawSize, crossOffset + drawSize)
                 : new android.graphics.Rect(crossOffset, pos, crossOffset + drawSize, pos + drawSize);
             canvas.drawBitmap(icons.get(i), null, dst, iconPaint);
-        }
     }
 }
         private class CornerView extends View {
