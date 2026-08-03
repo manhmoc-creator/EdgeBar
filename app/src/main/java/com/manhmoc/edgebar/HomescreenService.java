@@ -280,6 +280,7 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
             canvas.drawBitmap(icons.get(i), null, dst, iconPaint);
         }
     }
+}
     private class CornerView extends View {
         private Paint pFill, pStroke; private int type; private String prefix;
         private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
