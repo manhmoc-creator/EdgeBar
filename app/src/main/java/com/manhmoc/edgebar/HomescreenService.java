@@ -439,7 +439,9 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
     private void doScreenshot() {
         registerScreenshotReceiver();
         Intent i = new Intent(this, ScreenshotPermissionActivity.class);
-        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_NO_ANIMATION
+                | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
         startActivity(i);
     }
     private void captureScreen(int resultCode, Intent data) {
