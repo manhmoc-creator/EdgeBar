@@ -829,10 +829,12 @@ private LinearLayout buildGestureIconDrawer() {
         boolean willOpen = body.getVisibility() == View.GONE;
         if (willOpen && !inflated[0]) {
             inflated[0] = true;
+            inflated[0] = true;
             body.addView(createSlider(T("Jump Icon Size", "Kích thước Icon Nhảy"), "homacc_jump_icon_size", 160, 90));
 body.addView(createSlider(T("Jump Icon Opacity", "Độ đậm Icon Nhảy"), "homacc_jump_icon_alpha", 255, 255));
             body.addView(createSlider(T("Jump Up/Fall Duration (ms)", "Thời gian nhảy lên/rơi (ms)"), "homacc_jump_anim_dur", 3000, 1000));
             body.addView(createSlider(T("Jump Hold Duration (ms)","Thời gian giữ trên đỉnh (ms)"), "homacc_jump_hold_ms", 3000, 2000));
+            body.addView(createSlider(T("Jump Distance (px)","Khoảng cách nhảy Icon (px)"), "homacc_jump_dist", 400, 160));
             for (int i = 0; i < C_GESTURES.length; i++) {
                 final String gKey = "homacc_gesture_icon_" + C_GESTURES[i];
                 LinearLayout row = new LinearLayout(this);
@@ -1955,8 +1957,11 @@ private void applyPackRulesToSpace(String itemKey, String targetPrefix, String c
             .putInt(barKey + "x", prefs.getInt(src + "x", 0))
             .putInt(barKey + "y", prefs.getInt(src + "y", 0))
             .putString(barKey + "icons", prefs.getString(src + "icons", ""))
-            .putInt(barKey + "icon_alpha", prefs.getInt("homacc_bar_icon_alpha", 255))
-            .putInt(barKey + "icon_size", prefs.getInt("homacc_bar_icon_size", 40))
+            // [FIX] KHÔNG ghi snapshot icon_alpha/icon_size nữa -> luôn fallback về
+            // key chung "<prefix>bar_icon_size/alpha" => thanh kéo chung áp dụng real-time.
+            .remove(barKey + "icon_alpha")
+            .remove(barKey + "icon_size")
+            .putInt(barKey + "jumpdir", prefs.getInt(src + "jumpdir", 0))
             .apply();
         applyPackRulesToSpace("bar_" + id, targetPrefix, BARS[loc]); // [MỚI]
     }
@@ -1978,6 +1983,7 @@ private void applyPackRulesToSpace(String itemKey, String targetPrefix, String c
         String cornerKey = targetPrefix + "corner_" + CORNERS[loc] + "_";
         prefs.edit()
             .putBoolean(cornerKey + "en", true)
+            .putInt(cornerKey + "jumpdir", prefs.getInt(src + "jumpdir", 0))
             .putInt(cornerKey + "vis_mode", prefs.getInt(src + "vis_mode", 0))
             .putInt(cornerKey + "pri_mode", prefs.getInt(src + "pri_mode", 0))
             .putInt(cornerKey + "shape", prefs.getInt(src + "shape", 0))
@@ -4002,6 +4008,8 @@ prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
 previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_alpha");
         content.addView(createComboDropdown("Hiển thị", prefix + id + "_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
         content.addView(createComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode", new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+        content.addView(createComboDropdown(T("Icon Jump Direction (Tap/DTap/Long)","Hướng nhảy Icon (Chạm/2 Chạm/Giữ)"), prefix + id + "_jumpdir",
+            new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"), T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"), T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
         content.addView(createSlider("Độ trong suốt", prefix + id + "_alpha", 255, 50));
         content.addView(createSlider("Chiều ngang", prefix + id + "_w", 3000, 300));
         content.addView(createSlider("Chiều dọc", prefix + id + "_h", 3000, 60));
@@ -4052,6 +4060,8 @@ previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_alpha"
     previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_x");
     content.addView(createComboDropdown("Hiển thị", prefix + id + "_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
         content.addView(createComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode", new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+        content.addView(createComboDropdown(T("Icon Jump Direction (Tap/DTap/Long)","Hướng nhảy Icon (Chạm/2 Chạm/Giữ)"), prefix + id + "_jumpdir",
+            new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"), T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"), T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
         content.addView(createComboDropdown("Hình dáng Góc", prefix + id + "_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0));
         content.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix + id + "_w", 2500, 100));
         content.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix + id + "_h", 2500, 100));
@@ -4843,48 +4853,41 @@ private FrameLayout buildIconGridCell(String ref, java.util.function.Supplier<Im
         etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
         etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
         appsPage.addView(etSearch);
-        ListView lvApps = new ListView(this);
-        lvApps.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-        appsPage.addView(lvApps);
+        ScrollView appsGridScroll = new ScrollView(this);
+        appsGridScroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+        LinearLayout appsGrid = new LinearLayout(this);
+        appsGrid.setOrientation(LinearLayout.VERTICAL);
+        appsGrid.setPadding(0, 10, 0, 10);
+        appsGridScroll.addView(appsGrid);
+        appsPage.addView(appsGridScroll);
         List<String[]> allApps = getAppListCached();
-        final List<String[]> shownApps = new ArrayList<>(allApps);
-        BaseAdapter appsAdapter = new BaseAdapter() {
-            public int getCount() { return shownApps.size(); }
-            public Object getItem(int p) { return shownApps.get(p); }
-            public long getItemId(int p) { return p; }
-            public View getView(int p, View cv, ViewGroup parent) {
-                LinearLayout row = new LinearLayout(MainActivity.this);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(20, 22, 20, 22);
-                ImageView iv = new ImageView(MainActivity.this);
-                LinearLayout.LayoutParams ivLp = new LinearLayout.LayoutParams(70, 70);
-                ivLp.setMargins(0, 0, 20, 0);
-                iv.setLayoutParams(ivLp);
-                loadAppIconInto(shownApps.get(p)[1], iv);
-                TextView tv = new TextView(MainActivity.this);
-                tv.setText(shownApps.get(p)[0]); tv.setTextColor(Color.WHITE); tv.setTextSize(15);
-                row.addView(iv); row.addView(tv);
-                return row;
+        java.util.List<String> dummySelIcon = new java.util.ArrayList<>();
+        Runnable[] refreshAppsGrid = new Runnable[1];
+        refreshAppsGrid[0] = () -> {
+            appsGrid.removeAllViews();
+            String q = etSearch.getText().toString().trim().toLowerCase();
+            LinearLayout row = null; int count = 0;
+            for (String[] app : allApps) {
+                if (!q.isEmpty() && !app[0].toLowerCase().contains(q)) continue;
+                if (count % 5 == 0) { row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); appsGrid.addView(row); }
+                String ref = "app:" + app[1];
+                FrameLayout cell = buildIconGridCell(ref, () -> { ImageView iv = new ImageView(this); loadAppIconInto(app[1], iv); return iv; },
+                    dummySelIcon, () -> {});
+                cell.setOnClickListener(v -> {
+                    prefs.edit().putString(prefKey, ref).apply();
+                    if (onSaved != null) onSaved.run();
+                    d.dismiss();
+                });
+                row.addView(cell);
+                count++;
             }
         };
-        lvApps.setAdapter(appsAdapter);
-        lvApps.setOnItemClickListener((p, v, pos, id) -> {
-            prefs.edit().putString(prefKey, "app:" + shownApps.get(pos)[1]).apply();
-            if (onSaved != null) onSaved.run();
-            d.dismiss();
-        });
+        refreshAppsGrid[0].run();
         etSearch.addTextChangedListener(new android.text.TextWatcher(){
-            public void afterTextChanged(android.text.Editable s){
-                String q = s.toString().trim().toLowerCase();
-                shownApps.clear();
-                for (String[] it : allApps) if (q.isEmpty() || it[0].toLowerCase().contains(q)) shownApps.add(it);
-                appsAdapter.notifyDataSetChanged();
-            }
+            public void afterTextChanged(android.text.Editable s){ refreshAppsGrid[0].run(); }
             public void beforeTextChanged(CharSequence s,int a,int b,int c){}
             public void onTextChanged(CharSequence s,int a,int b,int c){}
         });
-
         ScrollView poolScroll = buildIconGridPage(PanelEngine.SYSTEM_ICON_POOL, "pool:", prefKey, d, onSaved);
         ScrollView customScroll = buildIconGridPage(PanelEngine.getCustomIconPool(this), "poolc:", prefKey, d, onSaved);
         body.addView(appsPage);

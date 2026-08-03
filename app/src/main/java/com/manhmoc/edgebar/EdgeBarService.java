@@ -475,8 +475,9 @@ jumpIconBmp = resolveGestureIconBitmap(gestureKey, jSize);
             jumpUpAnim.setInterpolator(new android.view.animation.OvershootInterpolator(1.2f));
             jumpUpAnim.addUpdateListener(a -> {
                 float v = (float) a.getAnimatedValue();
-                jumpOffsetY = -180f * v + dyDir * 70f * v;
-                jumpOffsetX = dxDir * 70f * v;
+                int dist = prefs.getInt("homacc_jump_dist", 160); // [MỚI] khoảng cách nhảy toàn cục
+                jumpOffsetY = dyDir * dist * v;
+                jumpOffsetX = dxDir * dist * v;
                 jumpRotation = 360f * v;
                 invalidate();
             });
@@ -529,19 +530,20 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
     }
     private final java.util.Map<String, Bitmap> gestureIconCache = new java.util.HashMap<>();
     private Bitmap resolveGestureIconBitmap(String gestureKey, int size) {
-        if (gestureIconCache.containsKey(gestureKey)) return gestureIconCache.get(gestureKey);
         String ref = prefs.getString("homacc_gesture_icon_" + gestureKey, "");
+        String cacheKey = gestureKey + "_" + ref + "_" + size; // [FIX] gồm cả size lẫn ref -> đổi slider/icon là cache tự invalidate
+        if (gestureIconCache.containsKey(cacheKey)) return gestureIconCache.get(cacheKey);
         Drawable d = null;
         try {
             if (ref.startsWith("app:")) d = getPackageManager().getApplicationIcon(ref.substring(4));
             else if (ref.startsWith("poolc:")) { int[] p2 = PanelEngine.getCustomIconPool(this); int idx = Integer.parseInt(ref.substring(6)); if (idx>=0 && idx<p2.length) d = getDrawable(p2[idx]); }
             else if (ref.startsWith("pool:")) { int idx = Integer.parseInt(ref.substring(5)); if (idx>=0 && idx<PanelEngine.SYSTEM_ICON_POOL.length) d = getDrawable(PanelEngine.SYSTEM_ICON_POOL[idx]); }
         } catch (Exception ignored) {}
-        if (d == null) { gestureIconCache.put(gestureKey, null); return null; }
+        if (d == null) { gestureIconCache.put(cacheKey, null); return null; }
         Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         d = d.mutate(); d.setTint(Color.WHITE); d.setBounds(0,0,size,size); d.draw(c);
-        gestureIconCache.put(gestureKey, bmp);
+        gestureIconCache.put(cacheKey, bmp);
         return bmp;
     }
     private class BarView extends View {
@@ -1408,7 +1410,7 @@ if (panelEngine != null) panelEngine.rebuildAll();
     private final Runnable longPressRunnable = () -> {
         longFired = true;
         handleAction(prefKeyBase + "_long");
-        if (rippleView != null) { float[] dir = computeJumpDir(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
+        if (rippleView != null) { float[] dir = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
     };
     private long lastTapUpTime = 0;
 private static final long DTAP_WINDOW_MS = 300;
@@ -1490,7 +1492,7 @@ private float[] computeJumpDir() {
                 long now = System.currentTimeMillis();
                 final float upX = e.getRawX(), upY = e.getRawY();
                 boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
-                float[] dirTap = computeJumpDir();
+                float[] dirTap = computeJumpDirForTap();
                 if (!hasDtap) {
                     lastTapUpTime = 0;
                     handleAction(prefKeyBase + "_tap");
@@ -1522,7 +1524,7 @@ private float[] computeJumpDir() {
                             && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
                         longFired = true;
                         handleAction(prefKeyBase + "_long");
-                        if (rippleView != null) { float[] dir = computeJumpDir(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
+                        if (rippleView != null) { float[] dir = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
                     }
                 }
                 return true;
@@ -1557,6 +1559,19 @@ try {
         if (rippleView != null) wm.removeView(rippleView);
         removeAccessibleHome(); 
     }
+private float[] computeJumpDirForTap() {
+    float[] auto = computeJumpDir();
+    int mode = prefs.getInt(prefKeyBase + "_jumpdir", 0); // 0=Auto,1=Chéo lên,2=Chéo xuống,3=Thẳng lên,4=Thẳng xuống,5=Thẳng trái,6=Thẳng phải
+    switch (mode) {
+        case 1: return new float[]{auto[0], -1f}; // Chéo lên: giữ dx theo góc (đã tự mirror), ép dy lên
+        case 2: return new float[]{auto[0], 1f};  // Chéo xuống: giữ dx theo góc, ép dy xuống
+        case 3: return new float[]{0f, -1f};      // Thẳng lên
+        case 4: return new float[]{0f, 1f};       // Thẳng xuống
+        case 5: return new float[]{-1f, 0f};      // Thẳng trái
+        case 6: return new float[]{1f, 0f};       // Thẳng phải
+        default: return auto;                      // Auto = hành vi cũ
+    }
+}
     // SAU (code thay thế):
 private void drawAccessibleHome() {
     // V19.12.3.6.9 TWIN-ENGINE PHANTOM — Fix Bug A:
