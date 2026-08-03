@@ -1101,6 +1101,31 @@ for (String a : acts) {
                 }
                 case "SCREEN_OFF": doScreenOff(); break;
                 case "SCREENSHOT": doScreenshot(); break;
+                case "SCREEN_RECORD": {
+                    if (ScreenRecorderService.isRunning) {
+                        Intent stopIntent = new Intent(this, ScreenRecorderService.class);
+                        stopIntent.setAction("STOP");
+                        startService(stopIntent);
+                    } else {
+                        Intent permIntent = new Intent(this, ScreenRecordPermissionActivity.class);
+                        permIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+                        startActivity(permIntent);
+                    }
+                    break;
+                }
+                case "AUTO_ROTATE_TOGGLE": {
+                    try {
+                        if (!android.provider.Settings.System.canWrite(this)) {
+                            Toast.makeText(this, "Chưa có quyền 'Sửa đổi cài đặt hệ thống'!", Toast.LENGTH_LONG).show();
+                            break;
+                        }
+                        int cur = android.provider.Settings.System.getInt(getContentResolver(),
+                            android.provider.Settings.System.ACCELEROMETER_ROTATION, 0);
+                        android.provider.Settings.System.putInt(getContentResolver(),
+                            android.provider.Settings.System.ACCELEROMETER_ROTATION, cur == 1 ? 0 : 1);
+                    } catch (Exception e) {}
+                    break;
+                }
                 // THÊM case mới trong switch(a) của cả 2 file:
 default:
                         if (a.startsWith("PANEL_")) {

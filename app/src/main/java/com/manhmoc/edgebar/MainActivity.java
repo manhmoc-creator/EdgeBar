@@ -149,11 +149,13 @@ prefs.edit().putBoolean("preview_lock", pLock)
 String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
         "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA",
         "NOTIFICATIONS", "QUICK_SETTINGS", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "VOICE_RECORD",
-        "LAUNCH_APP", "SPLIT_SCREEN", "TOGGLE_WORK_PROFILE"};
+        "LAUNCH_APP", "SPLIT_SCREEN", "ACC_BUTTON_CHOOSER", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE",
+        "LOCATION_SETTINGS_OPEN", "QUICK_SHARE_SETTINGS_OPEN"};
         String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Voice Record", "Ghi âm"),
-        T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình"), T("Toggle Island (Work Profile)", "Bật/Tắt Island (Không gian làm việc)")};
+        T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình"), T("Accessibility Shortcut Menu", "Bảng Trợ Năng Nhanh"), T("Bật/Tắt Island", "Không gian làm việc"),
+        T("Screen Record", "Quay màn hình"), T("Auto-Rotate Toggle", "Bật/Tắt Tự Động Xoay"),
         for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
 // LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
@@ -1828,8 +1830,8 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     // BACK/RECENTS/SCREEN_OFF/POWER_DIALOG/SCREENSHOT/NOTIFICATIONS/SPLIT_SCREEN đều gọi
     // performGlobalAction() nên rơi vào default và không làm gì. Ẩn hẳn khỏi UI Homeb.
     String[] sysKeysForPack = isHomebSpace
-        ? new String[]{"HOME", "FLASH", "VOLUME", "CAMERA", "SCREEN_OFF", "SCREENSHOT"}
-        : new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN"};
+        ? new String[]{"HOME", "FLASH", "VOLUME", "CAMERA", "SCREEN_OFF", "SCREENSHOT", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"}
+        : new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "ACC_BUTTON_CHOOSER", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
     List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeysForPack, ACT_KEYS, ACT_LABS);
     List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
     List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "VOICE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE"}, ACT_KEYS, ACT_LABS);
@@ -2200,11 +2202,11 @@ for (String sa : savedArray) {
         boolean isHomebSpace = (currentGesTab == 2);
         String[] sysKeys;
         if (isVolKeyMode) {
-            sysKeys = new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "SCREEN_ON", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN"};
+            sysKeys = new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "SCREEN_ON", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "ACC_BUTTON_CHOOSER", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
         } else if (isHomebSpace) {
-            sysKeys = new String[]{"HOME", "FLASH", "VOLUME", "CAMERA", "SCREEN_OFF", "SCREENSHOT"};
+            sysKeys = new String[]{"HOME", "FLASH", "VOLUME", "CAMERA", "SCREEN_OFF", "SCREENSHOT", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
         } else {
-            sysKeys = new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN"};
+            sysKeys = new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "ACC_BUTTON_CHOOSER", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
         }
         List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeys, actKeysUsed, actLabsUsed);
                 List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
