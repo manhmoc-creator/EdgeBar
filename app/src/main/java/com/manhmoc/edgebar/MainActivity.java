@@ -1797,7 +1797,7 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     // BACK/RECENTS/SCREEN_OFF/POWER_DIALOG/SCREENSHOT/NOTIFICATIONS/SPLIT_SCREEN đều gọi
     // performGlobalAction() nên rơi vào default và không làm gì. Ẩn hẳn khỏi UI Homeb.
     String[] sysKeysForPack = isHomebSpace
-        ? new String[]{"HOME", "FLASH", "VOLUME", "CAMERA"}
+        ? new String[]{"HOME", "FLASH", "VOLUME", "CAMERA", "SCREEN_OFF", "SCREENSHOT"}
         : new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN"};
     List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeysForPack, ACT_KEYS, ACT_LABS);
     List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
@@ -2171,7 +2171,7 @@ for (String sa : savedArray) {
         if (isVolKeyMode) {
             sysKeys = new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "SCREEN_ON", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN"};
         } else if (isHomebSpace) {
-            sysKeys = new String[]{"HOME", "FLASH", "VOLUME", "CAMERA"};
+            sysKeys = new String[]{"HOME", "FLASH", "VOLUME", "CAMERA", "SCREEN_OFF", "SCREENSHOT"};
         } else {
             sysKeys = new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN"};
         }

@@ -44,10 +44,17 @@ import android.view.WindowManager;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast; // ← THÊM DÒNG NÀY
-
 import java.io.InputStream;
 import java.util.Collections;
-
+import android.app.Activity;
+import android.app.admin.DevicePolicyManager;
+import android.content.ComponentName;
+import android.media.projection.MediaProjection;
+import android.media.projection.MediaProjectionManager;
+import android.media.ImageReader;
+import android.hardware.display.DisplayManager;
+import android.hardware.display.VirtualDisplay;
+import android.util.DisplayMetrics;
 // ĐẰNG TRƯỚC
 public class HomescreenService extends Service {
     // ĐẰNG SAU (Biến cũ của HomescreenService)
@@ -85,8 +92,14 @@ private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap
     private void ensureRippleView() {
         if (rippleView != null) return;
         rippleView = new GestureRippleView(this);
+        // [FIX] Homeb chỉ có quyền SYSTEM_ALERT_WINDOW (không có Accessibility),
+        // nên PHẢI dùng TYPE_APPLICATION_OVERLAY giống mọi View khác trong file này
+        // (BarView, CornerView, FlashView). TYPE_ACCESSIBILITY_OVERLAY chỉ addView
+        // được khi có AccessibilityService binding thật — Homeb không có, khiến
+        // addView() ném exception bị "catch (Exception ignored)" nuốt im lặng,
+        // rippleView tồn tại trong RAM nhưng không bao giờ thực sự hiện lên màn hình.
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(-1,-1,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT);
@@ -369,6 +382,118 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
         gestureIconCache.put(cacheKey, null);
         return null;
     }
+    }
+ private DevicePolicyManager dpm;
+    private ComponentName adminComponent;
+
+    private void initDeviceAdmin() {
+        dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+        adminComponent = new ComponentName(this, HomebDeviceAdminReceiver.class);
+    }
+
+    /** Trả về true nếu đã có quyền Device Admin, false nếu chưa (và sẽ tự bật dialog xin quyền) */
+    private boolean ensureDeviceAdmin() {
+        if (dpm == null) initDeviceAdmin();
+        if (dpm.isAdminActive(adminComponent)) return true;
+        Intent intent = new Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
+        intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent);
+        intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                "Cấp quyền này để Homeb tắt màn hình bằng nút System.");
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        return false;
+    }
+
+    /** Action SYSTEM: Screen Off — gọi hàm này khi người dùng bấm nút Screen Off trong Homeb */
+    private void doScreenOff() {
+        if (!ensureDeviceAdmin()) return; // đang chờ user cấp quyền lần đầu
+        try {
+            dpm.lockNow();
+        } catch (SecurityException e) {
+            android.widget.Toast.makeText(this, "Homeb chưa được cấp quyền Device Admin", android.widget.Toast.LENGTH_SHORT).show();
+        }
+    }
+ private MediaProjection mediaProjection;
+    private ImageReader imageReader;
+    private VirtualDisplay virtualDisplay;
+    private BroadcastReceiver screenshotReceiver;
+
+    private void registerScreenshotReceiver() {
+        if (screenshotReceiver != null) return;
+        screenshotReceiver = new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent intent) {
+                int resultCode = intent.getIntExtra("resultCode", Activity.RESULT_CANCELED);
+                Intent data = intent.getParcelableExtra("data");
+                if (resultCode == Activity.RESULT_OK && data != null) {
+                    captureScreen(resultCode, data);
+                }
+            }
+        };
+        IntentFilter f = new IntentFilter("com.manhmoc.edgebar.ACTION_SCREENSHOT_GRANTED");
+        registerReceiver(screenshotReceiver, f, Context.RECEIVER_NOT_EXPORTED);
+    }
+
+    /** Action SYSTEM: Screenshot — gọi hàm này khi người dùng bấm nút Screenshot trong Homeb */
+    private void doScreenshot() {
+        registerScreenshotReceiver();
+        Intent i = new Intent(this, ScreenshotPermissionActivity.class);
+        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
+    }
+
+    private void captureScreen(int resultCode, Intent data) {
+        MediaProjectionManager mpm = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+        mediaProjection = mpm.getMediaProjection(resultCode, data);
+        if (mediaProjection == null) return;
+
+        DisplayMetrics metrics = getResources().getDisplayMetrics();
+        int width = metrics.widthPixels, height = metrics.heightPixels, density = metrics.densityDpi;
+
+        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
+        virtualDisplay = mediaProjection.createVirtualDisplay(
+                "HomebScreenshot", width, height, density,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                imageReader.getSurface(), null, null);
+
+        imageReader.setOnImageAvailableListener(reader -> {
+            android.media.Image image = reader.acquireLatestImage();
+            if (image == null) return;
+            Bitmap bmp = imageToBitmap(image, width, height);
+            image.close();
+            saveBitmapToGallery(bmp);
+            releaseScreenCapture();
+        }, new android.os.Handler(android.os.Looper.getMainLooper()));
+    }
+
+    private Bitmap imageToBitmap(android.media.Image image, int width, int height) {
+        android.media.Image.Plane plane = image.getPlanes()[0];
+        java.nio.ByteBuffer buffer = plane.getBuffer();
+        int pixelStride = plane.getPixelStride();
+        int rowStride = plane.getRowStride();
+        int rowPadding = rowStride - pixelStride * width;
+        Bitmap bmp = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
+        bmp.copyPixelsFromBuffer(buffer);
+        return Bitmap.createBitmap(bmp, 0, 0, width, height);
+    }
+
+    private void saveBitmapToGallery(Bitmap bmp) {
+        String name = "Homeb_" + System.currentTimeMillis() + ".png";
+        android.content.ContentValues cv = new android.content.ContentValues();
+        cv.put(MediaStore.Images.Media.DISPLAY_NAME, name);
+        cv.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+        cv.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Homeb");
+        android.net.Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+        if (uri == null) return;
+        try (java.io.OutputStream os = getContentResolver().openOutputStream(uri)) {
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, os);
+            android.widget.Toast.makeText(this, "Đã lưu ảnh chụp màn hình", android.widget.Toast.LENGTH_SHORT).show();
+        } catch (Exception ignored) {}
+    }
+
+    private void releaseScreenCapture() {
+        if (virtualDisplay != null) { virtualDisplay.release(); virtualDisplay = null; }
+        if (imageReader != null) { imageReader.close(); imageReader = null; }
+        if (mediaProjection != null) { mediaProjection.stop(); mediaProjection = null; }
     }
     private class BarView extends View {
     private int baseAlpha, hideDelay;
@@ -942,6 +1067,8 @@ for (String a : acts) {
                     sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC"));
                     break;
                 }
+                case "SCREEN_OFF": doScreenOff(); break;
+                case "SCREENSHOT": doScreenshot(); break;
                 // THÊM case mới trong switch(a) của cả 2 file:
 default:
                         if (a.startsWith("PANEL_")) {

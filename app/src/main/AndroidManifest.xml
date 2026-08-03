@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools"
     package="com.manhmoc.edgebar">
-
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -34,6 +34,22 @@
         </activity>
 
         <activity android:name=".ScannerHelper" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:exported="true" />
+                <activity
+    android:name=".ScreenshotPermissionActivity"
+    android:theme="@android:style/Theme.Translucent.NoTitleBar"
+    android:excludeFromRecents="true"
+    android:exported="false" />
+                <receiver
+    android:name=".HomebDeviceAdminReceiver"
+    android:permission="android.permission.BIND_DEVICE_ADMIN"
+    android:exported="true">
+    <meta-data
+        android:name="android.app.device_admin"
+        android:resource="@xml/homeb_device_admin" />
+    <intent-filter>
+        <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+    </intent-filter>
+</receiver>
                 <receiver android:name=".ToggleReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="com.manhmoc.edgebar.TOGGLE_ACC" />
@@ -61,7 +77,8 @@
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <service android:name=".HomescreenService" android:exported="false" />
+        <service android:name=".HomescreenService" android:exported="false"
+    android:foregroundServiceType="mediaProjection" />
 <service android:name=".VolumeButtonService" android:exported="false"
     android:foregroundServiceType="mediaPlayback" />
 <service android:name=".VoiceRecorderService" android:exported="false"
