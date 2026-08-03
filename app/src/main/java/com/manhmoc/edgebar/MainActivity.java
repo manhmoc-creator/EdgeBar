@@ -5006,7 +5006,7 @@ private void showSingleAppPickerDialogCallback(java.util.function.Consumer<Strin
 
     final List<String[]> shown = new ArrayList<>(combined);
     Runnable[] refreshGridHolder = new Runnable[1];
-    java.util.Set<String> dummySel = new java.util.HashSet<>(); // single-select: không giữ trạng thái
+    java.util.List<String> dummySel = new java.util.ArrayList<>(); // single-select: không giữ trạng thái
     refreshGridHolder[0] = () -> {
         gridBox.removeAllViews();
         LinearLayout row = null;
