@@ -19,6 +19,9 @@ public class PanelEngine {
     private final Map<String, Boolean> forceTestOn = new HashMap<>();
     private final Map<String, Integer> lastIconSizeCache = new HashMap<>();
     private final Map<String, AtomicInteger> renderGen = new HashMap<>();
+    // [MỚI] Theo dõi chuyển đổi Lock <-> Homacc — dùng để tự đóng Panel đang mở,
+    // không cho Panel "mang theo" từ không gian này sang không gian kia.
+    private Boolean lastLockedForPanels = null;
     private static final int ICON_CACHE_LIMIT = 80;
     private static final LinkedHashMap<String, Drawable> iconCache =
         new LinkedHashMap<String, Drawable>(16, 0.75f, true) {
@@ -147,6 +150,19 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
     /** Gọi mỗi khi lock state / accessibility state đổi — decide xem instance này
      *  (Lock hay Homacc, tùy trạng thái) có được phép giữ panel hay không. */
     public void rebuildAll() {
+        // [FIX] Lock và Homacc dùng chung cờ isAnyMode nên shouldPanelBodyExistNow()
+        // trả về true khi LOCKED HOẶC Homacc đang chạy — nghĩa là khi khoá máy,
+        // điều kiện vẫn đúng (chỉ đổi lý do), Panel không bao giờ tự đóng dù đã
+        // đổi hẳn không gian. Phát hiện đúng thời điểm chuyển Lock <-> Homacc rồi
+        // tự đóng hết Panel đang mở tại đây — không cho Panel "mang theo" sang
+        // không gian mới, tránh treo overlay vô ích gây tốn pin/RAM.
+        if (isAnyMode) {
+            boolean lockedNow = km != null && km.isKeyguardLocked();
+            if (lastLockedForPanels != null && lastLockedForPanels != lockedNow) {
+                closeAllPanels();
+            }
+            lastLockedForPanels = lockedNow;
+        }
         // Duyệt đúng danh sách Panel THẬT đang tồn tại — Panel bị xóa khỏi pack_panel_ids
         // sẽ tự động bị dọn View ở dưới (không rebuild lại) → tự giải phóng RAM.
         java.util.Set<String> liveIds = new java.util.HashSet<>(getDynamicIds("pack_panel_ids"));
