@@ -1510,7 +1510,8 @@ private float[] computeJumpDir() {
                 }
                 if (rippleView != null) rippleView.popRipple();
                 return true;
-            }
+       }
+}
             case MotionEvent.ACTION_CANCEL: {
                 lpHandler.removeCallbacks(longPressRunnable);
                 if (!longFired) {
