@@ -414,10 +414,12 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
         }
     }
  private MediaProjection mediaProjection;
-    private ImageReader imageReader;
-    private VirtualDisplay virtualDisplay;
-    private BroadcastReceiver screenshotReceiver;
-
+private ImageReader imageReader;
+private VirtualDisplay virtualDisplay;
+private BroadcastReceiver screenshotReceiver;
+private long captureStartMs;
+private final java.util.concurrent.atomic.AtomicBoolean captureDone = new java.util.concurrent.atomic.AtomicBoolean(false);
+private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống mờ hẳn rồi mới lấy khung hình
     private void registerScreenshotReceiver() {
         if (screenshotReceiver != null) return;
         screenshotReceiver = new BroadcastReceiver() {
@@ -449,6 +451,9 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
         DisplayMetrics metrics = getResources().getDisplayMetrics();
         int width = metrics.widthPixels, height = metrics.heightPixels, density = metrics.densityDpi;
 
+        captureDone.set(false);
+        captureStartMs = System.currentTimeMillis();
+
         imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
         virtualDisplay = mediaProjection.createVirtualDisplay(
                 "HomebScreenshot", width, height, density,
@@ -458,13 +463,24 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
         imageReader.setOnImageAvailableListener(reader -> {
             android.media.Image image = reader.acquireLatestImage();
             if (image == null) return;
+
+            // Bỏ qua khung hình xuất hiện lúc dialog hệ thống còn đang mờ dần -> hết mờ ảnh
+            if (System.currentTimeMillis() - captureStartMs < CAPTURE_WARMUP_MS) {
+                image.close();
+                return;
+            }
+            // Chỉ xử lý ĐÚNG 1 lần -> chặn callback thứ 2 chụp trúng lúc Toast đang hiện
+            if (!captureDone.compareAndSet(false, true)) {
+                image.close();
+                return;
+            }
+
             Bitmap bmp = imageToBitmap(image, width, height);
             image.close();
             saveBitmapToGallery(bmp);
             releaseScreenCapture();
         }, new android.os.Handler(android.os.Looper.getMainLooper()));
     }
-
     private Bitmap imageToBitmap(android.media.Image image, int width, int height) {
         android.media.Image.Plane plane = image.getPlanes()[0];
         java.nio.ByteBuffer buffer = plane.getBuffer();

@@ -77,7 +77,7 @@ private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
     private final String CURRENT_VERSION = "V19.12.3.6.36";
     private RelativeLayout rootLayout;
-
+    private Button btnDeviceAdmin;
     private int ecoType = 0;
     private LinearLayout ecoContainer;
     // THÊM 2 field static này ngay dưới khai báo ecoContainer:
@@ -132,7 +132,17 @@ prefs.edit().putBoolean("preview_lock", pLock)
     .putBoolean("preview_home", inFrontierHome).apply();
     Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); 
 }
-    @Override protected void onResume() { super.onResume(); refreshPreview(); }
+    @Override protected void onResume() {
+        super.onResume();
+        refreshPreview();
+        if (btnDeviceAdmin != null) {
+            android.app.admin.DevicePolicyManager dpmR =
+                (android.app.admin.DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+            android.content.ComponentName adminR =
+                new android.content.ComponentName(this, HomebDeviceAdminReceiver.class);
+            btnDeviceAdmin.setVisibility(dpmR.isAdminActive(adminR) ? View.GONE : View.VISIBLE);
+        }
+    }
     @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
     private void reloadActionLabels() {
 // [XÓA] OPEN_PANEL_1/2/3 — Panel giờ liệt kê động qua nút "PANEL" (buildDynamicPackItems).
@@ -490,6 +500,27 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
                 main.addView(btnUsage);
             }
         } catch (Exception e) { /* bỏ qua nếu thiết bị không hỗ trợ */ }
+            // --- DEVICE ADMIN (để Homeb tắt được màn hình, không cần adb) ---
+        android.app.admin.DevicePolicyManager dpmCheck =
+            (android.app.admin.DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+        android.content.ComponentName adminCheck =
+            new android.content.ComponentName(this, HomebDeviceAdminReceiver.class);
+        btnDeviceAdmin = new Button(this);
+        btnDeviceAdmin.setText("⚠️ CẤP QUYỀN QUẢN TRỊ THIẾT BỊ\nĐể Homeb tắt được màn hình (Screen Off)");
+        btnDeviceAdmin.setBackground(getRounded("#673AB7", 25f));
+        btnDeviceAdmin.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams adminLp = new LinearLayout.LayoutParams(-1, -2);
+        adminLp.setMargins(0, 10, 0, 0);
+        btnDeviceAdmin.setLayoutParams(adminLp);
+        btnDeviceAdmin.setVisibility(dpmCheck.isAdminActive(adminCheck) ? View.GONE : View.VISIBLE);
+        btnDeviceAdmin.setOnClickListener(v -> {
+            Intent intent = new Intent(android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
+            intent.putExtra(android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminCheck);
+            intent.putExtra(android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                    "Cấp quyền này để Homeb tắt màn hình bằng nút Screen Off, không cần lệnh adb.");
+            startActivity(intent);
+        });
+        main.addView(btnDeviceAdmin);
     // Navigation Tab đẩy ra đầu dòng kèm icon
     navMain = new LinearLayout(this);
     navMain.setOrientation(LinearLayout.HORIZONTAL); navMain.setPadding(0, 0, 0, 40);
