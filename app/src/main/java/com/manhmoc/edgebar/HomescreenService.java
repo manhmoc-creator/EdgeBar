@@ -61,7 +61,6 @@ private boolean isAccessibleHomeShortcutOn() {
     private WindowManager wm;
     private View[] bars = new View[5];
     private View[] corners = new View[4];
-    private View kbdSensorView;
     private final java.util.Map<View, String> lastLayoutSig = new java.util.HashMap<>();
     private void updateLayoutIfChanged(View v, WindowManager.LayoutParams p) {
         String sig = p.flags + "|" + p.width + "|" + p.height + "|" + p.x + "|" + p.y + "|" + p.gravity;
@@ -98,6 +97,52 @@ private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap
 
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
+    private static final int BAR_ICON_CACHE_LIMIT = 40;
+private static final java.util.LinkedHashMap<String, android.graphics.Bitmap> barIconCache =
+    new java.util.LinkedHashMap<String, android.graphics.Bitmap>(16, 0.75f, true) {
+        protected boolean removeEldestEntry(java.util.Map.Entry<String, android.graphics.Bitmap> e) {
+            return size() > BAR_ICON_CACHE_LIMIT;
+        }
+    };
+private android.graphics.Bitmap resolveBarIconBitmap(String ref, int size) {
+    String key = ref + "_" + size;
+    synchronized (barIconCache) {
+        android.graphics.Bitmap cached = barIconCache.get(key);
+        if (cached != null && !cached.isRecycled()) return cached;
+    }
+    android.graphics.drawable.Drawable d = null;
+    try {
+        if (ref.startsWith("app:")) {
+            d = getPackageManager().getApplicationIcon(ref.substring(4));
+        } else if (ref.startsWith("poolc:")) {
+            int idx = Integer.parseInt(ref.substring(6));
+            int[] pool = PanelEngine.getCustomIconPool(this);
+            if (idx >= 0 && idx < pool.length) d = getDrawable(pool[idx]);
+        } else if (ref.startsWith("pool:")) {
+            int idx = Integer.parseInt(ref.substring(5));
+            if (idx >= 0 && idx < PanelEngine.SYSTEM_ICON_POOL.length) d = getDrawable(PanelEngine.SYSTEM_ICON_POOL[idx]);
+        }
+    } catch (Exception ignored) {}
+    if (d == null) return null;
+    android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
+    Canvas c = new Canvas(bmp);
+    d = d.mutate();
+    d.setTint(Color.WHITE);
+    d.setBounds(0, 0, size, size);
+    d.draw(c);
+    synchronized (barIconCache) { barIconCache.put(key, bmp); }
+    return bmp;
+}
+private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int size) {
+    java.util.List<android.graphics.Bitmap> list = new java.util.ArrayList<>();
+    if (csv == null || csv.isEmpty()) return list;
+    for (String ref : csv.split(",")) {
+        if (ref.trim().isEmpty()) continue;
+        android.graphics.Bitmap b = resolveBarIconBitmap(ref.trim(), size);
+        if (b != null) list.add(b);
+    }
+    return list;
+}
     private class FlashView extends View {
     private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE";
     int aStyle = 0; private float phaseFraction = 0f;
@@ -401,36 +446,6 @@ filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
         // máy Android 11+ (API >= 30). Bổ sung đúng phần dựng cửa sổ, dùng TYPE_APPLICATION_OVERLAY
         // (không NO_LIMITS) để nhận đúng WindowInsets.Type.ime() — cùng cấu hình đã sửa bên
         // EdgeBarService. Vẫn chỉ 1 View trong suốt, không thêm chi phí pin/RAM nào.
-        kbdSensorView = new View(this);
-        kbdSensorView.setAlpha(0f);
-        // [GIẢM VÙNG PHỦ TAPJACKING] Chỉ neo ở nửa dưới màn hình (nơi IME thực sự
-        // xuất hiện) thay vì MATCH_PARENT toàn màn — giảm diện tích "obscure" gây
-        // cảnh báo tapjacking ở các app khác (Play Store, ngân hàng...) khi Homeb sống.
-        int screenH = getResources().getDisplayMetrics().heightPixels;
-        WindowManager.LayoutParams kp = new WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT, (int)(screenH * 0.5f),
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT);
-        kp.gravity = Gravity.BOTTOM;
-        try { wm.addView(kbdSensorView, kp); } catch (Exception e) {}
-        // [FIX PUSH-AWAY BÀN PHÍM] Homeb chạy độc lập không cần Accessibility —
-        // gắn thẳng WindowInsets.Type.ime() lên overlay của CHÍNH service này,
-        // không còn phụ thuộc broadcast từ EdgeBarService (nguồn không tồn tại
-        // khi Accessibility tắt). Chỉ update khi lệch ≥ ngưỡng, tránh gọi
-        // updateVisibility() thừa mỗi khi Gboard đang animate.
-        if (Build.VERSION.SDK_INT >= 30) {
-            kbdSensorView.setOnApplyWindowInsetsListener((v, insets) -> {
-                int imeH = insets.getInsets(android.view.WindowInsets.Type.ime()).bottom;
-                if (Math.abs(imeH - lastKbdHeight) >= KBD_HEIGHT_CHANGE_THRESHOLD) {
-                    lastKbdHeight = imeH;
-                    isKbd = imeH > 0;
-                    updateVisibility();
-                }
-                return insets;
-            });
-        }
         for (int i = 0; i < 5; i++) {
             bars[i] = new BarView(this);
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(
@@ -534,7 +549,11 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
                 int x = prefs.getInt("home_" + BARS[i] + "_x", 0);
                 int y = prefs.getInt("home_" + BARS[i] + "_y", 0);
                 int visMode = prefs.getInt("home_" + BARS[i] + "_vis_mode", 0);
-                ((BarView)bars[i]).updateProps(alpha, visMode==1, 2500, visMode==2);
+                int barHideDur = prefs.getInt("home_bar_hide_dur", 2500);
+                ((BarView)bars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2);
+                int iconSize = prefs.getInt("home_" + BARS[i] + "_icon_size", 40);
+                int iconAlpha = prefs.getInt("home_" + BARS[i] + "_icon_alpha", 255);
+                ((BarView)bars[i]).setIcons(resolveBarIcons(prefs.getString("home_" + BARS[i] + "_icons",""), iconSize), iconAlpha);
                 int priMode = prefs.getInt("home_" + BARS[i] + "_pri_mode", 0);
                 int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                 if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -918,6 +937,5 @@ private void fireIntentById(String id) {
     // vĩnh viễn trên WindowManager dù Service đã chết, khiến Android/Play Protect
     // luôn coi mọi UI hệ thống (kể cả lúc Trợ năng đang chạy sạch) là đang bị
     // 1 app khác che phủ → báo "ứng dụng khác đang chặn màn hình" liên tục.
-    if (kbdSensorView != null) { try { wm.removeView(kbdSensorView); } catch (Exception ignored) {} kbdSensorView = null; }
   }
 }  // ← đây là dấu } cuối cùng đóng class HomescreenService, KHÔNG XÓA

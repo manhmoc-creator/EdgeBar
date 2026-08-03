@@ -283,6 +283,52 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         }
     }
 };
+    private static final int BAR_ICON_CACHE_LIMIT = 40;
+private static final java.util.LinkedHashMap<String, android.graphics.Bitmap> barIconCache =
+    new java.util.LinkedHashMap<String, android.graphics.Bitmap>(16, 0.75f, true) {
+        protected boolean removeEldestEntry(java.util.Map.Entry<String, android.graphics.Bitmap> e) {
+            return size() > BAR_ICON_CACHE_LIMIT;
+        }
+    };
+private android.graphics.Bitmap resolveBarIconBitmap(String ref, int size) {
+    String key = ref + "_" + size;
+    synchronized (barIconCache) {
+        android.graphics.Bitmap cached = barIconCache.get(key);
+        if (cached != null && !cached.isRecycled()) return cached;
+    }
+    android.graphics.drawable.Drawable d = null;
+    try {
+        if (ref.startsWith("app:")) {
+            d = getPackageManager().getApplicationIcon(ref.substring(4));
+        } else if (ref.startsWith("poolc:")) {
+            int idx = Integer.parseInt(ref.substring(6));
+            int[] pool = PanelEngine.getCustomIconPool(this);
+            if (idx >= 0 && idx < pool.length) d = getDrawable(pool[idx]);
+        } else if (ref.startsWith("pool:")) {
+            int idx = Integer.parseInt(ref.substring(5));
+            if (idx >= 0 && idx < PanelEngine.SYSTEM_ICON_POOL.length) d = getDrawable(PanelEngine.SYSTEM_ICON_POOL[idx]);
+        }
+    } catch (Exception ignored) {}
+    if (d == null) return null;
+    android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
+    Canvas c = new Canvas(bmp);
+    d = d.mutate();
+    d.setTint(Color.WHITE);
+    d.setBounds(0, 0, size, size);
+    d.draw(c);
+    synchronized (barIconCache) { barIconCache.put(key, bmp); }
+    return bmp;
+}
+private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int size) {
+    java.util.List<android.graphics.Bitmap> list = new java.util.ArrayList<>();
+    if (csv == null || csv.isEmpty()) return list;
+    for (String ref : csv.split(",")) {
+        if (ref.trim().isEmpty()) continue;
+        android.graphics.Bitmap b = resolveBarIconBitmap(ref.trim(), size);
+        if (b != null) list.add(b);
+    }
+    return list;
+}
     private class FlashView extends View {
     private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE";
     int aStyle = 0; private float phaseFraction = 0f;
@@ -360,7 +406,14 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     private boolean isAutoHiding = false, isInv = false;
     private Handler autoHideHandler = new Handler();
     private GradientDrawable gd = new GradientDrawable();
+    private java.util.List<android.graphics.Bitmap> icons = new java.util.ArrayList<>();
+    private Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     public BarView(Context c) { super(c); gd.setCornerRadius(24f); setBackground(gd); }
+    public void setIcons(java.util.List<android.graphics.Bitmap> newIcons, int alpha) {
+        this.icons = newIcons != null ? newIcons : new java.util.ArrayList<>();
+        iconPaint.setAlpha(alpha);
+        invalidate();
+    }
     public void updateProps(int alpha, boolean autoHide, int delay, boolean inv) {
         this.baseAlpha = alpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
         autoHideHandler.removeCallbacksAndMessages(null);
@@ -384,6 +437,29 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             });
             a.start();
         }, hideDelay);
+    }
+    // [MỚI] Icon LUÔN vẽ ở lớp riêng, KHÔNG phụ thuộc alpha của nền GradientDrawable —
+    // dù nền đang tàng hình (alpha=0), icon vẫn hiện trắng rõ nét vì đây là 1 lớp canvas
+    // độc lập, chỉ tắt icon nếu người dùng chủ động không gán icon nào.
+    @Override protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        if (icons.isEmpty()) return;
+        int w = getWidth(), h = getHeight();
+        if (w <= 0 || h <= 0) return;
+        int n = icons.size();
+        int iconSize = icons.get(0).getWidth();
+        boolean horizontal = w >= h;
+        if (horizontal) {
+            int totalW = n * iconSize + (n - 1) * 8;
+            int startX = (w - totalW) / 2;
+            int y = (h - iconSize) / 2;
+            for (int i = 0; i < n; i++) canvas.drawBitmap(icons.get(i), startX + i * (iconSize + 8), y, iconPaint);
+        } else {
+            int totalH = n * iconSize + (n - 1) * 8;
+            int startY = (h - totalH) / 2;
+            int x = (w - iconSize) / 2;
+            for (int i = 0; i < n; i++) canvas.drawBitmap(icons.get(i), x, startY + i * (iconSize + 8), iconPaint);
+        }
     }
 }
     private class CornerView extends View {
@@ -1111,7 +1187,11 @@ for (int i=0;i<5;i++) {
                 int x = prefs.getInt("lock_"+BARS[i]+"_x",0);
                 int y = prefs.getInt("lock_"+BARS[i]+"_y",0);
                 int visMode = prefs.getInt("lock_"+BARS[i]+"_vis_mode",0);
-                ((BarView)bars[i]).updateProps(alpha, visMode==1, 2500, visMode==2);
+                int barHideDur = prefs.getInt("lock_bar_hide_dur", 2500);
+                ((BarView)bars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2);
+                int iconSize = prefs.getInt("lock_"+BARS[i]+"_icon_size", 40);
+                int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", 255);
+                ((BarView)bars[i]).setIcons(resolveBarIcons(prefs.getString("lock_"+BARS[i]+"_icons",""), iconSize), iconAlpha);
                 int priMode = prefs.getInt("lock_"+BARS[i]+"_pri_mode",0);
                 int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                 if (priMode==1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -1326,7 +1406,11 @@ int baseF = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         int priMode = p.getInt(px + BARS[i] + "_pri_mode", 0);
 
         int visMode = p.getInt(px + BARS[i] + "_vis_mode", 0);
-        bar.updateProps(alpha, visMode == 1, 2500, visMode == 2);
+        int barHideDur = p.getInt(px + "bar_hide_dur", 2500);
+        bar.updateProps(alpha, visMode == 1, barHideDur, visMode == 2);
+        int iconSizeH = p.getInt(px + BARS[i] + "_icon_size", 40);
+        int iconAlphaH = p.getInt(px + BARS[i] + "_icon_alpha", 255);
+        bar.setIcons(resolveBarIcons(p.getString(px + BARS[i] + "_icons",""), iconSizeH), iconAlphaH);
         int f = baseF;
         // priMode==1: xuyên thấu hoàn toàn — KHÔNG nhận touch
         if (priMode == 1) f |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -1436,9 +1520,11 @@ boolean pushForKbd = avoidKbd && cachedKbdHeight > 0;
         int y       = p.getInt(px + BARS[i] + "_y", 0);
         int priMode = p.getInt(px + BARS[i] + "_pri_mode", 0);
         int visMode = p.getInt(px + BARS[i] + "_vis_mode", 0);
-        // MỚI - chỉ update nếu color thay đổi
-// MỚI - chỉ update nếu color thay đổi
-((BarView)accHomeBars[i]).updateProps(alpha, visMode==1, 2500, visMode==2);
+        int barHideDur = p.getInt(px + "bar_hide_dur", 2500);
+        ((BarView)accHomeBars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2);
+        int iconSizeL = p.getInt(px + BARS[i] + "_icon_size", 40);
+        int iconAlphaL = p.getInt(px + BARS[i] + "_icon_alpha", 255);
+        ((BarView)accHomeBars[i]).setIcons(resolveBarIcons(p.getString(px + BARS[i] + "_icons",""), iconSizeL), iconAlphaL);
 int f = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
               | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
               | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH

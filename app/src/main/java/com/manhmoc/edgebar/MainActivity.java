@@ -271,7 +271,11 @@ private String[] getVolKeyActLabs() {
     private void closeDesignSpace() { 
     currentMainTab = 1; pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(View.VISIBLE); updateFabVisibility(); refreshPreview();
     }
-private void openDesignSpace() { currentMainTab = 0; refreshPreview(); navMain.setVisibility(View.GONE); pageConditions.setVisibility(View.GONE); pageEcosystem.setVisibility(View.GONE); pageDesign.setVisibility(View.VISIBLE); updateFabVisibility(); }
+private void openDesignSpace() { 
+    currentMainTab = 0; refreshPreview(); navMain.setVisibility(View.GONE); pageConditions.setVisibility(View.GONE); pageEcosystem.setVisibility(View.GONE); pageDesign.setVisibility(View.VISIBLE); updateFabVisibility();
+    // [FIX] Tự động mở ANIMA ngay khi vào Design Space — tránh màn hình trống chỉ có 2 nút
+    if (btnEditAnim != null) btnEditAnim.performClick();
+}
     // V19.12.3.6.10: FAB "+NEW EB" hiện ở mọi tab Điều kiện (kể cả LOCK) —
 // riêng option vân tay đã bị loại khỏi component list của LOCK ngay trong
 // buildRuleEditor(), nên không cần ẩn cả nút.
@@ -775,15 +779,6 @@ ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
 // không liên quan khi người dùng chỉ đang ở Frontier.
 private void renderBarsCornersEditor(LinearLayout container, String prefix,
         String[] bKeys, String[] bNames, boolean isHomaccStyle) {
-    // [TỐI ƯU PIXEL 2XL] Bỏ hẳn 2 vòng for dựng "EDGE BARS" (N thanh) và
-    // "4 FRAME CORNERS" — trước đây mỗi lần mở Home/Lock/Homacc phải
-    // inflate 5+4 = 9 Drawer, mỗi Drawer chứa 1 CheckBox + 2-3 Dropdown +
-    // 6-11 Slider => hàng trăm View con dựng ra rồi đọc SharedPreferences
-    // ngay cả khi người dùng không mở drawer nào. Giờ chỉ còn 1 Drawer
-    // duy nhất "TÙY CHỈNH CHUNG GÓC VIỀN" (4 slider) => giảm ~90% số View
-    // + số lần gọi prefs.getBoolean()/getInt() mỗi lần renderSliders().
-    // Tham số bKeys/bNames vẫn giữ nguyên chữ ký hàm để không phải sửa
-    // nơi gọi renderBarsCornersEditor(...) ở redrawFrontierBody().
     LinearLayout gd = new LinearLayout(this);
     gd.setOrientation(LinearLayout.VERTICAL); gd.setPadding(30,10,30,30);
     gd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500));
@@ -791,6 +786,14 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
     gd.addView(createSlider("Độ mờ VIỀN GÓC", prefix+"corner_stroke_alpha", 255, 200));
     gd.addView(createSlider("Độ đậm viền", prefix+"corner_thick", 50, 8));
     container.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", gd));
+
+    // [MỚI] Drawer tàng hình thông minh riêng cho Bar — cùng thuật toán triggerFlash()
+    // đã có sẵn trong BarView (chỉ lóe lên khi chạm rồi tự mờ dần), chỉ khác thời
+    // gian chờ (bar_hide_dur) tách biệt khỏi Corner (corner_hide_dur).
+    LinearLayout bd = new LinearLayout(this);
+    bd.setOrientation(LinearLayout.VERTICAL); bd.setPadding(30,10,30,30);
+    bd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"bar_hide_dur", 5000, 2500));
+    container.addView(createDrawer("TÙY CHỈNH CHUNG THANH CẠNH", bd));
 }
 private void renderVolKeyRules() {
     listRules.removeAllViews();
@@ -1877,8 +1880,10 @@ private void applyPackRulesToSpace(String itemKey, String targetPrefix, String c
             .putInt(barKey + "h", prefs.getInt(src + "h", 60))
             .putInt(barKey + "x", prefs.getInt(src + "x", 0))
             .putInt(barKey + "y", prefs.getInt(src + "y", 0))
+            .putString(barKey + "icons", prefs.getString(src + "icons", ""))
+            .putInt(barKey + "icon_alpha", prefs.getInt(src + "icon_alpha", 255))
+            .putInt(barKey + "icon_size", prefs.getInt(src + "icon_size", 40))
             .apply();
-
         applyPackRulesToSpace("bar_" + id, targetPrefix, BARS[loc]); // [MỚI]
     }
     private void applyCornerPackToSpace(String id, String targetPrefix) {
@@ -3905,6 +3910,21 @@ previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_alpha"
         content.addView(createSlider("Chiều dọc", prefix + id + "_h", 3000, 60));
         content.addView(createSlider("Tọa độ X", prefix + id + "_x", 1000, 0));
         content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 3000, 0));
+
+        content.addView(createSectionTitle(T("ICON ON BAR (optional)", "ICON TRÊN BAR (tuỳ chọn)")));
+        String iconsStr = prefs.getString(prefix + id + "_icons", "");
+        int iconCount = iconsStr.isEmpty() ? 0 : iconsStr.split(",").length;
+        Button btnIcons = new Button(this);
+        btnIcons.setText(T("CHOOSE ICON (", "CHỌN ICON (") + iconCount + ")");
+        btnIcons.setBackground(getRounded("#FFC107", 20f));
+        btnIcons.setTextColor(Color.BLACK);
+        btnIcons.setOnClickListener(v -> showBarIconMultiPicker(prefix + id + "_icons", () -> {
+            String s = prefs.getString(prefix + id + "_icons", "");
+            btnIcons.setText(T("CHOOSE ICON (", "CHỌN ICON (") + (s.isEmpty() ? 0 : s.split(",").length) + ")");
+        }));
+        content.addView(btnIcons);
+        content.addView(createSlider("Độ mờ Icon", prefix + id + "_icon_alpha", 255, 255));
+        content.addView(createSlider("Kích thước Icon", prefix + id + "_icon_size", 120, 40));
     } else if (type == 1) {
     String[] cKeys = {"br", "bl", "tr", "tl"};
     // [BỎ UI PREVIEW] Không còn checkbox — Corner luôn xem-trước-sẵn đúng
@@ -4448,6 +4468,96 @@ private ScrollView buildIconGridPage(int[] pool, String prefixTag, String prefKe
         row.addView(iv);
     }
     return scroll;
+}
+   private void showBarIconMultiPicker(String prefKey, Runnable onSaved) {
+    String cur = prefs.getString(prefKey, "");
+    final java.util.LinkedHashSet<String> selectedOrder = new java.util.LinkedHashSet<>();
+    for (String s : cur.split(",")) if (!s.trim().isEmpty()) selectedOrder.add(s.trim());
+    final List<String[]> allItems = new ArrayList<>();
+    for (String[] app : getAppListCached()) allItems.add(new String[]{app[0], "app:" + app[1]});
+    int[] sysPool = PanelEngine.SYSTEM_ICON_POOL;
+    for (int i = 0; i < sysPool.length; i++) allItems.add(new String[]{T("System Icon ","Icon Hệ Thống ") + (i+1), "pool:" + i});
+    int[] customPool = PanelEngine.getCustomIconPool(this);
+    for (int i = 0; i < customPool.length; i++) allItems.add(new String[]{T("Custom Icon ","Icon Tùy Chỉnh ") + (i+1), "poolc:" + i});
+
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212"));
+    root.setPadding(30,80,30,30);
+    EditText etSearch = new EditText(this);
+    etSearch.setHint("🔍 " + T("Search...","Tìm kiếm..."));
+    etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
+    etSearch.setBackground(getRounded("#2C2C2C", 20f));
+    etSearch.setPadding(30,25,30,25);
+    root.addView(etSearch);
+    ListView lv = new ListView(this);
+    lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    final List<String[]> shown = new ArrayList<>();
+    final Runnable[] refreshHolder = new Runnable[1];
+    BaseAdapter adapter = new BaseAdapter() {
+        @Override public int getCount() { return shown.size(); }
+        @Override public Object getItem(int p) { return shown.get(p); }
+        @Override public long getItemId(int p) { return p; }
+        @Override public View getView(int p, View cv, ViewGroup parent) {
+            LinearLayout row = new LinearLayout(MainActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(20,22,20,22);
+            String[] item = shown.get(p);
+            CheckBox cb = new CheckBox(MainActivity.this);
+            cb.setChecked(selectedOrder.contains(item[1]));
+            cb.setClickable(false);
+            TextView tv = new TextView(MainActivity.this);
+            tv.setText(item[0]); tv.setTextColor(Color.WHITE);
+            tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+            row.addView(cb); row.addView(tv);
+            row.setOnClickListener(v -> {
+                if (selectedOrder.contains(item[1])) selectedOrder.remove(item[1]);
+                else selectedOrder.add(item[1]);
+                refreshHolder[0].run();
+            });
+            return row;
+        }
+    };
+    lv.setAdapter(adapter);
+    root.addView(lv);
+    Runnable doRefresh = () -> {
+        String q = etSearch.getText().toString().trim().toLowerCase();
+        shown.clear();
+        for (String key : selectedOrder)
+            for (String[] it : allItems) if (it[1].equals(key)) { shown.add(it); break; }
+        for (String[] it : allItems) {
+            if (selectedOrder.contains(it[1])) continue;
+            if (!q.isEmpty() && !it[0].toLowerCase().contains(q)) continue;
+            shown.add(it);
+        }
+        adapter.notifyDataSetChanged();
+    };
+    refreshHolder[0] = doRefresh;
+    etSearch.addTextChangedListener(new android.text.TextWatcher() {
+        public void afterTextChanged(android.text.Editable s) { doRefresh.run(); }
+        public void beforeTextChanged(CharSequence s,int a,int b,int c) {}
+        public void onTextChanged(CharSequence s,int a,int b,int c) {}
+    });
+    doRefresh.run();
+    LinearLayout footer = new LinearLayout(this);
+    footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,20,0,0);
+    Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY"));
+    bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE);
+    bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+    Button bSave = new Button(this); bSave.setText(T("SAVE","LƯU"));
+    bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0);
+    bSave.setLayoutParams(slp);
+    footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave.setOnClickListener(v -> {
+        prefs.edit().putString(prefKey, TextUtils.join(",", selectedOrder)).apply();
+        if (onSaved != null) onSaved.run();
+        d.dismiss();
+    });
+    d.setContentView(root); d.show();
 }
  // [MỚI] Picker icon riêng cho 1 Action trong Panel — 2 tab: Apps đã cài / Bộ icon nội bộ.
     private void showIconPickerForPanelAction(String panelId, String actionKey, Runnable onSaved) {
