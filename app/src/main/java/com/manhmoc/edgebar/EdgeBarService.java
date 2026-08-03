@@ -546,11 +546,23 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
             else if (ref.startsWith("pool:")) { int idx = Integer.parseInt(ref.substring(5)); if (idx>=0 && idx<PanelEngine.SYSTEM_ICON_POOL.length) d = getDrawable(PanelEngine.SYSTEM_ICON_POOL[idx]); }
         } catch (Exception ignored) {}
         if (d == null) { gestureIconCache.put(cacheKey, null); return null; }
-        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+    // [FIX CRASH] size lấy từ slider "Jump Icon Size" có thể bị kéo về 0/âm —
+    // Bitmap.createBitmap(0,0,...) ném IllegalArgumentException không bắt được,
+    // đây chính là nguyên nhân crash tap/dtap/long khi có gán icon (swipe không
+    // crash vì thường chưa được gán icon nên hàm return null ở dòng trên, không
+    // bao giờ chạy tới đây). Ép tối thiểu 8px + bọc try/catch để không bao giờ
+    // crash dù prefs có giá trị bất thường.
+    int safeSize = Math.max(8, size);
+    try {
+        Bitmap bmp = Bitmap.createBitmap(safeSize, safeSize, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        d = d.mutate(); d.setTint(Color.WHITE); d.setBounds(0,0,size,size); d.draw(c);
+        d = d.mutate(); d.setTint(Color.WHITE); d.setBounds(0,0,safeSize,safeSize); d.draw(c);
         gestureIconCache.put(cacheKey, bmp);
         return bmp;
+    } catch (Exception e) {
+        gestureIconCache.put(cacheKey, null);
+        return null;
+    }
     }
     private class BarView extends View {
     private int baseAlpha, hideDelay;
