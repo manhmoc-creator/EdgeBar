@@ -414,24 +414,32 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, p);
     }
 }
-    // ===== GESTURE RIPPLE VIEW (icon + sóng theo điểm chạm) =====
+    // ===== GESTURE RIPPLE VIEW (chấm sóng chạm + icon NHẢY LÊN xoay 1 vòng rồi RƠI XUỐNG) =====
     private class GestureRippleView extends View {
         private float touchX = -1, touchY = -1;
         private float rippleRadius = 0f, rippleAlpha = 0f;
-        private Bitmap iconBmp = null;
-        private int barColor = Color.WHITE;
         private Paint ripplePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private ValueAnimator popAnim;
+
+        private Bitmap jumpIconBmp = null;
+        private float jumpX = -1, jumpY = -1;
+        private float jumpOffsetY = 0f;
+        private float jumpRotation = 0f;
+        private float jumpAlpha = 0f;
+        private ValueAnimator jumpUpAnim, fallAnim;
+        private final Handler jumpHandler = new Handler(android.os.Looper.getMainLooper());
+
         public GestureRippleView(Context c) { super(c); setLayerType(LAYER_TYPE_HARDWARE, null); }
-        public void showAt(float x, float y, String gestureKey, int color) {
-            touchX = x; touchY = y; barColor = color;
-            iconBmp = resolveGestureIconBitmap(gestureKey, 90);
+
+        public void showAt(float x, float y) {
+            touchX = x; touchY = y;
             rippleRadius = 10f; rippleAlpha = 1f;
             setVisibility(View.VISIBLE); invalidate();
         }
         public void moveTo(float x, float y) { touchX = x; touchY = y; invalidate(); }
-        public void popAndHide() {
+
+        public void popRipple() {
             if (popAnim != null) popAnim.cancel();
             popAnim = ValueAnimator.ofFloat(1f, 0f);
             popAnim.setDuration(320);
@@ -442,16 +450,75 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
                 invalidate();
             });
             popAnim.addListener(new AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(Animator a) { setVisibility(View.GONE); iconBmp = null; }
+                @Override public void onAnimationEnd(Animator a) {
+                    if (jumpIconBmp == null) setVisibility(View.GONE);
+                }
             });
             popAnim.start();
         }
+
+        public void jumpIcon(float x, float y, String gestureKey, int color) {
+            jumpHandler.removeCallbacksAndMessages(null);
+            if (jumpUpAnim != null) jumpUpAnim.cancel();
+            if (fallAnim != null) fallAnim.cancel();
+            jumpIconBmp = resolveGestureIconBitmap(gestureKey, 90);
+            if (jumpIconBmp == null) return;
+            jumpX = x; jumpY = y;
+            jumpOffsetY = 0f; jumpRotation = 0f; jumpAlpha = 1f;
+            setVisibility(View.VISIBLE);
+            invalidate();
+
+            jumpUpAnim = ValueAnimator.ofFloat(0f, 1f);
+            jumpUpAnim.setDuration(450);
+            jumpUpAnim.setInterpolator(new android.view.animation.OvershootInterpolator(1.2f));
+            jumpUpAnim.addUpdateListener(a -> {
+                float v = (float) a.getAnimatedValue();
+                jumpOffsetY = -180f * v;
+                jumpRotation = 360f * v;
+                invalidate();
+            });
+            jumpUpAnim.addListener(new AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(Animator a) {
+                    jumpHandler.postDelayed(() -> startFall(), 2000);
+                }
+            });
+            jumpUpAnim.start();
+        }
+
+        private void startFall() {
+            fallAnim = ValueAnimator.ofFloat(0f, 1f);
+            fallAnim.setDuration(550);
+            fallAnim.setInterpolator(new android.view.animation.AccelerateInterpolator(1.4f));
+            float startOffset = jumpOffsetY;
+            fallAnim.addUpdateListener(a -> {
+                float v = (float) a.getAnimatedValue();
+                jumpOffsetY = startOffset + (140f - startOffset) * v;
+                jumpAlpha = 1f - v;
+                invalidate();
+            });
+            fallAnim.addListener(new AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(Animator a) {
+                    jumpIconBmp = null;
+                    if (rippleAlpha <= 0f) setVisibility(View.GONE);
+                    invalidate();
+                }
+            });
+            fallAnim.start();
+        }
+
         @Override protected void onDraw(Canvas canvas) {
-            if (touchX < 0) return;
-            ripplePaint.setColor(barColor);
-            ripplePaint.setAlpha((int) (rippleAlpha * 160));
-            canvas.drawCircle(touchX, touchY, rippleRadius, ripplePaint);
-            if (iconBmp != null) canvas.drawBitmap(iconBmp, touchX - iconBmp.getWidth()/2f, touchY - iconBmp.getHeight()/2f, iconPaint);
+            if (touchX >= 0 && rippleAlpha > 0f) {
+                ripplePaint.setColor(Color.argb((int) (rippleAlpha * 160), 96, 125, 139));
+                canvas.drawCircle(touchX, touchY, rippleRadius, ripplePaint);
+            }
+            if (jumpIconBmp != null) {
+                canvas.save();
+                float cx = jumpX, cy = jumpY + jumpOffsetY;
+                canvas.rotate(jumpRotation, cx, cy);
+                iconPaint.setAlpha((int) (jumpAlpha * 255));
+                canvas.drawBitmap(jumpIconBmp, cx - jumpIconBmp.getWidth()/2f, cy - jumpIconBmp.getHeight()/2f, iconPaint);
+                canvas.restore();
+            }
         }
     }
     private final java.util.Map<String, Bitmap> gestureIconCache = new java.util.HashMap<>();

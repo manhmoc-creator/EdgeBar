@@ -4389,6 +4389,8 @@ private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShort
         
         final List<String[]> shown = new ArrayList<>();
         final Runnable[] refreshHolder = new Runnable[1];
+        final int[] dragFromPos = {-1};
+        final boolean[] isDragging = {false};
         BaseAdapter adapter = new BaseAdapter() {
             @Override public int getCount() { return shown.size(); }
             @Override public Object getItem(int p) { return shown.get(p); }
@@ -4483,8 +4485,6 @@ private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShort
         // [MỚI] Giữ-chạm 1 mục ĐÃ CHỌN để bắt đầu kéo đổi vị trí — chỉ áp dụng cho các
         // mục đã tick (những mục này luôn được xếp đầu danh sách `shown` theo đúng thứ tự
         // selectedOrder, nên hoán đổi trong selectedOrder là đủ để đổi vị trí hiển thị).
-        final int[] dragFromPos = {-1};
-        final boolean[] isDragging = {false};
         lv.setOnTouchListener((v, e) -> {
             if (!isDragging[0]) return false; // chưa kéo -> để ListView xử lý click/long-click bình thường
             int action = e.getAction();

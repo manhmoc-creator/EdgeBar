@@ -333,7 +333,24 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
             }
         }
     }
-   private class BarView extends View {
+   private final java.util.Map<String, Bitmap> gestureIconCache = new java.util.HashMap<>();
+    private Bitmap resolveGestureIconBitmap(String gestureKey, int size) {
+        if (gestureIconCache.containsKey(gestureKey)) return gestureIconCache.get(gestureKey);
+        String ref = prefs.getString("homacc_gesture_icon_" + gestureKey, "");
+        Drawable d = null;
+        try {
+            if (ref.startsWith("app:")) d = getPackageManager().getApplicationIcon(ref.substring(4));
+            else if (ref.startsWith("poolc:")) { int[] p2 = PanelEngine.getCustomIconPool(this); int idx = Integer.parseInt(ref.substring(6)); if (idx>=0 && idx<p2.length) d = getDrawable(p2[idx]); }
+            else if (ref.startsWith("pool:")) { int idx = Integer.parseInt(ref.substring(5)); if (idx>=0 && idx<PanelEngine.SYSTEM_ICON_POOL.length) d = getDrawable(PanelEngine.SYSTEM_ICON_POOL[idx]); }
+        } catch (Exception ignored) {}
+        if (d == null) { gestureIconCache.put(gestureKey, null); return null; }
+        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        d = d.mutate(); d.setTint(Color.WHITE); d.setBounds(0,0,size,size); d.draw(c);
+        gestureIconCache.put(gestureKey, bmp);
+        return bmp;
+    }
+    private class BarView extends View {
     private int baseAlpha, hideDelay;
     private boolean isAutoHiding = false, isInv = false;
     private Handler autoHideHandler = new Handler();
