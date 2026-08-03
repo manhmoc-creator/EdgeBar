@@ -798,10 +798,7 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
     // [MỚI] Icon cho 13 cử chỉ — CHỈ hiện ở không gian Homacc, áp dụng CHUNG cho mọi
     // Bar/Corner của Homacc (giống Homeb). Thuật toán vẽ animation kéo icon ra theo
     // sóng làm sau — hiện tại chỉ lưu lựa chọn vào prefs.
-    if (isHomaccStyle) {
-        container.addView(buildGestureIconDrawer());
     }
-}
 // [MỚI] UI rỗng chọn icon cho 13 cử chỉ, dùng CHUNG cho mọi Bar/Corner của Homacc.
 // Lazy-inflate (giống Panel Config/Handle Config) — 13 dòng chỉ thực sự dựng View
 // khi người dùng bấm mở lần đầu, Zero-RAM khi đóng, tiết kiệm cho Pixel 2XL.
@@ -812,7 +809,7 @@ private LinearLayout buildGestureIconDrawer() {
     body.setVisibility(View.GONE);
 
     TextView header = new TextView(this);
-    header.setText("📁 " + T("ICON FOR 13 GESTURES (Homacc)", "ICON CHO 13 CỬ CHỈ (Chung Homacc)") + " (Chạm để mở ▼)");
+    header.setText("📁 " + T("ICON FOR 13 GESTURES FRONTIER", "ICON CHO 13 CỬ CHỈ") + " (▼)");
     header.setTextColor(Color.parseColor("#00E5FF"));
     header.setPadding(30, 30, 30, 30);
     header.setTextSize(16);
@@ -831,6 +828,8 @@ private LinearLayout buildGestureIconDrawer() {
         boolean willOpen = body.getVisibility() == View.GONE;
         if (willOpen && !inflated[0]) {
             inflated[0] = true;
+            body.addView(createSlider(T("Icon Opacity (all bars)", "Độ mờ Icon (mọi thanh)"), "homacc_bar_icon_alpha", 255, 255));
+            body.addView(createSlider(T("Icon Size (all bars)", "Kích thước Icon (mọi thanh)"), "homacc_bar_icon_size", 120, 40));
             for (int i = 0; i < C_GESTURES.length; i++) {
                 final String gKey = "homacc_gesture_icon_" + C_GESTURES[i];
                 LinearLayout row = new LinearLayout(this);
@@ -1297,6 +1296,7 @@ private String cloneDataPackDeep(String itemKey) {
     b1.setLayoutParams(lp1); b2.setLayoutParams(lp2); b3.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     subTab.addView(b2); subTab.addView(b3); subTab.addView(b1);
     listRules.addView(subTab);
+    listRules.addView(buildGestureIconDrawer());
 
     LinearLayout body = new LinearLayout(this);
     body.setOrientation(LinearLayout.VERTICAL);
@@ -1305,9 +1305,8 @@ private String cloneDataPackDeep(String itemKey) {
     Runnable styleTabs = () -> {
         b1.setBackground(getRounded(frontierSubTab==0?"#00E5FF":"#222222",20f)); b1.setTextColor(frontierSubTab==0?Color.BLACK:Color.WHITE);
         b2.setBackground(getRounded(frontierSubTab==1?"#00E5FF":"#222222",20f)); b2.setTextColor(frontierSubTab==1?Color.BLACK:Color.WHITE);
-        b3.setBackground(getRounded(frontierSubTab==2?"#7C4DFF":"#333333",20f)); b3.setTextColor(Color.WHITE);
+        b3.setBackground(getRounded(frontierSubTab==2?"#00E5FF":"#222222",20f)); b3.setTextColor(frontierSubTab==2?Color.BLACK:Color.WHITE);
     };
-
     b1.setOnClickListener(v -> { frontierSubTab=0; refreshPreview(); styleTabs.run(); redrawFrontierBody(body); updateFabVisibility(); });
     b2.setOnClickListener(v -> { frontierSubTab=1; ensureHomeServiceForPreview(); refreshPreview(); styleTabs.run(); redrawFrontierBody(body); updateFabVisibility(); });
     b3.setOnClickListener(v -> { frontierSubTab=2; refreshPreview(); styleTabs.run(); redrawFrontierBody(body); updateFabVisibility(); });
@@ -1953,8 +1952,8 @@ private void applyPackRulesToSpace(String itemKey, String targetPrefix, String c
             .putInt(barKey + "x", prefs.getInt(src + "x", 0))
             .putInt(barKey + "y", prefs.getInt(src + "y", 0))
             .putString(barKey + "icons", prefs.getString(src + "icons", ""))
-            .putInt(barKey + "icon_alpha", prefs.getInt(src + "icon_alpha", 255))
-            .putInt(barKey + "icon_size", prefs.getInt(src + "icon_size", 40))
+            .putInt(barKey + "icon_alpha", prefs.getInt("homacc_bar_icon_alpha", 255))
+            .putInt(barKey + "icon_size", prefs.getInt("homacc_bar_icon_size", 40))
             .apply();
         applyPackRulesToSpace("bar_" + id, targetPrefix, BARS[loc]); // [MỚI]
     }
@@ -4018,8 +4017,6 @@ previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_alpha"
             btnIcons.setText(T("CHOOSE ICON (", "CHỌN ICON (") + (s.isEmpty() ? 0 : s.split(",").length) + ")");
         }));
         content.addView(btnIcons);
-        content.addView(createSlider("Độ mờ Icon", prefix + id + "_icon_alpha", 255, 255));
-        content.addView(createSlider("Kích thước Icon", prefix + id + "_icon_size", 120, 40));
     } else if (type == 1) {
     String[] cKeys = {"br", "bl", "tr", "tl"};
     // [BỎ UI PREVIEW] Không còn checkbox — Corner luôn xem-trước-sẵn đúng
@@ -4158,6 +4155,8 @@ panelCfgHeader.setOnClickListener(v -> {
         panelCfgBody.addView(createSlider("Length (Chiều dài)", prefix + id + "_panel_length", 3000, 700));
         panelCfgBody.addView(createSlider("Width (Bề dày)", prefix + id + "_size", 2500, 700));
         panelCfgBody.addView(createSlider("Corner Radius (Bo góc)", prefix + id + "_panel_radius", 60, 24));
+        panelCfgBody.addView(createSlider(T("Move Horizontal (X) — 500=Center","Di chuyển Ngang (X) — 500=Giữa"), prefix + id + "_offset_x", 1000, 500));
+        panelCfgBody.addView(createSlider(T("Move Vertical (Y) — 500=Center","Di chuyển Dọc (Y) — 500=Giữa"), prefix + id + "_offset_y", 1000, 500));
     }
     panelCfgBody.setVisibility(willOpen ? View.VISIBLE : View.GONE);
     panelCfgHeader.setText(willOpen ? "📂 PANEL CONFIG (Chạm để đóng ▲)" : "📁 PANEL CONFIG (Chạm để mở ▼)");
@@ -4337,8 +4336,8 @@ private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShort
 }
 private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShortcut, Runnable onSaved) {
         String cur = prefs.getString(prefKey, "");
-        final java.util.LinkedHashSet<String> selectedOrder = new java.util.LinkedHashSet<>();
-        for (String s : cur.split(",")) if (!s.trim().isEmpty()) selectedOrder.add(s.trim());
+        final java.util.List<String> selectedOrder = new java.util.ArrayList<>();
+        for (String s : cur.split(",")) { String t = s.trim(); if (!t.isEmpty() && !selectedOrder.contains(t)) selectedOrder.add(t); }
         final List<String[]> allItems = new ArrayList<>();
         if (isApp) {
             allItems.addAll(getAppListCached());
@@ -4363,13 +4362,17 @@ private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShort
     allItems.addAll(buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent"));
     allItems.addAll(buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro"));
 }
-        // [MỚI] Chỉ bật icon-picker riêng khi đây là màn "CHỌN ACTION" của Lenap —
+        // [MỚI] Bật icon-picker riêng cho cả màn "CHỌN ACTION" lẫn "CHỌN APP" của Lenap —
         // không ảnh hưởng Rule Editor (buildRuleEditor dùng showActionCategoryPicker khác hẳn).
         final boolean isPanelActionPicker = !isApp && !isShortcut
             && prefKey.startsWith("pack_panel_") && prefKey.endsWith("_acts");
+        final boolean isPanelAppPicker = isApp
+            && prefKey.startsWith("pack_panel_") && prefKey.endsWith("_apps");
         final String panelIdForIcons = isPanelActionPicker
             ? prefKey.substring("pack_panel_".length(), prefKey.length() - "_acts".length())
-            : "";
+            : (isPanelAppPicker
+                ? prefKey.substring("pack_panel_".length(), prefKey.length() - "_apps".length())
+                : "");
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -4412,7 +4415,7 @@ private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShort
                     row.addView(ivApp);
                 }
                 row.addView(tv);
-                if (isPanelActionPicker) {
+                if (isPanelActionPicker || isPanelAppPicker) {
                     Button btnEditIcon = new Button(MainActivity.this);
                     btnEditIcon.setText("🖌");
                     btnEditIcon.setBackground(getRounded("#303134", 14f));
@@ -4457,10 +4460,52 @@ private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShort
                     else selectedOrder.add(item[1]);
                     refreshHolder[0].run();
                 });
+                if (selectedOrder.contains(item[1])) {
+                    TextView dragHandle = new TextView(MainActivity.this);
+                    dragHandle.setText("☰");
+                    dragHandle.setTextColor(Color.parseColor("#8AB4F8"));
+                    dragHandle.setTextSize(16);
+                    LinearLayout.LayoutParams dhLp = new LinearLayout.LayoutParams(-2, -2);
+                    dhLp.setMargins(0, 0, 15, 0);
+                    dragHandle.setLayoutParams(dhLp);
+                    row.addView(dragHandle, 0);
+                    row.setOnLongClickListener(v -> {
+                        dragFromPos[0] = p;
+                        isDragging[0] = true;
+                        return true;
+                    });
+                }
                 return row;
             }
         };
         lv.setAdapter(adapter);
+
+        // [MỚI] Giữ-chạm 1 mục ĐÃ CHỌN để bắt đầu kéo đổi vị trí — chỉ áp dụng cho các
+        // mục đã tick (những mục này luôn được xếp đầu danh sách `shown` theo đúng thứ tự
+        // selectedOrder, nên hoán đổi trong selectedOrder là đủ để đổi vị trí hiển thị).
+        final int[] dragFromPos = {-1};
+        final boolean[] isDragging = {false};
+        lv.setOnTouchListener((v, e) -> {
+            if (!isDragging[0]) return false; // chưa kéo -> để ListView xử lý click/long-click bình thường
+            int action = e.getAction();
+            if (action == MotionEvent.ACTION_MOVE) {
+                int targetPos = lv.pointToPosition((int) e.getX(), (int) e.getY());
+                if (targetPos != android.widget.AdapterView.INVALID_POSITION
+                        && targetPos != dragFromPos[0] && targetPos < selectedOrder.size()
+                        && dragFromPos[0] < selectedOrder.size()) {
+                    String moved = selectedOrder.remove(dragFromPos[0]);
+                    selectedOrder.add(targetPos, moved);
+                    dragFromPos[0] = targetPos;
+                    refreshHolder[0].run();
+                }
+                return true;
+            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                isDragging[0] = false;
+                dragFromPos[0] = -1;
+                return true;
+            }
+            return true;
+        });
         if (isShortcut) {
             Button btnNewShortcut = new Button(this);
             btnNewShortcut.setText("➕ " + T("Create new Shortcut", "Tạo Shortcut mới"));
@@ -4566,76 +4611,125 @@ private ScrollView buildIconGridPage(int[] pool, String prefixTag, String prefKe
 }
    private void showBarIconMultiPicker(String prefKey, Runnable onSaved) {
     String cur = prefs.getString(prefKey, "");
-    final java.util.LinkedHashSet<String> selectedOrder = new java.util.LinkedHashSet<>();
-    for (String s : cur.split(",")) if (!s.trim().isEmpty()) selectedOrder.add(s.trim());
-    final List<String[]> allItems = new ArrayList<>();
-    for (String[] app : getAppListCached()) allItems.add(new String[]{app[0], "app:" + app[1]});
-    int[] sysPool = PanelEngine.SYSTEM_ICON_POOL;
-    for (int i = 0; i < sysPool.length; i++) allItems.add(new String[]{T("System Icon ","Icon Hệ Thống ") + (i+1), "pool:" + i});
-    int[] customPool = PanelEngine.getCustomIconPool(this);
-    for (int i = 0; i < customPool.length; i++) allItems.add(new String[]{T("Custom Icon ","Icon Tùy Chỉnh ") + (i+1), "poolc:" + i});
+    final java.util.List<String> selectedOrder = new java.util.ArrayList<>();
+    for (String s : cur.split(",")) { String t = s.trim(); if (!t.isEmpty() && !selectedOrder.contains(t)) selectedOrder.add(t); }
 
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
-    root.setPadding(30,80,30,30);
+    root.setPadding(30, 80, 30, 30);
+
+    TextView title = new TextView(this);
+    title.setText(T("Choose icons for the bar", "Chọn icon cho thanh"));
+    title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(18); title.setPadding(0,0,0,20);
+    root.addView(title);
+
+    LinearLayout tabs = new LinearLayout(this);
+    tabs.setOrientation(LinearLayout.HORIZONTAL);
+    Button bApps = createTabBtn(T("APPS", "APP ĐÃ CÀI"));
+    Button bPool = createTabBtn(T("SYSTEM", "HỆ THỐNG"));
+    Button bCustom = createTabBtn(T("CUSTOM", "TÙY CHỈNH"));
+    LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, -2, 1f);
+    tlp.setMargins(0,0,10,0);
+    bApps.setLayoutParams(tlp); bPool.setLayoutParams(tlp);
+    bCustom.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    tabs.addView(bApps); tabs.addView(bPool); tabs.addView(bCustom);
+    root.addView(tabs);
+
+    TextView tvCount = new TextView(this);
+    tvCount.setTextColor(Color.parseColor("#8AB4F8")); tvCount.setTextSize(12f);
+    tvCount.setPadding(0, 15, 0, 10);
+    root.addView(tvCount);
+
+    FrameLayout body = new FrameLayout(this);
+    body.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    root.addView(body);
+
+    Runnable[] refreshCount = new Runnable[1];
+    refreshCount[0] = () -> tvCount.setText(selectedOrder.size() + " " + T("selected", "đã chọn"));
+
+    // ===== TAB 1: APPS (có ô tìm kiếm + lưới icon thật) =====
+    LinearLayout appsPage = new LinearLayout(this);
+    appsPage.setOrientation(LinearLayout.VERTICAL);
     EditText etSearch = new EditText(this);
-    etSearch.setHint("🔍 " + T("Search...","Tìm kiếm..."));
+    etSearch.setHint("🔍 " + T("Search...", "Tìm kiếm..."));
     etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
-    etSearch.setBackground(getRounded("#2C2C2C", 20f));
-    etSearch.setPadding(30,25,30,25);
-    root.addView(etSearch);
-    ListView lv = new ListView(this);
-    lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-    final List<String[]> shown = new ArrayList<>();
-    final Runnable[] refreshHolder = new Runnable[1];
-    BaseAdapter adapter = new BaseAdapter() {
-        @Override public int getCount() { return shown.size(); }
-        @Override public Object getItem(int p) { return shown.get(p); }
-        @Override public long getItemId(int p) { return p; }
-        @Override public View getView(int p, View cv, ViewGroup parent) {
-            LinearLayout row = new LinearLayout(MainActivity.this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(20,22,20,22);
-            String[] item = shown.get(p);
-            CheckBox cb = new CheckBox(MainActivity.this);
-            cb.setChecked(selectedOrder.contains(item[1]));
-            cb.setClickable(false);
-            TextView tv = new TextView(MainActivity.this);
-            tv.setText(item[0]); tv.setTextColor(Color.WHITE);
-            tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-            row.addView(cb); row.addView(tv);
-            row.setOnClickListener(v -> {
-                if (selectedOrder.contains(item[1])) selectedOrder.remove(item[1]);
-                else selectedOrder.add(item[1]);
-                refreshHolder[0].run();
-            });
-            return row;
-        }
-    };
-    lv.setAdapter(adapter);
-    root.addView(lv);
-    Runnable doRefresh = () -> {
+    etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
+    appsPage.addView(etSearch);
+    ScrollView appsScroll = new ScrollView(this);
+    appsScroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    LinearLayout appsGrid = new LinearLayout(this);
+    appsGrid.setOrientation(LinearLayout.VERTICAL);
+    appsGrid.setPadding(0, 10, 0, 10);
+    appsScroll.addView(appsGrid);
+    appsPage.addView(appsScroll);
+    List<String[]> allApps = getAppListCached();
+
+    Runnable[] refreshApps = new Runnable[1];
+    refreshApps[0] = () -> {
+        appsGrid.removeAllViews();
         String q = etSearch.getText().toString().trim().toLowerCase();
-        shown.clear();
-        for (String key : selectedOrder)
-            for (String[] it : allItems) if (it[1].equals(key)) { shown.add(it); break; }
-        for (String[] it : allItems) {
-            if (selectedOrder.contains(it[1])) continue;
-            if (!q.isEmpty() && !it[0].toLowerCase().contains(q)) continue;
-            shown.add(it);
+        LinearLayout row = null; int count = 0;
+        for (String[] app : allApps) {
+            if (!q.isEmpty() && !app[0].toLowerCase().contains(q)) continue;
+            String ref = "app:" + app[1];
+            if (count % 5 == 0) { row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); appsGrid.addView(row); }
+            row.addView(buildIconGridCell(ref, () -> { ImageView iv = new ImageView(this); loadAppIconInto(app[1], iv); return iv; },
+                selectedOrder, () -> { refreshCount[0].run(); }));
+            count++;
         }
-        adapter.notifyDataSetChanged();
     };
-    refreshHolder[0] = doRefresh;
-    etSearch.addTextChangedListener(new android.text.TextWatcher() {
-        public void afterTextChanged(android.text.Editable s) { doRefresh.run(); }
-        public void beforeTextChanged(CharSequence s,int a,int b,int c) {}
-        public void onTextChanged(CharSequence s,int a,int b,int c) {}
+    etSearch.addTextChangedListener(new android.text.TextWatcher(){
+        public void afterTextChanged(android.text.Editable s){ refreshApps[0].run(); }
+        public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+        public void onTextChanged(CharSequence s,int a,int b,int c){}
     });
-    doRefresh.run();
+
+    // ===== TAB 2 & 3: SYSTEM / CUSTOM (lưới icon tĩnh) =====
+    ScrollView poolScroll = new ScrollView(this);
+    LinearLayout poolGrid = new LinearLayout(this); poolGrid.setOrientation(LinearLayout.VERTICAL); poolGrid.setPadding(0,10,0,10);
+    poolScroll.addView(poolGrid);
+    int[] sysPool = PanelEngine.SYSTEM_ICON_POOL;
+    LinearLayout prow = null;
+    for (int i = 0; i < sysPool.length; i++) {
+        String ref = "pool:" + i;
+        if (i % 5 == 0) { prow = new LinearLayout(this); prow.setOrientation(LinearLayout.HORIZONTAL); poolGrid.addView(prow); }
+        int resId = sysPool[i];
+        prow.addView(buildIconGridCell(ref, () -> { ImageView iv = new ImageView(this); iv.setImageResource(resId); iv.setColorFilter(Color.WHITE); return iv; },
+            selectedOrder, () -> refreshCount[0].run()));
+    }
+
+    ScrollView customScroll = new ScrollView(this);
+    LinearLayout customGrid = new LinearLayout(this); customGrid.setOrientation(LinearLayout.VERTICAL); customGrid.setPadding(0,10,0,10);
+    customScroll.addView(customGrid);
+    int[] customPool = PanelEngine.getCustomIconPool(this);
+    LinearLayout crow = null;
+    for (int i = 0; i < customPool.length; i++) {
+        String ref = "poolc:" + i;
+        if (i % 5 == 0) { crow = new LinearLayout(this); crow.setOrientation(LinearLayout.HORIZONTAL); customGrid.addView(crow); }
+        int resId = customPool[i];
+        crow.addView(buildIconGridCell(ref, () -> { ImageView iv = new ImageView(this); iv.setImageResource(resId); iv.setColorFilter(Color.WHITE); return iv; },
+            selectedOrder, () -> refreshCount[0].run()));
+    }
+
+    body.addView(appsPage); body.addView(poolScroll); body.addView(customScroll);
+    poolScroll.setVisibility(View.GONE);
+    customScroll.setVisibility(View.GONE);
+    refreshApps[0].run();
+    refreshCount[0].run();
+
+    View.OnClickListener tabClick = v -> {
+        bApps.setBackground(getRounded(v==bApps?"#00E5FF":"#222222", 15f)); bApps.setTextColor(v==bApps?Color.BLACK:Color.WHITE);
+        bPool.setBackground(getRounded(v==bPool?"#00E5FF":"#222222", 15f)); bPool.setTextColor(v==bPool?Color.BLACK:Color.WHITE);
+        bCustom.setBackground(getRounded(v==bCustom?"#00E5FF":"#222222", 15f)); bCustom.setTextColor(v==bCustom?Color.BLACK:Color.WHITE);
+        appsPage.setVisibility(v==bApps?View.VISIBLE:View.GONE);
+        poolScroll.setVisibility(v==bPool?View.VISIBLE:View.GONE);
+        customScroll.setVisibility(v==bCustom?View.VISIBLE:View.GONE);
+    };
+    bApps.setOnClickListener(tabClick); bPool.setOnClickListener(tabClick); bCustom.setOnClickListener(tabClick);
+    bApps.performClick();
+
     LinearLayout footer = new LinearLayout(this);
     footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,20,0,0);
     Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY"));
@@ -4646,6 +4740,7 @@ private ScrollView buildIconGridPage(int[] pool, String prefixTag, String prefKe
     LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0);
     bSave.setLayoutParams(slp);
     footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
+
     bCancel.setOnClickListener(v -> d.dismiss());
     bSave.setOnClickListener(v -> {
         prefs.edit().putString(prefKey, TextUtils.join(",", selectedOrder)).apply();
@@ -4653,6 +4748,58 @@ private ScrollView buildIconGridPage(int[] pool, String prefixTag, String prefKe
         d.dismiss();
     });
     d.setContentView(root); d.show();
+}
+
+/** Ô icon vuông trong lưới chọn nhiều: có border xanh + dấu ✓ khi đang được chọn.
+ *  iconFactory tạo ImageView chứa icon thật (app icon hoặc icon pool), cache-free
+ *  vì mỗi Dialog chỉ tồn tại trong lúc mở, GC thu hồi ngay khi đóng. */
+private FrameLayout buildIconGridCell(String ref, java.util.function.Supplier<ImageView> iconFactory,
+        java.util.List<String> selectedOrder, Runnable onToggle) {
+    FrameLayout cell = new FrameLayout(this);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, 140, 1f);
+    lp.setMargins(6,6,6,6);
+    cell.setLayoutParams(lp);
+    boolean sel = selectedOrder.contains(ref);
+    cell.setBackground(getRounded(sel ? "#00E5FF" : "#202124", 16f));
+
+    ImageView iv = iconFactory.get();
+    FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(-1, -1);
+    ivLp.setMargins(20,20,20,20);
+    iv.setLayoutParams(ivLp);
+    cell.addView(iv);
+
+    if (sel) {
+        TextView check = new TextView(this);
+        check.setText("✓");
+        check.setTextColor(Color.BLACK);
+        check.setTextSize(14f);
+        check.setBackground(getRounded("#00E5FF", 100f));
+        FrameLayout.LayoutParams cLp = new FrameLayout.LayoutParams(40, 40);
+        cLp.gravity = Gravity.TOP | Gravity.END;
+        check.setGravity(Gravity.CENTER);
+        check.setLayoutParams(cLp);
+        cell.addView(check);
+    }
+
+    cell.setOnClickListener(v -> {
+        if (selectedOrder.contains(ref)) selectedOrder.remove(ref); else selectedOrder.add(ref);
+        onToggle.run();
+        // Vẽ lại tại chỗ thay vì render lại toàn bộ Dialog — rẻ, tức thì
+        cell.setBackground(getRounded(selectedOrder.contains(ref) ? "#00E5FF" : "#202124", 16f));
+        if (selectedOrder.contains(ref) && cell.getChildCount() < 2) {
+            TextView check = new TextView(this);
+            check.setText("✓"); check.setTextColor(Color.BLACK); check.setTextSize(14f);
+            check.setBackground(getRounded("#00E5FF", 100f));
+            FrameLayout.LayoutParams cLp = new FrameLayout.LayoutParams(40, 40);
+            cLp.gravity = Gravity.TOP | Gravity.END;
+            check.setGravity(Gravity.CENTER);
+            check.setLayoutParams(cLp);
+            cell.addView(check);
+        } else if (!selectedOrder.contains(ref) && cell.getChildCount() > 1) {
+            cell.removeViewAt(1);
+        }
+    });
+    return cell;
 }
  // [MỚI] Picker icon riêng cho 1 Action trong Panel — 2 tab: Apps đã cài / Bộ icon nội bộ.
     private void showIconPickerForPanelAction(String panelId, String actionKey, Runnable onSaved) {

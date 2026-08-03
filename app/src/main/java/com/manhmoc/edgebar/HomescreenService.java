@@ -222,23 +222,32 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
     }
 }
     // ===== GESTURE RIPPLE VIEW (icon + sóng theo điểm chạm) =====
+    // ===== GESTURE RIPPLE VIEW (chấm sóng chạm + icon NHẢY LÊN xoay 1 vòng rồi RƠI XUỐNG) =====
     private class GestureRippleView extends View {
         private float touchX = -1, touchY = -1;
         private float rippleRadius = 0f, rippleAlpha = 0f;
-        private Bitmap iconBmp = null;
-        private int barColor = Color.WHITE;
         private Paint ripplePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private ValueAnimator popAnim;
+
+        private Bitmap jumpIconBmp = null;
+        private float jumpX = -1, jumpY = -1;
+        private float jumpOffsetY = 0f;
+        private float jumpRotation = 0f;
+        private float jumpAlpha = 0f;
+        private ValueAnimator jumpUpAnim, fallAnim;
+        private final Handler jumpHandler = new Handler(android.os.Looper.getMainLooper());
+
         public GestureRippleView(Context c) { super(c); setLayerType(LAYER_TYPE_HARDWARE, null); }
-        public void showAt(float x, float y, String gestureKey, int color) {
-            touchX = x; touchY = y; barColor = color;
-            iconBmp = resolveGestureIconBitmap(gestureKey, 90);
+
+        public void showAt(float x, float y) {
+            touchX = x; touchY = y;
             rippleRadius = 10f; rippleAlpha = 1f;
             setVisibility(View.VISIBLE); invalidate();
         }
         public void moveTo(float x, float y) { touchX = x; touchY = y; invalidate(); }
-        public void popAndHide() {
+
+        public void popRipple() {
             if (popAnim != null) popAnim.cancel();
             popAnim = ValueAnimator.ofFloat(1f, 0f);
             popAnim.setDuration(320);
@@ -249,34 +258,80 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
                 invalidate();
             });
             popAnim.addListener(new AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(Animator a) { setVisibility(View.GONE); iconBmp = null; }
+                @Override public void onAnimationEnd(Animator a) {
+                    if (jumpIconBmp == null) setVisibility(View.GONE);
+                }
             });
             popAnim.start();
         }
-        @Override protected void onDraw(Canvas canvas) {
-            if (touchX < 0) return;
-            ripplePaint.setColor(barColor);
-            ripplePaint.setAlpha((int) (rippleAlpha * 160));
-            canvas.drawCircle(touchX, touchY, rippleRadius, ripplePaint);
-            if (iconBmp != null) canvas.drawBitmap(iconBmp, touchX - iconBmp.getWidth()/2f, touchY - iconBmp.getHeight()/2f, iconPaint);
+
+        /** Icon của đúng cử chỉ vừa thực hiện: NHẢY LÊN + xoay 1 vòng (450ms) -> giữ
+         *  trên đỉnh (2000ms) -> RƠI XUỐNG mờ dần biến mất (550ms). Tổng ~3 giây.
+         *  Zero-alloc lặp lại: chỉ 2 ValueAnimator ngắn + 1 Handler, không giữ
+         *  Thread/Service nào -> tối ưu pin/RAM cho Pixel 2XL. */
+        public void jumpIcon(float x, float y, String gestureKey, int color) {
+            jumpHandler.removeCallbacksAndMessages(null);
+            if (jumpUpAnim != null) jumpUpAnim.cancel();
+            if (fallAnim != null) fallAnim.cancel();
+            jumpIconBmp = resolveGestureIconBitmap(gestureKey, 90);
+            if (jumpIconBmp == null) return;
+            jumpX = x; jumpY = y;
+            jumpOffsetY = 0f; jumpRotation = 0f; jumpAlpha = 1f;
+            setVisibility(View.VISIBLE);
+            invalidate();
+
+            jumpUpAnim = ValueAnimator.ofFloat(0f, 1f);
+            jumpUpAnim.setDuration(450);
+            jumpUpAnim.setInterpolator(new android.view.animation.OvershootInterpolator(1.2f));
+            jumpUpAnim.addUpdateListener(a -> {
+                float v = (float) a.getAnimatedValue();
+                jumpOffsetY = -180f * v;
+                jumpRotation = 360f * v;
+                invalidate();
+            });
+            jumpUpAnim.addListener(new AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(Animator a) {
+                    jumpHandler.postDelayed(() -> startFall(), 2000);
+                }
+            });
+            jumpUpAnim.start();
         }
-    }
-    private final java.util.Map<String, Bitmap> gestureIconCache = new java.util.HashMap<>();
-    private Bitmap resolveGestureIconBitmap(String gestureKey, int size) {
-        if (gestureIconCache.containsKey(gestureKey)) return gestureIconCache.get(gestureKey);
-        String ref = prefs.getString("homacc_gesture_icon_" + gestureKey, "");
-        Drawable d = null;
-        try {
-            if (ref.startsWith("app:")) d = getPackageManager().getApplicationIcon(ref.substring(4));
-            else if (ref.startsWith("poolc:")) { int[] p2 = PanelEngine.getCustomIconPool(this); int idx = Integer.parseInt(ref.substring(6)); if (idx>=0 && idx<p2.length) d = getDrawable(p2[idx]); }
-            else if (ref.startsWith("pool:")) { int idx = Integer.parseInt(ref.substring(5)); if (idx>=0 && idx<PanelEngine.SYSTEM_ICON_POOL.length) d = getDrawable(PanelEngine.SYSTEM_ICON_POOL[idx]); }
-        } catch (Exception ignored) {}
-        if (d == null) { gestureIconCache.put(gestureKey, null); return null; }
-        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(bmp);
-        d = d.mutate(); d.setTint(Color.WHITE); d.setBounds(0,0,size,size); d.draw(c);
-        gestureIconCache.put(gestureKey, bmp);
-        return bmp;
+
+        private void startFall() {
+            fallAnim = ValueAnimator.ofFloat(0f, 1f);
+            fallAnim.setDuration(550);
+            fallAnim.setInterpolator(new android.view.animation.AccelerateInterpolator(1.4f));
+            float startOffset = jumpOffsetY;
+            fallAnim.addUpdateListener(a -> {
+                float v = (float) a.getAnimatedValue();
+                jumpOffsetY = startOffset + (140f - startOffset) * v;
+                jumpAlpha = 1f - v;
+                invalidate();
+            });
+            fallAnim.addListener(new AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(Animator a) {
+                    jumpIconBmp = null;
+                    if (rippleAlpha <= 0f) setVisibility(View.GONE);
+                    invalidate();
+                }
+            });
+            fallAnim.start();
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            if (touchX >= 0 && rippleAlpha > 0f) {
+                ripplePaint.setColor(Color.argb((int) (rippleAlpha * 160), 96, 125, 139));
+                canvas.drawCircle(touchX, touchY, rippleRadius, ripplePaint);
+            }
+            if (jumpIconBmp != null) {
+                canvas.save();
+                float cx = jumpX, cy = jumpY + jumpOffsetY;
+                canvas.rotate(jumpRotation, cx, cy);
+                iconPaint.setAlpha((int) (jumpAlpha * 255));
+                canvas.drawBitmap(jumpIconBmp, cx - jumpIconBmp.getWidth()/2f, cy - jumpIconBmp.getHeight()/2f, iconPaint);
+                canvas.restore();
+            }
+        }
     }
    private class BarView extends View {
     private int baseAlpha, hideDelay;
@@ -286,17 +341,23 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
     private java.util.List<android.graphics.Bitmap> icons = new java.util.ArrayList<>();
     private Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     public BarView(Context c) { super(c); gd.setCornerRadius(24f); setBackground(gd); }
+    private int userIconAlpha = 255;
     public void setIcons(java.util.List<android.graphics.Bitmap> newIcons, int alpha) {
         this.icons = newIcons != null ? newIcons : new java.util.ArrayList<>();
-        iconPaint.setAlpha(alpha);
+        userIconAlpha = alpha;
         invalidate();
     }
+    private int iconAlphaFactor = 255; // 0 = ẩn hoàn toàn icon, 255 = hiện đầy đủ
+
     public void updateProps(int alpha, boolean autoHide, int delay, boolean inv) {
         this.baseAlpha = alpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
         autoHideHandler.removeCallbacksAndMessages(null);
-        if (inv) gd.setColor(Color.argb(0, 96, 125, 139));
-        else if (!autoHide) gd.setColor(Color.argb(alpha, 96, 125, 139));
-        else gd.setColor(Color.argb(0, 96, 125, 139));
+        // [FIX] "Tàng hình" (autoHide) CHỈ làm mờ NỀN theo thời gian — icon luôn giữ
+        // nguyên độ hiện rõ để người dùng còn thấy vị trí chạm. "Ẩn vô hình" (inv)
+        // mới thực sự ẩn cả icon lẫn nền.
+        if (inv) { gd.setColor(Color.argb(0, 96, 125, 139)); iconAlphaFactor = 0; }
+        else if (!autoHide) { gd.setColor(Color.argb(alpha, 96, 125, 139)); iconAlphaFactor = 255; }
+        else { gd.setColor(Color.argb(0, 96, 125, 139)); iconAlphaFactor = 255; }
         invalidate();
     }
     public void triggerFlash() {
@@ -310,6 +371,7 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
             a.addUpdateListener(anim -> {
                 float val = (float) anim.getAnimatedValue();
                 gd.setColor(Color.argb((int) (baseAlpha * val), 96, 125, 139));
+                // icon KHÔNG mờ theo nền nữa — luôn giữ độ hiện rõ trong suốt lúc tàng hình
                 invalidate();
             });
             a.start();
@@ -317,6 +379,9 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
     }
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        @Override protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        iconPaint.setAlpha((int) (userIconAlpha * (iconAlphaFactor / 255f)));
         if (icons.isEmpty()) return;
         int w = getWidth(), h = getHeight();
         if (w <= 0 || h <= 0) return;
@@ -936,10 +1001,11 @@ switch (e.getAction()) {
         longPressTriggered = false;
         longPressHandler.removeCallbacksAndMessages(null);
         ensureRippleView();
-        rippleView.showAt(sx, sy, "tap", Color.argb(180, 96, 125, 139));
+        rippleView.showAt(sx, sy);
         longPressHandler.postDelayed(() -> {
             longPressTriggered = true;
             handleAction(prefKeyBase + "_long");
+            if (rippleView != null) rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139));
         }, prefs.getInt("hold_dur", 600));
         return true;
     case MotionEvent.ACTION_UP: {
@@ -958,7 +1024,10 @@ switch (e.getAction()) {
                 if (isHold) actionName += "_hold";
             }
             handleAction(prefKeyBase + "_" + actionName);
-            if (rippleView != null) rippleView.popAndHide();
+            if (rippleView != null) {
+                rippleView.popRipple();
+                rippleView.jumpIcon(e.getRawX(), e.getRawY(), actionName, Color.argb(180, 96, 125, 139));
+            }
             return true;
         }
         if (longPressTriggered) return true;
@@ -970,13 +1039,16 @@ switch (e.getAction()) {
             return true;
         }
         long now = System.currentTimeMillis();
+        final float upX = e.getRawX(), upY = e.getRawY();
         boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
         if (!hasDtap) {
             lastTapUpTime = 0;
             handleAction(prefKeyBase + "_tap");
+            if (rippleView != null) rippleView.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139));
         } else if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
             lastTapUpTime = 0;
             handleAction(prefKeyBase + "_dtap");
+            if (rippleView != null) rippleView.jumpIcon(upX, upY, "dtap", Color.argb(180, 96, 125, 139));
         } else {
             lastTapUpTime = now;
             final long myUpTs = now;
@@ -984,12 +1056,13 @@ switch (e.getAction()) {
                 if (lastTapUpTime == myUpTs) {
                     lastTapUpTime = 0;
                     handleAction(prefKeyBase + "_tap");
+                    if (rippleView != null) rippleView.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139));
                 }
             }, DTAP_WINDOW_MS + 20);
         }
-        if (rippleView != null) rippleView.popAndHide();
-        return true;      // ← THÊM DÒNG NÀY
-    }                     // ← THÊM DẤU ĐÓNG NÀY (đóng case ACTION_UP)
+        if (rippleView != null) rippleView.popRipple();
+        return true;
+    }
     case MotionEvent.ACTION_CANCEL: {
         longPressHandler.removeCallbacksAndMessages(null);
         if (!longPressTriggered) {
@@ -999,6 +1072,7 @@ switch (e.getAction()) {
                     && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
                 longPressTriggered = true;
                 handleAction(prefKeyBase + "_long");
+                if (rippleView != null) rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139));
             }
         }
         return true;

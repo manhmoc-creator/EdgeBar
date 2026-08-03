@@ -266,6 +266,8 @@ int cross = Math.max(size, iconSize + 48 + labelExtra);
                 pp.width = cross;
                 pp.height = Math.min(mainAxis, ctx.getResources().getDisplayMetrics().heightPixels);
             }
+            pp.x = prefs.getInt(px + "offset_x", 500) - 500;
+            pp.y = prefs.getInt(px + "offset_y", 500) - 500;
             try { wm.updateViewLayout(panel, pp); } catch (Exception ignored) {}
             Integer cachedSize = lastIconSizeCache.get(id);
             if (cachedSize == null || cachedSize != iconSize) {
@@ -417,6 +419,8 @@ int itemCount = csvToList(prefs.getString(px+"apps","")).size() +
     pp.gravity = edge.equals("left") ? (Gravity.LEFT|Gravity.CENTER_VERTICAL)
                : edge.equals("right") ? (Gravity.RIGHT|Gravity.CENTER_VERTICAL)
                : (Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
+    pp.x = prefs.getInt(px + "offset_x", 500) - 500;
+    pp.y = prefs.getInt(px + "offset_y", 500) - 500;
     try { wm.addView(panel, pp); panels.put(id, panel); } catch (Exception e) { return; }
     final String fId = id;
     panel.setOnTouchListener((v,e) -> { closePanel(fId); return true; });
@@ -874,7 +878,12 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
     private View buildCell(String px, String type, Object payload, String ref) {
     String panelId = px.startsWith("pack_panel_") ? px.substring("pack_panel_".length(), px.length()-1) : "";
     if (type.equals("APP")) {
-        return wrapAppIconCell(px, (Drawable) payload, ref, v -> {
+        String ovrKey = "pack_panel_" + panelId + "_icon_override_" + ref;
+        String ovrVal = prefs.getString(ovrKey, "");
+        Drawable overrideIcon = ovrVal.isEmpty() ? null : getIconOverride(panelId, ref);
+        Drawable finalIcon = overrideIcon != null ? overrideIcon : (Drawable) payload;
+        String cellCacheKey = overrideIcon != null ? (ref + "_ov_" + ovrVal) : ref;
+        return wrapAppIconCell(px, finalIcon, cellCacheKey, v -> {
             Intent li = ctx.getPackageManager().getLaunchIntentForPackage(ref);
             if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(li); }
             closeAllPanels();

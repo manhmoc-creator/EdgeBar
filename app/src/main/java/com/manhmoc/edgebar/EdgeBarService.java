@@ -479,17 +479,23 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
     private java.util.List<android.graphics.Bitmap> icons = new java.util.ArrayList<>();
     private Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     public BarView(Context c) { super(c); gd.setCornerRadius(24f); setBackground(gd); }
+    private int userIconAlpha = 255;
     public void setIcons(java.util.List<android.graphics.Bitmap> newIcons, int alpha) {
         this.icons = newIcons != null ? newIcons : new java.util.ArrayList<>();
-        iconPaint.setAlpha(alpha);
+        userIconAlpha = alpha;
         invalidate();
     }
+    private int iconAlphaFactor = 255; // 0 = ẩn hoàn toàn icon, 255 = hiện đầy đủ
+
     public void updateProps(int alpha, boolean autoHide, int delay, boolean inv) {
         this.baseAlpha = alpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
         autoHideHandler.removeCallbacksAndMessages(null);
-        if (inv) gd.setColor(Color.argb(0, 96, 125, 139));
-        else if (!autoHide) gd.setColor(Color.argb(alpha, 96, 125, 139));
-        else gd.setColor(Color.argb(0, 96, 125, 139));
+        // [FIX] "Tàng hình" (autoHide) CHỈ làm mờ NỀN theo thời gian — icon luôn giữ
+        // nguyên độ hiện rõ để người dùng còn thấy vị trí chạm. "Ẩn vô hình" (inv)
+        // mới thực sự ẩn cả icon lẫn nền.
+        if (inv) { gd.setColor(Color.argb(0, 96, 125, 139)); iconAlphaFactor = 0; }
+        else if (!autoHide) { gd.setColor(Color.argb(alpha, 96, 125, 139)); iconAlphaFactor = 255; }
+        else { gd.setColor(Color.argb(0, 96, 125, 139)); iconAlphaFactor = 255; }
         invalidate();
     }
     public void triggerFlash() {
@@ -503,6 +509,7 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
             a.addUpdateListener(anim -> {
                 float val = (float) anim.getAnimatedValue();
                 gd.setColor(Color.argb((int) (baseAlpha * val), 96, 125, 139));
+                // icon KHÔNG mờ theo nền nữa — luôn giữ độ hiện rõ trong suốt lúc tàng hình
                 invalidate();
             });
             a.start();
@@ -510,6 +517,9 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
     }
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        @Override protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        iconPaint.setAlpha((int) (userIconAlpha * (iconAlphaFactor / 255f)));
         if (icons.isEmpty()) return;
         int w = getWidth(), h = getHeight();
         if (w <= 0 || h <= 0) return;
@@ -1327,6 +1337,7 @@ if (panelEngine != null) panelEngine.rebuildAll();
     private final Runnable longPressRunnable = () -> {
         longFired = true;
         handleAction(prefKeyBase + "_long");
+        if (rippleView != null) rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139));
     };
     private long lastTapUpTime = 0;
 private static final long DTAP_WINDOW_MS = 300;
@@ -1356,10 +1367,7 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                 longFired = false;
                 lpHandler.removeCallbacks(longPressRunnable);
                 ensureRippleView();
-                rippleView.showAt(sx, sy, "tap", Color.argb(180, 96, 125, 139));
-                // [FIX #3] Timer long-press độc lập hoàn toàn với updateViewLayout() —
-                // không còn phụ thuộc GestureDetector nên KHÔNG bị "quên" khi
-                // updateVisibility()/updateHomaccLive() đụng vào view giữa chừng cử chỉ.
+                rippleView.showAt(sx, sy);
                 lpHandler.postDelayed(longPressRunnable, prefs.getInt("hold_dur", 600));
                 return true;
             case MotionEvent.ACTION_UP: {
@@ -1378,7 +1386,10 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                         if (isHold) actionName += "_hold";
                     }
                     handleAction(prefKeyBase + "_" + actionName);
-                    if (rippleView != null) rippleView.popAndHide();
+                    if (rippleView != null) {
+                        rippleView.popRipple();
+                        rippleView.jumpIcon(e.getRawX(), e.getRawY(), actionName, Color.argb(180, 96, 125, 139));
+                    }
                     return true;
                 }
                 if (longFired) return true;
@@ -1393,13 +1404,16 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                     return true;
                 }
                 long now = System.currentTimeMillis();
+                final float upX = e.getRawX(), upY = e.getRawY();
                 boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
                 if (!hasDtap) {
                     lastTapUpTime = 0;
                     handleAction(prefKeyBase + "_tap");
+                    if (rippleView != null) rippleView.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139));
                 } else if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
                     lastTapUpTime = 0;
                     handleAction(prefKeyBase + "_dtap");
+                    if (rippleView != null) rippleView.jumpIcon(upX, upY, "dtap", Color.argb(180, 96, 125, 139));
                 } else {
                     lastTapUpTime = now;
                     final long myUpTs = now;
@@ -1407,10 +1421,11 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                         if (lastTapUpTime == myUpTs) {
                             lastTapUpTime = 0;
                             handleAction(prefKeyBase + "_tap");
+                            if (rippleView != null) rippleView.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139));
                         }
                     }, DTAP_WINDOW_MS + 20);
                 }
-                if (rippleView != null) rippleView.popAndHide();
+                if (rippleView != null) rippleView.popRipple();
                 return true;
             }
             case MotionEvent.ACTION_CANCEL: {
@@ -1422,6 +1437,7 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                             && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
                         longFired = true;
                         handleAction(prefKeyBase + "_long");
+                        if (rippleView != null) rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139));
                     }
                 }
                 return true;
