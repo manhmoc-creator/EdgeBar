@@ -192,8 +192,14 @@ if (k != null && k.startsWith("shortcut_") && k.endsWith("_icon_override")) {
     // Guard kép: isRunning + isHomaccDrawn tránh IPC vô nghĩa
     if (k != null && k.startsWith("homacc_")) {
     boolean previewOn = prefs.getBoolean("preview_homacc", false);
-    // Cho phép cập nhật live nếu ĐANG preview (Frontier) HOẶC Homacc thật đang chạy
     if ((!AccessibleHomeService.isRunning && !previewOn) || !isHomaccDrawn) return;
+
+    // [MỚI] Key chỉ ảnh hưởng icon -> cập nhật NGAY, không debounce
+    boolean isIconOnlyKey = k.endsWith("_icon_size") || k.endsWith("_icon_alpha")
+        || k.equals("homacc_jump_icon_size") || k.equals("homacc_jump_icon_alpha")
+        || k.startsWith("homacc_gesture_icon_");
+    if (isIconOnlyKey) { updateHomaccLive(); return; }
+
     if (homaccDebounceRunnable != null)
         homaccDebounceHandler.removeCallbacks(homaccDebounceRunnable);
     homaccDebounceRunnable = () -> {
@@ -1425,7 +1431,7 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
 private float[] computeJumpDir() {
         float dxDir = 0f, dyDir = 0f;
         if (myView instanceof CornerView) {
-            int idx = ((CornerView) myView).getCornerType(); // 0=BR,1=BL,2=TR,3=TL
+            int idx = ((CornerView) myView).getCornerType();
             dxDir = (idx == 0 || idx == 2) ? -1f : 1f;
             dyDir = (idx == 0 || idx == 1) ? -1f : 1f;
         } else {
@@ -1434,7 +1440,24 @@ private float[] computeJumpDir() {
         }
         return new float[]{dxDir, dyDir};
     }
-    @Override public boolean onTouch(View v, MotionEvent e) {
+
+// ===== THÊM ĐÚNG CHỖ NÀY =====
+private float[] computeJumpDirForTap() {
+    float[] auto = computeJumpDir();
+    int mode = prefs.getInt(prefKeyBase + "_jumpdir", 0);
+    switch (mode) {
+        case 1: return new float[]{auto[0], -1f};
+        case 2: return new float[]{auto[0], 1f};
+        case 3: return new float[]{0f, -1f};
+        case 4: return new float[]{0f, 1f};
+        case 5: return new float[]{-1f, 0f};
+        case 6: return new float[]{1f, 0f};
+        default: return auto;
+    }
+}
+// ===============================
+
+@Override public boolean onTouch(View v, MotionEvent e) {
         if (myView != null && myView instanceof CornerView) ((CornerView)myView).triggerFlash();
         switch (e.getAction()) {
             case MotionEvent.ACTION_MOVE: {
@@ -1559,19 +1582,6 @@ try {
         if (rippleView != null) wm.removeView(rippleView);
         removeAccessibleHome(); 
     }
-private float[] computeJumpDirForTap() {
-    float[] auto = computeJumpDir();
-    int mode = prefs.getInt(prefKeyBase + "_jumpdir", 0); // 0=Auto,1=Chéo lên,2=Chéo xuống,3=Thẳng lên,4=Thẳng xuống,5=Thẳng trái,6=Thẳng phải
-    switch (mode) {
-        case 1: return new float[]{auto[0], -1f}; // Chéo lên: giữ dx theo góc (đã tự mirror), ép dy lên
-        case 2: return new float[]{auto[0], 1f};  // Chéo xuống: giữ dx theo góc, ép dy xuống
-        case 3: return new float[]{0f, -1f};      // Thẳng lên
-        case 4: return new float[]{0f, 1f};       // Thẳng xuống
-        case 5: return new float[]{-1f, 0f};      // Thẳng trái
-        case 6: return new float[]{1f, 0f};       // Thẳng phải
-        default: return auto;                      // Auto = hành vi cũ
-    }
-}
     // SAU (code thay thế):
 private void drawAccessibleHome() {
     // V19.12.3.6.9 TWIN-ENGINE PHANTOM — Fix Bug A:
