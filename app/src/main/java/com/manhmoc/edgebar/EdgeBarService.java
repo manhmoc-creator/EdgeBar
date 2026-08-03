@@ -1083,6 +1083,21 @@ case "SCREEN_ON":
                     sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC"));
                     break;
                 }
+                case "TOGGLE_WORK_PROFILE": {
+                    try {
+                        android.os.UserManager um =
+                            (android.os.UserManager) getSystemService(Context.USER_SERVICE);
+                        android.os.UserHandle work = null;
+                        for (android.os.UserHandle uh : um.getUserProfiles()) {
+                            if (!uh.equals(android.os.Process.myUserHandle())) { work = uh; break; }
+                        }
+                        if (work != null) {
+                            boolean currentlyQuiet = um.isQuietModeEnabled(work);
+                            um.requestQuietModeEnabled(!currentlyQuiet, work);
+                        }
+                    } catch (SecurityException ignored) {}
+                    break;
+                }
                 // THÊM case mới trong switch(a) của cả 2 file:
 default:
                         if (a.startsWith("PANEL_")) {

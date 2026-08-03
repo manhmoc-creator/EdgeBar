@@ -439,10 +439,9 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
     private void doScreenshot() {
         registerScreenshotReceiver();
         Intent i = new Intent(this, ScreenshotPermissionActivity.class);
-        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
         startActivity(i);
     }
-
     private void captureScreen(int resultCode, Intent data) {
         MediaProjectionManager mpm = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
         mediaProjection = mpm.getMediaProjection(resultCode, data);
@@ -1081,6 +1080,21 @@ for (String a : acts) {
                 }
                 case "TOGGLE_OVERLAY": {
                     sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC"));
+                    break;
+                }
+                case "TOGGLE_WORK_PROFILE": {
+                    try {
+                        android.os.UserManager um =
+                            (android.os.UserManager) getSystemService(Context.USER_SERVICE);
+                        android.os.UserHandle work = null;
+                        for (android.os.UserHandle uh : um.getUserProfiles()) {
+                            if (!uh.equals(android.os.Process.myUserHandle())) { work = uh; break; }
+                        }
+                        if (work != null) {
+                            boolean currentlyQuiet = um.isQuietModeEnabled(work);
+                            um.requestQuietModeEnabled(!currentlyQuiet, work);
+                        }
+                    } catch (SecurityException ignored) {}
                     break;
                 }
                 case "SCREEN_OFF": doScreenOff(); break;

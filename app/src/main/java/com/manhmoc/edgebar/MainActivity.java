@@ -149,11 +149,11 @@ prefs.edit().putBoolean("preview_lock", pLock)
 String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
         "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA",
         "NOTIFICATIONS", "QUICK_SETTINGS", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "VOICE_RECORD",
-        "LAUNCH_APP", "SPLIT_SCREEN"};
+        "LAUNCH_APP", "SPLIT_SCREEN", "TOGGLE_WORK_PROFILE"};
         String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Voice Record", "Ghi âm"),
-        T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình")};
+        T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình"), T("Toggle Island (Work Profile)", "Bật/Tắt Island (Không gian làm việc)")};
         for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
 // LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
