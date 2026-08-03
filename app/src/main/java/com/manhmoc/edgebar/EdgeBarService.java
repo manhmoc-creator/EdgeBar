@@ -63,6 +63,17 @@ private boolean fpRegistered = false;
     private View[] bars = new View[5];
     private View[] corners = new View[4];
     private FlashView fV;
+    private GestureRippleView rippleView;
+    private void ensureRippleView() {
+        if (rippleView != null) return;
+        rippleView = new GestureRippleView(this);
+        WindowManager.LayoutParams p = new WindowManager.LayoutParams(-1,-1,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT);
+        try { wm.addView(rippleView, p); } catch (Exception ignored) {}
+    }
     private CameraManager cm;
     private String cId;
     private boolean fOn = false, isKbd = false, isBl = false;
@@ -124,7 +135,7 @@ private static final java.util.Set<String> EB_KEY_PREFIXES =
         // [FIX] Khóa thật của Panel là "pack_panel_<id>_..." — không phải "panel".
         // Thiếu tiền tố đúng khiến isOurKey() chặn TOÀN BỘ thay đổi live của Panel
         // (Preview Handle, Enable, slider...) ngay từ vòng lọc whitelist.
-        "pack_panel_",
+        "pack_panel_","lenap_",
         "i1_","i2_","i3_","i4_","i5_","i6_","i7_","i8_",
         "i9_","i10_","i11_","i12_","i13_","i14_","i15_"
     ));
@@ -401,6 +412,63 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, p);
     }
 }
+    // ===== GESTURE RIPPLE VIEW (icon + sóng theo điểm chạm) =====
+    private class GestureRippleView extends View {
+        private float touchX = -1, touchY = -1;
+        private float rippleRadius = 0f, rippleAlpha = 0f;
+        private Bitmap iconBmp = null;
+        private int barColor = Color.WHITE;
+        private Paint ripplePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private ValueAnimator popAnim;
+        public GestureRippleView(Context c) { super(c); setLayerType(LAYER_TYPE_HARDWARE, null); }
+        public void showAt(float x, float y, String gestureKey, int color) {
+            touchX = x; touchY = y; barColor = color;
+            iconBmp = resolveGestureIconBitmap(gestureKey, 90);
+            rippleRadius = 10f; rippleAlpha = 1f;
+            setVisibility(View.VISIBLE); invalidate();
+        }
+        public void moveTo(float x, float y) { touchX = x; touchY = y; invalidate(); }
+        public void popAndHide() {
+            if (popAnim != null) popAnim.cancel();
+            popAnim = ValueAnimator.ofFloat(1f, 0f);
+            popAnim.setDuration(320);
+            popAnim.addUpdateListener(a -> {
+                float v = (float) a.getAnimatedValue();
+                rippleRadius = 60f + (1f - v) * 70f;
+                rippleAlpha = v;
+                invalidate();
+            });
+            popAnim.addListener(new AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(Animator a) { setVisibility(View.GONE); iconBmp = null; }
+            });
+            popAnim.start();
+        }
+        @Override protected void onDraw(Canvas canvas) {
+            if (touchX < 0) return;
+            ripplePaint.setColor(barColor);
+            ripplePaint.setAlpha((int) (rippleAlpha * 160));
+            canvas.drawCircle(touchX, touchY, rippleRadius, ripplePaint);
+            if (iconBmp != null) canvas.drawBitmap(iconBmp, touchX - iconBmp.getWidth()/2f, touchY - iconBmp.getHeight()/2f, iconPaint);
+        }
+    }
+    private final java.util.Map<String, Bitmap> gestureIconCache = new java.util.HashMap<>();
+    private Bitmap resolveGestureIconBitmap(String gestureKey, int size) {
+        if (gestureIconCache.containsKey(gestureKey)) return gestureIconCache.get(gestureKey);
+        String ref = prefs.getString("homacc_gesture_icon_" + gestureKey, "");
+        Drawable d = null;
+        try {
+            if (ref.startsWith("app:")) d = getPackageManager().getApplicationIcon(ref.substring(4));
+            else if (ref.startsWith("poolc:")) { int[] p2 = PanelEngine.getCustomIconPool(this); int idx = Integer.parseInt(ref.substring(6)); if (idx>=0 && idx<p2.length) d = getDrawable(p2[idx]); }
+            else if (ref.startsWith("pool:")) { int idx = Integer.parseInt(ref.substring(5)); if (idx>=0 && idx<PanelEngine.SYSTEM_ICON_POOL.length) d = getDrawable(PanelEngine.SYSTEM_ICON_POOL[idx]); }
+        } catch (Exception ignored) {}
+        if (d == null) { gestureIconCache.put(gestureKey, null); return null; }
+        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        d = d.mutate(); d.setTint(Color.WHITE); d.setBounds(0,0,size,size); d.draw(c);
+        gestureIconCache.put(gestureKey, bmp);
+        return bmp;
+    }
     private class BarView extends View {
     private int baseAlpha, hideDelay;
     private boolean isAutoHiding = false, isInv = false;
@@ -1272,6 +1340,7 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
         if (myView != null && myView instanceof CornerView) ((CornerView)myView).triggerFlash();
         switch (e.getAction()) {
             case MotionEvent.ACTION_MOVE: {
+    if (rippleView != null) rippleView.moveTo(e.getRawX(), e.getRawY());
     // [FIX LONG-PRESS] Ngưỡng dùng chung SWIPE_CANCEL_SLOP_PX — chỉ huỷ timer khi
     // tay THỰC SỰ đang vuốt, không phải rung tay tự nhiên lúc giữ yên 600ms.
     float mdx = e.getRawX() - sx, mdy = e.getRawY() - sy;
@@ -1284,6 +1353,8 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                 sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis();
                 longFired = false;
                 lpHandler.removeCallbacks(longPressRunnable);
+                ensureRippleView();
+                rippleView.showAt(sx, sy, "tap", Color.argb(180, 96, 125, 139));
                 // [FIX #3] Timer long-press độc lập hoàn toàn với updateViewLayout() —
                 // không còn phụ thuộc GestureDetector nên KHÔNG bị "quên" khi
                 // updateVisibility()/updateHomaccLive() đụng vào view giữa chừng cử chỉ.
@@ -1305,6 +1376,7 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                         if (isHold) actionName += "_hold";
                     }
                     handleAction(prefKeyBase + "_" + actionName);
+                    if (rippleView != null) rippleView.popAndHide();
                     return true;
                 }
                 if (longFired) return true;
@@ -1336,6 +1408,7 @@ private static final float SWIPE_CANCEL_SLOP_PX = 60f;
                         }
                     }, DTAP_WINDOW_MS + 20);
                 }
+                if (rippleView != null) rippleView.popAndHide();
                 return true;
             }
             case MotionEvent.ACTION_CANCEL: {
@@ -1378,6 +1451,7 @@ try {
         for (int i=0;i<5;i++) if (bars[i]!=null) wm.removeView(bars[i]);
         for (int i=0;i<4;i++) if (corners[i]!=null) wm.removeView(corners[i]);
         if (fV != null) wm.removeView(fV);
+        if (rippleView != null) wm.removeView(rippleView);
         removeAccessibleHome(); 
     }
     // SAU (code thay thế):

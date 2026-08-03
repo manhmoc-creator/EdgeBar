@@ -580,8 +580,13 @@ private Bitmap maskBitmapToShape(Bitmap content, int shape, int size) {
 // "bị thu bé" so với trước (bản cũ App icon phóng to 1.28x, Action icon chỉ 0.8x —
 // giờ dùng chung 1 hệ số nên phải tăng lên để không còn bé hơn hẳn so với trước).
 private static final float ICON_CONTENT_SCALE = 0.77f;
+    private float getIconCoreScale() { return prefs.getInt("lenap_global_icon_scale", 77) / 100f; }
+    private int getPoolIconAlpha() { return prefs.getInt("lenap_global_alpha_pool", 255); }
 private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor) {
-    String key = cacheKey + "_" + shape + "_" + size + "_" + backdropColor;
+    return getStyledIconBitmap(cacheKey, icon, emoji, shape, size, backdropColor, false);
+}
+private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor, boolean useGlobalScale) {
+    String key = cacheKey + "_" + shape + "_" + size + "_" + backdropColor + "_" + (useGlobalScale ? getIconCoreScale() : 0);
     synchronized (maskedIconCache) {
         Bitmap cached = maskedIconCache.get(key);
         if (cached != null && !cached.isRecycled()) return cached;
@@ -590,8 +595,10 @@ private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji,
     Canvas cc = new Canvas(content);
     if (backdropColor != 0) cc.drawColor(backdropColor);
     if (icon != null) {
-        int targetSize = Math.round(size * ICON_CONTENT_SCALE);
+        float scale = useGlobalScale ? getIconCoreScale() : ICON_CONTENT_SCALE;
+        int targetSize = Math.round(size * scale);
         int off = (size - targetSize) / 2;
+        if (useGlobalScale) icon.setAlpha(getPoolIconAlpha());
         icon.setBounds(off, off, off + targetSize, off + targetSize);
         icon.draw(cc);
     } else if (emoji != null) {
@@ -796,7 +803,7 @@ private Path buildRoughPath(int size) {
     } else {
         int effectiveShape = (shape == 5) ? 0 : shape;
         int backdropColor = Color.argb(230, 60, 64, 67);
-        Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null, effectiveShape, iconSize, backdropColor);
+        Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null, effectiveShape, iconSize, backdropColor, true);
         ImageView iv = new ImageView(ctx);
         iv.setImageBitmap(styled);
         iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));

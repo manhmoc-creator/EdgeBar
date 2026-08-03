@@ -3644,6 +3644,13 @@ private void renderPanelDesign() {
         designSliderContainer.removeAllViews();
         TextView tvHeader = createSectionTitle("📦 KHO LƯU BIẾN LENAP (DATA PACKS)");
         designSliderContainer.addView(tvHeader);
+
+        LinearLayout globalCfgBody = new LinearLayout(this);
+        globalCfgBody.setOrientation(LinearLayout.VERTICAL);
+        globalCfgBody.setPadding(20,10,20,20);
+        globalCfgBody.addView(createSlider("Độ mờ 120 Icon Hệ Thống/Tùy Chỉnh", "lenap_global_alpha_pool", 255, 255));
+        globalCfgBody.addView(createSlider("Kích thước lõi Icon (%)", "lenap_global_icon_scale", 100, 77));
+        designSliderContainer.addView(createDrawer("⚙️ TÙY CHỈNH CHUNG LENAP", globalCfgBody));
         // [TỐI ƯU PIXEL 2XL] Đã gỡ bỏ UI nút Reset Lenap theo yêu cầu.
         List<String> ids = getDynamicIds("pack_panel_ids");
         if (ids.isEmpty()) {
