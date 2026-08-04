@@ -132,37 +132,44 @@ isRunning = true;
     upLongFired = false; downLongFired = false;
 }
 private Runnable upLongTimeout, downLongTimeout;
+// Cửa sổ chờ cú bấm thứ 2 — PHẢI ngắn hơn HELD_MS_THRESHOLD để timer Long Press
+// và timer Double-Tap không bao giờ đụng độ nhau nữa (đây là nguyên nhân gốc
+// khiến dtap không hoạt động ổn định). Rẻ pin hơn REPEAT_WINDOW_MS cũ vì Handler
+// chỉ thức dậy sớm hơn 1 chút, không tạo thêm callback nào so với bản gốc.
+private static final long DTAP_GAP_MS = 260;
 
 private void handleSide(boolean isUp) {
     int burst = (isUp ? upBurst : downBurst) + 1;
     if (isUp) upBurst = burst; else downBurst = burst;
 
+    // FIX GỐC: hễ có sự kiện mới tới (kể cả cú bấm thứ 2) là HUỶ NGAY timer Long
+    // Press cũ trước tiên. Nhờ vậy khi burst >= 2 xảy ra, Long Press chắc chắn
+    // không thể bắn nhầm nữa — chỉ còn đúng 1 con đường thắng.
+    Runnable pendingLong = isUp ? upLongTimeout : downLongTimeout;
+    if (pendingLong != null) h.removeCallbacks(pendingLong);
+
+    Runnable prevEnd = isUp ? upEndCheck : downEndCheck;
+    if (prevEnd != null) h.removeCallbacks(prevEnd);
+
     if (burst == 1) {
-        // Lần bấm đầu của burst — hẹn giờ long-press TUYỆT ĐỐI (550ms) kể từ đây,
-        // KHÔNG phụ thuộc onAdjustVolume() có gọi lặp thêm hay không. Firmware/driver
-        // không đảm bảo gửi key-repeat cho remote volume provider, nên đếm burst >= 5
-        // như code cũ có thể không bao giờ đạt được dù đang giữ phím thật.
         Runnable timeout = () -> {
+            // Chỉ bắn Long khi burst tại thời điểm timeout nổ vẫn còn đúng 1 —
+            // nếu có cú bấm thứ 2 xen vào, handleSide() đã huỷ timer này rồi.
             boolean already = isUp ? upLongFired : downLongFired;
-            if (!already) {
+            if (!already && (isUp ? upBurst : downBurst) == 1) {
                 if (isUp) upLongFired = true; else downLongFired = true;
                 fire("volkey_" + (isUp ? "up" : "down") + "_long");
+                if (isUp) upBurst = 0; else downBurst = 0;
             }
         };
         if (isUp) upLongTimeout = timeout; else downLongTimeout = timeout;
         h.postDelayed(timeout, HELD_MS_THRESHOLD);
     }
 
-    Runnable prev = isUp ? upEndCheck : downEndCheck;
-    if (prev != null) h.removeCallbacks(prev);
     Runnable check = () -> {
-        // Buông phím — huỷ hẹn giờ long-press nếu chưa kịp bắn
-        Runnable pendingLong = isUp ? upLongTimeout : downLongTimeout;
-        if (pendingLong != null) h.removeCallbacks(pendingLong);
-
         boolean wasLong = isUp ? upLongFired : downLongFired;
         int finalBurst = isUp ? upBurst : downBurst;
-        if (!wasLong) {
+        if (!wasLong && finalBurst > 0) {
             if (finalBurst >= 2) fire("volkey_" + (isUp ? "up" : "down") + "_dtap");
             else fire("volkey_" + (isUp ? "up" : "down") + "_tap");
         }
@@ -170,7 +177,7 @@ private void handleSide(boolean isUp) {
         else { downBurst = 0; downLongFired = false; }
     };
     if (isUp) upEndCheck = check; else downEndCheck = check;
-    h.postDelayed(check, REPEAT_WINDOW_MS);
+    h.postDelayed(check, DTAP_GAP_MS);
 }
     private void fire(String key) {
         if (!prefs.getBoolean(key + "_on", true)) return;

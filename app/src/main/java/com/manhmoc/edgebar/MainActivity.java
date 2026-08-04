@@ -76,6 +76,7 @@ private Button fab;
 private View livePreviewOverlay;
 private WindowManager.LayoutParams livePreviewLp;
     private int designTabState = 0;
+    private boolean recIndicatorTestOn = false;
     private int currentMainTab = 1; private int currentGesTab = 0; private int frontierSubTab = 0;
     // [MULTI-SELECT FRONTIER] Zero-RAM khi không dùng — chỉ 1 boolean + 1 Set rỗng
     private boolean frontierSelectMode = false;
@@ -868,6 +869,7 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
     // gian chờ (bar_hide_dur) tách biệt khỏi Corner (corner_hide_dur).
     LinearLayout bd = new LinearLayout(this);
     bd.setOrientation(LinearLayout.VERTICAL); bd.setPadding(30,10,30,30);
+    bd.addView(createSlider(T("Bar Corner Radius","Độ bo tròn Thanh Cạnh"), prefix+"bar_radius", 100, 24));
     bd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"bar_hide_dur", 5000, 2500));
     bd.addView(createSlider(T("Icon Thickness on Bar","Độ đậm Icon trên Bar"), prefix+"bar_icon_alpha", 255, 255));
 bd.addView(createSlider(T("Icon Size on Bar","Kích thước Icon trên Bar"), prefix+"bar_icon_size", 120, 40));
@@ -3215,7 +3217,7 @@ btnCopy.setOnClickListener(v -> {
     secSys.addView(ytdlRow);
 
     // [MỚI] Slider grace period cho LockList
-    secSys.addView(createSlider(T("Lock grace period after leaving app (sec)", "Thời gian ân hạn trước khi khoá lại (giây)"), "applock_grace_sec", 3000, 0));
+    secSys.addView(createSlider(T("Lock grace period after leaving app (sec)", "Thời gian ân hạn trước khi khoá lại (giây)"), "applock_grace_sec", 1000, 0));
 
     CheckBox cbAutoHomeb = new CheckBox(this);
 cbAutoHomeb.setText(T("Auto-disable Accessibility + switch to Homeb for Blacklist apps",
@@ -4025,6 +4027,23 @@ designSliderContainer.removeAllViews();
 if (designTabState == 5) { renderPanelDesign(); return; }
     if(designTabState == 3) {
             Button btnTest = new Button(this); btnTest.setText("▶ THỬ NGAY HIỆU ỨNG"); btnTest.setBackground(getRounded("#FFC107", 20f)); btnTest.setTextColor(Color.BLACK); btnTest.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(-1,-2); testLp.setMargins(0,0,0,20); btnTest.setLayoutParams(testLp); btnTest.setOnClickListener(v -> { Intent i = new Intent("com.manhmoc.edgebar.TEST_ANIM"); i.setPackage(getPackageName()); sendBroadcast(i); Toast.makeText(this, "Playing Animation...", Toast.LENGTH_SHORT).show(); }); designSliderContainer.addView(btnTest);
+// [MỚI] Bật lên để chỉnh X/Y/Size chỉ báo ghi âm theo thời gian thực
+            Button btnTestRec = new Button(this);
+            btnTestRec.setText(recIndicatorTestOn ? "⏹ TẮT THỬ CHỈ BÁO GHI ÂM" : "🔴 THỬ CHỈ BÁO GHI ÂM");
+            btnTestRec.setBackground(getRounded(recIndicatorTestOn ? "#D32F2F" : "#FFC107", 20f));
+            btnTestRec.setTextColor(recIndicatorTestOn ? Color.WHITE : Color.BLACK);
+            btnTestRec.setPadding(0,30,0,30);
+            LinearLayout.LayoutParams testRecLp = new LinearLayout.LayoutParams(-1,-2);
+            testRecLp.setMargins(0,0,0,20); btnTestRec.setLayoutParams(testRecLp);
+            btnTestRec.setOnClickListener(v -> {
+                recIndicatorTestOn = !recIndicatorTestOn;
+                Intent i = new Intent("com.manhmoc.edgebar.TEST_REC_INDICATOR");
+                i.setPackage(getPackageName());
+                i.putExtra("on", recIndicatorTestOn);
+                sendBroadcast(i);
+                renderSliders();
+            });
+            designSliderContainer.addView(btnTestRec);
             LinearLayout lC = new LinearLayout(this); lC.setOrientation(LinearLayout.HORIZONTAL); lC.setPadding(0,10,0,10); TextView tC = new TextView(this); tC.setText("Chủ đề:"); tC.setTextColor(Color.WHITE); tC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sC = createSpinner(); sC.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, COLOR_NAMES)); String curC = prefs.getString("anim_color", "WHITE"); for(int i=0;i<COLOR_KEYS.length;i++) if(COLOR_KEYS[i].equals(curC)) sC.setSelection(i); sC.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putString("anim_color",COLOR_KEYS[pos]).apply();}public void onNothingSelected(AdapterView<?> p){}}); sC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lC.addView(tC); lC.addView(sC); designSliderContainer.addView(lC); 
             LinearLayout lS = new LinearLayout(this); lS.setOrientation(LinearLayout.HORIZONTAL); lS.setPadding(0,10,0,10); TextView tS = new TextView(this); tS.setText("Kiểu chạy:"); tS.setTextColor(Color.WHITE); tS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); Spinner sS = createSpinner(); sS.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Nhấp Nháy", "1 Tia sáng nối đuôi", "2 Tia sáng đối xứng", "3 Tia sáng đều nhau"})); sS.setSelection(prefs.getInt("anim_style", 0)); sS.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p, View v, int pos, long id){prefs.edit().putInt("anim_style", pos).apply();}public void onNothingSelected(AdapterView<?> p){}}); sS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f)); lS.addView(tS); lS.addView(sS); designSliderContainer.addView(lS); 
             designSliderContainer.addView(createSlider("Chiều ngang Hiệu ứng (0=Full)", "anim_w", 2000, 0)); designSliderContainer.addView(createSlider("Chiều dọc Hiệu ứng (0=Full)", "anim_h", 3500, 0)); designSliderContainer.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255)); designSliderContainer.addView(createSlider("Độ dày viền", "anim_thick", 50, 12)); designSliderContainer.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500));

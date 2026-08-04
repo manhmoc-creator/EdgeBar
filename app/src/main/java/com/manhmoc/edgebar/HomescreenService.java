@@ -95,6 +95,8 @@ private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap
     private TextView recIndicatorText;
     private View recIndicatorDot;
     private ValueAnimator recBlinkAnim;
+    private boolean recIndicatorTestMode = false;
+private boolean recIndicatorTestPaused = false;
     private void ensureRippleView() {
         if (rippleView != null) return;
         rippleView = new GestureRippleView(this);
@@ -120,6 +122,39 @@ private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap
     private PanelEngine panelEngine;
     private int lastKbdHeight = 0;
     private long lastSyncMs = 0;
+    private final Handler appLockPollHandler = new Handler(android.os.Looper.getMainLooper());
+    private String lastPolledFgPkg = "";
+    private static final long APPLOCK_POLL_MS = 400; // đủ nhanh, không tốn pin đáng kể
+
+    private void startAppLockPolling() {
+        appLockPollHandler.postDelayed(appLockPollRunnable, APPLOCK_POLL_MS);
+    }
+    private final Runnable appLockPollRunnable = new Runnable() {
+        @Override public void run() {
+            try {
+                String lockList = prefs.getString("applock_list", "");
+                if (!lockList.isEmpty()) {
+                    android.app.usage.UsageStatsManager usm =
+                        (android.app.usage.UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+                    long now = System.currentTimeMillis();
+                    android.app.usage.UsageEvents events = usm.queryEvents(now - 3000, now);
+                    android.app.usage.UsageEvents.Event ev = new android.app.usage.UsageEvents.Event();
+                    String fg = lastPolledFgPkg;
+                    while (events.hasNextEvent()) {
+                        events.getNextEvent(ev);
+                        if (ev.getEventType() == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                            fg = ev.getPackageName();
+                        }
+                    }
+                    if (!fg.isEmpty() && !fg.equals(lastPolledFgPkg)) {
+                        lastPolledFgPkg = fg;
+                        AppLockHelper.check(HomescreenService.this, prefs, fg);
+                    }
+                }
+            } catch (Exception ignored) {}
+            appLockPollHandler.postDelayed(this, APPLOCK_POLL_MS);
+        }
+    };
     private static final long SYNC_THROTTLE_MS = 150;
     private long accCheckTimestamp = 0;
     private static final int KBD_HEIGHT_CHANGE_THRESHOLD = 20;
@@ -534,12 +569,10 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
     }
     private int iconAlphaFactor = 255; // 0 = ẩn hoàn toàn icon, 255 = hiện đầy đủ
 
-    public void updateProps(int alpha, boolean autoHide, int delay, boolean inv) {
+    public void updateProps(int alpha, boolean autoHide, int delay, boolean inv, float radius) {
         this.baseAlpha = alpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
         autoHideHandler.removeCallbacksAndMessages(null);
-        // [FIX] "Tàng hình" (autoHide) CHỈ làm mờ NỀN theo thời gian — icon luôn giữ
-        // nguyên độ hiện rõ để người dùng còn thấy vị trí chạm. "Ẩn vô hình" (inv)
-        // mới thực sự ẩn cả icon lẫn nền.
+        gd.setCornerRadius(radius); // [MỚI] Độ bo tròn tuỳ chỉnh từ slider "bar_radius"
         if (inv) { gd.setColor(Color.argb(0, 96, 125, 139)); iconAlphaFactor = 0; }
         else if (!autoHide) { gd.setColor(Color.argb(alpha, 96, 125, 139)); iconAlphaFactor = 255; }
         else { gd.setColor(Color.argb(0, 96, 125, 139)); iconAlphaFactor = 255; }
@@ -831,6 +864,7 @@ panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ false); // Home
         panelEngine.rebuildAll();
         updateVisibility();
         sendSyncState();
+        startAppLockPolling(); // [MỚI] Homeb không có Accessibility -> phải poll UsageStats
     }
     private final Handler debounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable debounceRunnable = null;
@@ -913,7 +947,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
                 int y = prefs.getInt("home_" + BARS[i] + "_y", 0);
                 int visMode = prefs.getInt("home_" + BARS[i] + "_vis_mode", 0);
                 int barHideDur = prefs.getInt("home_bar_hide_dur", 2500);
-                ((BarView)bars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2);
+                ((BarView)bars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2, prefs.getInt("home_bar_radius", 24));
                int iconSize = prefs.getInt("home_" + BARS[i] + "_icon_size", prefs.getInt("home_bar_icon_size", 40)); 
                int iconAlpha = prefs.getInt("home_" + BARS[i] + "_icon_alpha", prefs.getInt("home_bar_icon_alpha", 255)); 
                 ((BarView)bars[i]).setIcons(resolveBarIcons(prefs.getString("home_" + BARS[i] + "_icons",""), iconSize), iconAlpha);
@@ -1502,24 +1536,38 @@ private void ensureRecIndicator() {
         dot.setShape(GradientDrawable.OVAL);
         dot.setColor(Color.parseColor("#FF3B30"));
         recIndicatorDot.setBackground(dot);
-        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(24, 24);
+        int dotSize = Math.round(24 * (prefs.getInt("anim_rec_size", 140) / 140f));
+        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dotSize, dotSize);
         dotLp.setMargins(0, 0, 16, 0);
         recIndicatorDot.setLayoutParams(dotLp);
 
         recIndicatorText = new TextView(this);
         recIndicatorText.setTextColor(Color.WHITE);
-        recIndicatorText.setTextSize(13);
+        recIndicatorText.setTextSize(13 * (prefs.getInt("anim_rec_size", 140) / 140f));
         recIndicatorText.setText("00:00");
 
         recIndicatorView.addView(recIndicatorDot);
         recIndicatorView.addView(recIndicatorText);
 
+        // [MỚI] Chạm để Tạm dừng/Tiếp tục — ghi âm thật thì điều khiển service thật,
+        // đang ở chế độ THỬ thì chỉ đổi trạng thái hiển thị, không đụng MediaRecorder.
+        recIndicatorView.setOnClickListener(v -> {
+            if (VoiceRecorderService.isRunning) {
+                Intent p2 = new Intent(this, VoiceRecorderService.class);
+                p2.setAction(VoiceRecorderService.ACTION_PAUSE_TOGGLE);
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(p2); else startService(p2);
+            } else if (recIndicatorTestMode) {
+                recIndicatorTestPaused = !recIndicatorTestPaused;
+                updateRecIndicator(recIndicatorTestPaused ? "PAUSED" : "RECORDING", 0);
+            }
+        });
+
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT);
+WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+| WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         lp.x = prefs.getInt("anim_rec_x", 1000) - 1000;
         lp.y = prefs.getInt("anim_rec_y", 1000) - 1000;
@@ -1531,6 +1579,23 @@ private void ensureRecIndicator() {
         recBlinkAnim.addUpdateListener(a -> { if (recIndicatorDot != null) recIndicatorDot.setAlpha((float) a.getAnimatedValue()); });
     }
 
+    // [MỚI] Cập nhật vị trí/kích thước TẠI CHỖ khi kéo slider anim_rec_x/y/size —
+    // chỉ updateViewLayout(), KHÔNG removeView/addView -> rẻ CPU/pin, mượt tức thì.
+    private void liveUpdateRecIndicatorPosition() {
+        if (recIndicatorView == null) return;
+        WindowManager.LayoutParams lp = (WindowManager.LayoutParams) recIndicatorView.getLayoutParams();
+        lp.x = prefs.getInt("anim_rec_x", 1000) - 1000;
+        lp.y = prefs.getInt("anim_rec_y", 1000) - 1000;
+        try { wm.updateViewLayout(recIndicatorView, lp); } catch (Exception ignored) {}
+        float scale = prefs.getInt("anim_rec_size", 140) / 140f;
+        int dotSize = Math.round(24 * scale);
+        if (recIndicatorDot != null) {
+            LinearLayout.LayoutParams dlp = (LinearLayout.LayoutParams) recIndicatorDot.getLayoutParams();
+            dlp.width = dotSize; dlp.height = dotSize;
+            recIndicatorDot.setLayoutParams(dlp);
+        }
+        if (recIndicatorText != null) recIndicatorText.setTextSize(scale * 13);
+    }
     private void updateRecIndicator(String state, long sec) {
         if (state == null || "STOPPED".equals(state)) {
             if (recBlinkAnim != null) recBlinkAnim.cancel();
@@ -1550,6 +1615,7 @@ private void ensureRecIndicator() {
    public void onDestroy() {
     super.onDestroy();
     isRunning = false;
+    appLockPollHandler.removeCallbacksAndMessages(null); // [MỚI] dừng poll, tránh leak Handler
     try { unregisterReceiver(syncReceiver); } catch (Exception e) {}
     prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
     for (int i = 0; i < 5; i++) if (bars[i] != null) wm.removeView(bars[i]);
