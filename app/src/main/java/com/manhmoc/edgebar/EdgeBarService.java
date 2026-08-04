@@ -62,8 +62,29 @@ private boolean lastPreviewHomaccState = false;
 private FingerprintGestureController fpController;
 private FingerprintGestureController.FingerprintGestureCallback fpCallback;
 private boolean fpRegistered = false;
+// [MỚI] AppLock — lưu mốc thời gian unlock gần nhất theo RAM, không ghi prefs
+    private static final java.util.Map<String, Long> appLockLastUnlock = new java.util.HashMap<>();
+    public static void markPackageUnlocked(String pkg) {
+        appLockLastUnlock.put(pkg, System.currentTimeMillis());
+    }
+    private void checkAppLock(String pkg) {
+        if (pkg == null || pkg.isEmpty() || pkg.equals(getPackageName())) return;
+        String lockList = prefs.getString("applock_list", "");
+        if (lockList.isEmpty() || !lockList.contains(pkg)) return;
+        boolean isLocked = false;
+        for (String p : lockList.split(",")) if (p.trim().equals(pkg)) { isLocked = true; break; }
+        if (!isLocked) return;
 
+        long graceMs = prefs.getInt("applock_grace_sec", 0) * 1000L;
+        Long lastUnlock = appLockLastUnlock.get(pkg);
+        long now = System.currentTimeMillis();
+        if (lastUnlock != null && (now - lastUnlock) < graceMs) return; // còn trong thời gian ân hạn
 
+        Intent lockIntent = new Intent(this, LockOverlayActivity.class);
+        lockIntent.putExtra("lock_pkg", pkg);
+        lockIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+        startActivity(lockIntent);
+    }
     // ĐẰNG SAU (Các biến cũ của EdgeBarService)
     private WindowManager wm;
     private View[] bars = new View[5];
@@ -234,6 +255,7 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             playAnim();
         } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
     if (isHomaccDrawn) removeAccessibleHome();
+     appLockLastUnlock.clear(); // [MỚI] tắt màn = ép mọi app trong LockList phải xác thực lại
     // Cảm biến chắc chắn không khả dụng khi màn tắt — huỷ đăng ký, đỡ giữ callback vô ích
     if (fpRegistered && fpController != null && fpCallback != null) {
         try { fpController.unregisterFingerprintGestureCallback(fpCallback); } catch (Exception e) {}
@@ -856,6 +878,7 @@ refreshFingerprintRegistration();
     boolean newIsKbd = newKbdHeight > 0;
 String bl = prefs.getString("blacklist", "");
 boolean newIsBl = !pName.isEmpty() && bl.contains(pName);
+if (!pName.isEmpty()) checkAppLock(pName);
 // [MỚI] Blacklist Auto-Homeb: app blacklist vừa mở (false→true)
 if (newIsBl && !lastIsBl_cache && prefs.getBoolean("blacklist_auto_homeb_en", false)) {
     triggerBlacklistAutoHomeb();

@@ -66,6 +66,12 @@ private boolean panelSelectMode = false;
 private boolean trashSelectMode = false;
 private java.util.Set<String> trashSelectedItems = new java.util.LinkedHashSet<>();
 private java.util.Set<String> panelSelectedItems = new java.util.LinkedHashSet<>();
+// [MỚI] Multi-select cho Intent/QS Tile/Macro trong Ecosystem
+private boolean ecoSelectMode = false;
+private java.util.Set<String> ecoSelectedItems = new java.util.LinkedHashSet<>();
+// [MỚI] Multi-select cho danh sách ghi âm (voice recordings)
+private boolean voiceSelectMode = false;
+private java.util.Set<String> voiceSelectedItems = new java.util.LinkedHashSet<>();
 private Button fab;
 private View livePreviewOverlay;
 private WindowManager.LayoutParams livePreviewLp;
@@ -2921,12 +2927,46 @@ private void clonePackRules(String srcItemKey, String dstItemKey) {
     }
     prefs.edit().putString(dstItemKey + "_pack_rules", TextUtils.join(",", dstRules)).apply();
 }
+private LinearLayout buildEcoSelectionToolbar() {
+    LinearLayout bar = new LinearLayout(this);
+    bar.setOrientation(LinearLayout.HORIZONTAL);
+    bar.setGravity(Gravity.CENTER_VERTICAL);
+    bar.setPadding(0, 0, 0, 20);
+
+    TextView tvCount = new TextView(this);
+    tvCount.setText(ecoSelectedItems.size() + " " + T("selected", "đã chọn"));
+    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", "Xóa"));
+    btnDelete.setBackground(getRounded("#D32F2F", 20f)); btnDelete.setTextColor(Color.WHITE); btnDelete.setTextSize(12.5f);
+    btnDelete.setOnClickListener(v -> {
+        new AlertDialog.Builder(this).setTitle(T("Move to trash?", "Chuyển vào Kho Cũ?"))
+            .setPositiveButton(T("MOVE", "CHUYỂN"), (d, w) -> {
+                for (String itemKey : new java.util.ArrayList<>(ecoSelectedItems)) moveDataPackToTrash(itemKey);
+                ecoSelectMode = false;
+                ecoSelectedItems.clear();
+                renderEcosystem();
+            }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
+    });
+    LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(-2, -2); delLp.setMargins(10, 0, 10, 0);
+    btnDelete.setLayoutParams(delLp);
+
+    Button btnCancel = new Button(this); btnCancel.setText(T("Cancel", "Hủy"));
+    btnCancel.setBackground(getRounded("#333333", 20f)); btnCancel.setTextColor(Color.WHITE); btnCancel.setTextSize(12.5f);
+    btnCancel.setOnClickListener(v -> { ecoSelectMode = false; ecoSelectedItems.clear(); renderEcosystem(); });
+
+    bar.addView(tvCount); bar.addView(btnDelete); bar.addView(btnCancel);
+    return bar;
+}
     private void renderEcosystem() {
     ecoContainer.removeAllViews();
    if (ecoType == 0 || ecoType == 1 || ecoType == 2) {
     String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
     String prefixBase = ecoType == 0 ? "intent_" : (ecoType == 1 ? "tilev2_" : "macro_");
     List<String> ids = getDynamicIds(listKey);
+
+    if (ecoSelectMode) ecoContainer.addView(buildEcoSelectionToolbar());
 
     LinearLayout currentRow = null;
     int count = 0;
@@ -2944,15 +2984,15 @@ private void clonePackRules(String srcItemKey, String dstItemKey) {
                     : ecoType == 1 ? prefs.getString(prefixBase+id+"_label", "Tile")
                     : prefs.getString(prefixBase+id+"_name", "Macro");
 
+        FrameLayout cardWrap = new FrameLayout(this);
+        LinearLayout.LayoutParams wrapLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        wrapLp.setMargins(6, 6, 6, 6);
+        cardWrap.setLayoutParams(wrapLp);
+
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(getRounded("#202124", 20f));
         card.setPadding(15, 20, 15, 20);
-        // Tối ưu margin cho 3 cột trên Pixel 2XL
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-        lp.setMargins(6, 6, 6, 6);
-        card.setLayoutParams(lp);
-
         // Hàng 1: Tên và Nút Switch
         LinearLayout r1 = new LinearLayout(this);
         r1.setOrientation(LinearLayout.HORIZONTAL);
@@ -3052,31 +3092,47 @@ btnCopy.setOnClickListener(v -> {
             else if (finalType == 1) openTileEditorV2(newId);
             else openMacroEditorV2(newId);
         });
-
         r2.addView(btnCopy);
-        // FIX CRASH: bỏ card.addView(r1) ở đây vì r1 đã được add phía trên rồi —
-        // add lại lần 2 sẽ ném IllegalStateException "The specified child already has a parent"
         card.addView(r2);
-        // THUẬT TOÁN UX: CHẠM 1 LẦN -> MỞ EDIT DIALOG
-        card.setOnClickListener(v -> {
-            if (finalType == 0) openIntentEditorV2(finalId);
-            else if (finalType == 1) openTileEditorV2(finalId);
-            else openMacroEditorV2(finalId);
-        });
 
-        // CHẠM GIỮ -> CHUYỂN VÀO KHO CŨ (không xóa vĩnh viễn ngay)
-        card.setOnLongClickListener(v -> {
-            new AlertDialog.Builder(this).setTitle(T("Move to trash?", "Chuyển vào Kho Cũ?"))
-                .setPositiveButton(T("MOVE", "CHUYỂN"), (d,w) -> {
-                    String ecoPrefix = finalType == 0 ? "intent_" : (finalType == 1 ? "tilev2_" : "macro_");
-                    moveDataPackToTrash(ecoPrefix + finalId);
-                    renderEcosystem();
-                }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
-            return true;
-        });
-        currentRow.addView(card); count++;
+        cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+        final String ecoItemKey = (finalType == 0 ? "intent_" : (finalType == 1 ? "tilev2_" : "macro_")) + finalId;
+
+        if (ecoSelectMode) {
+            // Chế độ chọn nhiều: chấm tròn góc dưới-trái, chạm để tick/bỏ tick
+            TextView selDot = new TextView(this);
+            boolean sel = ecoSelectedItems.contains(ecoItemKey);
+            selDot.setText(sel ? "🟢" : "⚪");
+            selDot.setTextSize(18);
+            FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+            dotLp.gravity = Gravity.BOTTOM | Gravity.START;
+            dotLp.setMargins(10, 0, 0, 6);
+            selDot.setLayoutParams(dotLp);
+            cardWrap.addView(selDot);
+            card.setOnClickListener(v -> {
+                if (ecoSelectedItems.contains(ecoItemKey)) ecoSelectedItems.remove(ecoItemKey);
+                else ecoSelectedItems.add(ecoItemKey);
+                renderEcosystem();
+            });
+            card.setOnLongClickListener(v -> true);
+        } else {
+            // THUẬT TOÁN UX: CHẠM 1 LẦN -> MỞ EDIT DIALOG
+            card.setOnClickListener(v -> {
+                if (finalType == 0) openIntentEditorV2(finalId);
+                else if (finalType == 1) openTileEditorV2(finalId);
+                else openMacroEditorV2(finalId);
+            });
+            // CHẠM GIỮ -> VÀO CHẾ ĐỘ CHỌN NHIỀU (thay vì mở dialog xoá 1 gói như trước)
+            card.setOnLongClickListener(v -> {
+                ecoSelectMode = true;
+                ecoSelectedItems.clear();
+                ecoSelectedItems.add(ecoItemKey);
+                renderEcosystem();
+                return true;
+            });
+        }
+        currentRow.addView(cardWrap); count++;
     }
-    
     // Đệm thêm view rỗng nếu hàng cuối không đủ 3 thẻ
     while (count % 3 != 0 && currentRow != null) {
         View dummy = new View(this);
@@ -3127,17 +3183,32 @@ btnCopy.setOnClickListener(v -> {
     btnPickBlacklist.setText("🚫 BLACKLIST"); btnPickBlacklist.setBackground(getRounded("#D32F2F", 20f)); btnPickBlacklist.setTextColor(Color.WHITE);
     btnPickBlacklist.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
     btnPickBlacklist.setOnClickListener(v -> showPanelMultiPicker("blacklist", true));
-    // thuộc về cấu hình Morse, không thuộc Ecosystem). Chỗ trống thay bằng nút YTDL GỌN
-    // (Dialog thay Drawer) — Dialog chỉ cấp phát View lúc mở, GC thu hồi ngay khi đóng,
-    // khác Drawer cũ luôn giữ EditText+2 Button trong RAM (chỉ setVisibility GONE khi đóng).
+
+    Button btnPickLockList = new Button(this);
+    btnPickLockList.setText("🔐 LOCKLIST"); btnPickLockList.setBackground(getRounded("#7C4DFF", 20f)); btnPickLockList.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams lpLock = new LinearLayout.LayoutParams(0, -2, 1f); lpLock.setMargins(15, 0, 0, 0);
+    btnPickLockList.setLayoutParams(lpLock);
+    btnPickLockList.setOnClickListener(v -> showPanelMultiPicker("applock_list", true));
+
+    appListRow.addView(btnPickBlacklist); appListRow.addView(btnPickLockList);
+    secSys.addView(appListRow);
+
+    // [MỚI] Hàng riêng cho YTDL — đẩy xuống dưới Blacklist/LockList
+    LinearLayout ytdlRow = new LinearLayout(this);
+    ytdlRow.setOrientation(LinearLayout.HORIZONTAL);
+    LinearLayout.LayoutParams ytdlRowLp = new LinearLayout.LayoutParams(-1, -2);
+    ytdlRowLp.setMargins(0, 15, 0, 0);
+    ytdlRow.setLayoutParams(ytdlRowLp);
     Button btnPickYtdl = new Button(this);
     btnPickYtdl.setText("🎵 YTDL"); btnPickYtdl.setBackground(getRounded("#FFD700", 20f)); btnPickYtdl.setTextColor(Color.BLACK);
-    LinearLayout.LayoutParams lpYtdl = new LinearLayout.LayoutParams(0, -2, 1f); lpYtdl.setMargins(15, 0, 0, 0);
-    btnPickYtdl.setLayoutParams(lpYtdl);
+    btnPickYtdl.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
     btnPickYtdl.setOnClickListener(v -> showYTDLDialog());
+    ytdlRow.addView(btnPickYtdl);
+    secSys.addView(ytdlRow);
 
-    appListRow.addView(btnPickBlacklist); appListRow.addView(btnPickYtdl);
-    secSys.addView(appListRow);
+    // [MỚI] Slider grace period cho LockList
+    secSys.addView(createSlider(T("Lock grace period after leaving app (sec)", "Thời gian ân hạn trước khi khoá lại (giây)"), "applock_grace_sec", 3000, 0));
+
     CheckBox cbAutoHomeb = new CheckBox(this);
 cbAutoHomeb.setText(T("Auto-disable Accessibility + switch to Homeb for Blacklist apps",
     "Tự tắt Trợ năng + chuyển sang Homeb khi mở app Blacklist"));
@@ -3552,7 +3623,6 @@ private List<Object[]> getVoiceRecListCached(boolean forceRefresh) {
     cachedVoiceRecList = out; cachedVoiceRecTs = now;
     return out;
 }
-
 private void renderVoiceRecordList() {
     List<Object[]> list = getVoiceRecListCached(false);
     Button btnRefresh = new Button(this);
@@ -3573,6 +3643,9 @@ private void renderVoiceRecordList() {
         ecoContainer.addView(empty);
         return;
     }
+
+    if (voiceSelectMode) ecoContainer.addView(buildVoiceSelectionToolbar());
+
     LinearLayout currentRow = null;
     for (int i = 0; i < list.size(); i++) {
         if (i % 2 == 0) {
@@ -3585,14 +3658,17 @@ private void renderVoiceRecordList() {
         android.net.Uri uri = (android.net.Uri) item[0];
         String name = (String) item[1];
         long size = (long) item[2];
+        final String uriStr = uri.toString();
+
+        FrameLayout cardWrap = new FrameLayout(this);
+        LinearLayout.LayoutParams wrapLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        wrapLp.setMargins(6, 6, 6, 6);
+        cardWrap.setLayoutParams(wrapLp);
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(getRounded("#202124", 20f));
         card.setPadding(30, 24, 30, 24);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-        lp.setMargins(6, 6, 6, 6);
-        card.setLayoutParams(lp);
 
         TextView tName = new TextView(this);
         tName.setText("🎙️ " + name);
@@ -3605,20 +3681,73 @@ private void renderVoiceRecordList() {
         tSize.setPadding(0, 5, 0, 0);
 
         card.addView(tName); card.addView(tSize);
-        card.setOnClickListener(v -> openInFilesByGoogle(uri));
-        card.setOnLongClickListener(v -> {
-            new AlertDialog.Builder(this).setTitle(T("Delete this recording?", "Xoá bản ghi này?"))
-                .setPositiveButton(T("DELETE", "XOÁ"), (d, w) -> {
-                    try { getContentResolver().delete(uri, null, null); } catch (Exception ignored) {}
-                    getVoiceRecListCached(true);
-                    renderEcosystem();
-                }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
-            return true;
-        });
-        currentRow.addView(card);
+        cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+
+        if (voiceSelectMode) {
+            TextView selDot = new TextView(this);
+            boolean sel = voiceSelectedItems.contains(uriStr);
+            selDot.setText(sel ? "🟢" : "⚪");
+            selDot.setTextSize(18);
+            FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+            dotLp.gravity = Gravity.BOTTOM | Gravity.START;
+            dotLp.setMargins(10, 0, 0, 6);
+            selDot.setLayoutParams(dotLp);
+            cardWrap.addView(selDot);
+            card.setOnClickListener(v -> {
+                if (voiceSelectedItems.contains(uriStr)) voiceSelectedItems.remove(uriStr);
+                else voiceSelectedItems.add(uriStr);
+                renderEcosystem();
+            });
+            card.setOnLongClickListener(v -> true);
+        } else {
+            card.setOnClickListener(v -> openInFilesByGoogle(uri));
+            card.setOnLongClickListener(v -> {
+                voiceSelectMode = true;
+                voiceSelectedItems.clear();
+                voiceSelectedItems.add(uriStr);
+                renderEcosystem();
+                return true;
+            });
+        }
+        currentRow.addView(cardWrap);
     }
 }
 
+private LinearLayout buildVoiceSelectionToolbar() {
+    LinearLayout bar = new LinearLayout(this);
+    bar.setOrientation(LinearLayout.HORIZONTAL);
+    bar.setGravity(Gravity.CENTER_VERTICAL);
+    bar.setPadding(0, 0, 0, 20);
+
+    TextView tvCount = new TextView(this);
+    tvCount.setText(voiceSelectedItems.size() + " " + T("selected", "đã chọn"));
+    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", "Xóa"));
+    btnDelete.setBackground(getRounded("#D32F2F", 20f)); btnDelete.setTextColor(Color.WHITE); btnDelete.setTextSize(12.5f);
+    btnDelete.setOnClickListener(v -> {
+        new AlertDialog.Builder(this).setTitle(T("Delete selected recordings?", "Xoá các bản ghi đã chọn?"))
+            .setPositiveButton(T("DELETE", "XOÁ"), (d, w) -> {
+                for (String uriStr : new java.util.ArrayList<>(voiceSelectedItems)) {
+                    try { getContentResolver().delete(android.net.Uri.parse(uriStr), null, null); } catch (Exception ignored) {}
+                }
+                voiceSelectMode = false;
+                voiceSelectedItems.clear();
+                getVoiceRecListCached(true);
+                renderEcosystem();
+            }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
+    });
+    LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(-2, -2); delLp.setMargins(10, 0, 10, 0);
+    btnDelete.setLayoutParams(delLp);
+
+    Button btnCancel = new Button(this); btnCancel.setText(T("Cancel", "Hủy"));
+    btnCancel.setBackground(getRounded("#333333", 20f)); btnCancel.setTextColor(Color.WHITE); btnCancel.setTextSize(12.5f);
+    btnCancel.setOnClickListener(v -> { voiceSelectMode = false; voiceSelectedItems.clear(); renderEcosystem(); });
+
+    bar.addView(tvCount); bar.addView(btnDelete); bar.addView(btnCancel);
+    return bar;
+}
 /** Mở đúng file ghi âm trong Files by Google; nếu chưa cài thì fallback sang chooser. */
 private void openInFilesByGoogle(android.net.Uri uri) {
     try {
