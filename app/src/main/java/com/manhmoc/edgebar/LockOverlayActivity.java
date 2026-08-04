@@ -24,7 +24,7 @@ public class LockOverlayActivity extends Activity {
             // [FIX FULL MÀN HÌNH] Ép chỉ hỏi PIN/Pattern/Password, bỏ qua vân tay
             // hoàn toàn — đây là màn hình full-screen thật của hệ thống.
             BiometricPrompt prompt = new BiometricPrompt.Builder(this)
-                .setTitle("Mở khoá " + targetPkg)
+                .setTitle("Unlock this App")
                 .setAllowedAuthenticators(BiometricManager.Authenticators.DEVICE_CREDENTIAL)
                 .build();
             prompt.authenticate(new CancellationSignal(), getMainExecutor(),

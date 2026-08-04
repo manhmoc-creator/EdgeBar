@@ -672,83 +672,98 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
     }
 }
         private class CornerView extends View {
-        private Paint pFill, pStroke; private int type; private String prefix = "lock_";
-        private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
-        private boolean isInv = false;
+            private Paint pFill, pStroke; private int type; private String prefix;
+            private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
+            private boolean isInv = false;
 
-        public CornerView(Context c, int type) { this(c, type, "lock_"); }
-    public CornerView(Context c, int type, String prefix) { super(c); this.type = type; this.prefix = prefix; pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); }
-public int getCornerType() { return type; }
-    public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) {
-        pStroke.setStrokeWidth(thick);
-        this.baseMoonAlpha = moonAlpha;
-        this.baseStrokeAlpha = strokeAlpha;
-        this.isAutoHiding = autoHide;
-        this.hideDelay = delay;
-        this.isInv = inv;
-        // KHÔNG gọi triggerFlash() ở đây — chỉ gọi khi user thực sự CHẠM
-if (inv) {
-    pFill.setAlpha(0);
-    pStroke.setAlpha(0);
-} else if (!autoHide) {
-    pFill.setColor(Color.argb(moonAlpha, 96, 125, 139));
-    pStroke.setAlpha(strokeAlpha);
-} else {
-    pFill.setColor(Color.argb(0, 96, 125, 139));
-    pStroke.setAlpha(0);
-  }
-  invalidate();
-}
-        public void triggerFlash() { if(!isAutoHiding || isInv) return; autoHideHandler.removeCallbacksAndMessages(null); pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha+50), 96,125,139)); pStroke.setAlpha(Math.min(255, baseStrokeAlpha+50)); invalidate(); autoHideHandler.postDelayed(() -> { ValueAnimator a = ValueAnimator.ofFloat(1f,0f); a.setDuration(1500); a.addUpdateListener(anim -> { float val = (float)anim.getAnimatedValue(); pFill.setColor(Color.argb((int)(baseMoonAlpha*val), 96,125,139)); pStroke.setAlpha((int)(baseStrokeAlpha*val)); invalidate(); }); a.start(); }, hideDelay); }
-
-        @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas);
-            float tw = getWidth(), th = getHeight(), thick = pStroke.getStrokeWidth(), pad = thick/2;
-            String ck = prefix + "corner_" + CORNERS[type] + "_";
-            int shapeMode = prefs.getInt(ck+"shape", 0);
-            float sRad = prefs.getInt(ck+"rad", 80) / 1000f; float mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
-            float sw = prefs.getInt(ck+"w", 100), sh = prefs.getInt(ck+"h", 100);
-            float mw = prefs.getInt(ck+"moon_w", 100), mh = prefs.getInt(ck+"moon_h", 100);
-
-            Path moonPath = new Path(), strokePath = new Path();
-            float sRootX=0, sRootY=0, sTipX=0, sTipY=0, sCtrlX=0, sCtrlY=0;
-            float mRootX=0, mRootY=0, mTipX=0, mTipY=0, mCtrlX=0, mCtrlY=0;
-
-            if (type == 0) { // BR
-                sRootX=tw-pad; sRootY=th-pad; sTipX=tw-sw+pad; sTipY=th-sh+pad;
-                sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
-                mRootX=tw; mRootY=th; mTipX=tw-mw; mTipY=th-mh;
-                mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
-            } else if (type == 1) { // BL
-                sRootX=pad; sRootY=th-pad; sTipX=sw-pad; sTipY=th-sh+pad;
-                sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
-                mRootX=0; mRootY=th; mTipX=mw; mTipY=th-mh;
-                mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
-            } else if (type == 2) { // TR
-                sRootX=tw-pad; sRootY=pad; sTipX=tw-sw+pad; sTipY=sh-pad;
-                sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
-                mRootX=tw; mRootY=0; mTipX=tw-mw; mTipY=mh;
-                mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
-            } else { // TL
-                sRootX=pad; sRootY=pad; sTipX=sw-pad; sTipY=sh-pad;
-                sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
-                mRootX=0; mRootY=0; mTipX=mw; mTipY=mh;
-                mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
+            public CornerView(Context c, int type, String prefix) {  
+                super(c); this.type = type; this.prefix = prefix; 
+                setLayerType(LAYER_TYPE_HARDWARE, null);
+                pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); 
+                pStroke = new Paint(); pStroke.setColor(Color.WHITE); pStroke.setStyle(Paint.Style.STROKE); pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND); 
             }
 
-            if(shapeMode == 1) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sTipX, sRootY); }
-            else if(shapeMode == 2) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sRootX, sTipY); }
-            else { strokePath.moveTo(sRootX, sTipY); strokePath.quadTo(sCtrlX, sCtrlY, sTipX, sRootY); }
+            public int getCornerType() { return type; }
 
-            if(type==0||type==1) { moonPath.moveTo(mRootX, mTipY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mTipX, mRootY); moonPath.quadTo(mCtrlX, mCtrlY, mRootX, mTipY); }
-            else { moonPath.moveTo(mTipX, mRootY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mRootX, mTipY); moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY); }
-            moonPath.close();
+            public void updateProps(int thick, int moonAlpha, int strokeAlpha, boolean autoHide, int delay, boolean inv) {
+                pStroke.setStrokeWidth(thick);
+                this.baseMoonAlpha = moonAlpha;
+                this.baseStrokeAlpha = strokeAlpha;
+                this.isAutoHiding = autoHide;
+                this.hideDelay = delay;
+                this.isInv = inv;
+                if (inv) {
+                    pFill.setAlpha(0);
+                    pStroke.setAlpha(0);
+                } else if (!autoHide) {
+                    pFill.setColor(Color.argb(moonAlpha, 96, 125, 139));
+                    pStroke.setColor(Color.argb(strokeAlpha, 255, 255, 255));
+                } else {
+                    pFill.setColor(Color.argb(0, 96, 125, 139));
+                    pStroke.setColor(Color.argb(0, 255, 255, 255));
+                }
+                invalidate();
+            }
 
-            canvas.drawPath(strokePath, pStroke);
-            float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
-            float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
-            canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill); canvas.restore();
+            public void triggerFlash() { 
+                if(!isAutoHiding || isInv) return; 
+                autoHideHandler.removeCallbacksAndMessages(null); 
+                pFill.setColor(Color.argb(Math.min(255, baseMoonAlpha + 50), 96, 125, 139)); 
+                pStroke.setColor(Color.argb(Math.min(255, baseStrokeAlpha + 50), 255, 255, 255)); 
+                invalidate(); 
+                autoHideHandler.postDelayed(() -> { 
+                    ValueAnimator a = ValueAnimator.ofFloat(1f, 0f); 
+                    a.setDuration(1500); 
+                    a.addUpdateListener(anim -> { 
+                        float val = (float)anim.getAnimatedValue(); 
+                        pFill.setColor(Color.argb((int)(baseMoonAlpha * val), 96, 125, 139)); 
+                        pStroke.setColor(Color.argb((int)(baseStrokeAlpha * val), 255, 255, 255)); 
+                        invalidate(); 
+                    }); 
+                    a.start(); 
+                }, hideDelay); 
+            }
+
+            @Override protected void onDraw(Canvas canvas) { super.onDraw(canvas);
+                float tw = getWidth(), th = getHeight(), thick = pStroke.getStrokeWidth(); float pad = thick/2;
+                String ck = prefix + "corner_" + CORNERS[type] + "_";
+                int shapeMode = prefs.getInt(ck+"shape", 0);
+                float sRad = prefs.getInt(ck+"rad", 80) / 1000f; float mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
+                float sw = prefs.getInt(ck+"w", 100); float sh = prefs.getInt(ck+"h", 100);
+                float mw = prefs.getInt(ck+"moon_w", 100); float mh = prefs.getInt(ck+"moon_h", 100);
+
+                Path moonPath = new Path(); Path strokePath = new Path();
+                float sRootX=0, sRootY=0, sTipX=0, sTipY=0, sCtrlX=0, sCtrlY=0;
+                float mRootX=0, mRootY=0, mTipX=0, mTipY=0, mCtrlX=0, mCtrlY=0;
+
+                if(type==0) { // BR
+                    sRootX=tw-pad; sRootY=th-pad; sTipX=tw-sw+pad; sTipY=th-sh+pad; sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
+                    mRootX=tw; mRootY=th; mTipX=tw-mw; mTipY=th-mh; mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
+                } else if(type==1) { // BL
+                    sRootX=pad; sRootY=th-pad; sTipX=sw-pad; sTipY=th-sh+pad; sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
+                    mRootX=0; mRootY=th; mTipX=mw; mTipY=th-mh; mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
+                } else if(type==2) { // TR
+                    sRootX=tw-pad; sRootY=pad; sTipX=tw-sw+pad; sTipY=sh-pad; sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
+                    mRootX=tw; mRootY=0; mTipX=tw-mw; mTipY=mh; mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
+                } else { // TL
+                    sRootX=pad; sRootY=pad; sTipX=sw-pad; sTipY=sh-pad; sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
+                    mRootX=0; mRootY=0; mTipX=mw; mTipY=mh; mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
+                }
+
+                if(shapeMode == 1) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sTipX, sRootY); }
+                else if(shapeMode == 2) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sRootX, sTipY); }
+                else { strokePath.moveTo(sRootX, sTipY); strokePath.quadTo(sCtrlX, sCtrlY, sTipX, sRootY); }
+
+                if(type==0||type==1) { moonPath.moveTo(mRootX, mTipY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mTipX, mRootY); moonPath.quadTo(mCtrlX, mCtrlY, mRootX, mTipY); }
+                else { moonPath.moveTo(mTipX, mRootY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mRootX, mTipY); moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY); }
+                moonPath.close();
+
+                canvas.drawPath(strokePath, pStroke);
+                float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
+                float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
+                canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill); canvas.restore();
+            }
         }
-    }
     @Override protected void onServiceConnected() {
         super.onServiceConnected();
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);

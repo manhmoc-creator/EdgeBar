@@ -4029,7 +4029,7 @@ if (designTabState == 5) { renderPanelDesign(); return; }
             Button btnTest = new Button(this); btnTest.setText("▶ THỬ NGAY HIỆU ỨNG"); btnTest.setBackground(getRounded("#FFC107", 20f)); btnTest.setTextColor(Color.BLACK); btnTest.setPadding(0,30,0,30); LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(-1,-2); testLp.setMargins(0,0,0,20); btnTest.setLayoutParams(testLp); btnTest.setOnClickListener(v -> { Intent i = new Intent("com.manhmoc.edgebar.TEST_ANIM"); i.setPackage(getPackageName()); sendBroadcast(i); Toast.makeText(this, "Playing Animation...", Toast.LENGTH_SHORT).show(); }); designSliderContainer.addView(btnTest);
 // [MỚI] Bật lên để chỉnh X/Y/Size chỉ báo ghi âm theo thời gian thực
             Button btnTestRec = new Button(this);
-            btnTestRec.setText(recIndicatorTestOn ? "⏹ TẮT THỬ CHỈ BÁO GHI ÂM" : "🔴 THỬ CHỈ BÁO GHI ÂM");
+            btnTestRec.setText(recIndicatorTestOn ? "⏹ DONE" : "🔴 TEST ANIMATION RECORD");
             btnTestRec.setBackground(getRounded(recIndicatorTestOn ? "#D32F2F" : "#FFC107", 20f));
             btnTestRec.setTextColor(recIndicatorTestOn ? Color.WHITE : Color.BLACK);
             btnTestRec.setPadding(0,30,0,30);
@@ -4054,7 +4054,7 @@ if (designTabState == 5) { renderPanelDesign(); return; }
         tvRecNote.setTextColor(Color.parseColor("#FF5252"));
         designSliderContainer.addView(tvRecNote);
         designSliderContainer.addView(createSlider(T("Indicator X position","Vị trí X chỉ báo"), "anim_rec_x", 2000, 1000));
-        designSliderContainer.addView(createSlider(T("Indicator Y position","Vị trí Y chỉ báo"), "anim_rec_y", 2000, 1000));
+        designSliderContainer.addView(createSlider(T("Indicator Y position","Vị trí Y chỉ báo"), "anim_rec_y", 3000, 10));
         designSliderContainer.addView(createSlider(T("Indicator size","Kích thước chỉ báo"), "anim_rec_size", 300, 140));
 
         TextView tvOptNote = new TextView(this);
@@ -5887,57 +5887,56 @@ private String formatPruleActionLabel(String rId) {
             pStroke.setAntiAlias(true); pStroke.setStrokeCap(Paint.Cap.ROUND); pStroke.setStrokeJoin(Paint.Join.ROUND);
         }
         @Override protected void onDraw(Canvas canvas) {
-            super.onDraw(canvas);
-            pStroke.setStrokeWidth(prefs.getInt(ck+"thick", 8));
-            pStroke.setAlpha(prefs.getInt(ck+"stroke_alpha", 200));
-            pFill.setColor(Color.argb(prefs.getInt(ck+"moon_alpha", 100), 96, 125, 139));
+                super.onDraw(canvas);
+                pStroke.setStrokeWidth(prefs.getInt(ck+"thick", 8));
+                pStroke.setColor(Color.argb(prefs.getInt(ck+"stroke_alpha", 200), 255, 255, 255));
+                pFill.setColor(Color.argb(prefs.getInt(ck+"moon_alpha", 100), 96, 125, 139));
 
-            float tw = getWidth(), th = getHeight(), thick = pStroke.getStrokeWidth(), pad = thick/2;
-            int shapeMode = prefs.getInt(ck+"shape", 0);
-            float sRad = prefs.getInt(ck+"rad", 80) / 1000f; float mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
-            float sw = prefs.getInt(ck+"w", 100), sh = prefs.getInt(ck+"h", 100);
-            float mw = prefs.getInt(ck+"moon_w", 100), mh = prefs.getInt(ck+"moon_h", 100);
+                float tw = getWidth(), th = getHeight(), thick = pStroke.getStrokeWidth(), pad = thick/2;
+                int shapeMode = prefs.getInt(ck+"shape", 0);
+                float sRad = prefs.getInt(ck+"rad", 80) / 1000f; float mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
+                float sw = prefs.getInt(ck+"w", 100), sh = prefs.getInt(ck+"h", 100);
+                float mw = prefs.getInt(ck+"moon_w", 100), mh = prefs.getInt(ck+"moon_h", 100);
 
-            android.graphics.Path moonPath = new android.graphics.Path(), strokePath = new android.graphics.Path();
-            float sRootX=0, sRootY=0, sTipX=0, sTipY=0, sCtrlX=0, sCtrlY=0;
-            float mRootX=0, mRootY=0, mTipX=0, mTipY=0, mCtrlX=0, mCtrlY=0;
+                android.graphics.Path moonPath = new android.graphics.Path(), strokePath = new android.graphics.Path();
+                float sRootX=0, sRootY=0, sTipX=0, sTipY=0, sCtrlX=0, sCtrlY=0;
+                float mRootX=0, mRootY=0, mTipX=0, mTipY=0, mCtrlX=0, mCtrlY=0;
 
-            if (type == 0) { // BR
-                sRootX=tw-pad; sRootY=th-pad; sTipX=tw-sw+pad; sTipY=th-sh+pad;
-                sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
-                mRootX=tw; mRootY=th; mTipX=tw-mw; mTipY=th-mh;
-                mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
-            } else if (type == 1) { // BL
-                sRootX=pad; sRootY=th-pad; sTipX=sw-pad; sTipY=th-sh+pad;
-                sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
-                mRootX=0; mRootY=th; mTipX=mw; mTipY=th-mh;
-                mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
-            } else if (type == 2) { // TR
-                sRootX=tw-pad; sRootY=pad; sTipX=tw-sw+pad; sTipY=sh-pad;
-                sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
-                mRootX=tw; mRootY=0; mTipX=tw-mw; mTipY=mh;
-                mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
-            } else { // TL
-                sRootX=pad; sRootY=pad; sTipX=sw-pad; sTipY=sh-pad;
-                sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
-                mRootX=0; mRootY=0; mTipX=mw; mTipY=mh;
-                mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
+                if (type == 0) { // BR
+                    sRootX=tw-pad; sRootY=th-pad; sTipX=tw-sw+pad; sTipY=th-sh+pad;
+                    sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
+                    mRootX=tw; mRootY=th; mTipX=tw-mw; mTipY=th-mh;
+                    mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
+                } else if (type == 1) { // BL
+                    sRootX=pad; sRootY=th-pad; sTipX=sw-pad; sTipY=th-sh+pad;
+                    sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
+                    mRootX=0; mRootY=th; mTipX=mw; mTipY=th-mh;
+                    mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY-(1f-mRad)*(mh*0.7f);
+                } else if (type == 2) { // TR
+                    sRootX=tw-pad; sRootY=pad; sTipX=tw-sw+pad; sTipY=sh-pad;
+                    sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
+                    mRootX=tw; mRootY=0; mTipX=tw-mw; mTipY=mh;
+                    mCtrlX=mRootX-(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
+                } else { // TL
+                    sRootX=pad; sRootY=pad; sTipX=sw-pad; sTipY=sh-pad;
+                    sCtrlX=sRootX+(1f-sRad)*(sw*0.7f); sCtrlY=sRootY+(1f-sRad)*(sh*0.7f);
+                    mRootX=0; mRootY=0; mTipX=mw; mTipY=mh;
+                    mCtrlX=mRootX+(1f-mRad)*(mw*0.7f); mCtrlY=mRootY+(1f-mRad)*(mh*0.7f);
+                }
+
+                if(shapeMode == 1) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sTipX, sRootY); }
+                else if(shapeMode == 2) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sRootX, sTipY); }
+                else { strokePath.moveTo(sRootX, sTipY); strokePath.quadTo(sCtrlX, sCtrlY, sTipX, sRootY); }
+
+                if(type==0||type==1) { moonPath.moveTo(mRootX, mTipY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mTipX, mRootY); moonPath.quadTo(mCtrlX, mCtrlY, mRootX, mTipY); }
+                else { moonPath.moveTo(mTipX, mRootY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mRootX, mTipY); moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY); }
+                moonPath.close();
+
+                canvas.drawPath(strokePath, pStroke);
+                float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
+                float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
+                canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill); canvas.restore();
             }
-
-            if(shapeMode == 1) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sTipX, sRootY); }
-            else if(shapeMode == 2) { strokePath.moveTo(sRootX, sRootY); strokePath.lineTo(sRootX, sTipY); }
-            else { strokePath.moveTo(sRootX, sTipY); strokePath.quadTo(sCtrlX, sCtrlY, sTipX, sRootY); }
-
-            if(type==0||type==1) { moonPath.moveTo(mRootX, mTipY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mTipX, mRootY); moonPath.quadTo(mCtrlX, mCtrlY, mRootX, mTipY); }
-            else { moonPath.moveTo(mTipX, mRootY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mRootX, mTipY); moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY); }
-            moonPath.close();
-
-            canvas.drawPath(strokePath, pStroke);
-            float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
-            float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
-            canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill); canvas.restore();
-        }
-    }
     private void updateLivePreviewCorner(int cornerIdx, String ck) {
         if (!Settings.canDrawOverlays(this)) return;
         WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
