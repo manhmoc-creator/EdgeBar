@@ -1900,7 +1900,7 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
         : new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "ACC_BUTTON_CHOOSER", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
     List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeysForPack, ACT_KEYS, ACT_LABS);
     List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
-    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN"}, ACT_KEYS, ACT_LABS);
+    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR"}, ACT_KEYS, ACT_LABS);
     List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
     List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
     vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
@@ -2330,7 +2330,7 @@ for (String sa : savedArray) {
                 actKeysUsed, actLabsUsed);
             vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", VOLKEY_UTIL_ITEMS, selectedActs, "#FF9800"));
         } else {
-            List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN"}, actKeysUsed, actLabsUsed);
+            List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR"}, actKeysUsed, actLabsUsed);
             List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
             List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
             vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
@@ -3231,21 +3231,6 @@ btnCopy.setOnClickListener(v -> {
 
     appListRow.addView(btnPickBlacklist); appListRow.addView(btnPickLockList);
     secSys.addView(appListRow);
-
-    // [MỚI] App trong LockList được phép xác thực vân tay ngay (bank app...),
-    // thay vì luôn ép PIN/Pattern/Password.
-    LinearLayout fastBioRow = new LinearLayout(this);
-    fastBioRow.setOrientation(LinearLayout.HORIZONTAL);
-    LinearLayout.LayoutParams fastBioRowLp = new LinearLayout.LayoutParams(-1, -2);
-    fastBioRowLp.setMargins(0, 15, 0, 0);
-    fastBioRow.setLayoutParams(fastBioRowLp);
-    Button btnFastBio = new Button(this);
-    btnFastBio.setText("⚡ " + T("FAST FINGERPRINT", "VÂN TAY NHANH"));
-    btnFastBio.setBackground(getRounded("#FFC107", 20f)); btnFastBio.setTextColor(Color.BLACK);
-    btnFastBio.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-    btnFastBio.setOnClickListener(v -> showPanelMultiPicker("applock_fastbio_list", true));
-    fastBioRow.addView(btnFastBio);
-    secSys.addView(fastBioRow);
     // [MỚI] Hàng riêng cho YTDL — đẩy xuống dưới Blacklist/LockList
     LinearLayout ytdlRow = new LinearLayout(this);
     ytdlRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -3942,7 +3927,7 @@ private void openTileEditorV2(String id) {
     }));
 
     List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME","SCREENSHOT","CAMERA","NOTIFICATIONS","QUICK_SETTINGS","SPLIT_SCREEN"}, ACT_KEYS, ACT_LABS);
-    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY","TOGGLE_RECORD","PAUSE_RECORD","YTDL_DOWNLOAD","OPEN_STORAGE_SCAN"}, ACT_KEYS, ACT_LABS);
+    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY","TOGGLE_RECORD","PAUSE_RECORD","YTDL_DOWNLOAD","OPEN_STORAGE_SCAN","SCAN_QR"}, ACT_KEYS, ACT_LABS);
     List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids","intent_","INTENT_","Intent");
     List<String[]> MACRO_ITEMS  = buildDynamicPackItems("macro_ids","macro_","MACRO_","Macro");
 

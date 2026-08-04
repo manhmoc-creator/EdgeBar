@@ -960,9 +960,11 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     for (String prefix : ourPrefixes)
         if (k.startsWith(prefix) || k.equals(prefix)) { isOurKey = true; break; }
     if (!isOurKey) return;
-
-    if (k.startsWith("anim_") && fV != null) { fV.updateStyle(); return; }
-
+    if (k.startsWith("anim_")) {
+        if (fV != null) fV.updateStyle();
+        if (k.startsWith("anim_rec_")) liveUpdateRecIndicatorPosition();
+        return;
+    }
     if (k.startsWith("pack_panel_")) {
         if (panelEngine == null) return;
         if (panelDebounceRunnable != null) panelDebounceHandler.removeCallbacks(panelDebounceRunnable);

@@ -19,16 +19,11 @@ public class LockOverlayActivity extends Activity {
         super.onCreate(savedInstanceState);
         targetPkg = getIntent().getStringExtra("lock_pkg");
         if (targetPkg == null) { finish(); return; }
-
         if (Build.VERSION.SDK_INT >= 30) {
-            // [MỚI] App nằm trong "applock_fastbio_list" được phép xác thực vân tay
-            // ngay, những app khác vẫn ép PIN/Pattern/Password như cũ.
-            boolean allowFinger = getIntent().getBooleanExtra("allow_fingerprint", false);
-            int authFlags = allowFinger
-                ? (BiometricManager.Authenticators.BIOMETRIC_STRONG | BiometricManager.Authenticators.DEVICE_CREDENTIAL)
-                : BiometricManager.Authenticators.DEVICE_CREDENTIAL;
+            int authFlags = BiometricManager.Authenticators.BIOMETRIC_STRONG
+                | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
             BiometricPrompt prompt = new BiometricPrompt.Builder(this)
-                .setTitle("Unlock This App")
+                .setTitle("Unlock 🎭")
                 .setAllowedAuthenticators(authFlags)
                 .build();
             prompt.authenticate(new CancellationSignal(), getMainExecutor(),
