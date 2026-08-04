@@ -40,7 +40,10 @@ import android.view.View;
 import android.view.WindowManager;
 // ĐẰNG TRƯỚC (Có thể là các dòng import cuối cùng)
 import android.view.accessibility.AccessibilityEvent;
-import android.widget.Toast; 
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+
 
 public class EdgeBarService extends AccessibilityService {
 
