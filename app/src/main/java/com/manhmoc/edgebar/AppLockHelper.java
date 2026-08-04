@@ -54,9 +54,11 @@ public class AppLockHelper {
             lastUnlock.put(pkg, System.currentTimeMillis());
             return;
         }
-
+        String fastBioList = prefs.getString("applock_fastbio_list", "");
+        boolean allowFinger = ("," + fastBioList + ",").contains("," + pkg + ",");
         Intent lockIntent = new Intent(ctx, LockOverlayActivity.class);
         lockIntent.putExtra("lock_pkg", pkg);
+        lockIntent.putExtra("allow_fingerprint", allowFinger);
         lockIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
         ctx.startActivity(lockIntent);
     }

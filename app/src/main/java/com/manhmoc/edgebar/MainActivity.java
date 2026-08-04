@@ -4796,6 +4796,12 @@ private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShort
 }
 private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShortcut, Runnable onSaved) {
         String cur = prefs.getString(prefKey, "");
+        final boolean isLockListPicker = isApp && prefKey.equals("applock_list");
+        final java.util.Set<String> fastBioSet = new java.util.LinkedHashSet<>();
+        if (isLockListPicker) {
+            String fb = prefs.getString("applock_fastbio_list", "");
+            for (String s : fb.split(",")) if (!s.trim().isEmpty()) fastBioSet.add(s.trim());
+        }
         final java.util.List<String> selectedOrder = new java.util.ArrayList<>();
         for (String s : cur.split(",")) { String t = s.trim(); if (!t.isEmpty() && !selectedOrder.contains(t)) selectedOrder.add(t); }
         final List<String[]> allItems = new ArrayList<>();
@@ -4877,6 +4883,23 @@ private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShort
                     row.addView(ivApp);
                 }
                 row.addView(tv);
+                if (isLockListPicker) {
+                    Button btnFingerToggle = new Button(MainActivity.this);
+                    boolean fbOn = fastBioSet.contains(item[1]);
+                    btnFingerToggle.setText(fbOn ? "🔓 Vân tay" : "🔒 PIN");
+                    btnFingerToggle.setBackground(getRounded(fbOn ? "#4CAF50" : "#303134", 14f));
+                    btnFingerToggle.setTextColor(Color.WHITE);
+                    btnFingerToggle.setTextSize(10.5f);
+                    btnFingerToggle.setPadding(14, 8, 14, 8);
+                    btnFingerToggle.setOnClickListener(v -> {
+                        if (fastBioSet.contains(item[1])) fastBioSet.remove(item[1]);
+                        else fastBioSet.add(item[1]);
+                        prefs.edit().putString("applock_fastbio_list",
+                            TextUtils.join(",", fastBioSet)).apply();
+                        refreshHolder[0].run();
+                    });
+                    row.addView(btnFingerToggle);
+                }
                 if (isPanelActionPicker || isPanelAppPicker) {
                     Button btnEditIcon = new Button(MainActivity.this);
                     btnEditIcon.setText("🖌");

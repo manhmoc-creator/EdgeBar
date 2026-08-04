@@ -20,8 +20,13 @@ public class LockOverlayActivity extends Activity {
         targetPkg = getIntent().getStringExtra("lock_pkg");
         if (targetPkg == null) { finish(); return; }
         if (Build.VERSION.SDK_INT >= 30) {
-            int authFlags = BiometricManager.Authenticators.BIOMETRIC_STRONG
-                | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
+            // Chỉ những app được đánh dấu 🔓 trong LockList mới cho vân tay ngay;
+            // app không đánh dấu -> ép PIN/Pattern/Password, che kín cả màn hình
+            // (đúng nhu cầu che app tin nhắn của bạn).
+            boolean allowFinger = getIntent().getBooleanExtra("allow_fingerprint", false);
+            int authFlags = allowFinger
+                ? (BiometricManager.Authenticators.BIOMETRIC_STRONG | BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                : BiometricManager.Authenticators.DEVICE_CREDENTIAL;
             BiometricPrompt prompt = new BiometricPrompt.Builder(this)
                 .setTitle("Unlock 🎭")
                 .setAllowedAuthenticators(authFlags)

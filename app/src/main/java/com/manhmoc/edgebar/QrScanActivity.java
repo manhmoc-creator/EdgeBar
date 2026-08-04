@@ -18,11 +18,20 @@ public class QrScanActivity extends Activity {
     private ImageReader reader;
     private HandlerThread bgThread;
     private Handler bgHandler;
-    private volatile boolean done = false;
-
+    private volatile boolean done = false; 
+    private android.view.Surface previewSurface;
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        if (Build.VERSION.SDK_INT >= 27) {
+            setShowWhenLocked(true);
+            setTurnScreenOn(true);
+        } else {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD);
+        }
         if (checkSelfPermission(android.Manifest.permission.CAMERA)
+
                 != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{android.Manifest.permission.CAMERA}, REQ_CAMERA);
             return; // chờ onRequestPermissionsResult
@@ -48,7 +57,7 @@ public class QrScanActivity extends Activity {
         bgThread = new HandlerThread("qr-bg"); bgThread.start();
         bgHandler = new Handler(bgThread.getLooper());
         sv.getHolder().addCallback(new SurfaceHolder.Callback() {
-            @Override public void surfaceCreated(SurfaceHolder h) { openCamera(); }
+            @Override public void surfaceCreated(SurfaceHolder h) { previewSurface = h.getSurface(); openCamera(); }
             @Override public void surfaceChanged(SurfaceHolder h,int f,int w,int ht){}
             @Override public void surfaceDestroyed(SurfaceHolder h){}
         });
@@ -68,7 +77,13 @@ public class QrScanActivity extends Activity {
                     try {
                         CaptureRequest.Builder req = c.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                         req.addTarget(reader.getSurface());
-                        c.createCaptureSession(java.util.Collections.singletonList(reader.getSurface()),
+                        java.util.List<android.view.Surface> targets = new java.util.ArrayList<>();
+                        targets.add(reader.getSurface());
+                        if (previewSurface != null) {
+                            req.addTarget(previewSurface);
+                            targets.add(previewSurface);
+                        }
+                        c.createCaptureSession(targets,
                             new CameraCaptureSession.StateCallback() {
                                 @Override public void onConfigured(CameraCaptureSession s) {
                                     try { s.setRepeatingRequest(req.build(), null, bgHandler); } catch (Exception ignored) {}
