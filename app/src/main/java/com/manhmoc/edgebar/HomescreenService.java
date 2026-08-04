@@ -1194,9 +1194,14 @@ for (String a : acts) {
                     break;
                 }
                 case "OPEN_STORAGE_SCAN": {
+                    // [FIX] Dùng cờ bền trong SharedPreferences thay vì Intent extra —
+                    // onResume() của MainActivity LUÔN chạy khi Activity hiện ra, đảm bảo
+                    // tuyệt đối nhảy đúng tab Storage. Zero RAM/pin thêm.
+                    prefs.edit().putBoolean("pending_storage_scan", true).apply();
                     Intent openStorage = new Intent(this, MainActivity.class);
-                    openStorage.putExtra("open_storage_scan", true);
-                    openStorage.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    openStorage.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                     startActivity(openStorage);
                     break;
                 }

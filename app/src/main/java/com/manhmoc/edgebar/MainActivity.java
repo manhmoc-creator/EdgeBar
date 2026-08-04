@@ -82,6 +82,7 @@ private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<
     private Button btnDeviceAdmin;
     private int ecoType = 0;
     private LinearLayout ecoContainer;
+    private LinearLayout ecoNavRef; // [MỚI] tham chiếu thanh nav Intents/QSTiles/Macros/Trash
     // THÊM 2 field static này ngay dưới khai báo ecoContainer:
 private static List<String[]> cachedAppList = null; // mỗi phần tử: {name, pkg}
 private static long cachedAppListTs = 0;
@@ -137,6 +138,7 @@ prefs.edit().putBoolean("preview_lock", pLock)
     @Override protected void onResume() {
         super.onResume();
         refreshPreview();
+        checkPendingStorageScan(); // [FIX] nhảy thẳng vào Storage nếu có yêu cầu quét đang chờ
         if (btnDeviceAdmin != null) {
             android.app.admin.DevicePolicyManager dpmR =
                 (android.app.admin.DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
@@ -588,28 +590,29 @@ btnNavCond.setOnClickListener(v -> switchMainTab(1, btnNavCond, btnNavEco));
 btnNavEco.setOnClickListener(v -> switchMainTab(2, btnNavCond, btnNavEco));
 switchMainTab(1, btnNavCond, btnNavEco);
         setContentView(rootLayout);
-        handleIncomingIntent(getIntent()); // [MỚI] xử lý action "Storage" nếu app vừa được mở từ đó
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        handleIncomingIntent(intent); // [MỚI] app đã mở sẵn -> chỉ chuyển tab, không tạo lại UI
     }
 
-    /** [MỚI] Nếu Intent có cờ open_storage_scan, tự chuyển sang Ecosystem > Storage
-     *  và kích hoạt runDeepStorageScan() ngay — Zero-RAM khi không dùng vì chỉ
-     *  chạy đúng 1 lần lúc Intent tới, không polling. */
-    private void handleIncomingIntent(Intent intent) {
-        if (intent == null || !intent.getBooleanExtra("open_storage_scan", false)) return;
+    /** [FIX] Kiểm tra tại onResume() thay vì Intent extra + onNewIntent() — onResume()
+     *  LUÔN chạy mỗi khi Activity thực sự hiện ra trước mắt user (cold start, warm
+     *  restart, hay bring-to-front từ Recents), đảm bảo tuyệt đối luôn nhảy đúng tab
+     *  Storage dù app đang ở trạng thái nào. Cờ lưu trong SharedPreferences (Zero-cost
+     *  vì "prefs" đã có sẵn trong RAM) thay vì Intent extra dễ lệch thời điểm giữa
+     *  các đời máy/ROM khác nhau. */
+    private void checkPendingStorageScan() {
+        if (!prefs.getBoolean("pending_storage_scan", false)) return;
+        prefs.edit().putBoolean("pending_storage_scan", false).apply();
         if (navCondBtnRef == null || navEcoBtnRef == null) return;
-        switchMainTab(2, navCondBtnRef, navEcoBtnRef);
         ecoType = 3;
+        switchMainTab(2, navCondBtnRef, navEcoBtnRef);
+        if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE);
         updateFabVisibility();
-        renderEcosystem();
         runDeepStorageScan();
-        intent.removeExtra("open_storage_scan"); // tránh quét lại nếu Activity bị recreate (xoay màn...)
     }
 private void switchMainTab(int idx, Button b1, Button b2) { 
     currentMainTab = idx; refreshPreview(); navMain.setVisibility(View.VISIBLE);
@@ -2647,6 +2650,7 @@ private void showActionCategoryPicker(String title, List<String[]> items,
     LinearLayout ecoNav = new LinearLayout(this);
     ecoNav.setOrientation(LinearLayout.HORIZONTAL);
     ecoNav.setPadding(0, 0, 0, 35);
+    ecoNavRef = ecoNav; // [MỚI]
     Button btnIntents = new Button(this); btnIntents.setText("INTENTS");
     btnIntents.setBackground(getRounded("#D32F2F", 40f)); btnIntents.setTextColor(Color.WHITE); btnIntents.setTextSize(13.5f);
     Button btnTiles = new Button(this); btnTiles.setText("QS TILES");
