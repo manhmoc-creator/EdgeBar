@@ -238,10 +238,10 @@ public class QrScanActivity extends Activity {
             img.getPlanes()[0].getBuffer().get(y);
             LuminanceSource src = new PlanarYUVLuminanceSource(y, img.getWidth(), img.getHeight(),
                 0,0, img.getWidth(), img.getHeight(), false);
-            String text = tryDecode(src);
-            if (text != null) {
+            Result result = tryDecode(src);
+            if (result != null) {
                 paused = true;
-                runOnUiThread(() -> playDetectAnimThenShow(text));
+                runOnUiThread(() -> playDetectAnimThenShow(result.getText(), result));
             }
         } catch (Exception ignored) {
         } finally { img.close(); }
@@ -249,37 +249,80 @@ public class QrScanActivity extends Activity {
 
     /** HybridBinarizer trước (nhanh, ánh sáng đều); rớt thì thử GlobalHistogramBinarizer
      *  (chịu ánh sáng không đều/độ tương phản cục bộ thấp — hay gặp ở QR có logo giữa). */
-    private String tryDecode(LuminanceSource src) {
+    private Result tryDecode(LuminanceSource src) {
         try {
             Result r = zxingReader.decodeWithState(new BinaryBitmap(new HybridBinarizer(src)));
             zxingReader.reset();
-            return r.getText();
+            return r;
         } catch (Exception ignored) { zxingReader.reset(); }
         try {
             Result r = zxingReader.decodeWithState(
                 new BinaryBitmap(new com.google.zxing.common.GlobalHistogramBinarizer(src)));
             zxingReader.reset();
-            return r.getText();
+            return r;
         } catch (Exception ignored) { zxingReader.reset(); }
         return null;
     }
-
     /** Hiệu ứng: khung đổi xanh lá + thu nhỏ có nảy (bounce) báo hiệu "đã khoá QR",
      *  hoạt động đồng nhất dù bạn cầm máy quét ngang/dọc/nghiêng (zxing tự xoay bất
      *  biến khi tìm 3 góc định vị của QR, không phụ thuộc hướng cầm máy). */
-    private void playDetectAnimThenShow(String raw) {
+    private void playDetectAnimThenShow(String raw, Result zxingResult) {
         GradientDrawable gd = new GradientDrawable();
         gd.setStroke(10, Color.parseColor("#4CAF50"));
         gd.setCornerRadius(32f);
         frame.setBackground(gd);
-        frame.animate().scaleX(0.72f).scaleY(0.72f).setDuration(220)
-            .setInterpolator(new OvershootInterpolator(1.3f))
+
+        // [MỚI] Tính hệ số scale từ khoảng cách giữa các điểm định vị (finder pattern)
+        // mà zxing trả về — QR quét được to (chụp gần) thì khung phóng to hơn, QR nhỏ
+        // (chụp xa) thì khung thu nhỏ hơn, thay vì luôn co về 1 tỉ lệ cố định như cũ.
+        // Không phụ thuộc hướng cầm máy vì chỉ dựa vào khoảng cách pixel giữa các điểm,
+        // không dựa vào toạ độ x/y tuyệt đối.
+        float targetScale = computeFrameTargetScale(zxingResult);
+
+        frame.animate()
+            .scaleX(targetScale).scaleY(targetScale)
+            .rotationBy(360f) // xoay đúng 1 vòng khi "khoá" vào QR — hiệu ứng ôm khít
+            .setDuration(360)
+            .setInterpolator(new OvershootInterpolator(1.15f))
             .withEndAction(() -> {
-                frame.animate().scaleX(1f).scaleY(1f).setDuration(150).start();
+                // Trả khung về kích thước/góc xoay gốc trước khi hiện kết quả, tránh
+                // khung bị kẹt size lạ nếu người dùng bấm "Quét lại" ở màn kết quả.
+                frame.animate().scaleX(1f).scaleY(1f).rotation(0f).setDuration(180).start();
                 showResult(raw);
             }).start();
     }
 
+    /** Khung mặc định = 68% chiều rộng màn hình (xem fsize trong setupScanner()).
+     *  Trả về hệ số scale so với size mặc định đó, sao cho khung ôm khít đúng kích
+     *  thước thật của QR vừa quét được. Giới hạn trong [0.30, 1.40] để tránh khung
+     *  co gần như biến mất hoặc phóng tràn màn hình nếu zxing bắt nhầm điểm định vị. */
+    private float computeFrameTargetScale(Result result) {
+        try {
+            ResultPoint[] pts = result.getResultPoints();
+            if (pts == null || pts.length < 2) return 0.72f; // fallback: hành vi cũ
+
+            float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE;
+            float minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
+            for (ResultPoint p : pts) {
+                if (p == null) continue;
+                minX = Math.min(minX, p.getX()); maxX = Math.max(maxX, p.getX());
+                minY = Math.min(minY, p.getY()); maxY = Math.max(maxY, p.getY());
+            }
+            float qrPixelSize = Math.max(maxX - minX, maxY - minY);
+            if (qrPixelSize <= 0) return 0.72f;
+
+            // Buffer phân tích cố định 1280x720 (xem ImageReader.newInstance trong openCamera()).
+            // Dùng cạnh ngắn (720) làm chuẩn quy đổi vì khung vuông lấy 68% CHIỀU RỘNG
+            // màn hình (= cạnh ngắn khi cầm máy dọc) làm kích thước gốc.
+            float bufferShortSide = Math.min(1280, 720);
+            float qrFractionOfBuffer = qrPixelSize / bufferShortSide;
+            float rawScale = qrFractionOfBuffer / 0.68f;
+
+            return Math.max(0.30f, Math.min(1.40f, rawScale));
+        } catch (Exception e) {
+            return 0.72f;
+        }
+    }
     // ===================== PHÂN LOẠI & HÀNH ĐỘNG =====================
     private void showResult(String raw) {
         if (resultCard != null) root.removeView(resultCard);
@@ -372,31 +415,55 @@ public class QrScanActivity extends Activity {
         resultCard = card;
         root.addView(card, lp);
     }
-
-    /** Danh sách app ngân hàng: dò sẵn (best-effort) ∪ app do bạn tự chọn trong
-     *  Ecosystem > "QR NGÂN HÀNG" — hợp nhất và loại trùng. */
+    /** [SỬA] Dùng LauncherApps quét qua từng UserHandle (giống getAppListCached()
+     *  trong MainActivity) thay vì PackageManager.getPackageInfo() — vì
+     *  getPackageInfo() KHÔNG thấy app nằm trong Island/Work profile (app nhân
+     *  bản dùng UserHandle riêng, không cùng namespace với profile chính).
+     *  Kết quả hiện dạng Icon + Tên app (tên có hậu tố "[Island]" nếu là bản
+     *  nhân bản) để phân biệt rõ 2 bản của cùng 1 app. */
     private LinearLayout buildBankAppList() {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(0, 4, 0, 20);
 
         android.content.SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        PackageManager pm = getPackageManager();
-        // [ĐỔI HÀNH VI] CHỈ hiện app do người dùng tự chọn trong Ecosystem >
-        // "QR NGÂN HÀNG", KHÔNG dò tự động theo danh sách cứng nữa — tránh liệt kê
-        // app không liên quan hoặc icon "chết" (đã chọn nhưng đã gỡ khỏi máy).
-        // Kiểm tra pm.getPackageInfo() ngay tại đây để lọc bỏ app đã gỡ cài đặt.
-        LinkedHashSet<String> pkgs = new LinkedHashSet<>();
         String userList = prefs.getString("qr_bank_apps", "");
+        java.util.List<String> wantedPkgs = new java.util.ArrayList<>();
         for (String p : userList.split(",")) {
-            String pkg = p.trim();
-            if (pkg.isEmpty()) continue;
-            try { pm.getPackageInfo(pkg, 0); pkgs.add(pkg); } catch (Exception ignored) {}
+            String t = p.trim();
+            if (!t.isEmpty() && !wantedPkgs.contains(t)) wantedPkgs.add(t);
         }
-        if (pkgs.isEmpty()) {
+
+        if (wantedPkgs.isEmpty()) {
             TextView tv = new TextView(this);
-            tv.setText(T("No bank app detected. Add one in Ecosystem > QR NGÂN HÀNG.",
-                "Chưa có app ngân hàng nào. Vào Ecosystem > QR NGÂN HÀNG để thêm."));
+            tv.setText("Chưa có app ngân hàng nào. Vào Ecosystem > QR NGÂN HÀNG để thêm.");
+            tv.setTextColor(Color.parseColor("#9AA0A6"));
+            tv.setTextSize(12);
+            box.addView(tv);
+            return box;
+        }
+
+        // {pkg, label, drawable, isIsland} — quét từng package qua mọi profile
+        java.util.List<Object[]> found = new java.util.ArrayList<>();
+        try {
+            android.os.UserManager um = (android.os.UserManager) getSystemService(USER_SERVICE);
+            android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) getSystemService(LAUNCHER_APPS_SERVICE);
+            for (String pkg : wantedPkgs) {
+                for (android.os.UserHandle profile : um.getUserProfiles()) {
+                    boolean isIsland = !profile.equals(android.os.Process.myUserHandle());
+                    java.util.List<android.content.pm.LauncherActivityInfo> acts = la.getActivityList(pkg, profile);
+                    if (acts != null && !acts.isEmpty()) {
+                        android.content.pm.LauncherActivityInfo info = acts.get(0);
+                        String label = info.getLabel().toString() + (isIsland ? " [Island]" : "");
+                        found.add(new Object[]{pkg, label, info.getBadgedIcon(0), isIsland});
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        if (found.isEmpty()) {
+            TextView tv = new TextView(this);
+            tv.setText("Không tìm thấy app đã chọn trên máy (có thể đã gỡ cài đặt).");
             tv.setTextColor(Color.parseColor("#9AA0A6"));
             tv.setTextSize(12);
             box.addView(tv);
@@ -404,39 +471,69 @@ public class QrScanActivity extends Activity {
         }
 
         TextView tvHint = new TextView(this);
-        tvHint.setText(T("Open with:", "Mở bằng:"));
+        tvHint.setText("Mở bằng:");
         tvHint.setTextColor(Color.parseColor("#9AA0A6"));
         tvHint.setTextSize(12);
         tvHint.setPadding(0, 0, 0, 8);
         box.addView(tvHint);
 
         LinearLayout row = null; int i = 0;
-        for (String pkg : pkgs) {
-            if (i % 4 == 0) {
+        for (Object[] item : found) {
+            if (i % 3 == 0) { // 3 cột (thay vì 4) vì giờ có thêm dòng tên app bên dưới icon
                 row = new LinearLayout(this);
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 box.addView(row);
             }
+            final String fPkg = (String) item[0];
+            String label = (String) item[1];
+            android.graphics.drawable.Drawable icon = (android.graphics.drawable.Drawable) item[2];
+            final boolean fIsIsland = (boolean) item[3];
+
             LinearLayout cell = new LinearLayout(this);
             cell.setOrientation(LinearLayout.VERTICAL);
             cell.setGravity(Gravity.CENTER);
             LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, -2, 1f);
-            clp.setMargins(6, 0, 6, 8);
+            clp.setMargins(6, 0, 6, 10);
             cell.setLayoutParams(clp);
+
             ImageView iv = new ImageView(this);
-            try {
-                Drawable d = pm.getApplicationIcon(pkg);
-                iv.setImageDrawable(d);
-            } catch (Exception ignored) {}
-            iv.setLayoutParams(new LinearLayout.LayoutParams(90, 90));
+            if (icon != null) iv.setImageDrawable(icon);
+            iv.setLayoutParams(new LinearLayout.LayoutParams(84, 84));
             cell.addView(iv);
-            final String fPkg = pkg;
+
+            TextView tvLabel = new TextView(this);
+            tvLabel.setText(label);
+            tvLabel.setTextColor(Color.WHITE);
+            tvLabel.setTextSize(10.5f);
+            tvLabel.setMaxLines(1);
+            tvLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tvLabel.setGravity(Gravity.CENTER);
+            tvLabel.setPadding(0, 4, 0, 0);
+            cell.addView(tvLabel);
+
             cell.setOnClickListener(v -> {
                 try {
-                    Intent li = pm.getLaunchIntentForPackage(fPkg);
-                    if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
-                    else Toast.makeText(this, "App chưa cài trên máy", Toast.LENGTH_SHORT).show();
-                } catch (Exception ignored) {}
+                    if (fIsIsland) {
+                        // Mở đúng bản trong Island qua LauncherApps + UserHandle riêng —
+                        // getLaunchIntentForPackage() thường của PackageManager chỉ mở
+                        // được app ở profile chính, không mở được bản nhân bản.
+                        android.os.UserManager um2 = (android.os.UserManager) getSystemService(USER_SERVICE);
+                        android.content.pm.LauncherApps la2 = (android.content.pm.LauncherApps) getSystemService(LAUNCHER_APPS_SERVICE);
+                        for (android.os.UserHandle profile : um2.getUserProfiles()) {
+                            if (profile.equals(android.os.Process.myUserHandle())) continue;
+                            java.util.List<android.content.pm.LauncherActivityInfo> acts = la2.getActivityList(fPkg, profile);
+                            if (acts != null && !acts.isEmpty()) {
+                                la2.startMainActivity(acts.get(0).getComponentName(), profile, null, null);
+                                break;
+                            }
+                        }
+                    } else {
+                        Intent li = getPackageManager().getLaunchIntentForPackage(fPkg);
+                        if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
+                    }
+                } catch (Exception ignored) {
+                    Toast.makeText(this, "Không thể mở app này", Toast.LENGTH_SHORT).show();
+                }
                 finish();
             });
             row.addView(cell);
@@ -444,7 +541,6 @@ public class QrScanActivity extends Activity {
         }
         return box;
     }
-
     private String T(String en, String vi) { return vi; }
 
     private void confirmThenRun(QrParsed p) {
@@ -581,7 +677,7 @@ public class QrScanActivity extends Activity {
             p.typeLabel = "💳 Mã QR thanh toán (VietQR)";
             p.displayText = trimmed;
             p.isBankQr = true;
-            p.warning = "EdgeBar không tự nạp số tiền/tài khoản vì mỗi ngân hàng dùng định dạng riêng — chọn app bên dưới rồi quét/nhập lại trong app đó.";
+            p.warning = "Chọn ngân hàng để thanh toán";
             return p;
         }
 
