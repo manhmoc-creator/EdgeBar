@@ -4,28 +4,29 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.ImageFormat;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.*;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
 import android.net.Uri;
 import android.os.*;
 import android.util.Patterns;
+import android.util.Size;
 import android.view.*;
+import android.view.animation.OvershootInterpolator;
 import android.widget.*;
 import com.google.zxing.*;
 import com.google.zxing.common.HybridBinarizer;
 import java.util.*;
 
 /**
- * Quét QR thông minh kiểu Zalo/iPhone Camera:
- * - Nhận diện loại nội dung (Link, WiFi, Danh bạ, SĐT, Email, SMS, Vị trí, Văn bản thường,
- *   mã QR thanh toán VietQR/EMVCo) và đưa ra hành động tương ứng thay vì chỉ hiện text cứng.
- * - Cảnh báo an toàn trước khi mở link (hiện rõ domain thật, chặn scheme nguy hiểm
- *   như javascript:/intent:/file: để chống link giả mạo/khai thác lỗ hổng).
- * - Fix quét được cả QR có logo giữa (Messenger...): tăng độ phân giải khung hình,
- *   bật autofocus liên tục, bật TRY_HARDER cho zxing.
- * Zero-RAM overhead: không giữ Bitmap/Thread nào sau khi Activity đóng.
+ * Quét QR thông minh kiểu Zalo/iPhone Camera + nhận diện QR thanh toán ngân hàng.
+ * Tối ưu Pixel 2XL: analysis stream giữ cố định 1280x720 (đủ để giải mã, không
+ * tốn thêm CPU/pin so với res cao hơn); preview stream tự chọn size khớp camera
+ * thật rồi letterbox đúng tỉ lệ (fix lỗi hình bị bóp méo do trước đây ép SurfaceView
+ * full màn hình bất kể tỉ lệ buffer thật).
  */
 public class QrScanActivity extends Activity {
     private static final int REQ_CAMERA = 8801;
@@ -34,12 +35,75 @@ public class QrScanActivity extends Activity {
     private ImageReader reader;
     private HandlerThread bgThread;
     private Handler bgHandler;
-    private volatile boolean paused = false; // true khi đang hiện dialog kết quả
-    private android.view.Surface previewSurface;
+    private volatile boolean paused = false;
+    private SurfaceView surfaceView;
     private FrameLayout root;
     private View resultCard;
+    private View frame;
     private final MultiFormatReader zxingReader = new MultiFormatReader();
 
+    private String cameraId;
+    private int sensorOrientation = 90;
+    private Size previewSize;
+
+    // Best-effort — không thể đầy đủ 100% vì rebrand/đổi package thường xuyên.
+    // Người dùng bổ sung qua nút "QR NGÂN HÀNG" trong Ecosystem là nguồn chính xác nhất.
+    private static final String[] CURATED_BANK_PACKAGES = {
+        // ===== Big 4 (Nhà nước) =====
+        "com.VCB", "com.vnpay.Agribank", "com.agribank.mbank",
+        "com.bidv.smartbanking", "com.vietinbank.ipay", "com.icb.qtsc",
+        // ===== NHTM Cổ phần lớn =====
+        "vn.com.techcombank.bb.app", "com.mbmobile", "com.acb.acbmobile3",
+        "com.vpbank.vpbankonline", "vn.vpbank.neo", "vn.vib.myvib2",
+        "com.sacombank.SacombankMobile", "com.tpb.mb.gprsandroid", "com.shbmobile",
+        "com.hdbank.mbanking", "vn.com.msb.smartbanking", "com.msb.smartbanking",
+        "com.eximbank.mobile", "com.scb.smartbanking", "com.ocb.omni",
+        "com.seabank.mb", "com.abbank.retail.abbank", "com.kienlongbank.kienlongbank",
+        "vn.com.vietbank.mobile", "com.pvcombank.momobile", "com.bva.bab",
+        "com.vietcapitalbank.iBank", "com.namabank.onebank", "vn.com.namabank.mobile",
+        "com.lio.lio", "com.lienvietpostbank.mobile.banking", "com.vnptmoney.pgbank",
+        "com.vib.myvib",
+        // ===== Ngân hàng số / mới =====
+        "com.timo.timo", "com.cake.customer", "com.ubank.customer",
+        "vn.vietcombank.digitalbank",
+        // ===== Ví điện tử =====
+        "com.mservice.momotransfer", "vn.com.vng.zalopay", "com.airpay.customer",
+        "vn.shopeepay.customer", "com.viettel.viettelpay", "com.vnpay.vn",
+        "com.vinid.vinid", "com.mpos.mpos", "com.zion.moca"
+    };
+
+    // [TỐI ƯU] Set tra cứu O(1), build 1 lần duy nhất — tránh duyệt tuần tự mảng
+    // mỗi lần showResult() được gọi (mỗi lần quét QR mới).
+    private static java.util.Set<String> CURATED_BANK_SET = null;
+    private static java.util.Set<String> curatedBankSet() {
+        if (CURATED_BANK_SET == null) {
+            CURATED_BANK_SET = new java.util.HashSet<>(java.util.Arrays.asList(CURATED_BANK_PACKAGES));
+        }
+        return CURATED_BANK_SET;
+    }
+
+    // [TỐI ƯU PIN/RAM] Cache 5 phút danh sách app ngân hàng ĐÃ CÀI trên máy —
+    // tránh gọi pm.getPackageInfo() (IPC sang PackageManagerService, tốn CPU/pin)
+    // lặp lại hơn 40 lần mỗi khi mở kết quả quét, giống pattern cachedAppList
+    // đã dùng trong MainActivity.
+    private static java.util.List<String> cachedInstalledBanks = null;
+    private static long cachedInstalledBanksTs = 0;
+    private static final long BANK_CACHE_MS = 5 * 60 * 1000;
+
+    private java.util.List<String> getInstalledBankPackagesCached() {
+        long now = System.currentTimeMillis();
+        if (cachedInstalledBanks != null && (now - cachedInstalledBanksTs) < BANK_CACHE_MS) {
+            return cachedInstalledBanks;
+        }
+        PackageManager pm = getPackageManager();
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (String pkg : curatedBankSet()) {
+            try { pm.getPackageInfo(pkg, 0); out.add(pkg); } catch (Exception ignored) {}
+        }
+        cachedInstalledBanks = out;
+        cachedInstalledBanksTs = now;
+        return out;
+    }
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         if (Build.VERSION.SDK_INT >= 27) {
@@ -78,14 +142,18 @@ public class QrScanActivity extends Activity {
     }
 
     private void setupScanner() {
-        root = new FrameLayout(this);
-        SurfaceView sv = new SurfaceView(this);
-        root.addView(sv, new FrameLayout.LayoutParams(-1, -1));
+        if (!queryCameraInfo()) { finish(); return; }
 
-        // Khung ngắm ở giữa — chỉ trang trí, không ảnh hưởng vùng giải mã thật
-        View frame = new View(this);
+        root = new FrameLayout(this);
+        root.setBackgroundColor(Color.BLACK);
+
+        surfaceView = new SurfaceView(this);
+        FrameLayout.LayoutParams svLp = computeLetterboxLayoutParams();
+        root.addView(surfaceView, svLp);
+
+        frame = new View(this);
         GradientDrawable fd = new GradientDrawable();
-        fd.setStroke(4, Color.parseColor("#00E5FF"));
+        fd.setStroke(10, Color.parseColor("#00E5FF")); // khung dày hơn (trước đây 4)
         fd.setCornerRadius(32f);
         frame.setBackground(fd);
         int fsize = (int) (getResources().getDisplayMetrics().widthPixels * 0.68f);
@@ -107,11 +175,75 @@ public class QrScanActivity extends Activity {
         setContentView(root);
         bgThread = new HandlerThread("qr-bg"); bgThread.start();
         bgHandler = new Handler(bgThread.getLooper());
-        sv.getHolder().addCallback(new SurfaceHolder.Callback() {
-            @Override public void surfaceCreated(SurfaceHolder h) { previewSurface = h.getSurface(); openCamera(); }
+        surfaceView.getHolder().setFixedSize(previewSize.getWidth(), previewSize.getHeight());
+        surfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
+            @Override public void surfaceCreated(SurfaceHolder h) { openCamera(h.getSurface()); }
             @Override public void surfaceChanged(SurfaceHolder h,int f,int w,int ht){}
             @Override public void surfaceDestroyed(SurfaceHolder h){}
         });
+    }
+
+    /** Chọn camera sau + đọc sensor orientation + chọn size preview khớp camera thật
+     *  (KHÔNG ép cứng theo màn hình) — đây là gốc của lỗi hình bị bóp méo trước đây. */
+    private boolean queryCameraInfo() {
+        try {
+            CameraManager cm = (CameraManager) getSystemService(CAMERA_SERVICE);
+            for (String id : cm.getCameraIdList()) {
+                CameraCharacteristics c = cm.getCameraCharacteristics(id);
+                Integer facing = c.get(CameraCharacteristics.LENS_FACING);
+                if (facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) {
+                    cameraId = id;
+                    Integer so = c.get(CameraCharacteristics.SENSOR_ORIENTATION);
+                    sensorOrientation = so != null ? so : 90;
+                    StreamConfigurationMap map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                    previewSize = choosePreviewSize(map.getOutputSizes(SurfaceHolder.class));
+                    break;
+                }
+            }
+            if (cameraId == null) {
+                cameraId = cm.getCameraIdList()[0];
+                CameraCharacteristics c = cm.getCameraCharacteristics(cameraId);
+                StreamConfigurationMap map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                previewSize = choosePreviewSize(map.getOutputSizes(SurfaceHolder.class));
+            }
+            return previewSize != null;
+        } catch (Exception e) { return false; }
+    }
+
+    /** Ưu tiên size gần tỉ lệ 9:16 (khớp màn dọc), cap chiều dài <=1280 để nhẹ pin/CPU. */
+    private Size choosePreviewSize(Size[] sizes) {
+        Size best = null;
+        double targetRatio = 16.0 / 9.0;
+        for (Size s : sizes) {
+            if (Math.max(s.getWidth(), s.getHeight()) > 1280) continue;
+            double ratio = Math.max(s.getWidth(), s.getHeight()) / (double) Math.min(s.getWidth(), s.getHeight());
+            if (best == null) { best = s; continue; }
+            double bestRatio = Math.max(best.getWidth(), best.getHeight()) / (double) Math.min(best.getWidth(), best.getHeight());
+            boolean closerRatio = Math.abs(ratio - targetRatio) < Math.abs(bestRatio - targetRatio);
+            boolean biggerArea = s.getWidth() * s.getHeight() > best.getWidth() * best.getHeight();
+            if (closerRatio || (Math.abs(ratio - bestRatio) < 0.05 && biggerArea)) best = s;
+        }
+        if (best == null && sizes.length > 0) {
+            // Không size nào <=1280 -> chọn size nhỏ nhất có sẵn (đỡ tốn pin nhất)
+            best = sizes[0];
+            for (Size s : sizes) if (s.getWidth()*s.getHeight() < best.getWidth()*best.getHeight()) best = s;
+        }
+        return best;
+    }
+
+    /** Tính khung hiển thị đúng tỉ lệ camera thật (contain/letterbox), không kéo méo. */
+    private FrameLayout.LayoutParams computeLetterboxLayoutParams() {
+        int screenW = getResources().getDisplayMetrics().widthPixels;
+        int screenH = getResources().getDisplayMetrics().heightPixels;
+        boolean swapped = (sensorOrientation % 180) == 90;
+        int dispW = swapped ? previewSize.getHeight() : previewSize.getWidth();
+        int dispH = swapped ? previewSize.getWidth() : previewSize.getHeight();
+        float scale = Math.max(screenW / (float) dispW, screenH / (float) dispH); // cover, tránh viền đen 2 bên
+        int outW = Math.round(dispW * scale);
+        int outH = Math.round(dispH * scale);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(outW, outH);
+        lp.gravity = Gravity.CENTER;
+        return lp;
     }
 
     private GradientDrawable makeRounded(String hex, float radius) {
@@ -121,33 +253,25 @@ public class QrScanActivity extends Activity {
         return g;
     }
 
-    private void openCamera() {
+    private void openCamera(android.view.Surface previewSurface) {
         try {
             CameraManager cm = (CameraManager) getSystemService(CAMERA_SERVICE);
-            String id = cm.getCameraIdList()[0];
-            // Tăng độ phân giải từ 1280x720 lên 1920x1080 — QR có logo giữa (Messenger...)
-            // cần mật độ pixel cao hơn mới đủ chi tiết để zxing giải mã được các module nhỏ.
-            reader = ImageReader.newInstance(1920, 1080, ImageFormat.YUV_420_888, 2);
+            reader = ImageReader.newInstance(1280, 720, ImageFormat.YUV_420_888, 2);
             reader.setOnImageAvailableListener(this::onFrame, bgHandler);
             if (checkSelfPermission(android.Manifest.permission.CAMERA)
                     != PackageManager.PERMISSION_GRANTED) { finish(); return; }
-            cm.openCamera(id, new CameraDevice.StateCallback() {
+            cm.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override public void onOpened(CameraDevice c) {
                     camera = c;
                     try {
                         CaptureRequest.Builder req = c.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                         req.addTarget(reader.getSurface());
-                        // Autofocus liên tục — mặc định TEMPLATE_PREVIEW không lock focus gần,
-                        // khiến QR ở khoảng cách gần (10-20cm, phổ biến khi quét) bị mờ và
-                        // không giải mã nổi dù ảnh đã lên khung hình.
+                        req.addTarget(previewSurface);
+                        // Autofocus liên tục — QR ở khoảng cách gần (10-20cm) cần lấy nét
+                        // chủ động, mặc định TEMPLATE_PREVIEW không lock focus gần.
                         req.set(CaptureRequest.CONTROL_AF_MODE,
                             CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                        List<android.view.Surface> targets = new ArrayList<>();
-                        targets.add(reader.getSurface());
-                        if (previewSurface != null) {
-                            req.addTarget(previewSurface);
-                            targets.add(previewSurface);
-                        }
+                        List<android.view.Surface> targets = Arrays.asList(reader.getSurface(), previewSurface);
                         c.createCaptureSession(targets,
                             new CameraCaptureSession.StateCallback() {
                                 @Override public void onConfigured(CameraCaptureSession s) {
@@ -176,15 +300,14 @@ public class QrScanActivity extends Activity {
             String text = tryDecode(src);
             if (text != null) {
                 paused = true;
-                runOnUiThread(() -> showResult(text));
+                runOnUiThread(() -> playDetectAnimThenShow(text));
             }
         } catch (Exception ignored) {
         } finally { img.close(); }
     }
 
-    /** Giải mã với HybridBinarizer trước (nhanh, tốt cho ánh sáng đều); nếu thất bại
-     *  thử lại với GlobalHistogramBinarizer (chịu được ánh sáng không đều / QR có logo
-     *  làm giảm độ tương phản cục bộ — đúng trường hợp Messenger). */
+    /** HybridBinarizer trước (nhanh, ánh sáng đều); rớt thì thử GlobalHistogramBinarizer
+     *  (chịu ánh sáng không đều/độ tương phản cục bộ thấp — hay gặp ở QR có logo giữa). */
     private String tryDecode(LuminanceSource src) {
         try {
             Result r = zxingReader.decodeWithState(new BinaryBitmap(new HybridBinarizer(src)));
@@ -198,6 +321,22 @@ public class QrScanActivity extends Activity {
             return r.getText();
         } catch (Exception ignored) { zxingReader.reset(); }
         return null;
+    }
+
+    /** Hiệu ứng: khung đổi xanh lá + thu nhỏ có nảy (bounce) báo hiệu "đã khoá QR",
+     *  hoạt động đồng nhất dù bạn cầm máy quét ngang/dọc/nghiêng (zxing tự xoay bất
+     *  biến khi tìm 3 góc định vị của QR, không phụ thuộc hướng cầm máy). */
+    private void playDetectAnimThenShow(String raw) {
+        GradientDrawable gd = new GradientDrawable();
+        gd.setStroke(10, Color.parseColor("#4CAF50"));
+        gd.setCornerRadius(32f);
+        frame.setBackground(gd);
+        frame.animate().scaleX(0.72f).scaleY(0.72f).setDuration(220)
+            .setInterpolator(new OvershootInterpolator(1.3f))
+            .withEndAction(() -> {
+                frame.animate().scaleX(1f).scaleY(1f).setDuration(150).start();
+                showResult(raw);
+            }).start();
     }
 
     // ===================== PHÂN LOẠI & HÀNH ĐỘNG =====================
@@ -238,6 +377,10 @@ public class QrScanActivity extends Activity {
             card.addView(tvWarn);
         }
 
+        if (parsed.isBankQr) {
+            card.addView(buildBankAppList());
+        }
+
         LinearLayout btnRow = new LinearLayout(this);
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
 
@@ -248,7 +391,13 @@ public class QrScanActivity extends Activity {
         LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(0, -2, 1f);
         sLp.setMargins(0, 0, 10, 0);
         btnScanAgain.setLayoutParams(sLp);
-        btnScanAgain.setOnClickListener(v -> { root.removeView(resultCard); resultCard = null; paused = false; });
+        btnScanAgain.setOnClickListener(v -> {
+            root.removeView(resultCard); resultCard = null; paused = false;
+            GradientDrawable fd = new GradientDrawable();
+            fd.setStroke(10, Color.parseColor("#00E5FF"));
+            fd.setCornerRadius(32f);
+            frame.setBackground(fd);
+        });
         btnRow.addView(btnScanAgain);
 
         Button btnCopy = new Button(this);
@@ -283,6 +432,72 @@ public class QrScanActivity extends Activity {
         root.addView(card, lp);
     }
 
+    /** Danh sách app ngân hàng: dò sẵn (best-effort) ∪ app do bạn tự chọn trong
+     *  Ecosystem > "QR NGÂN HÀNG" — hợp nhất và loại trùng. */
+    private LinearLayout buildBankAppList() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(0, 4, 0, 20);
+
+        android.content.SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+        PackageManager pm = getPackageManager();
+        LinkedHashSet<String> pkgs = new LinkedHashSet<>(getInstalledBankPackagesCached());
+        String userList = prefs.getString("qr_bank_apps", "");
+        for (String p : userList.split(",")) if (!p.trim().isEmpty()) pkgs.add(p.trim());
+        if (pkgs.isEmpty()) {
+            TextView tv = new TextView(this);
+            tv.setText(T("No bank app detected. Add one in Ecosystem > QR NGÂN HÀNG.",
+                "Chưa có app ngân hàng nào. Vào Ecosystem > QR NGÂN HÀNG để thêm."));
+            tv.setTextColor(Color.parseColor("#9AA0A6"));
+            tv.setTextSize(12);
+            box.addView(tv);
+            return box;
+        }
+
+        TextView tvHint = new TextView(this);
+        tvHint.setText(T("Open with:", "Mở bằng:"));
+        tvHint.setTextColor(Color.parseColor("#9AA0A6"));
+        tvHint.setTextSize(12);
+        tvHint.setPadding(0, 0, 0, 8);
+        box.addView(tvHint);
+
+        LinearLayout row = null; int i = 0;
+        for (String pkg : pkgs) {
+            if (i % 4 == 0) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                box.addView(row);
+            }
+            LinearLayout cell = new LinearLayout(this);
+            cell.setOrientation(LinearLayout.VERTICAL);
+            cell.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, -2, 1f);
+            clp.setMargins(6, 0, 6, 8);
+            cell.setLayoutParams(clp);
+            ImageView iv = new ImageView(this);
+            try {
+                Drawable d = pm.getApplicationIcon(pkg);
+                iv.setImageDrawable(d);
+            } catch (Exception ignored) {}
+            iv.setLayoutParams(new LinearLayout.LayoutParams(90, 90));
+            cell.addView(iv);
+            final String fPkg = pkg;
+            cell.setOnClickListener(v -> {
+                try {
+                    Intent li = pm.getLaunchIntentForPackage(fPkg);
+                    if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
+                    else Toast.makeText(this, "App chưa cài trên máy", Toast.LENGTH_SHORT).show();
+                } catch (Exception ignored) {}
+                finish();
+            });
+            row.addView(cell);
+            i++;
+        }
+        return box;
+    }
+
+    private String T(String en, String vi) { return vi; }
+
     private void confirmThenRun(QrParsed p) {
         new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Mở liên kết ngoài?")
@@ -302,7 +517,7 @@ public class QrScanActivity extends Activity {
 
     private static class QrParsed {
         String typeLabel, displayText, actionLabel, warning, safeHostPreview;
-        boolean needsConfirm = false;
+        boolean needsConfirm = false, isBankQr = false;
         Runnable primaryAction;
     }
 
@@ -311,7 +526,6 @@ public class QrScanActivity extends Activity {
         String trimmed = raw.trim();
         String lower = trimmed.toLowerCase(Locale.ROOT);
 
-        // --- Link web ---
         if (lower.startsWith("http://") || lower.startsWith("https://")) {
             Uri uri = Uri.parse(trimmed);
             String scheme = uri.getScheme();
@@ -332,16 +546,13 @@ public class QrScanActivity extends Activity {
             return p;
         }
 
-        // --- Chặn scheme nguy hiểm (chống khai thác lỗ hổng qua intent://, javascript:, file:) ---
         if (lower.startsWith("intent://") || lower.startsWith("javascript:") || lower.startsWith("file:")) {
             p.typeLabel = "⛔ Nội dung không an toàn";
             p.displayText = trimmed;
             p.warning = "Mã QR này chứa lệnh có thể gây hại, EdgeBar đã chặn không cho thực thi.";
-            p.actionLabel = null; p.primaryAction = null;
             return p;
         }
 
-        // --- WiFi ---
         if (trimmed.startsWith("WIFI:")) {
             String ssid = extractField(trimmed, "S:");
             String pass = extractField(trimmed, "P:");
@@ -354,7 +565,6 @@ public class QrScanActivity extends Activity {
             return p;
         }
 
-        // --- Danh bạ (vCard) ---
         if (trimmed.startsWith("BEGIN:VCARD")) {
             String name = extractField(trimmed, "FN:");
             String tel = extractField(trimmed, "TEL:");
@@ -374,7 +584,6 @@ public class QrScanActivity extends Activity {
             return p;
         }
 
-        // --- Số điện thoại ---
         if (lower.startsWith("tel:")) {
             String num = trimmed.substring(4);
             p.typeLabel = "📞 Số điện thoại";
@@ -385,7 +594,6 @@ public class QrScanActivity extends Activity {
             return p;
         }
 
-        // --- SMS ---
         if (lower.startsWith("smsto:")) {
             String[] parts = trimmed.substring(6).split(":", 2);
             p.typeLabel = "💬 Tin nhắn SMS";
@@ -399,7 +607,6 @@ public class QrScanActivity extends Activity {
             return p;
         }
 
-        // --- Email ---
         if (trimmed.startsWith("MATMSG:") || lower.startsWith("mailto:")
                 || Patterns.EMAIL_ADDRESS.matcher(trimmed).matches()) {
             String email = trimmed.startsWith("MATMSG:") ? extractField(trimmed, "TO:")
@@ -412,7 +619,6 @@ public class QrScanActivity extends Activity {
             return p;
         }
 
-        // --- Vị trí ---
         if (lower.startsWith("geo:")) {
             p.typeLabel = "📍 Vị trí";
             p.displayText = trimmed;
@@ -422,17 +628,14 @@ public class QrScanActivity extends Activity {
             return p;
         }
 
-        // --- Mã QR thanh toán VietQR/EMVCo (thường bắt đầu bằng "000201") ---
         if (trimmed.startsWith("000201") && trimmed.length() > 20) {
             p.typeLabel = "💳 Mã QR thanh toán (VietQR)";
             p.displayText = trimmed;
-            p.warning = "EdgeBar không tự mở app ngân hàng vì mỗi ngân hàng dùng liên kết riêng "
-                + "— hãy mở app ngân hàng/ví của bạn và dùng chức năng quét QR trong app đó để đảm bảo an toàn.";
-            p.actionLabel = null; p.primaryAction = null;
+            p.isBankQr = true;
+            p.warning = "EdgeBar không tự nạp số tiền/tài khoản vì mỗi ngân hàng dùng định dạng riêng — chọn app bên dưới rồi quét/nhập lại trong app đó.";
             return p;
         }
 
-        // --- Còn lại: văn bản thường (mã lô hàng, số series...) ---
         p.typeLabel = "📄 Văn bản";
         p.displayText = trimmed;
         p.actionLabel = "Tìm trên Google";

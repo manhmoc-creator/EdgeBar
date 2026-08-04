@@ -3244,6 +3244,22 @@ btnCopy.setOnClickListener(v -> {
     ytdlRow.addView(btnPickYtdl);
     secSys.addView(ytdlRow);
 
+    // [MỚI] Chọn app ngân hàng — hiện khi quét trúng mã VietQR thanh toán.
+    // Không có API nào cho biết chắc "app nào là app ngân hàng", nên EdgeBar tự
+    // dò 1 danh sách package phổ biến (best-effort) rồi CỘNG THÊM danh sách này
+    // do bạn tự chọn — đảm bảo đúng 100% dù danh sách dò sẵn có thiếu/sai.
+    LinearLayout bankRow = new LinearLayout(this);
+    bankRow.setOrientation(LinearLayout.HORIZONTAL);
+    LinearLayout.LayoutParams bankRowLp = new LinearLayout.LayoutParams(-1, -2);
+    bankRowLp.setMargins(0, 15, 0, 0);
+    bankRow.setLayoutParams(bankRowLp);
+    Button btnPickBank = new Button(this);
+    btnPickBank.setText("🏦 " + T("QR BANKS", "CHỌN NGÂN HÀNG"));
+    btnPickBank.setBackground(getRounded("#2E7D32", 20f)); btnPickBank.setTextColor(Color.WHITE);
+    btnPickBank.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+    btnPickBank.setOnClickListener(v -> showPanelMultiPicker("qr_bank_apps", true));
+    bankRow.addView(btnPickBank);
+    secSys.addView(bankRow);
     // [MỚI] Slider grace period cho LockList
     secSys.addView(createSlider(T("Lock grace period after leaving app (sec)", "Thời gian ân hạn trước khi khoá lại (giây)"), "applock_grace_sec", 1000, 0));
 
