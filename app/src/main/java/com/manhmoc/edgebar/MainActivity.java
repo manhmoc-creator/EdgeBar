@@ -2795,7 +2795,15 @@ private void cleanExpiredTrash() {
     long now = System.currentTimeMillis();
     java.util.List<String> expired = new java.util.ArrayList<>();
     for (String itemKey : trash) {
-        long ts = prefs.getLong("trash_" + itemKey + "_ts", 0);
+        long ts;
+        try {
+            ts = prefs.getLong("trash_" + itemKey + "_ts", 0);
+        } catch (ClassCastException cce) {
+            // Dữ liệu cũ bị lưu sai kiểu (Integer thay vì Long) — tự sửa lại,
+            // giống hệt cách xử lý cho storage_scan_ts ở renderEcosystem().
+            ts = prefs.getInt("trash_" + itemKey + "_ts", 0);
+            prefs.edit().putLong("trash_" + itemKey + "_ts", ts).apply();
+        }
         // Dữ liệu cũ từ bản trước chưa có mốc giờ -> gán NGAY BÂY GIỜ thay vì xóa
         // luôn, tránh mất dữ liệu người dùng đột ngột ngay sau khi cập nhật app.
         if (ts == 0) { prefs.edit().putLong("trash_" + itemKey + "_ts", now).apply(); continue; }
