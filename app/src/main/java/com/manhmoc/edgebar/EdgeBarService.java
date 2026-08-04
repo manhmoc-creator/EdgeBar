@@ -66,6 +66,11 @@ private boolean fpRegistered = false;
     private View[] corners = new View[4];
     private FlashView fV;
     private GestureRippleView rippleView;
+    // [MỚI] Chỉ báo ghi âm (chấm đỏ + mm:ss)
+    private LinearLayout recIndicatorView;
+    private TextView recIndicatorText;
+    private View recIndicatorDot;
+    private ValueAnimator recBlinkAnim;
     private void ensureRippleView() {
         if (rippleView != null) return;
         rippleView = new GestureRippleView(this);
@@ -250,6 +255,10 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     for (int j=0;j<4;j++) if (accHomeCorners[j]!=null) accHomeCorners[j].setVisibility(View.GONE);
 } else if ("com.manhmoc.edgebar.RESUME_WM_OPS".equals(act)) {
     updateVisibility();
+} else if (VoiceRecorderService.TICK_ACTION.equals(act)) {
+    String state = i.getStringExtra("state");
+    long sec = i.getLongExtra("elapsed_sec", 0);
+    updateRecIndicator(state, sec);
 } else {
     updateVisibility();
        }
@@ -742,6 +751,7 @@ filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
 filter.addAction("com.manhmoc.edgebar.PANEL_TEST_TOGGLE");
 filter.addAction("com.manhmoc.edgebar.PAUSE_WM_OPS");
         filter.addAction("com.manhmoc.edgebar.RESUME_WM_OPS");
+        filter.addAction(VoiceRecorderService.TICK_ACTION);
         registerReceiver(stateReceiver, filter);
         if (Build.VERSION.SDK_INT >= 33)
             registerReceiver(ipcReceiver, new IntentFilter("com.manhmoc.edgebar.IPC_ACTION"), Context.RECEIVER_NOT_EXPORTED);
@@ -1021,30 +1031,7 @@ private void triggerBlacklistAutoHomeb() {
         if (a == null || a.equals("NONE")) return;
         try {
             switch (a) {
-                case "YTDL_DOWNLOAD":
-try{
-    // [FIX] Ưu tiên đọc đúng nội dung người dùng đã gõ/lưu trong ô nhập YTDLnis
-    // thay vì chỉ trông chờ Clipboard — hỗ trợ cả link lẫn tên bài hát dạng chữ.
-    SharedPreferences p2 = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-    String query = p2.getString("ytdl_last_link", "").trim();
-    if (query.isEmpty()) {
-        // Không có gì đã lưu -> fallback về Clipboard như hành vi cũ
-        android.content.ClipboardManager cb = (android.content.ClipboardManager)
-            getSystemService(Context.CLIPBOARD_SERVICE);
-        if (cb.hasPrimaryClip() && cb.getPrimaryClip().getItemCount() > 0) {
-            CharSequence txt = cb.getPrimaryClip().getItemAt(0).getText();
-            if (txt != null) query = txt.toString().trim();
-        }
-    }
-    if (!query.isEmpty()) {
-        Intent y = new Intent(Intent.ACTION_SEND);
-        y.setType("text/plain");
-        y.putExtra(Intent.EXTRA_TEXT, query);
-        y.setPackage("com.deniscerri.ytdl");
-        y.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(y);
-    }
-} catch (Exception e) {} break;
+                case "YTDL_DOWNLOAD": showYtdlQuickInput(); break;
                 case "BACK": performGlobalAction(GLOBAL_ACTION_BACK); break;
                 case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break;
                 case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break;
@@ -1098,10 +1085,26 @@ case "SCREEN_ON":
                     } catch (Exception e) {}
                     break;
                 }
-                case "VOICE_RECORD": {
+                case "TOGGLE_RECORD": {
                     Intent recIntent = new Intent(this, VoiceRecorderService.class);
+                    recIntent.setAction(VoiceRecorderService.ACTION_TOGGLE);
                     if (Build.VERSION.SDK_INT >= 26) startForegroundService(recIntent);
                     else startService(recIntent);
+                    break;
+                }
+                case "PAUSE_RECORD": {
+                    if (!VoiceRecorderService.isRunning) break;
+                    Intent pauseIntent = new Intent(this, VoiceRecorderService.class);
+                    pauseIntent.setAction(VoiceRecorderService.ACTION_PAUSE_TOGGLE);
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(pauseIntent);
+                    else startService(pauseIntent);
+                    break;
+                }
+                case "OPEN_STORAGE_SCAN": {
+                    Intent openStorage = new Intent(this, MainActivity.class);
+                    openStorage.putExtra("open_storage_scan", true);
+                    openStorage.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    startActivity(openStorage);
                     break;
                 }
                 case "TOGGLE_OVERLAY": {
@@ -1293,6 +1296,115 @@ private void fireIntentById(String id) {
         }
     }
     private void doVibrate(int dur) { if (dur<=0) return; try { if (Build.VERSION.SDK_INT>=26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
+// ===== YTDL QUICK INPUT OVERLAY — chỉ tồn tại đúng lúc dùng, Zero-RAM lúc đóng =====
+    private View ytdlOverlay;
+
+    private void showYtdlQuickInput() {
+        if (ytdlOverlay != null) return; // đang mở sẵn -> không chồng lần 2
+        if (!Settings.canDrawOverlays(this)) return;
+
+        android.widget.LinearLayout card = new android.widget.LinearLayout(this);
+        card.setOrientation(android.widget.LinearLayout.VERTICAL);
+        card.setPadding(40, 40, 40, 30);
+        card.setOnClickListener(v -> {}); // chặn chạm xuyên qua card làm đóng nhầm
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#F2121212"));
+        bg.setCornerRadius(28f);
+        card.setBackground(bg);
+
+        android.widget.TextView title = new android.widget.TextView(this);
+        title.setText("🎵 YTDLnis — Tải nhạc/video");
+        title.setTextColor(Color.parseColor("#FFD700"));
+        title.setTextSize(15f);
+        title.setPadding(0, 0, 0, 20);
+        card.addView(title);
+
+        android.widget.EditText input = new android.widget.EditText(this);
+        input.setHint("Dán link hoặc nhập tên bài hát");
+        input.setHintTextColor(Color.GRAY);
+        input.setTextColor(Color.WHITE);
+        input.setSingleLine(true);
+        GradientDrawable inputBg = new GradientDrawable();
+        inputBg.setColor(Color.parseColor("#2C2C2C"));
+        inputBg.setCornerRadius(20f);
+        input.setBackground(inputBg);
+        input.setPadding(24, 20, 24, 20);
+        input.setText(prefs.getString("ytdl_last_link", ""));
+        card.addView(input);
+
+        android.widget.LinearLayout btnRow = new android.widget.LinearLayout(this);
+        btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        android.widget.LinearLayout.LayoutParams rowLp = new android.widget.LinearLayout.LayoutParams(-1, -2);
+        rowLp.topMargin = 24;
+        btnRow.setLayoutParams(rowLp);
+
+        android.widget.Button bCancel = ytdlBtn("HỦY", "#333333", Color.WHITE);
+        android.widget.Button bSave = ytdlBtn("LƯU LINK", "#4CAF50", Color.WHITE);
+        android.widget.Button bDownload = ytdlBtn("TẢI", "#00E5FF", Color.BLACK);
+        btnRow.addView(bCancel); btnRow.addView(bSave); btnRow.addView(bDownload);
+        card.addView(btnRow);
+
+        bCancel.setOnClickListener(v -> removeYtdlOverlay());
+        bSave.setOnClickListener(v -> {
+            prefs.edit().putString("ytdl_last_link", input.getText().toString().trim()).apply();
+            removeYtdlOverlay();
+        });
+        bDownload.setOnClickListener(v -> {
+            String q = input.getText().toString().trim();
+            if (!q.isEmpty()) {
+                prefs.edit().putString("ytdl_last_link", q).apply();
+                try {
+                    Intent y = new Intent(Intent.ACTION_SEND);
+                    y.setType("text/plain");
+                    y.putExtra(Intent.EXTRA_TEXT, q);
+                    y.setPackage("com.deniscerri.ytdl");
+                    y.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(y);
+                } catch (Exception ignored) {}
+            }
+            removeYtdlOverlay();
+        });
+
+        android.widget.FrameLayout wrap = new android.widget.FrameLayout(this);
+        android.widget.FrameLayout.LayoutParams cardLp = new android.widget.FrameLayout.LayoutParams(
+            (int) (getResources().getDisplayMetrics().widthPixels * 0.86f), -2);
+        cardLp.gravity = Gravity.CENTER;
+        wrap.addView(card, cardLp);
+        wrap.setOnClickListener(v -> removeYtdlOverlay()); // chạm ra ngoài thẻ -> hủy
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+            -1, -1,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT);
+        lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
+            | WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE;
+        lp.gravity = Gravity.CENTER;
+
+        try {
+            wm.addView(wrap, lp);
+            ytdlOverlay = wrap;
+            input.requestFocus();
+        } catch (Exception ignored) {}
+    }
+
+    private android.widget.Button ytdlBtn(String text, String bg, int textColor) {
+        android.widget.Button b = new android.widget.Button(this);
+        b.setText(text); b.setTextColor(textColor); b.setTextSize(12.5f);
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(Color.parseColor(bg)); g.setCornerRadius(16f);
+        b.setBackground(g);
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, -2, 1f);
+        lp.setMargins(6, 0, 6, 0);
+        b.setLayoutParams(lp);
+        return b;
+    }
+
+    private void removeYtdlOverlay() {
+        if (ytdlOverlay == null) return;
+        try { wm.removeView(ytdlOverlay); } catch (Exception ignored) {}
+        ytdlOverlay = null;
+    }
     // Battery opt Pixel 2XL: CHỈ đăng ký callback khi user thực sự gán ít nhất
 // 1 rule cho "fingerprint" (ở tab HOMACC hoặc HOME). Nếu không có rule nào,
 // KHÔNG đăng ký — tránh giữ sensor driver ở trạng thái lắng nghe vô ích.
@@ -1615,6 +1727,68 @@ private float[] computeJumpDirForTap() {
     }
 }
     @Override public void onInterrupt() {}
+    private void ensureRecIndicator() {
+        if (recIndicatorView != null) return;
+        recIndicatorView = new LinearLayout(this);
+        recIndicatorView.setOrientation(LinearLayout.HORIZONTAL);
+        recIndicatorView.setGravity(Gravity.CENTER_VERTICAL);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.argb(200, 20, 20, 20));
+        bg.setCornerRadius(100f);
+        recIndicatorView.setBackground(bg);
+        int pad = 16;
+        recIndicatorView.setPadding(pad*2, pad, pad*2, pad);
+
+        recIndicatorDot = new View(this);
+        GradientDrawable dot = new GradientDrawable();
+        dot.setShape(GradientDrawable.OVAL);
+        dot.setColor(Color.parseColor("#FF3B30"));
+        recIndicatorDot.setBackground(dot);
+        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(24, 24);
+        dotLp.setMargins(0, 0, 16, 0);
+        recIndicatorDot.setLayoutParams(dotLp);
+
+        recIndicatorText = new TextView(this);
+        recIndicatorText.setTextColor(Color.WHITE);
+        recIndicatorText.setTextSize(13);
+        recIndicatorText.setText("00:00");
+
+        recIndicatorView.addView(recIndicatorDot);
+        recIndicatorView.addView(recIndicatorText);
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
+            PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        lp.x = prefs.getInt("anim_rec_x", 1000) - 1000;
+        lp.y = prefs.getInt("anim_rec_y", 1000) - 1000;
+        try { wm.addView(recIndicatorView, lp); } catch (Exception ignored) {}
+
+        recBlinkAnim = ValueAnimator.ofFloat(1f, 0.25f, 1f);
+        recBlinkAnim.setDuration(1000);
+        recBlinkAnim.setRepeatCount(ValueAnimator.INFINITE);
+        recBlinkAnim.addUpdateListener(a -> { if (recIndicatorDot != null) recIndicatorDot.setAlpha((float) a.getAnimatedValue()); });
+    }
+
+    private void updateRecIndicator(String state, long sec) {
+        if (state == null || "STOPPED".equals(state)) {
+            if (recBlinkAnim != null) recBlinkAnim.cancel();
+            if (recIndicatorView != null) { try { wm.removeView(recIndicatorView); } catch (Exception ignored) {} recIndicatorView = null; }
+            return;
+        }
+        ensureRecIndicator();
+        recIndicatorText.setText(String.format("%02d:%02d", sec/60, sec%60));
+        if ("PAUSED".equals(state)) {
+            if (recBlinkAnim != null && recBlinkAnim.isRunning()) recBlinkAnim.cancel();
+            if (recIndicatorDot != null) recIndicatorDot.setAlpha(1f);
+        } else {
+            if (recBlinkAnim != null && !recBlinkAnim.isRunning()) recBlinkAnim.start();
+        }
+    }
     @Override public void onDestroy() {
         super.onDestroy();
         // [AUTO-HOMEB] Trợ năng vừa bị tắt — Lock/Homacc từ giờ vô hiệu vì cả
@@ -1638,6 +1812,9 @@ try {
         for (int i=0;i<4;i++) if (corners[i]!=null) wm.removeView(corners[i]);
         if (fV != null) wm.removeView(fV);
         if (rippleView != null) wm.removeView(rippleView);
+        removeYtdlOverlay(); // MỚI: tránh treo overlay "ma" nếu service chết giữa lúc đang mở YTDL
+        if (recIndicatorView != null) { try { wm.removeView(recIndicatorView); } catch (Exception ignored) {} }
+        if (recBlinkAnim != null) recBlinkAnim.cancel();
         removeAccessibleHome(); 
     }
     // SAU (code thay thế):
