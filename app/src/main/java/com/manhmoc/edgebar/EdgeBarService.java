@@ -33,6 +33,7 @@ import android.os.Handler;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
