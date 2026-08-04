@@ -9,6 +9,3 @@ android {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
-dependencies {
-    implementation 'androidx.biometric:biometric:1.1.0'
-}
