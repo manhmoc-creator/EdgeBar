@@ -520,7 +520,7 @@ jumpIconBmp = resolveGestureIconBitmap(gestureKey, jSize);
 
         @Override protected void onDraw(Canvas canvas) {
             if (touchX >= 0 && rippleAlpha > 0f) {
-                ripplePaint.setColor(Color.argb((int) (rippleAlpha * 160), 96, 125, 139));
+                ripplePaint.setColor(Color.argb((int) (rippleAlpha * 160), 255, 255, 255));
                 canvas.drawCircle(touchX, touchY, rippleRadius, ripplePaint);
             }
             if (jumpIconBmp != null) {
@@ -1552,8 +1552,10 @@ private float[] computeJumpDirForTap() {
                     handleAction(prefKeyBase + "_" + actionName);
                     if (rippleView != null) {
                         rippleView.popRipple();
-                        float[] dir = computeJumpDir();
-                        rippleView.jumpIcon(e.getRawX(), e.getRawY(), actionName, Color.argb(180, 96, 125, 139), dir[0], dir[1]);
+                        float swipeMag = (float) Math.sqrt(dx * dx + dy * dy);
+                        float dirX = swipeMag > 0.001f ? dx / swipeMag : 0f;
+                        float dirY = swipeMag > 0.001f ? dy / swipeMag : 0f;
+                        rippleView.jumpIcon(e.getRawX(), e.getRawY(), actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
                     }
                     return true;
                 }

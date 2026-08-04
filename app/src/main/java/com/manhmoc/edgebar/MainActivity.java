@@ -154,10 +154,9 @@ String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Voice Record", "Ghi âm"),
-        T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình"), T("Accessibility Shortcut Menu", "Bảng Trợ Năng Nhanh"), T("Bật/Tắt Island", "Không gian làm việc"),
-        T("Screen Record", "Quay màn hình"), T("Auto-Rotate Toggle", "Bật/Tắt Tự Động Xoay"),
+        T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình"), T("Accessibility Shortcut Menu", "Bảng Trợ Năng Nhanh"), T("Screen Record", "Quay màn hình"), T("Auto-Rotate Toggle", "Bật/Tắt Tự Động Xoay"),
         T("Open Location Settings", "Mở Cài Đặt Vị Trí"), T("Open Quick Share Settings", "Mở Cài Đặt Chia Sẻ Nhanh")};
-        for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
+for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
 // LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
 // Đã thay bằng buildDynamicPackItems("intent_ids"/"macro_ids", ...) ở nơi dùng.
@@ -223,7 +222,7 @@ private String[] getVolKeyActLabs() {
                         String key = k.next(); Object v = j.get(key);
                         if(v instanceof Boolean) ed.putBoolean(key, (Boolean)v);
                         else if (v instanceof Integer) ed.putInt(key, (Integer)v);
-                        else if (v instanceof Long) ed.putInt(key, ((Long)v).intValue());
+                        else if (v instanceof Long) ed.putLong(key, (Long)v);
                         else if (v instanceof String) ed.putString(key, (String)v);
                     }
                     ed.commit(); Toast.makeText(this, T("Restored Successfully!", "Đã Khôi Phục Cấu Hình!"), Toast.LENGTH_LONG).show(); recreate();
@@ -3026,7 +3025,14 @@ btnCopy.setOnClickListener(v -> {
     }
 } else if (ecoType == 3) {
     // Không gian Storage: Nút Scan đã chuyển xuống FAB, chỉ giữ hiển thị text
-    long lastScanTs = prefs.getLong("storage_scan_ts", 0);
+    long lastScanTs;
+    try {
+        lastScanTs = prefs.getLong("storage_scan_ts", 0);
+    } catch (ClassCastException cce) {
+        // Dữ liệu cũ bị lưu sai kiểu (Integer thay vì Long) do bug Restore trước đây — tự sửa lại
+        lastScanTs = prefs.getInt("storage_scan_ts", 0);
+        prefs.edit().putLong("storage_scan_ts", lastScanTs).apply();
+    }
     TextView tvInfo = new TextView(this);
     tvInfo.setTextColor(Color.parseColor("#9AA0A6")); tvInfo.setPadding(0,0,0,20);
     tvInfo.setText(lastScanTs == 0 ? T("Chưa quét lần nào", "Chưa quét lần nào")
@@ -3036,7 +3042,7 @@ btnCopy.setOnClickListener(v -> {
     renderCachedStorageList();
 } else if (ecoType == 4) {
     TextView tvNote = new TextView(this);
-    tvNote.setText("Ghi âm sẽ tự dừng nếu phát hiện Quay màn hình hoặc app khác đang dùng mic.\nFile lưu tại: Music/EdgeBar - mở bằng Files by Google.");
+    tvNote.setText("File lưu tại: Music/EdgeBar - mở bằng Files by Google.");
     tvNote.setTextColor(Color.parseColor("#9AA0A6")); tvNote.setTextSize(12);
     tvNote.setPadding(0, 20, 0, 0);
     ecoContainer.addView(tvNote);
