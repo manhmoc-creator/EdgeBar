@@ -1528,7 +1528,7 @@ private void refreshFingerprintRegistration() {
             bars[i].setOnTouchListener(new SidebarTouchListener("lock_"+BARS[i], bars[i]));
         }
         for (int i=0;i<4;i++) {
-            corners[i] = new CornerView(this,i);
+            corners[i] = new CornerView(this, i, "lock_");
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,0,PixelFormat.TRANSLUCENT);
             try { wm.addView(corners[i], p); } catch(Exception e){}
             corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_"+CORNERS[i], corners[i]));
