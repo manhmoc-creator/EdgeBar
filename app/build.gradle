@@ -9,3 +9,6 @@ android {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
+dependencies {
+    implementation 'com.google.zxing:core:3.5.3'
+}

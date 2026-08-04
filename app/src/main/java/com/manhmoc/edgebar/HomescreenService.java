@@ -776,6 +776,55 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
                 String state = i.getStringExtra("state");
                 long sec = i.getLongExtra("elapsed_sec", 0);
                 updateRecIndicator(state, sec);
+            } else if ("com.manhmoc.edgebar.IPC_ACTION".equals(action)) {
+                // [MỚI] VolKey (và mọi nguồn khác) bắn IPC_ACTION broadcast — trước đây
+                // chỉ EdgeBarService nghe được, Homeb (Trợ năng tắt) bị bỏ sót hoàn toàn.
+                String act = i.getStringExtra("act");
+                if (act == null) return;
+                if ("LAUNCH_APP".equals(act)) {
+                    String pkg = i.getStringExtra("launch_pkg");
+                    if (pkg != null && !pkg.isEmpty()) {
+                        try {
+                            Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
+                            if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
+                        } catch (Exception ignored) {}
+                    }
+                    return;
+                }
+                if ("RUN_SHORTCUT".equals(act)) {
+                    String scId = i.getStringExtra("shortcut_id");
+                    if (scId != null && !scId.isEmpty()) {
+                        try {
+                            String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+                            if (!uri.isEmpty()) {
+                                Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
+                                scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                startActivity(scIntent);
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                    return;
+                }
+                if (act.startsWith("RUN_SHORTCUT_")) {
+                    String scId = act.substring("RUN_SHORTCUT_".length());
+                    try {
+                        String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+                        if (!uri.isEmpty()) {
+                            Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
+                            scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(scIntent);
+                        }
+                    } catch (Exception ignored) {}
+                    return;
+                }
+                exec(act);
+} else if ("com.manhmoc.edgebar.TEST_REC_INDICATOR".equals(action)) {
+                boolean on = i.getBooleanExtra("on", false);
+                if (!VoiceRecorderService.isRunning) {
+                    recIndicatorTestMode = on;
+                    recIndicatorTestPaused = false;
+                    updateRecIndicator(on ? "RECORDING" : "STOPPED", 0);
+                }
             }
         }
     };
@@ -839,6 +888,8 @@ filter.addAction("com.manhmoc.edgebar.RESUME_WM_OPS");
 filter.addAction("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
 filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
 filter.addAction(VoiceRecorderService.TICK_ACTION);
+filter.addAction("com.manhmoc.edgebar.IPC_ACTION");
+filter.addAction("com.manhmoc.edgebar.TEST_REC_INDICATOR");
         if (Build.VERSION.SDK_INT >= 33)
             registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         else
@@ -1265,6 +1316,12 @@ for (String a : acts) {
                     startActivity(openStorage);
                     break;
                 }
+                case "SCAN_QR": {
+                    Intent qr = new Intent(this, QrScanActivity.class);
+                    qr.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+                    startActivity(qr);
+                    break;
+                }
                 case "TOGGLE_OVERLAY": {
                     sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC"));
                     break;
@@ -1414,7 +1471,8 @@ public SidebarTouchListener(String keyBase, View v) {
     }
         @Override
         public boolean onTouch(View v, MotionEvent e) {
-            if (myView != null && myView instanceof CornerView) ((CornerView) myView).triggerFlash();
+            if (myView instanceof CornerView) ((CornerView) myView).triggerFlash();
+            else if (myView instanceof BarView) ((BarView) myView).triggerFlash();
 switch (e.getAction()) {
     case MotionEvent.ACTION_MOVE: {
     if (rippleView != null) rippleView.moveTo(e.getRawX(), e.getRawY());

@@ -36,7 +36,7 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".ScannerHelper" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:exported="true" />
+        <activity android:name=".QrScanActivity" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:exported="false" />
          <activity
             android:name=".LockOverlayActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"

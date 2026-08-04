@@ -1153,6 +1153,12 @@ case "SCREEN_ON":
                     startActivity(openStorage);
                     break;
                 }
+                case "SCAN_QR": {
+                    Intent qr = new Intent(this, QrScanActivity.class);
+                    qr.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+                    startActivity(qr);
+                    break;
+                }
                 case "TOGGLE_OVERLAY": {
                     // [MỚI] Bật/tắt Trợ năng (Homeb ⇄ Overlay Trợ năng) ngay từ Action —
                     // tái sử dụng NGUYÊN VẸN pipeline PAUSE_WM_OPS -> ghi Settings.Secure ->
@@ -1670,9 +1676,9 @@ private float[] computeJumpDirForTap() {
     }
 }
 // ===============================
-
 @Override public boolean onTouch(View v, MotionEvent e) {
-        if (myView != null && myView instanceof CornerView) ((CornerView)myView).triggerFlash();
+        if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
+        else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
         switch (e.getAction()) {
             case MotionEvent.ACTION_MOVE: {
     if (rippleView != null) rippleView.moveTo(e.getRawX(), e.getRawY());

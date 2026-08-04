@@ -161,12 +161,12 @@ String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
         "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA",
         "NOTIFICATIONS", "QUICK_SETTINGS", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "TOGGLE_RECORD",
         "LAUNCH_APP", "SPLIT_SCREEN", "ACC_BUTTON_CHOOSER", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE",
-        "LOCATION_SETTINGS_OPEN", "QUICK_SHARE_SETTINGS_OPEN", "PAUSE_RECORD", "OPEN_STORAGE_SCAN"};
+        "LOCATION_SETTINGS_OPEN", "QUICK_SHARE_SETTINGS_OPEN", "PAUSE_RECORD", "OPEN_STORAGE_SCAN", "SCAN_QR"};
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Toggle Voice Record", "Bật/Tắt Ghi Âm"),
         T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình"), T("Accessibility Shortcut Menu", "Bảng Trợ Năng Nhanh"), T("Screen Record", "Quay màn hình"), T("Auto-Rotate Toggle", "Bật/Tắt Tự Động Xoay"),
-        T("Open Location Settings", "Mở Cài Đặt Vị Trí"), T("Open Quick Share Settings", "Mở Cài Đặt Chia Sẻ Nhanh"), T("Pause/Resume Recording", "Tạm Dừng/Tiếp Tục Ghi Âm"), T("Storage Scan", "Quét Dung Lượng")};
+        T("Open Location Settings", "Mở Cài Đặt Vị Trí"), T("Open Quick Share Settings", "Mở Cài Đặt Chia Sẻ Nhanh"), T("Pause/Resume Recording", "Tạm Dừng/Tiếp Tục Ghi Âm"), T("Storage Scan", "Quét Dung Lượng"), T("Scan QR", "Quét QR")};
 for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
 // LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
@@ -288,6 +288,13 @@ private String[] getVolKeyActLabs() {
         renderEcosystem();
     } else if (requestCode == 201) {
         Toast.makeText(this, "Cần quyền Micro để ghi âm!", Toast.LENGTH_SHORT).show();
+    } else if (requestCode == 202) {
+        if (grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, T("Camera permission granted!", "Đã cấp quyền Camera!"), Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, T("Camera permission needed for QR scanning!", "Cần quyền Camera để quét QR!"), Toast.LENGTH_SHORT).show();
+        }
+        recreate(); // ẩn nút nếu đã cấp quyền, giống cách các nút quyền khác refresh trạng thái
     }
 }
     @Override public void onBackPressed() { if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); Button btnD = rootLayout.findViewWithTag("btnDesign"); if(btnD!=null){btnD.setText("⚙️"); btnD.setBackground(getRounded("#333333", 100f));} } else super.onBackPressed(); }
@@ -523,6 +530,20 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
                 main.addView(btnUsage);
             }
         } catch (Exception e) { /* bỏ qua nếu thiết bị không hỗ trợ */ }
+        // --- CAMERA (để dùng Scan QR) ---
+        if (checkSelfPermission(android.Manifest.permission.CAMERA)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Button btnCamera = new Button(this);
+            btnCamera.setText("⚠️ CẤP QUYỀN CAMERA (Quét QR)");
+            btnCamera.setBackground(getRounded("#009688", 25f));
+            btnCamera.setTextColor(Color.WHITE);
+            LinearLayout.LayoutParams camLp = new LinearLayout.LayoutParams(-1, -2);
+            camLp.setMargins(0, 10, 0, 0);
+            btnCamera.setLayoutParams(camLp);
+            btnCamera.setOnClickListener(v ->
+                requestPermissions(new String[]{android.Manifest.permission.CAMERA}, 202));
+            main.addView(btnCamera);
+        }
             // --- DEVICE ADMIN (để Homeb tắt được màn hình, không cần adb) ---
         android.app.admin.DevicePolicyManager dpmCheck =
             (android.app.admin.DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
@@ -2300,7 +2321,15 @@ for (String sa : savedArray) {
             launchAppSelected[0] = false;
             shortcutSelected[0] = false;
         }
-        if (!isVolKeyMode) {
+        if (isVolKeyMode) {
+            // [MỚI] VolKey: chỉ hiện Action nào hoạt động tốt lúc màn tắt (không cần
+            // mở UI/dialog) — TOGGLE_WORK_PROFILE bị loại vì key này chưa từng được
+            // khai báo trong mảng ACT_KEYS/ACT_LABS nên chọn cũng không hiện ra được.
+            List<String[]> VOLKEY_UTIL_ITEMS = buildItemsForKeys(
+                new String[]{"TOGGLE_RECORD", "PAUSE_RECORD", "TOGGLE_OVERLAY"},
+                actKeysUsed, actLabsUsed);
+            vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", VOLKEY_UTIL_ITEMS, selectedActs, "#FF9800"));
+        } else {
             List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN"}, actKeysUsed, actLabsUsed);
             List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
             List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
@@ -3203,6 +3232,20 @@ btnCopy.setOnClickListener(v -> {
     appListRow.addView(btnPickBlacklist); appListRow.addView(btnPickLockList);
     secSys.addView(appListRow);
 
+    // [MỚI] App trong LockList được phép xác thực vân tay ngay (bank app...),
+    // thay vì luôn ép PIN/Pattern/Password.
+    LinearLayout fastBioRow = new LinearLayout(this);
+    fastBioRow.setOrientation(LinearLayout.HORIZONTAL);
+    LinearLayout.LayoutParams fastBioRowLp = new LinearLayout.LayoutParams(-1, -2);
+    fastBioRowLp.setMargins(0, 15, 0, 0);
+    fastBioRow.setLayoutParams(fastBioRowLp);
+    Button btnFastBio = new Button(this);
+    btnFastBio.setText("⚡ " + T("FAST FINGERPRINT", "VÂN TAY NHANH"));
+    btnFastBio.setBackground(getRounded("#FFC107", 20f)); btnFastBio.setTextColor(Color.BLACK);
+    btnFastBio.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+    btnFastBio.setOnClickListener(v -> showPanelMultiPicker("applock_fastbio_list", true));
+    fastBioRow.addView(btnFastBio);
+    secSys.addView(fastBioRow);
     // [MỚI] Hàng riêng cho YTDL — đẩy xuống dưới Blacklist/LockList
     LinearLayout ytdlRow = new LinearLayout(this);
     ytdlRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -4054,7 +4097,7 @@ if (designTabState == 5) { renderPanelDesign(); return; }
         tvRecNote.setTextColor(Color.parseColor("#FF5252"));
         designSliderContainer.addView(tvRecNote);
         designSliderContainer.addView(createSlider(T("Indicator X position","Vị trí X chỉ báo"), "anim_rec_x", 2000, 1000));
-        designSliderContainer.addView(createSlider(T("Indicator Y position","Vị trí Y chỉ báo"), "anim_rec_y", 3000, 10));
+        designSliderContainer.addView(createSlider(T("Indicator Y position","Vị trí Y chỉ báo"), "anim_rec_y", 4000, 1000));
         designSliderContainer.addView(createSlider(T("Indicator size","Kích thước chỉ báo"), "anim_rec_size", 300, 140));
 
         TextView tvOptNote = new TextView(this);

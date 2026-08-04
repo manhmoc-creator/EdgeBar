@@ -21,11 +21,15 @@ public class LockOverlayActivity extends Activity {
         if (targetPkg == null) { finish(); return; }
 
         if (Build.VERSION.SDK_INT >= 30) {
-            // [FIX FULL MÀN HÌNH] Ép chỉ hỏi PIN/Pattern/Password, bỏ qua vân tay
-            // hoàn toàn — đây là màn hình full-screen thật của hệ thống.
+            // [MỚI] App nằm trong "applock_fastbio_list" được phép xác thực vân tay
+            // ngay, những app khác vẫn ép PIN/Pattern/Password như cũ.
+            boolean allowFinger = getIntent().getBooleanExtra("allow_fingerprint", false);
+            int authFlags = allowFinger
+                ? (BiometricManager.Authenticators.BIOMETRIC_STRONG | BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                : BiometricManager.Authenticators.DEVICE_CREDENTIAL;
             BiometricPrompt prompt = new BiometricPrompt.Builder(this)
-                .setTitle("Unlock this App")
-                .setAllowedAuthenticators(BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                .setTitle("Unlock This App")
+                .setAllowedAuthenticators(authFlags)
                 .build();
             prompt.authenticate(new CancellationSignal(), getMainExecutor(),
                 new BiometricPrompt.AuthenticationCallback() {

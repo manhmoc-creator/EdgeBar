@@ -59,10 +59,12 @@ public class AppLockHelper {
         // Hết thời gian ân hạn hoặc chưa mở khoá lần nào -> Khởi động màn hình Khoá.
         Intent lockIntent = new Intent(ctx, LockOverlayActivity.class);
         lockIntent.putExtra("lock_pkg", pkg);
+        String fastBioList = prefs.getString("applock_fastbio_list", "");
+        boolean allowFinger = ("," + fastBioList + ",").contains("," + pkg + ",");
+        lockIntent.putExtra("allow_fingerprint", allowFinger);
         lockIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
         ctx.startActivity(lockIntent);
     }
-
     public static void clearAll() { 
         lastUnlock.clear(); 
         currentlyActiveLockedApp = "";
