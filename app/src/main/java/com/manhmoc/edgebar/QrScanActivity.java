@@ -45,65 +45,6 @@ public class QrScanActivity extends Activity {
     private String cameraId;
     private int sensorOrientation = 90;
     private Size previewSize;
-
-    // Best-effort — không thể đầy đủ 100% vì rebrand/đổi package thường xuyên.
-    // Người dùng bổ sung qua nút "QR NGÂN HÀNG" trong Ecosystem là nguồn chính xác nhất.
-    private static final String[] CURATED_BANK_PACKAGES = {
-        // ===== Big 4 (Nhà nước) =====
-        "com.VCB", "com.vnpay.Agribank", "com.agribank.mbank",
-        "com.bidv.smartbanking", "com.vietinbank.ipay", "com.icb.qtsc",
-        // ===== NHTM Cổ phần lớn =====
-        "vn.com.techcombank.bb.app", "com.mbmobile", "com.acb.acbmobile3",
-        "com.vpbank.vpbankonline", "vn.vpbank.neo", "vn.vib.myvib2",
-        "com.sacombank.SacombankMobile", "com.tpb.mb.gprsandroid", "com.shbmobile",
-        "com.hdbank.mbanking", "vn.com.msb.smartbanking", "com.msb.smartbanking",
-        "com.eximbank.mobile", "com.scb.smartbanking", "com.ocb.omni",
-        "com.seabank.mb", "com.abbank.retail.abbank", "com.kienlongbank.kienlongbank",
-        "vn.com.vietbank.mobile", "com.pvcombank.momobile", "com.bva.bab",
-        "com.vietcapitalbank.iBank", "com.namabank.onebank", "vn.com.namabank.mobile",
-        "com.lio.lio", "com.lienvietpostbank.mobile.banking", "com.vnptmoney.pgbank",
-        "com.vib.myvib",
-        // ===== Ngân hàng số / mới =====
-        "com.timo.timo", "com.cake.customer", "com.ubank.customer",
-        "vn.vietcombank.digitalbank",
-        // ===== Ví điện tử =====
-        "com.mservice.momotransfer", "vn.com.vng.zalopay", "com.airpay.customer",
-        "vn.shopeepay.customer", "com.viettel.viettelpay", "com.vnpay.vn",
-        "com.vinid.vinid", "com.mpos.mpos", "com.zion.moca"
-    };
-
-    // [TỐI ƯU] Set tra cứu O(1), build 1 lần duy nhất — tránh duyệt tuần tự mảng
-    // mỗi lần showResult() được gọi (mỗi lần quét QR mới).
-    private static java.util.Set<String> CURATED_BANK_SET = null;
-    private static java.util.Set<String> curatedBankSet() {
-        if (CURATED_BANK_SET == null) {
-            CURATED_BANK_SET = new java.util.HashSet<>(java.util.Arrays.asList(CURATED_BANK_PACKAGES));
-        }
-        return CURATED_BANK_SET;
-    }
-
-    // [TỐI ƯU PIN/RAM] Cache 5 phút danh sách app ngân hàng ĐÃ CÀI trên máy —
-    // tránh gọi pm.getPackageInfo() (IPC sang PackageManagerService, tốn CPU/pin)
-    // lặp lại hơn 40 lần mỗi khi mở kết quả quét, giống pattern cachedAppList
-    // đã dùng trong MainActivity.
-    private static java.util.List<String> cachedInstalledBanks = null;
-    private static long cachedInstalledBanksTs = 0;
-    private static final long BANK_CACHE_MS = 5 * 60 * 1000;
-
-    private java.util.List<String> getInstalledBankPackagesCached() {
-        long now = System.currentTimeMillis();
-        if (cachedInstalledBanks != null && (now - cachedInstalledBanksTs) < BANK_CACHE_MS) {
-            return cachedInstalledBanks;
-        }
-        PackageManager pm = getPackageManager();
-        java.util.List<String> out = new java.util.ArrayList<>();
-        for (String pkg : curatedBankSet()) {
-            try { pm.getPackageInfo(pkg, 0); out.add(pkg); } catch (Exception ignored) {}
-        }
-        cachedInstalledBanks = out;
-        cachedInstalledBanksTs = now;
-        return out;
-    }
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         if (Build.VERSION.SDK_INT >= 27) {
@@ -441,9 +382,17 @@ public class QrScanActivity extends Activity {
 
         android.content.SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
         PackageManager pm = getPackageManager();
-        LinkedHashSet<String> pkgs = new LinkedHashSet<>(getInstalledBankPackagesCached());
+        // [ĐỔI HÀNH VI] CHỈ hiện app do người dùng tự chọn trong Ecosystem >
+        // "QR NGÂN HÀNG", KHÔNG dò tự động theo danh sách cứng nữa — tránh liệt kê
+        // app không liên quan hoặc icon "chết" (đã chọn nhưng đã gỡ khỏi máy).
+        // Kiểm tra pm.getPackageInfo() ngay tại đây để lọc bỏ app đã gỡ cài đặt.
+        LinkedHashSet<String> pkgs = new LinkedHashSet<>();
         String userList = prefs.getString("qr_bank_apps", "");
-        for (String p : userList.split(",")) if (!p.trim().isEmpty()) pkgs.add(p.trim());
+        for (String p : userList.split(",")) {
+            String pkg = p.trim();
+            if (pkg.isEmpty()) continue;
+            try { pm.getPackageInfo(pkg, 0); pkgs.add(pkg); } catch (Exception ignored) {}
+        }
         if (pkgs.isEmpty()) {
             TextView tv = new TextView(this);
             tv.setText(T("No bank app detected. Add one in Ecosystem > QR NGÂN HÀNG.",
