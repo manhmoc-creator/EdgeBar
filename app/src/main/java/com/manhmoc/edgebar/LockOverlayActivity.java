@@ -1,44 +1,52 @@
 
 package com.manhmoc.edgebar;
+
+import android.app.Activity;
+import android.app.KeyguardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.widget.Toast;
-import androidx.biometric.BiometricPrompt;
-import androidx.core.content.ContextCompat;
-import androidx.fragment.app.FragmentActivity;
 
-public class LockOverlayActivity extends FragmentActivity {
+/**
+ * [TỐI ƯU DUNG LƯỢNG] Bỏ androidx.biometric (kéo theo fragment/core/lifecycle
+ * không cần thiết, làm APK phình ~1.2MB khi minifyEnabled=false). Dùng thẳng
+ * KeyguardManager.createConfirmDeviceCredentialIntent() — API hệ thống có sẵn
+ * từ API 21, không tốn thêm 1 byte thư viện nào, và màn hình xác thực hệ
+ * thống vẫn tự ưu tiên vân tay/khuôn mặt nếu máy hỗ trợ trước khi hỏi PIN.
+ */
+public class LockOverlayActivity extends Activity {
+    private static final int REQ_CONFIRM = 9911;
+    private String targetPkg;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        String targetPkg = getIntent().getStringExtra("lock_pkg");
+        targetPkg = getIntent().getStringExtra("lock_pkg");
         if (targetPkg == null) { finish(); return; }
 
-        BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Mở khoá")
-            .setAllowedAuthenticators(
-                androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
-                | androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL)
-            .build();
+        KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        Intent i = km.createConfirmDeviceCredentialIntent("Mở khoá", null);
+        if (i == null) {
+            // Máy chưa đặt khoá màn hình (PIN/hình/vân tay) -> không có gì để xác thực
+            finish();
+            return;
+        }
+        startActivityForResult(i, REQ_CONFIRM);
+    }
 
-        BiometricPrompt prompt = new BiometricPrompt(this, ContextCompat.getMainExecutor(this),
-            new BiometricPrompt.AuthenticationCallback() {
-                @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
-                    EdgeBarService.markPackageUnlocked(targetPkg);
-                    finish();
-                }
-                @Override public void onAuthenticationFailed() {
-                    Toast.makeText(LockOverlayActivity.this, "Xác thực thất bại", Toast.LENGTH_SHORT).show();
-                }
-                @Override public void onAuthenticationError(int errorCode, CharSequence errString) {
-                    // Người dùng huỷ hoặc lỗi -> đá về Home, không cho vào app đang khoá
-                    Intent home = new Intent(Intent.ACTION_MAIN);
-                    home.addCategory(Intent.CATEGORY_HOME);
-                    home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(home);
-                    finish();
-                }
-            });
-        prompt.authenticate(promptInfo);
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_CONFIRM) {
+            if (resultCode == RESULT_OK) {
+                EdgeBarService.markPackageUnlocked(targetPkg);
+            } else {
+                Intent home = new Intent(Intent.ACTION_MAIN);
+                home.addCategory(Intent.CATEGORY_HOME);
+                home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(home);
+            }
+            finish();
+        }
     }
 }
