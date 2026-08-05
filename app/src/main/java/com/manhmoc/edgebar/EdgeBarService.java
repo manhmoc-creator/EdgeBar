@@ -241,6 +241,8 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             playAnim();
         } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
     if (isHomaccDrawn) removeAccessibleHome();
+    removeYtdlOverlay(); // [FIX TAPJACKING] dọn overlay YTDL nếu đang mở dở khi tắt màn hình
+    removeRippleViewIfIdle(); // [FIX TAPJACKING] dọn overlay ripple nếu không còn dùng
      AppLockHelper.clearAll(); // [MỚI] tắt màn = ép mọi app trong LockList phải xác thực lại
     // Cảm biến chắc chắn không khả dụng khi màn tắt — huỷ đăng ký, đỡ giữ callback vô ích
     if (fpRegistered && fpController != null && fpCallback != null) {

@@ -113,6 +113,11 @@ private boolean recIndicatorTestPaused = false;
             PixelFormat.TRANSLUCENT);
         try { wm.addView(rippleView, p); } catch (Exception ignored) {}
     }
+    private void removeRippleViewIfIdle() {
+    if (rippleView == null) return;
+    try { wm.removeView(rippleView); } catch (Exception ignored) {}
+    rippleView = null;
+}
     private CameraManager cm;
     private String cId;
     private boolean fOn = false, isKbd = false, isBl = false;
@@ -728,7 +733,10 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
         @Override
         public void onReceive(Context c, Intent i) {
             String action = i.getAction();
-            if (action.equals("com.manhmoc.edgebar.SYNC_STATE")) {
+            if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+    removeYtdlOverlay(); // [FIX TAPJACKING] dọn overlay YTDL nếu đang mở dở khi tắt màn hình
+    removeRippleViewIfIdle(); // [FIX TAPJACKING] dọn overlay ripple nếu không còn dùng
+} else if (action.equals("com.manhmoc.edgebar.SYNC_STATE")) {
                 // V19.12.3.6.6: Throttle — tối đa 1 lần xử lý SYNC_STATE mỗi 150ms
                 long nowSync = System.currentTimeMillis();
                 if (nowSync - lastSyncMs < SYNC_THROTTLE_MS) return;

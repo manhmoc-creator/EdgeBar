@@ -87,6 +87,7 @@ private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<
     private final String CURRENT_VERSION = "V19.12.3.6.37";
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
+    private static final int REQ_UNINSTALL_CONFIRM = 9930;
     private int ecoType = 0;
     private LinearLayout ecoContainer;
     private LinearLayout ecoNavRef; // [MỚI] tham chiếu thanh nav Intents/QSTiles/Macros/Trash
@@ -281,7 +282,9 @@ private String[] getVolKeyActLabs() {
                         String shortcutName = data.getStringExtra(Intent.EXTRA_SHORTCUT_NAME);
                         if (shortcutIntent == null) {
                             Toast.makeText(this, "Shortcut không hợp lệ!", Toast.LENGTH_SHORT).show();
-                        } else {
+} else if (req == REQ_UNINSTALL_CONFIRM) {
+    doRevokeAdminAndUninstall();
+} else {
                             String id = java.util.UUID.randomUUID().toString().substring(0, 8);
                             String iconPath = "";
                             Bitmap bmp = data.getParcelableExtra(Intent.EXTRA_SHORTCUT_ICON);
@@ -603,6 +606,15 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
             startActivity(intent);
         });
         main.addView(btnDeviceAdmin);
+            Button btnUninstallSafe = new Button(this);
+btnUninstallSafe.setText(T("🔐 Uninstall Safely", "🔐 Gỡ Cài Đặt An Toàn"));
+btnUninstallSafe.setBackground(getRounded("#D32F2F", 25f));
+btnUninstallSafe.setTextColor(Color.WHITE);
+LinearLayout.LayoutParams unLp = new LinearLayout.LayoutParams(-1, -2);
+unLp.setMargins(0, 10, 0, 0);
+btnUninstallSafe.setLayoutParams(unLp);
+btnUninstallSafe.setOnClickListener(v -> confirmThenUninstallApp());
+main.addView(btnUninstallSafe);
     // Navigation Tab đẩy ra đầu dòng kèm icon
     navMain = new LinearLayout(this);
     navMain.setOrientation(LinearLayout.HORIZONTAL); navMain.setPadding(0, 0, 0, 40);
@@ -5820,7 +5832,43 @@ private void showPanelAppPicker() {
         ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); 
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); 
     }
+private void confirmThenUninstallApp() {
+    if (Build.VERSION.SDK_INT >= 30) {
+        android.hardware.biometrics.BiometricPrompt prompt =
+            new android.hardware.biometrics.BiometricPrompt.Builder(this)
+                .setTitle(T("Confirm to uninstall EdgeBar", "Xác nhận gỡ cài đặt EdgeBar"))
+                .setAllowedAuthenticators(
+                    android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_STRONG
+                    | android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                .build();
+        prompt.authenticate(new android.os.CancellationSignal(), getMainExecutor(),
+            new android.hardware.biometrics.BiometricPrompt.AuthenticationCallback() {
+                @Override public void onAuthenticationSucceeded(android.hardware.biometrics.BiometricPrompt.AuthenticationResult r) {
+                    doRevokeAdminAndUninstall();
+                }
+                @Override public void onAuthenticationError(int errorCode, CharSequence errString) {
+                    Toast.makeText(MainActivity.this, T("Cancelled", "Đã huỷ"), Toast.LENGTH_SHORT).show();
+                }
+            });
+    } else {
+        KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        Intent i = km.createConfirmDeviceCredentialIntent(T("Confirm", "Xác nhận"), null);
+        if (i == null) { doRevokeAdminAndUninstall(); return; }
+        startActivityForResult(i, REQ_UNINSTALL_CONFIRM);
+    }
+}
 
+private void doRevokeAdminAndUninstall() {
+    try {
+        android.app.admin.DevicePolicyManager dpmU =
+            (android.app.admin.DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+        android.content.ComponentName adminU = new android.content.ComponentName(this, HomebDeviceAdminReceiver.class);
+        if (dpmU.isAdminActive(adminU)) dpmU.removeActiveAdmin(adminU);
+    } catch (Exception ignored) {}
+    Intent uninstallIntent = new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + getPackageName()));
+    uninstallIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+    startActivity(uninstallIntent);
+}
     private LinearLayout createDrawer(String title, View content) { 
         LinearLayout container = new LinearLayout(this); container.setOrientation(LinearLayout.VERTICAL); container.setBackground(getRounded("#222222", 20f)); 
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1,-2); clp.setMargins(0,0,0,20); container.setLayoutParams(clp); 

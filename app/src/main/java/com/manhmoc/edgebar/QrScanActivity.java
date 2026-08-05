@@ -584,7 +584,7 @@ public class QrScanActivity extends Activity {
         card.addView(tv);
 
         Button btnRetry = new Button(this);
-        btnRetry.setText("↻ Quét lại");
+        btnRetry.setText("Quét lại");
         btnRetry.setBackground(makeRounded("#00E5FF", 20f));
         btnRetry.setTextColor(Color.BLACK);
         btnRetry.setOnClickListener(v -> {
