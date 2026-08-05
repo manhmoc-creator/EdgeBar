@@ -89,6 +89,11 @@ private boolean recIndicatorTestPaused = false;
             PixelFormat.TRANSLUCENT);
         try { wm.addView(rippleView, p); } catch (Exception ignored) {}
     }
+    private void removeRippleViewIfIdle() {
+        if (rippleView == null) return;
+        try { wm.removeView(rippleView); } catch (Exception ignored) {}
+        rippleView = null;
+    }
     private CameraManager cm;
     private String cId;
     private boolean fOn = false, isKbd = false, isBl = false;
@@ -1080,6 +1085,36 @@ private void triggerBlacklistAutoHomeb() {
         }, 150);
     } catch (Exception ignored) {}
 }
+private void showScreenRecordOptionsThenCapture() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(40, 30, 40, 10);
+
+        android.widget.CheckBox cbAudio = new android.widget.CheckBox(this);
+        cbAudio.setText("Ghi âm (Micro)");
+        cbAudio.setChecked(prefs.getBoolean("screenrec_audio_en", false));
+        box.addView(cbAudio);
+
+        android.widget.CheckBox cbTouches = new android.widget.CheckBox(this);
+        cbTouches.setText("Hiển thị vị trí thao tác chạm trên màn hình");
+        cbTouches.setChecked(prefs.getBoolean("screenrec_showtouches_en", true));
+        box.addView(cbTouches);
+
+        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Bắt đầu ghi?")
+            .setView(box)
+            .setPositiveButton("Bắt đầu", (d, w) -> {
+                prefs.edit()
+                    .putBoolean("screenrec_audio_en", cbAudio.isChecked())
+                    .putBoolean("screenrec_showtouches_en", cbTouches.isChecked())
+                    .apply();
+                Intent permIntent = new Intent(this, ScreenRecordPermissionActivity.class);
+                permIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+                startActivity(permIntent);
+            })
+            .setNegativeButton("Hủy", null)
+            .show();
+    }
     private void exec(String a) {
         if (a == null || a.equals("NONE")) return;
         try {
