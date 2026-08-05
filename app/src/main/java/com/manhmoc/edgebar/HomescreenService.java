@@ -41,6 +41,7 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
@@ -112,11 +113,6 @@ private boolean recIndicatorTestPaused = false;
         try { wm.removeView(rippleView); } catch (Exception ignored) {}
         rippleView = null;
     }
-    private void removeRippleViewIfIdle() {
-    if (rippleView == null) return;
-    try { wm.removeView(rippleView); } catch (Exception ignored) {}
-    rippleView = null;
-}
     private CameraManager cm;
     private String cId;
     private boolean fOn = false, isKbd = false, isBl = false;
