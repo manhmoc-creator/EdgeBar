@@ -62,11 +62,20 @@ public class ScreenRecorderService extends Service {
         mediaProjection = mpm.getMediaProjection(resultCode, data);
         if (mediaProjection == null) { stopForeground(true); stopSelf(); return START_NOT_STICKY; }
 
+        // [FIX ANDROID 14] Bắt buộc đăng ký Callback TRƯỚC khi gọi createVirtualDisplay(),
+        // nếu không hệ thống sẽ ném IllegalStateException khiến quay màn hình thất bại âm thầm.
+        // onStop() cũng cần thiết vì Android 14 có thể tự dừng projection (VD: user tắt qua
+        // notification hệ thống) — lúc đó phải dọn dẹp service theo, tránh giữ tài nguyên "ma".
+        mediaProjection.registerCallback(new MediaProjection.Callback() {
+            @Override public void onStop() {
+                stopRecording();
+            }
+        }, new Handler(Looper.getMainLooper()));
+
         if (!startRecorder()) {
             Toast.makeText(this, "Không thể bắt đầu quay màn hình", Toast.LENGTH_SHORT).show();
             stopForeground(true); stopSelf(); return START_NOT_STICKY;
         }
-
         isRunning = true;
         startTimeMs = System.currentTimeMillis();
         startTimerNotif();
