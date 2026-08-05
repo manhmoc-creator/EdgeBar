@@ -100,18 +100,17 @@ private boolean recIndicatorTestPaused = false;
     private void ensureRippleView() {
         if (rippleView != null) return;
         rippleView = new GestureRippleView(this);
-        // [FIX] Homeb chỉ có quyền SYSTEM_ALERT_WINDOW (không có Accessibility),
-        // nên PHẢI dùng TYPE_APPLICATION_OVERLAY giống mọi View khác trong file này
-        // (BarView, CornerView, FlashView). TYPE_ACCESSIBILITY_OVERLAY chỉ addView
-        // được khi có AccessibilityService binding thật — Homeb không có, khiến
-        // addView() ném exception bị "catch (Exception ignored)" nuốt im lặng,
-        // rippleView tồn tại trong RAM nhưng không bao giờ thực sự hiện lên màn hình.
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(-1,-1,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT);
         try { wm.addView(rippleView, p); } catch (Exception ignored) {}
+    }
+    private void removeRippleViewIfIdle() {
+        if (rippleView == null) return;
+        try { wm.removeView(rippleView); } catch (Exception ignored) {}
+        rippleView = null;
     }
     private void removeRippleViewIfIdle() {
     if (rippleView == null) return;

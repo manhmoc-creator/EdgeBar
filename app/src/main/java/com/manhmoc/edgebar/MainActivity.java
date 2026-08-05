@@ -3,6 +3,7 @@ package com.manhmoc.edgebar;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
+import android.app.KeyguardManager;
 import android.app.NotificationManager;
 import android.content.ComponentName;
 import android.content.Context;
