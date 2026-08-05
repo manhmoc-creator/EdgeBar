@@ -1740,41 +1740,175 @@ ctrlCol.addView(btnCopy);
         d.setContentView(rootLayout);
         d.show();
     }
-     private void showShareRuleToPackDialog(String rId, String currentItemKey, Runnable onDone) {
-    // Lấy toàn bộ Data Pack (Bar/Corner) hiện có ở cả 3 không gian Lock/Home/Homacc
-    java.util.LinkedHashSet<String> targets = new java.util.LinkedHashSet<>();
-    for (String px : new String[]{"lock_","home_","homacc_"}) {
-        for (String key : getDynamicIds(px + "applied_packs")) if (!key.equals(currentItemKey)) targets.add(key);
-    }
-    if (targets.isEmpty()) { Toast.makeText(this, T("No other Data Pack to share to","Không có Data Pack khác để chia sẻ"), Toast.LENGTH_SHORT).show(); return; }
-    String[] names = new String[targets.size()];
-    String[] keys = targets.toArray(new String[0]);
-    for (int i = 0; i < keys.length; i++) {
-        boolean isBar = keys[i].startsWith("bar_");
-        String id = keys[i].replace(isBar ? "bar_" : "corner_", "");
-        String pfx = isBar ? "pack_bar_" : "pack_corner_";
-        names[i] = (isBar ? "[Bar] " : "[Corner] ") + prefs.getString(pfx + id + "_name", "Data Pack");
-    }
-    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-        .setTitle(T("Copy this rule to...","Sao chép Rule sang..."))
-        .setItems(names, (d, which) -> {
-            String targetItemKey = keys[which];
+private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String currentItemKey, Runnable onDone) {
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212"));
+    root.setPadding(30, 80, 30, 30);
+
+    TextView title = new TextView(this);
+    title.setText(T("Share pattern(s) to...", "Chia sẻ Pattern sang..."));
+    title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(18); title.setPadding(0,0,0,20);
+    root.addView(title);
+
+    LinearLayout tabs = new LinearLayout(this);
+    tabs.setOrientation(LinearLayout.HORIZONTAL);
+    Button bHomeb = createTabBtn("HOMEB"), bHomacc = createTabBtn("HOMACC"), bLock = createTabBtn("LOCK");
+    LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0,-2,1f);
+    tlp.setMargins(0,0,10,0);
+    bHomeb.setLayoutParams(tlp); bHomacc.setLayoutParams(tlp);
+    bLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+    tabs.addView(bHomeb); tabs.addView(bHomacc); tabs.addView(bLock);
+    root.addView(tabs);
+
+    TextView tvCount = new TextView(this);
+    tvCount.setTextColor(Color.parseColor("#8AB4F8")); tvCount.setTextSize(12f);
+    tvCount.setPadding(0, 14, 0, 6);
+    root.addView(tvCount);
+
+    ScrollView scroll = new ScrollView(this);
+    scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    LinearLayout grid = new LinearLayout(this);
+    grid.setOrientation(LinearLayout.VERTICAL);
+    scroll.addView(grid);
+    root.addView(scroll);
+
+    final java.util.Set<String> selectedTargets = new java.util.LinkedHashSet<>();
+    final int[] curTab = {0};
+    String[] prefixes = {"home_", "homacc_", "lock_"};
+
+    Runnable[] renderGrid = new Runnable[1];
+    Runnable[] styleTabs = new Runnable[1];
+    styleTabs[0] = () -> {
+        bHomeb.setBackground(getRounded(curTab[0]==0?"#00E5FF":"#222222",20f)); bHomeb.setTextColor(curTab[0]==0?Color.BLACK:Color.WHITE);
+        bHomacc.setBackground(getRounded(curTab[0]==1?"#00E5FF":"#222222",20f)); bHomacc.setTextColor(curTab[0]==1?Color.BLACK:Color.WHITE);
+        bLock.setBackground(getRounded(curTab[0]==2?"#00E5FF":"#222222",20f)); bLock.setTextColor(curTab[0]==2?Color.BLACK:Color.WHITE);
+    };
+    renderGrid[0] = () -> {
+        grid.removeAllViews();
+        tvCount.setText(selectedTargets.size() + " " + T("selected", "đã chọn"));
+        String spacePrefix = prefixes[curTab[0]];
+        java.util.List<String> items = new java.util.ArrayList<>();
+        for (String key : getDynamicIds(spacePrefix + "applied_packs"))
+            if (!key.equals(currentItemKey)) items.add(key);
+
+        if (items.isEmpty()) {
+            TextView empty = new TextView(this);
+            empty.setText(T("No Data Pack here", "Không có Data Pack nào"));
+            empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,60,0,0);
+            grid.addView(empty);
+            return;
+        }
+        LinearLayout row = null;
+        int count = 0;
+        for (String itemKey : items) {
+            if (count % 2 == 0) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+                grid.addView(row);
+            }
+            boolean isBar = itemKey.startsWith("bar_");
+            String id = itemKey.replace(isBar ? "bar_" : "corner_", "");
+            String pfx = isBar ? "pack_bar_" : "pack_corner_";
+            String name = prefs.getString(pfx + id + "_name", "Data Pack");
+            String tag = isBar ? "B" : "C";
+
+            FrameLayout cardWrap = new FrameLayout(this);
+            LinearLayout.LayoutParams wLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            wLp.setMargins(6,6,6,6); cardWrap.setLayoutParams(wLp);
+
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            boolean sel = selectedTargets.contains(itemKey);
+            card.setBackground(getRounded(sel ? "#0D4A52" : "#202124", 20f));
+            card.setPadding(24, 22, 24, 22);
+            TextView tv = new TextView(this);
+            tv.setText("[" + tag + "] " + name);
+            tv.setTextColor(Color.parseColor("#E8EAED")); tv.setTextSize(13f);
+            tv.setMaxLines(2); tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            card.addView(tv);
+            cardWrap.addView(card);
+
+            TextView selDot = new TextView(this);
+            selDot.setText(sel ? "🟢" : "⚪");
+            selDot.setTextSize(16);
+            FrameLayout.LayoutParams dLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+            dLp.gravity = Gravity.BOTTOM | Gravity.START; dLp.setMargins(10,0,0,6);
+            selDot.setLayoutParams(dLp);
+            cardWrap.addView(selDot);
+
+            final String fKey = itemKey;
+            card.setOnClickListener(v -> {
+                if (selectedTargets.contains(fKey)) selectedTargets.remove(fKey);
+                else selectedTargets.add(fKey);
+                renderGrid[0].run();
+            });
+            row.addView(cardWrap);
+            count++;
+        }
+        if (count % 2 != 0 && row != null) {
+            View dummy = new View(this);
+            dummy.setLayoutParams(new LinearLayout.LayoutParams(0,1,1f));
+            row.addView(dummy);
+        }
+    };
+
+    View.OnClickListener tabClick = v -> {
+        curTab[0] = v == bHomeb ? 0 : v == bHomacc ? 1 : 2;
+        styleTabs[0].run();
+        renderGrid[0].run();
+    };
+    bHomeb.setOnClickListener(tabClick); bHomacc.setOnClickListener(tabClick); bLock.setOnClickListener(tabClick);
+    styleTabs[0].run();
+    renderGrid[0].run();
+
+    LinearLayout footer = new LinearLayout(this);
+    footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,20,0,0);
+    Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY"));
+    bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE);
+    bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+    Button bSave = new Button(this); bSave.setText(T("SHARE","CHIA SẺ"));
+    bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0);
+    bSave.setLayoutParams(slp);
+    footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
+
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave.setOnClickListener(v -> {
+        if (selectedTargets.isEmpty()) { Toast.makeText(this, T("Pick at least 1 target","Chọn ít nhất 1 nơi nhận"), Toast.LENGTH_SHORT).show(); return; }
+        int totalCopied = 0;
+        for (String targetItemKey : selectedTargets) {
             String targetListKey = targetItemKey + "_pack_rules";
             java.util.List<String> targetRules = getDynamicIds(targetListKey);
-            String newId = java.util.UUID.randomUUID().toString().substring(0, 8);
-            targetRules.add(newId);
-            prefs.edit()
-                .putString(targetListKey, android.text.TextUtils.join(",", targetRules))
-                .putString("prule_" + newId + "_gestures", prefs.getString("prule_" + rId + "_gestures", ""))
-                .putString("prule_" + newId + "_acts", prefs.getString("prule_" + rId + "_acts", ""))
-                .putString("prule_" + newId + "_launch_pkg", prefs.getString("prule_" + rId + "_launch_pkg", ""))
-                .putBoolean("prule_" + newId + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
-                .putBoolean("prule_" + newId + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
-                .putBoolean("prule_" + newId + "_en", true)
-                .apply();
-            Toast.makeText(this, T("Shared!","Đã chia sẻ!"), Toast.LENGTH_SHORT).show();
-            if (onDone != null) onDone.run();
-        }).show();
+            for (String rId : rIdsToShare) {
+                String newId = java.util.UUID.randomUUID().toString().substring(0, 8);
+                targetRules.add(newId);
+                prefs.edit()
+                    .putString("prule_" + newId + "_gestures", prefs.getString("prule_" + rId + "_gestures", ""))
+                    .putString("prule_" + newId + "_acts", prefs.getString("prule_" + rId + "_acts", ""))
+                    .putString("prule_" + newId + "_launch_pkg", prefs.getString("prule_" + rId + "_launch_pkg", ""))
+                    .putString("prule_" + newId + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
+                    .putBoolean("prule_" + newId + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
+                    .putBoolean("prule_" + newId + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
+                    .putBoolean("prule_" + newId + "_en", true)
+                    .apply();
+                totalCopied++;
+            }
+            prefs.edit().putString(targetListKey, TextUtils.join(",", targetRules)).apply();
+        }
+        Toast.makeText(this, T("Shared","Đã chia sẻ") + " " + totalCopied + " → " + selectedTargets.size() + " pack!", Toast.LENGTH_SHORT).show();
+        if (onDone != null) onDone.run();
+        d.dismiss();
+    });
+
+    d.setContentView(root); d.show();
+}
+     private void showShareRuleToPackDialog(String rId, String currentItemKey, Runnable onDone) {
+    java.util.Set<String> one = new java.util.LinkedHashSet<>();
+    one.add(rId);
+    showShareTargetPicker(one, currentItemKey, onDone);
 }
    private LinearLayout buildPruleSelectionToolbar(String appliedItemKey, java.util.List<String> rules, Runnable[] renderRules) {
     String listKey = appliedItemKey + "_pack_rules";
@@ -1816,46 +1950,8 @@ ctrlCol.addView(btnCopy);
     bar.addView(tvCount); bar.addView(btnShare); bar.addView(btnDelete); bar.addView(btnCancel);
     return bar;
 }
-
 private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, String currentItemKey, Runnable onDone) {
-    java.util.LinkedHashSet<String> targets = new java.util.LinkedHashSet<>();
-    for (String px : new String[]{"lock_","home_","homacc_"}) {
-        for (String key : getDynamicIds(px + "applied_packs")) if (!key.equals(currentItemKey)) targets.add(key);
-    }
-    if (targets.isEmpty()) { Toast.makeText(this, T("No other Data Pack to share to","Không có Data Pack khác để chia sẻ"), Toast.LENGTH_SHORT).show(); return; }
-    String[] names = new String[targets.size()];
-    String[] keys = targets.toArray(new String[0]);
-    for (int i = 0; i < keys.length; i++) {
-        boolean isBar = keys[i].startsWith("bar_");
-        String id = keys[i].replace(isBar ? "bar_" : "corner_", "");
-        String pfx = isBar ? "pack_bar_" : "pack_corner_";
-        names[i] = (isBar ? "[Bar] " : "[Corner] ") + prefs.getString(pfx + id + "_name", "Data Pack");
-    }
-    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-        .setTitle(T("Copy selected patterns to...","Sao chép các Pattern đã chọn sang..."))
-        .setItems(names, (d, which) -> {
-            String targetItemKey = keys[which];
-            String targetListKey = targetItemKey + "_pack_rules";
-            java.util.List<String> targetRules = getDynamicIds(targetListKey);
-            int copied = 0;
-            for (String rId : rIds) {
-                String newId = java.util.UUID.randomUUID().toString().substring(0, 8);
-                targetRules.add(newId);
-                prefs.edit()
-                    .putString("prule_" + newId + "_gestures", prefs.getString("prule_" + rId + "_gestures", ""))
-                    .putString("prule_" + newId + "_acts", prefs.getString("prule_" + rId + "_acts", ""))
-                    .putString("prule_" + newId + "_launch_pkg", prefs.getString("prule_" + rId + "_launch_pkg", ""))
-                    .putString("prule_" + newId + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
-                    .putBoolean("prule_" + newId + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
-                    .putBoolean("prule_" + newId + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
-                    .putBoolean("prule_" + newId + "_en", true)
-                    .apply();
-                copied++;
-            }
-            prefs.edit().putString(targetListKey, android.text.TextUtils.join(",", targetRules)).apply();
-            Toast.makeText(this, T("Shared","Đã chia sẻ") + " " + copied + " pattern!", Toast.LENGTH_SHORT).show();
-            if (onDone != null) onDone.run();
-        }).show();
+    showShareTargetPicker(rIds, currentItemKey, onDone);
 }
     // [TỐI ƯU PIXEL 2XL] Trình Editor Rule đặc biệt cho Pack (Không có mục Chọn Component)
     private void openPackRuleEditor(String appliedItemKey, String editId, String copyId, Runnable onRefresh, boolean isHomebSpace) {

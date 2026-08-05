@@ -1152,15 +1152,19 @@ case "SCREEN_ON":
                 case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break;
                 case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break;
                 case "SCREEN_RECORD": {
-                    if (ScreenRecorderService.isRunning) {
-                        Intent stopIntent = new Intent(this, ScreenRecorderService.class);
-                        stopIntent.setAction("STOP");
-                        startService(stopIntent);
-                    } else {
-                        showScreenRecordOptionsThenCapture();
-                    }
-                    break;
-                }
+    if (ScreenRecorderService.isRunning) {
+        Intent stopIntent = new Intent(this, ScreenRecorderService.class);
+        stopIntent.setAction("STOP");
+        startService(stopIntent);
+    } else {
+        // [FIX 1 CHẠM] Bỏ hộp thoại xác nhận nội bộ — bấm 1 lần là bắn thẳng
+        // sang hộp thoại xin quyền MediaProjection của hệ thống luôn.
+        Intent permIntent = new Intent(this, ScreenRecordPermissionActivity.class);
+        permIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+        startActivity(permIntent);
+    }
+    break;
+}
                 case "QUICK_SETTINGS": performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS); break;
                 case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break;
                 case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break;
@@ -1865,16 +1869,37 @@ private float[] computeJumpDirForTap() {
         // [MỚI] Chạm để Tạm dừng/Tiếp tục — ghi âm thật thì điều khiển service thật,
         // đang ở chế độ THỬ thì chỉ đổi trạng thái hiển thị, không đụng MediaRecorder.
         recIndicatorView.setOnClickListener(v -> {
-            if (VoiceRecorderService.isRunning) {
-                Intent p2 = new Intent(this, VoiceRecorderService.class);
-                p2.setAction(VoiceRecorderService.ACTION_PAUSE_TOGGLE);
-                if (Build.VERSION.SDK_INT >= 26) startForegroundService(p2); else startService(p2);
-            } else if (recIndicatorTestMode) {
-                recIndicatorTestPaused = !recIndicatorTestPaused;
-                updateRecIndicator(recIndicatorTestPaused ? "PAUSED" : "RECORDING", 0);
-            }
-        });
-
+    if (VoiceRecorderService.isRunning) {
+        Intent p2 = new Intent(this, VoiceRecorderService.class);
+        p2.setAction(VoiceRecorderService.ACTION_PAUSE_TOGGLE);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(p2); else startService(p2);
+    } else if (ScreenRecorderService.isRunning) {
+        Intent p3 = new Intent(this, ScreenRecorderService.class);
+        p3.setAction(ScreenRecorderService.ACTION_PAUSE_TOGGLE);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(p3); else startService(p3);
+    } else if (recIndicatorTestMode) {
+        recIndicatorTestPaused = !recIndicatorTestPaused;
+        updateRecIndicator(recIndicatorTestPaused ? "PAUSED" : "RECORDING", 0);
+    }
+});
+// [MỚI] Giữ chấm đỏ -> tắt ngay, không cần mở Notification kéo xuống
+recIndicatorView.setOnLongClickListener(v -> {
+    doVibrate(35);
+    if (VoiceRecorderService.isRunning) {
+        Intent s2 = new Intent(this, VoiceRecorderService.class);
+        s2.setAction(VoiceRecorderService.ACTION_STOP);
+        startService(s2);
+    } else if (ScreenRecorderService.isRunning) {
+        Intent s3 = new Intent(this, ScreenRecorderService.class);
+        s3.setAction(ScreenRecorderService.ACTION_STOP);
+        startService(s3);
+    } else if (recIndicatorTestMode) {
+        recIndicatorTestMode = false;
+        recIndicatorTestPaused = false;
+        updateRecIndicator("STOPPED", 0);
+    }
+    return true;
+});
             WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
