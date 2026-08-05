@@ -513,11 +513,53 @@ new Thread(() -> {
         });
     }).start();
 }
-    private Drawable getCachedIcon(String pkg) {
-        synchronized (iconCache) { Drawable c = iconCache.get(pkg); if (c != null) return c; }
+private static final String ISLAND_SEP = "#ISL#";
+    private boolean isIslandRef(String ref) { return ref != null && ref.contains(ISLAND_SEP); }
+    private String islandRefPkg(String ref) { int i = ref.indexOf(ISLAND_SEP); return i < 0 ? ref : ref.substring(0, i); }
+    private long islandRefSerial(String ref) {
+        int i = ref.indexOf(ISLAND_SEP);
+        if (i < 0) return -1;
+        try { return Long.parseLong(ref.substring(i + ISLAND_SEP.length())); } catch (Exception e) { return -1; }
+    }
+
+    // [MỚI] Mở đúng bản app — Island bắt buộc dùng LauncherApps.startMainActivity()
+    // với đúng UserHandle, vì getLaunchIntentForPackage() của PackageManager chỉ thấy
+    // app trong CHÍNH profile hiện tại, không thấy app nằm trong Island.
+    private void launchAppRef(String ref) {
         try {
-            Drawable d = ctx.getPackageManager().getApplicationIcon(pkg);
-            synchronized (iconCache) { iconCache.put(pkg, d); }
+            if (isIslandRef(ref)) {
+                String pkg = islandRefPkg(ref);
+                long serial = islandRefSerial(ref);
+                android.os.UserManager um = (android.os.UserManager) ctx.getSystemService(Context.USER_SERVICE);
+                android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE);
+                android.os.UserHandle target = um.getUserForSerialNumber(serial);
+                if (target == null) return;
+                java.util.List<android.content.pm.LauncherActivityInfo> acts = la.getActivityList(pkg, target);
+                if (acts != null && !acts.isEmpty()) la.startMainActivity(acts.get(0).getComponentName(), target, null, null);
+            } else {
+                Intent li = ctx.getPackageManager().getLaunchIntentForPackage(ref);
+                if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(li); }
+            }
+        } catch (Exception ignored) {}
+    }
+    private Drawable getCachedIcon(String ref) {
+        synchronized (iconCache) { Drawable c = iconCache.get(ref); if (c != null) return c; }
+        try {
+            Drawable d;
+            if (isIslandRef(ref)) {
+                String pkg = islandRefPkg(ref);
+                long serial = islandRefSerial(ref);
+                android.os.UserManager um = (android.os.UserManager) ctx.getSystemService(Context.USER_SERVICE);
+                android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE);
+                android.os.UserHandle target = um.getUserForSerialNumber(serial);
+                if (target == null) return null;
+                java.util.List<android.content.pm.LauncherActivityInfo> acts = la.getActivityList(pkg, target);
+                if (acts == null || acts.isEmpty()) return null;
+                d = acts.get(0).getBadgedIcon(0);
+            } else {
+                d = ctx.getPackageManager().getApplicationIcon(ref);
+            }
+            synchronized (iconCache) { iconCache.put(ref, d); }
             return d;
         } catch (Exception e) { return null; }
     }
@@ -688,12 +730,24 @@ private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji,
         } catch (Exception ignored) {}
         return null;
     }
-    private String getCachedAppLabel(String pkg) {
-        String c = labelCache.get(pkg); if (c != null) return c;
+    private String getCachedAppLabel(String ref) {
+        String c = labelCache.get(ref); if (c != null) return c;
         try {
-            String l = ctx.getPackageManager().getApplicationLabel(ctx.getPackageManager().getApplicationInfo(pkg,0)).toString();
-            labelCache.put(pkg, l); return l;
-        } catch (Exception e) { return pkg; }
+            String l;
+            if (isIslandRef(ref)) {
+                String pkg = islandRefPkg(ref);
+                long serial = islandRefSerial(ref);
+                android.os.UserManager um = (android.os.UserManager) ctx.getSystemService(Context.USER_SERVICE);
+                android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE);
+                android.os.UserHandle target = um.getUserForSerialNumber(serial);
+                java.util.List<android.content.pm.LauncherActivityInfo> acts =
+                    target != null ? la.getActivityList(pkg, target) : null;
+                l = (acts != null && !acts.isEmpty()) ? acts.get(0).getLabel().toString() + " [Island]" : pkg;
+            } else {
+                l = ctx.getPackageManager().getApplicationLabel(ctx.getPackageManager().getApplicationInfo(ref,0)).toString();
+            }
+            labelCache.put(ref, l); return l;
+        } catch (Exception e) { return ref; }
     }
     private String getActionLabelForPanel(String key) {
     if (key.startsWith("RUN_SHORTCUT_")) {
@@ -906,8 +960,7 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
         Drawable finalIcon = overrideIcon != null ? overrideIcon : (Drawable) payload;
         String cellCacheKey = overrideIcon != null ? (ref + "_ov_" + ovrVal) : ref;
         return wrapAppIconCell(px, finalIcon, cellCacheKey, v -> {
-            Intent li = ctx.getPackageManager().getLaunchIntentForPackage(ref);
-            if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(li); }
+            launchAppRef(ref);
             closeAllPanels();
         }, getCachedAppLabel(ref));
     } else if (ref.startsWith("RUN_SHORTCUT_")) {

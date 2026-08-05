@@ -128,6 +128,44 @@ private List<String[]> getAppListCached() {
     cachedAppList = combined; cachedAppListTs = now;
     return combined;
 }
+// [MỚI] List RIÊNG cho Panel — mã hoá ref app Island thành "pkg#ISL#<serial>" để
+// biết chính xác cần mở/lấy icon từ profile nào. Không dùng chung getAppListCached()
+// (return pkg trần) vì Blacklist/LockList/QR-Bank so khớp trực tiếp packageName sự
+// kiện hệ thống, không hiểu định dạng có hậu tố — tách riêng để không phá vỡ chỗ đó.
+private static final String ISLAND_SEP = "#ISL#";
+private boolean isIslandRef(String ref) { return ref != null && ref.contains(ISLAND_SEP); }
+private String islandRefPkg(String ref) { int i = ref.indexOf(ISLAND_SEP); return i < 0 ? ref : ref.substring(0, i); }
+private long islandRefSerial(String ref) {
+    int i = ref.indexOf(ISLAND_SEP);
+    if (i < 0) return -1;
+    try { return Long.parseLong(ref.substring(i + ISLAND_SEP.length())); } catch (Exception e) { return -1; }
+}
+
+private static List<String[]> cachedPanelAppList = null;
+private static long cachedPanelAppListTs = 0;
+
+private List<String[]> getPanelAppListCached() {
+    long now = System.currentTimeMillis();
+    if (cachedPanelAppList != null && (now - cachedPanelAppListTs) < APP_LIST_CACHE_MS) return cachedPanelAppList;
+    android.os.UserManager um = (android.os.UserManager) getSystemService(Context.USER_SERVICE);
+    android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
+    List<String[]> combined = new ArrayList<>();
+    try {
+        for (android.os.UserHandle profile : um.getUserProfiles()) {
+            boolean island = !profile.equals(android.os.Process.myUserHandle());
+            long serial = island ? um.getSerialNumberForUser(profile) : -1;
+            for (android.content.pm.LauncherActivityInfo info : la.getActivityList(null, profile)) {
+                String pkg = info.getApplicationInfo().packageName;
+                String ref = island ? (pkg + ISLAND_SEP + serial) : pkg;
+                String name = info.getLabel().toString() + (island ? " [Island]" : "");
+                combined.add(new String[]{name, ref});
+            }
+        }
+    } catch (Exception ignored) {}
+    combined.sort((a, b) -> a[0].compareToIgnoreCase(b[0]));
+    cachedPanelAppList = combined; cachedPanelAppListTs = now;
+    return combined;
+}
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
     
     private void refreshPreview() { 
@@ -4822,7 +4860,11 @@ private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShort
         for (String s : cur.split(",")) { String t = s.trim(); if (!t.isEmpty() && !selectedOrder.contains(t)) selectedOrder.add(t); }
         final List<String[]> allItems = new ArrayList<>();
         if (isApp) {
-            allItems.addAll(getAppListCached());
+            // [MỚI] Riêng App của Panel dùng list mang định danh Island; Blacklist/
+            // LockList/QR-Bank vẫn dùng list pkg thuần vì chúng so khớp trực tiếp với
+            // packageName sự kiện hệ thống (không hiểu định dạng có hậu tố Island).
+            boolean isPanelAppPickerNow = prefKey.startsWith("pack_panel_") && prefKey.endsWith("_apps");
+            allItems.addAll(isPanelAppPickerNow ? getPanelAppListCached() : getAppListCached());
         } else if (isShortcut) {
             // [THUẬT TOÁN MỚI] Hiển thị danh sách độc lập & Fix lỗi PanelEngine không nhận ID
             String scIds = prefs.getString("panel_shortcut_ids", "");
@@ -5449,18 +5491,37 @@ private static final java.util.LinkedHashMap<String, android.graphics.drawable.D
             return size() > APP_ICON_CACHE_LIMIT;
         }
     };
-private void loadAppIconInto(String pkg, ImageView iv) {
-    iv.setTag(pkg);
+private void loadAppIconInto(String ref, ImageView iv) {
+    iv.setTag(ref);
     android.graphics.drawable.Drawable cached;
-    synchronized (appIconCache) { cached = appIconCache.get(pkg); }
+    synchronized (appIconCache) { cached = appIconCache.get(ref); }
     if (cached != null) { iv.setImageDrawable(cached); return; }
     iv.setImageDrawable(null);
     new Thread(() -> {
-        android.graphics.drawable.Drawable d;
-        try { d = getPackageManager().getApplicationIcon(pkg); } catch (Exception e) { return; }
-        synchronized (appIconCache) { appIconCache.put(pkg, d); }
-        runOnUiThread(() -> { if (pkg.equals(iv.getTag())) iv.setImageDrawable(d); });
+        android.graphics.drawable.Drawable d = resolveAppRefIconSync(ref);
+        if (d == null) return;
+        synchronized (appIconCache) { appIconCache.put(ref, d); }
+        runOnUiThread(() -> { if (ref.equals(iv.getTag())) iv.setImageDrawable(d); });
     }).start();
+}
+
+// [MỚI] App Island không nằm trong PackageManager của profile chính -> phải tra
+// qua LauncherApps với đúng UserHandle, nếu không getApplicationIcon() luôn ném
+// NameNotFoundException (đây chính là lý do icon Island trước đây không lên được).
+private android.graphics.drawable.Drawable resolveAppRefIconSync(String ref) {
+    try {
+        if (isIslandRef(ref)) {
+            String pkg = islandRefPkg(ref);
+            long serial = islandRefSerial(ref);
+            android.os.UserManager um = (android.os.UserManager) getSystemService(Context.USER_SERVICE);
+            android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
+            android.os.UserHandle target = um.getUserForSerialNumber(serial);
+            if (target == null) return null;
+            java.util.List<android.content.pm.LauncherActivityInfo> acts = la.getActivityList(pkg, target);
+            return (acts != null && !acts.isEmpty()) ? acts.get(0).getBadgedIcon(0) : null;
+        }
+        return getPackageManager().getApplicationIcon(ref);
+    } catch (Exception e) { return null; }
 }
     // ==================== CÁC HÀM PHỤ TRỢ CHUNG ====================
     // GIỮ NGUYÊN bản cũ showSingleAppPickerDialog(EditText target) để không phá VOLKEY/TILE cũ,

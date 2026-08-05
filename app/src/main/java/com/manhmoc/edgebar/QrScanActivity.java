@@ -343,15 +343,49 @@ public class QrScanActivity extends Activity {
         tvType.setTextSize(13);
         card.addView(tvType);
 
+        // [SỬA] Thay TextView đa dòng bị cắt "..." bằng thanh cuộn ngang 1 dòng —
+        // xem trọn nội dung dài (VietQR, vCard, WiFi...) bằng vuốt trái/phải, kèm
+        // nút Sao chép ngay cạnh bên. Zero-alloc thêm ngoài lúc mở kết quả (dùng
+        // lại View đã có, không Thread/Timer nào chạy nền).
+        LinearLayout contentRow = new LinearLayout(this);
+        contentRow.setOrientation(LinearLayout.HORIZONTAL);
+        contentRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams contentRowLp = new LinearLayout.LayoutParams(-1, -2);
+        contentRowLp.setMargins(0, 10, 0, 20);
+        contentRow.setLayoutParams(contentRowLp);
+
+        HorizontalScrollView hsv = new HorizontalScrollView(this);
+        hsv.setHorizontalScrollBarEnabled(false);
+        hsv.setBackground(makeRounded("#1A1A1A", 18f));
+        hsv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        hsv.setPadding(24, 16, 24, 16);
+        hsv.setClipToPadding(false);
+
         TextView tvContent = new TextView(this);
-        tvContent.setText(parsed.displayText);
+        tvContent.setText(parsed.displayText.replace("\n", "   |   "));
         tvContent.setTextColor(Color.WHITE);
         tvContent.setTextSize(15);
-        tvContent.setPadding(0, 10, 0, 20);
-        tvContent.setMaxLines(4);
-        tvContent.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        card.addView(tvContent);
+        tvContent.setSingleLine(true);
+        tvContent.setEllipsize(null); // không cắt "..." — cuộn để xem trọn
+        hsv.addView(tvContent);
+        contentRow.addView(hsv);
 
+        Button btnCopyInline = new Button(this);
+        btnCopyInline.setText("📋");
+        btnCopyInline.setTextSize(16);
+        btnCopyInline.setBackground(makeRounded("#333333", 18f));
+        btnCopyInline.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams copyLp = new LinearLayout.LayoutParams(90, 90);
+        copyLp.setMargins(10, 0, 0, 0);
+        btnCopyInline.setLayoutParams(copyLp);
+        btnCopyInline.setOnClickListener(v -> {
+            android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            cb.setPrimaryClip(android.content.ClipData.newPlainText("QR", raw));
+            Toast.makeText(this, "Đã sao chép", Toast.LENGTH_SHORT).show();
+        });
+        contentRow.addView(btnCopyInline);
+
+        card.addView(contentRow);
         if (parsed.warning != null) {
             TextView tvWarn = new TextView(this);
             tvWarn.setText("⚠️ " + parsed.warning);
@@ -373,7 +407,7 @@ public class QrScanActivity extends Activity {
         btnScanAgain.setBackground(makeRounded("#333333", 20f));
         btnScanAgain.setTextColor(Color.WHITE);
         LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(0, -2, 1f);
-        sLp.setMargins(0, 0, 10, 0);
+        sLp.setMargins(0, 0, parsed.primaryAction != null ? 10 : 0, 0);
         btnScanAgain.setLayoutParams(sLp);
         btnScanAgain.setOnClickListener(v -> {
             root.removeView(resultCard); resultCard = null; paused = false;
@@ -383,20 +417,6 @@ public class QrScanActivity extends Activity {
             frame.setBackground(fd);
         });
         btnRow.addView(btnScanAgain);
-
-        Button btnCopy = new Button(this);
-        btnCopy.setText("📋 Sao chép");
-        btnCopy.setBackground(makeRounded("#333333", 20f));
-        btnCopy.setTextColor(Color.WHITE);
-        LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, -2, 1f);
-        cLp.setMargins(10, 0, parsed.primaryAction != null ? 10 : 0, 0);
-        btnCopy.setLayoutParams(cLp);
-        btnCopy.setOnClickListener(v -> {
-            android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-            cb.setPrimaryClip(android.content.ClipData.newPlainText("QR", raw));
-            Toast.makeText(this, "Đã sao chép", Toast.LENGTH_SHORT).show();
-        });
-        btnRow.addView(btnCopy);
 
         if (parsed.primaryAction != null) {
             Button btnAction = new Button(this);
