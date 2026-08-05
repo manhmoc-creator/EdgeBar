@@ -3,6 +3,8 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.graphics.ImageFormat;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -45,6 +47,12 @@ public class QrScanActivity extends Activity {
     private String cameraId;
     private int sensorOrientation = 90;
     private Size previewSize;
+
+    // [MỚI] Timeout tự tắt cam nếu quét quá lâu không ra kết quả — chống nóng máy
+    private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
+    private Runnable timeoutRunnable;
+    private static final long SCAN_TIMEOUT_MS = 15000;
+    private boolean cameraClosed = false;
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         if (Build.VERSION.SDK_INT >= 27) {
@@ -102,17 +110,13 @@ public class QrScanActivity extends Activity {
         flp.gravity = Gravity.CENTER;
         root.addView(frame, flp);
 
-        Button btnClose = new Button(this);
-        btnClose.setText("✕");
-        btnClose.setTextColor(Color.WHITE);
-        btnClose.setTextSize(18);
+        View btnClose = buildCloseXView();
         btnClose.setBackground(makeRounded("#66000000", 100f));
         FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(110, 110);
         clp.gravity = Gravity.TOP | Gravity.END;
         clp.setMargins(0, 60, 30, 0);
         btnClose.setOnClickListener(v -> finish());
         root.addView(btnClose, clp);
-
         setContentView(root);
         bgThread = new HandlerThread("qr-bg"); bgThread.start();
         bgHandler = new Handler(bgThread.getLooper());
@@ -194,6 +198,20 @@ public class QrScanActivity extends Activity {
         return g;
     }
 
+    /** [MỚI] Vẽ tay dấu X bằng 2 đường chéo — không phụ thuộc font,
+     *  luôn hiển thị đúng hình X trên mọi máy/mọi bộ font hệ thống. */
+    private View buildCloseXView() {
+        return new View(this) {
+            private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            { p.setColor(Color.WHITE); p.setStrokeWidth(6f); p.setStrokeCap(Paint.Cap.ROUND); }
+            @Override protected void onDraw(Canvas canvas) {
+                super.onDraw(canvas);
+                float pad = getWidth() * 0.30f;
+                canvas.drawLine(pad, pad, getWidth() - pad, getHeight() - pad, p);
+                canvas.drawLine(getWidth() - pad, pad, pad, getHeight() - pad, p);
+            }
+        };
+    }
     private void openCamera(android.view.Surface previewSurface) {
         try {
             CameraManager cm = (CameraManager) getSystemService(CAMERA_SERVICE);
@@ -218,6 +236,7 @@ public class QrScanActivity extends Activity {
                                 @Override public void onConfigured(CameraCaptureSession s) {
                                     session = s;
                                     try { s.setRepeatingRequest(req.build(), null, bgHandler); } catch (Exception ignored) {}
+                                    runOnUiThread(() -> scheduleScanTimeout()); // [MỚI]
                                 }
                                 @Override public void onConfigureFailed(CameraCaptureSession s) {}
                             }, bgHandler);
@@ -241,12 +260,89 @@ public class QrScanActivity extends Activity {
             Result result = tryDecode(src);
             if (result != null) {
                 paused = true;
+                // [MỚI] Tắt hẳn camera ngay khi vừa quét được — chống nóng máy/hao pin,
+                // preview sẽ đứng hình ở khung cuối cùng (đủ để làm nền cho bảng kết quả).
+                stopCameraHardware();
                 runOnUiThread(() -> playDetectAnimThenShow(result.getText(), result));
             }
         } catch (Exception ignored) {
         } finally { img.close(); }
     }
 
+    /** [MỚI] Đóng session + camera + reader, hủy timeout — camera thực sự ngừng hoạt động. */
+    private void stopCameraHardware() {
+        if (cameraClosed) return;
+        cameraClosed = true;
+        cancelScanTimeout();
+        try { if (session != null) { session.stopRepeating(); session.close(); } } catch (Exception ignored) {}
+        session = null;
+        try { if (camera != null) camera.close(); } catch (Exception ignored) {}
+        camera = null;
+        try { if (reader != null) reader.close(); } catch (Exception ignored) {}
+        reader = null;
+    }
+
+    private void scheduleScanTimeout() {
+        cancelScanTimeout();
+        timeoutRunnable = () -> {
+            if (!paused) {
+                stopCameraHardware();
+                showTimeoutOverlay();
+            }
+        };
+        timeoutHandler.postDelayed(timeoutRunnable, SCAN_TIMEOUT_MS);
+    }
+
+    private void cancelScanTimeout() {
+        if (timeoutRunnable != null) timeoutHandler.removeCallbacks(timeoutRunnable);
+        timeoutRunnable = null;
+    }
+
+    /** [MỚI] Hết giờ mà chưa quét được QR -> tắt cam, hiện bảng "Không tìm thấy mã QR". */
+    private void showTimeoutOverlay() {
+        if (resultCard != null) root.removeView(resultCard);
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER_HORIZONTAL);
+        card.setBackground(makeRounded("#F0121212", 28f));
+        card.setPadding(50, 45, 50, 40);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, -2);
+        lp.gravity = Gravity.BOTTOM;
+        lp.setMargins(30, 0, 30, 60);
+
+        TextView tv = new TextView(this);
+        tv.setText("⏱️ Không tìm thấy mã QR");
+        tv.setTextColor(Color.parseColor("#FFC107"));
+        tv.setTextSize(15);
+        tv.setPadding(0, 0, 0, 20);
+        card.addView(tv);
+
+        Button btnRetry = new Button(this);
+        btnRetry.setText("↻ Quét lại");
+        btnRetry.setBackground(makeRounded("#00E5FF", 20f));
+        btnRetry.setTextColor(Color.BLACK);
+        btnRetry.setOnClickListener(v -> {
+            root.removeView(resultCard); resultCard = null;
+            restartScanning();
+        });
+        card.addView(btnRetry);
+
+        resultCard = card;
+        root.addView(card, lp);
+    }
+
+    /** [MỚI] Mở lại camera + reset trạng thái quét, dùng chung cho nút "Quét lại" ở cả 2 nơi. */
+    private void restartScanning() {
+        paused = false;
+        cameraClosed = false;
+        GradientDrawable fd = new GradientDrawable();
+        fd.setStroke(10, Color.parseColor("#00E5FF"));
+        fd.setCornerRadius(32f);
+        frame.setBackground(fd);
+        if (surfaceView.getHolder().getSurface() != null && surfaceView.getHolder().getSurface().isValid()) {
+            openCamera(surfaceView.getHolder().getSurface());
+        }
+    }
     /** HybridBinarizer trước (nhanh, ánh sáng đều); rớt thì thử GlobalHistogramBinarizer
      *  (chịu ánh sáng không đều/độ tương phản cục bộ thấp — hay gặp ở QR có logo giữa). */
     private Result tryDecode(LuminanceSource src) {
@@ -410,11 +506,8 @@ public class QrScanActivity extends Activity {
         sLp.setMargins(0, 0, parsed.primaryAction != null ? 10 : 0, 0);
         btnScanAgain.setLayoutParams(sLp);
         btnScanAgain.setOnClickListener(v -> {
-            root.removeView(resultCard); resultCard = null; paused = false;
-            GradientDrawable fd = new GradientDrawable();
-            fd.setStroke(10, Color.parseColor("#00E5FF"));
-            fd.setCornerRadius(32f);
-            frame.setBackground(fd);
+            root.removeView(resultCard); resultCard = null;
+            restartScanning();
         });
         btnRow.addView(btnScanAgain);
 
@@ -697,10 +790,15 @@ public class QrScanActivity extends Activity {
             p.typeLabel = "💳 Mã QR thanh toán (VietQR)";
             p.displayText = trimmed;
             p.isBankQr = true;
-            p.warning = "Chọn ngân hàng để thanh toán";
+            // [MỚI] Best-effort: tag 59 (Merchant Name) trong chuẩn EMV/VietQR đôi khi
+            // chính là tên chủ tài khoản — không phải ngân hàng nào cũng điền, nên đây
+            // chỉ mang tính tham khảo, KHÔNG thay thế bước xác nhận thật trong app ngân hàng.
+            String holderName = extractEmvField(trimmed, "59");
+            p.warning = !holderName.isEmpty()
+                ? "Chủ tài khoản (tham khảo): " + holderName + " — luôn xác nhận lại trong app ngân hàng!"
+                : "Chọn ngân hàng để thanh toán — nhớ xác nhận tên chủ tài khoản trước khi chuyển!";
             return p;
         }
-
         p.typeLabel = "📄 Văn bản";
         p.displayText = trimmed;
         p.actionLabel = "Tìm trên Google";
@@ -708,6 +806,24 @@ public class QrScanActivity extends Activity {
             .putExtra(android.app.SearchManager.QUERY, trimmed)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         return p;
+    }
+
+    /** [MỚI] Parser EMV QR TLV đơn giản: mỗi field = 2 số ID + 2 số độ dài + nội dung.
+     *  Chỉ đọc field ở cấp NGOÀI CÙNG — đủ dùng cho tag "59" (Merchant Name) của VietQR. */
+    private String extractEmvField(String data, String tag) {
+        try {
+            int i = 0;
+            while (i + 4 <= data.length()) {
+                String id = data.substring(i, i + 2);
+                int len = Integer.parseInt(data.substring(i + 2, i + 4));
+                int valStart = i + 4, valEnd = valStart + len;
+                if (valEnd > data.length()) break;
+                String val = data.substring(valStart, valEnd);
+                if (id.equals(tag)) return val.trim();
+                i = valEnd;
+            }
+        } catch (Exception ignored) {}
+        return "";
     }
 
     private String extractField(String src, String key) {
@@ -721,6 +837,7 @@ public class QrScanActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        cancelScanTimeout();
         try { if (session != null) session.close(); } catch (Exception ignored) {}
         if (camera != null) camera.close();
         if (reader != null) reader.close();
