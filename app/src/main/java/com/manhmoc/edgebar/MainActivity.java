@@ -626,15 +626,6 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
             startActivity(intent);
         });
         main.addView(btnDeviceAdmin);
-            Button btnUninstallSafe = new Button(this);
-btnUninstallSafe.setText(T("🔐 Uninstall Safely", "🔐 Gỡ Cài Đặt An Toàn"));
-btnUninstallSafe.setBackground(getRounded("#D32F2F", 25f));
-btnUninstallSafe.setTextColor(Color.WHITE);
-LinearLayout.LayoutParams unLp = new LinearLayout.LayoutParams(-1, -2);
-unLp.setMargins(0, 10, 0, 0);
-btnUninstallSafe.setLayoutParams(unLp);
-btnUninstallSafe.setOnClickListener(v -> confirmThenUninstallApp());
-main.addView(btnUninstallSafe);
     // Navigation Tab đẩy ra đầu dòng kèm icon
     navMain = new LinearLayout(this);
     navMain.setOrientation(LinearLayout.HORIZONTAL); navMain.setPadding(0, 0, 0, 40);
@@ -3340,8 +3331,17 @@ cbAutoHomeb.setTextColor(Color.parseColor("#FFC107"));
 cbAutoHomeb.setChecked(prefs.getBoolean("blacklist_auto_homeb_en", false));
 cbAutoHomeb.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("blacklist_auto_homeb_en", c).apply());
 secSys.addView(cbAutoHomeb);
-    ecoContainer.addView(wrapCard(secSys));
+    Button btnUninstallSafe = new Button(this);
+    btnUninstallSafe.setText(T("🔐 Uninstall Safely", "🔐 Gỡ Cài Đặt An Toàn"));
+    btnUninstallSafe.setBackground(getRounded("#D32F2F", 25f));
+    btnUninstallSafe.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams unLp2 = new LinearLayout.LayoutParams(-1, -2);
+    unLp2.setMargins(0, 20, 0, 0);
+    btnUninstallSafe.setLayoutParams(unLp2);
+    btnUninstallSafe.setOnClickListener(v -> confirmThenUninstallApp());
+    secSys.addView(btnUninstallSafe);
 
+    ecoContainer.addView(wrapCard(secSys));
     // [XÓA] addYTDLDesign(ecoContainer) — thay bằng Dialog showYTDLDialog() ở trên.
     // (Hàm addYTDLDesign() vẫn còn trong file nhưng không còn nơi nào gọi tới —
     //  có thể xóa hẳn hàm này để dọn dead code, không bắt buộc vì không tốn RAM khi không gọi.)
