@@ -757,7 +757,18 @@ private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji,
     if (key.startsWith("INTENT_")) return prefs.getString("intent_" + key.substring(7) + "_name", "Intent");
     if (key.startsWith("MACRO_")) return prefs.getString("macro_" + key.substring(6) + "_name", "Macro");
     String l = ACT_LABEL_MAP.get(key);
-    return l != null ? l : key;
+    return l != null ? l : humanizeActionKey(key);
+}
+// [MỚI] Fallback: "OPEN_STORAGE_SCAN" -> "Open Storage Scan" khi chưa có trong ACT_LABEL_MAP
+private String humanizeActionKey(String key) {
+    String[] parts = key.toLowerCase(java.util.Locale.ROOT).split("_");
+    StringBuilder sb = new StringBuilder();
+    for (String p : parts) {
+        if (p.isEmpty()) continue;
+        if (sb.length() > 0) sb.append(' ');
+        sb.append(Character.toUpperCase(p.charAt(0))).append(p.substring(1));
+    }
+    return sb.length() == 0 ? key : sb.toString();
 }
 // Ngũ giác bo góc mềm — dùng Outline.setConvexPath() để clip, KHÔNG cần custom Drawable
 // riêng, tận dụng luôn backdrop trắng sẵn có -> nhẹ GPU, không thêm object vẽ nào.

@@ -88,6 +88,7 @@ private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<
     private final String CURRENT_VERSION = "V19.12.3.6.37";
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
+    private Button btnWriteSettings; // MỚI
     private static final int REQ_UNINSTALL_CONFIRM = 9930;
     private int ecoType = 0;
     private LinearLayout ecoContainer;
@@ -185,7 +186,10 @@ prefs.edit().putBoolean("preview_lock", pLock)
     @Override protected void onResume() {
         super.onResume();
         refreshPreview();
-        checkPendingStorageScan(); // [FIX] nhảy thẳng vào Storage nếu có yêu cầu quét đang chờ
+        checkPendingStorageScan();
+        if (btnWriteSettings != null) {
+            btnWriteSettings.setVisibility(android.provider.Settings.System.canWrite(this) ? View.GONE : View.VISIBLE);
+        }
         if (btnDeviceAdmin != null) {
             android.app.admin.DevicePolicyManager dpmR =
                 (android.app.admin.DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
@@ -586,6 +590,20 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
                 requestPermissions(new String[]{android.Manifest.permission.CAMERA}, 202));
             main.addView(btnCamera);
         }
+// --- WRITE_SETTINGS (để dùng Auto-Rotate Toggle) ---
+        btnWriteSettings = new Button(this);
+        btnWriteSettings.setText("⚠️ CẤP QUYỀN SỬA CÀI ĐẶT HỆ THỐNG (Tự Động Xoay)");
+        btnWriteSettings.setBackground(getRounded("#3F51B5", 25f));
+        btnWriteSettings.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams wsLp = new LinearLayout.LayoutParams(-1, -2);
+        wsLp.setMargins(0, 10, 0, 0);
+        btnWriteSettings.setLayoutParams(wsLp);
+        btnWriteSettings.setVisibility(android.provider.Settings.System.canWrite(this) ? View.GONE : View.VISIBLE);
+        btnWriteSettings.setOnClickListener(v -> {
+            Intent i = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:" + getPackageName()));
+            startActivity(i);
+        });
+        main.addView(btnWriteSettings);
             // --- DEVICE ADMIN (để Homeb tắt được màn hình, không cần adb) ---
         android.app.admin.DevicePolicyManager dpmCheck =
             (android.app.admin.DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
@@ -4151,7 +4169,8 @@ if (designTabState == 5) { renderPanelDesign(); return; }
         designSliderContainer.addView(createSlider(T("Indicator X position","Vị trí X chỉ báo"), "anim_rec_x", 2000, 1000));
         designSliderContainer.addView(createSlider(T("Indicator Y position","Vị trí Y chỉ báo"), "anim_rec_y", 4000, 1000));
         designSliderContainer.addView(createSlider(T("Indicator size","Kích thước chỉ báo"), "anim_rec_size", 300, 140));
-
+        designSliderContainer.addView(createSlider(T("Indicator Width","Bề rộng chỉ báo"), "anim_rec_width", 800, 260));
+        designSliderContainer.addView(createSlider(T("Indicator Height","Bề cao chỉ báo"), "anim_rec_height", 300, 90));
         TextView tvOptNote = new TextView(this);
         tvOptNote.setText(T("\nℹ️ Note: the 2 sliders below (Hold duration / Vibration) belong to general Options, not the recording indicator.",
             "\nℹ️ Lưu ý: 2 thanh bên dưới (Thời gian Vuốt+Giữ / Độ rung) thuộc nhóm TÙY CHỌN chung, không phải của chỉ báo ghi âm."));

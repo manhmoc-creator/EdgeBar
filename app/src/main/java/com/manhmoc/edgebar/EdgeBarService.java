@@ -489,7 +489,10 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
             });
             popAnim.addListener(new AnimatorListenerAdapter() {
                 @Override public void onAnimationEnd(Animator a) {
-                    if (jumpIconBmp == null) setVisibility(View.GONE);
+                    if (jumpIconBmp == null) {
+                        rippleAlpha = 0f; rippleRadius = 0f; touchX = -1; touchY = -1;
+                        setVisibility(View.GONE);
+                    }
                 }
             });
             popAnim.start();
@@ -500,8 +503,15 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
             if (jumpUpAnim != null) jumpUpAnim.cancel();
             if (fallAnim != null) fallAnim.cancel();
             int jSize = prefs.getInt("homacc_jump_icon_size", 90);
-jumpIconBmp = resolveGestureIconBitmap(gestureKey, jSize);
-            if (jumpIconBmp == null) return;
+            jumpIconBmp = resolveGestureIconBitmap(gestureKey, jSize);
+            if (jumpIconBmp == null) {
+                // [FIX] Không có icon gán cho gesture này -> dọn sạch ripple còn sót,
+                // không để lại đốm nhỏ do rippleAlpha/rippleRadius chưa reset.
+                rippleAlpha = 0f; rippleRadius = 0f; touchX = -1; touchY = -1;
+                setVisibility(View.GONE);
+                invalidate();
+                return;
+            }
             jumpX = x; jumpY = y;
             jumpOffsetX = 0f; jumpOffsetY = 0f; jumpRotation = 0f; jumpAlpha = 1f;
             setVisibility(View.VISIBLE);
@@ -1101,9 +1111,7 @@ case "SCREEN_ON":
                         stopIntent.setAction("STOP");
                         startService(stopIntent);
                     } else {
-                        Intent permIntent = new Intent(this, ScreenRecordPermissionActivity.class);
-                        permIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-                        startActivity(permIntent);
+                        showScreenRecordOptionsThenCapture();
                     }
                     break;
                 }
@@ -1792,7 +1800,8 @@ private float[] computeJumpDirForTap() {
         recIndicatorView.setBackground(bg);
         int pad = 16;
         recIndicatorView.setPadding(pad*2, pad, pad*2, pad);
-
+        recIndicatorView.setMinimumWidth(prefs.getInt("anim_rec_width", 260));
+        recIndicatorView.setMinimumHeight(prefs.getInt("anim_rec_height", 90));
         recIndicatorDot = new View(this);
         GradientDrawable dot = new GradientDrawable();
         dot.setShape(GradientDrawable.OVAL);

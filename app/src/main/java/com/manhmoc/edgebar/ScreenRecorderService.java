@@ -31,14 +31,24 @@ public class ScreenRecorderService extends Service {
     private ParcelFileDescriptor pfd;
     private Uri pendingUri;
     private long startTimeMs;
+    private long pausedAccumMs = 0, lastPauseStartMs = 0;
+    public static boolean isPaused = false;
+    private int prevShowTouches = -1; // giá trị gốc để khôi phục sau khi ghi xong
     private final Handler h = new Handler(Looper.getMainLooper());
     private Runnable timerRunnable, maxGuard;
 
+    public static final String ACTION_PAUSE_TOGGLE = "com.manhmoc.edgebar.SCREENREC_PAUSE_TOGGLE";
+    public static final String ACTION_STOP = "com.manhmoc.edgebar.SCREENREC_STOP";
     @Override public IBinder onBind(Intent i) { return null; }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : null;
-        if ("STOP".equals(action)) { stopRecording(); return START_NOT_STICKY; }
+        if (ACTION_STOP.equals(action) || "STOP".equals(action)) { stopRecording(); return START_NOT_STICKY; }
+        if (ACTION_PAUSE_TOGGLE.equals(action)) {
+            if (!isRunning) return START_NOT_STICKY;
+            if (isPaused) resumeRecording(); else pauseRecording();
+            return START_NOT_STICKY;
+        }
 
         if (isRunning || intent == null) return START_NOT_STICKY;
         startForegroundNotif(0);
@@ -65,7 +75,17 @@ public class ScreenRecorderService extends Service {
     }
 
     private boolean startRecorder() {
+        SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+        boolean audioOn = prefs.getBoolean("screenrec_audio_en", false);
+        boolean showTouches = prefs.getBoolean("screenrec_showtouches_en", true);
         try {
+            try {
+                prevShowTouches = android.provider.Settings.System.getInt(
+                    getContentResolver(), "show_touches", 0);
+                android.provider.Settings.System.putInt(
+                    getContentResolver(), "show_touches", showTouches ? 1 : 0);
+            } catch (Exception ignored) {} // cần WRITE_SECURE_SETTINGS, đã có sẵn trong app
+
             String fileName = "EdgeBar_" + System.currentTimeMillis() + ".mp4";
             ContentValues cv = new ContentValues();
             cv.put(MediaStore.Video.Media.DISPLAY_NAME, fileName);
@@ -85,14 +105,15 @@ public class ScreenRecorderService extends Service {
 
             recorder = new MediaRecorder();
             recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+            if (audioOn) recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
             recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
             recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
+            if (audioOn) recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
             recorder.setVideoSize(width, height);
             recorder.setVideoFrameRate(30);
             recorder.setVideoEncodingBitRate(6_000_000);
             recorder.setOutputFile(pfd.getFileDescriptor());
             recorder.prepare();
-
             virtualDisplay = mediaProjection.createVirtualDisplay(
                 "EdgeBarRecord", width, height, density,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
@@ -104,22 +125,61 @@ public class ScreenRecorderService extends Service {
             return false;
         }
     }
-
+private void pauseRecording() {
+        if (Build.VERSION.SDK_INT < 24 || recorder == null || isPaused) return;
+        try {
+            recorder.pause();
+            isPaused = true;
+            lastPauseStartMs = System.currentTimeMillis();
+            broadcastRecTick("PAUSED", getElapsedSec());
+            startForegroundNotif(getElapsedSec());
+        } catch (Exception ignored) {}
+    }
+    private void resumeRecording() {
+        if (Build.VERSION.SDK_INT < 24 || recorder == null || !isPaused) return;
+        try {
+            recorder.resume();
+            isPaused = false;
+            pausedAccumMs += System.currentTimeMillis() - lastPauseStartMs;
+            broadcastRecTick("RECORDING", getElapsedSec());
+        } catch (Exception ignored) {}
+    }
+    private long getElapsedSec() {
+        long now = isPaused ? lastPauseStartMs : System.currentTimeMillis();
+        return Math.max(0, (now - startTimeMs - pausedAccumMs) / 1000);
+    }
+    // [DÙNG CHUNG] tận dụng đúng chỉ báo ghi âm (chấm đỏ + mm:ss) đã có sẵn
+    private void broadcastRecTick(String state, long sec) {
+        Intent i = new Intent(VoiceRecorderService.TICK_ACTION);
+        i.putExtra("state", state);
+        i.putExtra("elapsed_sec", sec);
+        i.setPackage(getPackageName());
+        sendBroadcast(i);
+    }
     private void startTimerNotif() {
         timerRunnable = new Runnable() {
             @Override public void run() {
                 if (!isRunning) return;
-                long sec = (System.currentTimeMillis() - startTimeMs) / 1000;
-                startForegroundNotif(sec);
+                if (!isPaused) {
+                    long sec = getElapsedSec();
+                    startForegroundNotif(sec);
+                    broadcastRecTick("RECORDING", sec);
+                }
                 h.postDelayed(this, 1000);
             }
         };
         h.post(timerRunnable);
+        broadcastRecTick("RECORDING", 0);
     }
-
     private void stopRecording() {
         if (!isRunning) { stopForeground(true); stopSelf(); return; }
         isRunning = false;
+        isPaused = false;
+        broadcastRecTick("STOPPED", 0);
+        if (prevShowTouches != -1) {
+            try { android.provider.Settings.System.putInt(getContentResolver(), "show_touches", prevShowTouches); } catch (Exception ignored) {}
+            prevShowTouches = -1;
+        }
         if (timerRunnable != null) h.removeCallbacks(timerRunnable);
         if (maxGuard != null) h.removeCallbacks(maxGuard);
 
@@ -148,6 +208,13 @@ public class ScreenRecorderService extends Service {
         stopSelf();
     }
 
+    private android.app.PendingIntent screenRecActionPI(String action) {
+        Intent i = new Intent(this, ScreenRecorderService.class);
+        i.setAction(action);
+        int flags = android.app.PendingIntent.FLAG_UPDATE_CURRENT
+            | (Build.VERSION.SDK_INT >= 23 ? android.app.PendingIntent.FLAG_IMMUTABLE : 0);
+        return android.app.PendingIntent.getService(this, action.hashCode(), i, flags);
+    }
     private void startForegroundNotif(long sec) {
         String cid = "eb_screen_rec";
         NotificationChannel c = new NotificationChannel(cid, "Quay màn hình", NotificationManager.IMPORTANCE_LOW);
@@ -155,15 +222,17 @@ public class ScreenRecorderService extends Service {
         getSystemService(NotificationManager.class).createNotificationChannel(c);
         String time = String.format("%02d:%02d", sec / 60, sec % 60);
         Notification n = new Notification.Builder(this, cid)
-                .setContentTitle("🔴 Đang quay màn hình — " + time)
+                .setContentTitle((isPaused ? "⏸️ Đã tạm dừng — " : "🔴 Đang quay màn hình — ") + time)
                 .setSmallIcon(android.R.drawable.presence_video_online)
+                .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
+                        isPaused ? "Tiếp tục" : "Tạm dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE))
+                .addAction(android.R.drawable.ic_delete, "Dừng", screenRecActionPI(ACTION_STOP))
                 .setOngoing(true).build();
         if (Build.VERSION.SDK_INT >= 29)
             startForeground(94, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
         else
             startForeground(94, n);
     }
-
     @Override public void onDestroy() {
         if (isRunning) stopRecording();
         super.onDestroy();

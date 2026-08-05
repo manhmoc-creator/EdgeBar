@@ -479,7 +479,37 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
         IntentFilter f = new IntentFilter("com.manhmoc.edgebar.ACTION_SCREENSHOT_GRANTED");
         registerReceiver(screenshotReceiver, f, Context.RECEIVER_NOT_EXPORTED);
     }
+// [MỚI] Hộp thoại chọn Ghi âm + Hiện thao tác chạm trước khi xin quyền quay màn hình
+    private void showScreenRecordOptionsThenCapture() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(40, 30, 40, 10);
 
+        CheckBox cbAudio = new CheckBox(this);
+        cbAudio.setText("Ghi âm (Micro)");
+        cbAudio.setChecked(prefs.getBoolean("screenrec_audio_en", false));
+        box.addView(cbAudio);
+
+        CheckBox cbTouches = new CheckBox(this);
+        cbTouches.setText("Hiển thị vị trí thao tác chạm trên màn hình");
+        cbTouches.setChecked(prefs.getBoolean("screenrec_showtouches_en", true));
+        box.addView(cbTouches);
+
+        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Bắt đầu ghi?")
+            .setView(box)
+            .setPositiveButton("Bắt đầu", (d, w) -> {
+                prefs.edit()
+                    .putBoolean("screenrec_audio_en", cbAudio.isChecked())
+                    .putBoolean("screenrec_showtouches_en", cbTouches.isChecked())
+                    .apply();
+                Intent permIntent = new Intent(this, ScreenRecordPermissionActivity.class);
+                permIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+                startActivity(permIntent);
+            })
+            .setNegativeButton("Hủy", null)
+            .show();
+    }
     /** Action SYSTEM: Screenshot — gọi hàm này khi người dùng bấm nút Screenshot trong Homeb */
     private void doScreenshot() {
         registerScreenshotReceiver();
@@ -1358,9 +1388,7 @@ for (String a : acts) {
                         stopIntent.setAction("STOP");
                         startService(stopIntent);
                     } else {
-                        Intent permIntent = new Intent(this, ScreenRecordPermissionActivity.class);
-                        permIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-                        startActivity(permIntent);
+                        showScreenRecordOptionsThenCapture();
                     }
                     break;
                 }
@@ -1623,6 +1651,8 @@ private void ensureRecIndicator() {
         recIndicatorView.setBackground(bg);
         int pad = 16;
         recIndicatorView.setPadding(pad*2, pad, pad*2, pad);
+        recIndicatorView.setMinimumWidth(prefs.getInt("anim_rec_width", 260));
+        recIndicatorView.setMinimumHeight(prefs.getInt("anim_rec_height", 90));
 
         recIndicatorDot = new View(this);
         GradientDrawable dot = new GradientDrawable();
@@ -1680,6 +1710,8 @@ PixelFormat.TRANSLUCENT);
         lp.x = prefs.getInt("anim_rec_x", 1000) - 1000;
         lp.y = prefs.getInt("anim_rec_y", 1000) - 1000;
         try { wm.updateViewLayout(recIndicatorView, lp); } catch (Exception ignored) {}
+        recIndicatorView.setMinimumWidth(prefs.getInt("anim_rec_width", 260));
+        recIndicatorView.setMinimumHeight(prefs.getInt("anim_rec_height", 90));
         float scale = prefs.getInt("anim_rec_size", 140) / 140f;
         int dotSize = Math.round(24 * scale);
         if (recIndicatorDot != null) {
