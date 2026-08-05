@@ -2,27 +2,33 @@
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Paint;
+import android.graphics.Color;
+import android.graphics.ImageDecoder;
 import android.graphics.ImageFormat;
+import android.graphics.Paint;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.*;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.AudioManager;
 import android.media.Image;
 import android.media.ImageReader;
+import android.media.ToneGenerator;
 import android.net.Uri;
 import android.os.*;
+import android.provider.MediaStore;
 import android.util.Patterns;
 import android.util.Size;
 import android.view.*;
 import android.view.animation.OvershootInterpolator;
 import android.widget.*;
 import com.google.zxing.*;
+import com.google.zxing.common.BitMatrix;
 import com.google.zxing.common.HybridBinarizer;
+import com.google.zxing.qrcode.QRCodeWriter;
 import java.util.*;
-
 /**
  * Quét QR thông minh kiểu Zalo/iPhone Camera + nhận diện QR thanh toán ngân hàng.
  * Tối ưu Pixel 2XL: analysis stream giữ cố định 1280x720 (đủ để giải mã, không
@@ -53,6 +59,11 @@ public class QrScanActivity extends Activity {
     private Runnable timeoutRunnable;
     private static final long SCAN_TIMEOUT_MS = 15000;
     private boolean cameraClosed = false;
+
+    // [MỚI] Quét từ ảnh + Tạo QR
+    private static final int REQ_PICK_IMAGE = 8802;
+    private LinearLayout bottomBar;
+    private View createQrOverlay;
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         if (Build.VERSION.SDK_INT >= 27) {
@@ -117,6 +128,9 @@ public class QrScanActivity extends Activity {
         clp.setMargins(0, 60, 30, 0);
         btnClose.setOnClickListener(v -> finish());
         root.addView(btnClose, clp);
+
+        addBottomToolsBar(); // [MỚI] Quét từ ảnh + Tạo QR
+
         setContentView(root);
         bgThread = new HandlerThread("qr-bg"); bgThread.start();
         bgHandler = new Handler(bgThread.getLooper());
@@ -198,6 +212,254 @@ public class QrScanActivity extends Activity {
         return g;
     }
 
+    // ===================== [MỚI] THANH CÔNG CỤ DƯỚI: TỪ ẢNH + TẠO QR =====================
+    private void addBottomToolsBar() {
+        bottomBar = new LinearLayout(this);
+        bottomBar.setOrientation(LinearLayout.HORIZONTAL);
+        bottomBar.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams barLp = new FrameLayout.LayoutParams(-1, -2);
+        barLp.gravity = Gravity.BOTTOM;
+        barLp.setMargins(30, 0, 30, 50);
+        bottomBar.setLayoutParams(barLp);
+
+        Button btnGallery = new Button(this);
+        btnGallery.setText("🖼️ Từ ảnh");
+        btnGallery.setBackground(makeRounded("#CC202124", 24f));
+        btnGallery.setTextColor(Color.WHITE);
+        btnGallery.setTextSize(13.5f);
+        LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(0, -2, 1f);
+        glp.setMargins(0, 0, 10, 0);
+        btnGallery.setLayoutParams(glp);
+        btnGallery.setOnClickListener(v -> pickImageFromGallery());
+
+        Button btnCreate = new Button(this);
+        btnCreate.setText("✨ Tạo mã QR");
+        btnCreate.setBackground(makeRounded("#CC00E5FF", 24f));
+        btnCreate.setTextColor(Color.BLACK);
+        btnCreate.setTextSize(13.5f);
+        btnCreate.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        btnCreate.setOnClickListener(v -> showCreateQrOverlay());
+
+        bottomBar.addView(btnGallery);
+        bottomBar.addView(btnCreate);
+        root.addView(bottomBar);
+    }
+
+    // ===================== [MỚI] QUÉT TỪ ẢNH TRONG THƯ VIỆN =====================
+    private void pickImageFromGallery() {
+        Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+        i.setType("image/*");
+        try { startActivityForResult(i, REQ_PICK_IMAGE); }
+        catch (Exception e) { Toast.makeText(this, "Không tìm thấy ứng dụng chọn ảnh", Toast.LENGTH_SHORT).show(); }
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_PICK_IMAGE && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            decodeImageFromUri(data.getData());
+        }
+    }
+
+    /** Decode ảnh trên background thread — tránh đứng UI với ảnh lớn, tự giới hạn
+     *  1600px để đỡ tốn RAM khi quét (đủ độ nét để zxing đọc được QR thông thường). */
+    private void decodeImageFromUri(Uri uri) {
+        new Thread(() -> {
+            try {
+                Bitmap bmp;
+                if (Build.VERSION.SDK_INT >= 28) {
+                    ImageDecoder.Source src = ImageDecoder.createSource(getContentResolver(), uri);
+                    bmp = ImageDecoder.decodeBitmap(src, (decoder, info, s) ->
+                        decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE));
+                } else {
+                    bmp = MediaStore.Images.Media.getBitmap(getContentResolver(), uri);
+                }
+                if (bmp == null) throw new Exception("null bitmap");
+                int maxDim = 1600;
+                if (bmp.getWidth() > maxDim || bmp.getHeight() > maxDim) {
+                    float scale = Math.min(maxDim / (float) bmp.getWidth(), maxDim / (float) bmp.getHeight());
+                    bmp = Bitmap.createScaledBitmap(bmp,
+                        Math.round(bmp.getWidth()*scale), Math.round(bmp.getHeight()*scale), true);
+                }
+                int w = bmp.getWidth(), h = bmp.getHeight();
+                int[] pixels = new int[w*h];
+                bmp.getPixels(pixels, 0, w, 0, 0, w, h);
+                LuminanceSource src2 = new RGBLuminanceSource(w, h, pixels);
+                Result result = tryDecode(src2);
+                runOnUiThread(() -> {
+                    if (result != null) {
+                        fireDetectFeedback();
+                        stopCameraHardware();
+                        playDetectAnimThenShow(result.getText(), result);
+                    } else {
+                        Toast.makeText(this, "Không tìm thấy mã QR trong ảnh này", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "Không đọc được ảnh này", Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
+    // ===================== [MỚI] RUNG + BEEP KHI PHÁT HIỆN QR =====================
+    private void fireDetectFeedback() {
+        try {
+            Vibrator vib = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+            if (vib != null) {
+                if (Build.VERSION.SDK_INT >= 26) vib.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE));
+                else vib.vibrate(40);
+            }
+        } catch (Exception ignored) {}
+        try {
+            ToneGenerator tg = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70);
+            tg.startTone(ToneGenerator.TONE_PROP_BEEP, 120);
+            new Handler(Looper.getMainLooper()).postDelayed(tg::release, 200);
+        } catch (Exception ignored) {}
+    }
+
+    // ===================== [MỚI] TẠO MÃ QR TỪ VĂN BẢN =====================
+    private void showCreateQrOverlay() {
+        if (createQrOverlay != null) return;
+        stopCameraHardware(); // dừng camera khi đang ở màn tạo QR, đỡ hao pin
+        if (bottomBar != null) bottomBar.setVisibility(View.GONE);
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(makeRounded("#F0121212", 0f));
+        card.setPadding(50, 100, 50, 40);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, -1);
+
+        TextView title = new TextView(this);
+        title.setText("✨ Tạo mã QR");
+        title.setTextColor(Color.parseColor("#00E5FF"));
+        title.setTextSize(17);
+        title.setPadding(0, 0, 0, 20);
+        card.addView(title);
+
+        EditText etInput = new EditText(this);
+        etInput.setHint("Nhập link, văn bản, số điện thoại...");
+        etInput.setHintTextColor(Color.GRAY);
+        etInput.setTextColor(Color.WHITE);
+        etInput.setBackground(makeRounded("#2C2C2C", 20f));
+        etInput.setPadding(30, 26, 30, 26);
+        card.addView(etInput);
+
+        ImageView ivQr = new ImageView(this);
+        LinearLayout.LayoutParams ivLp = new LinearLayout.LayoutParams(-1, 0, 1f);
+        ivLp.setMargins(0, 30, 0, 30);
+        ivQr.setLayoutParams(ivLp);
+        ivQr.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        card.addView(ivQr);
+
+        Button btnGen = new Button(this);
+        btnGen.setText("Tạo mã");
+        btnGen.setBackground(makeRounded("#00E5FF", 20f));
+        btnGen.setTextColor(Color.BLACK);
+        card.addView(btnGen);
+
+        LinearLayout btnRow2 = new LinearLayout(this);
+        btnRow2.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow2.setPadding(0, 16, 0, 0);
+        Button btnSave = new Button(this);
+        btnSave.setText("💾 Lưu ảnh");
+        btnSave.setBackground(makeRounded("#4CAF50", 18f));
+        btnSave.setTextColor(Color.WHITE);
+        btnSave.setEnabled(false);
+        LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        sLp.setMargins(0, 0, 10, 0);
+        btnSave.setLayoutParams(sLp);
+
+        Button btnShare = new Button(this);
+        btnShare.setText("🔗 Chia sẻ");
+        btnShare.setBackground(makeRounded("#7C4DFF", 18f));
+        btnShare.setTextColor(Color.WHITE);
+        btnShare.setEnabled(false);
+        LinearLayout.LayoutParams shLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        shLp.setMargins(10, 0, 0, 0);
+        btnShare.setLayoutParams(shLp);
+
+        btnRow2.addView(btnSave); btnRow2.addView(btnShare);
+        card.addView(btnRow2);
+
+        Button btnClose2 = new Button(this);
+        btnClose2.setText("Đóng");
+        btnClose2.setBackground(makeRounded("#333333", 18f));
+        btnClose2.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams clp2 = new LinearLayout.LayoutParams(-1, -2);
+        clp2.setMargins(0, 16, 0, 0);
+        btnClose2.setLayoutParams(clp2);
+        card.addView(btnClose2);
+
+        final Bitmap[] genBmp = {null};
+
+        btnGen.setOnClickListener(v -> {
+            String text = etInput.getText().toString().trim();
+            if (text.isEmpty()) { Toast.makeText(this, "Nhập nội dung trước đã", Toast.LENGTH_SHORT).show(); return; }
+            Bitmap qr = generateQrBitmap(text, 720);
+            if (qr == null) { Toast.makeText(this, "Không tạo được mã QR", Toast.LENGTH_SHORT).show(); return; }
+            genBmp[0] = qr;
+            ivQr.setImageBitmap(qr);
+            btnSave.setEnabled(true);
+            btnShare.setEnabled(true);
+        });
+
+        btnSave.setOnClickListener(v -> {
+            if (genBmp[0] == null) return;
+            Uri saved = saveQrToGallery(genBmp[0]);
+            Toast.makeText(this, saved != null ? "Đã lưu vào Photos" : "Lưu thất bại", Toast.LENGTH_SHORT).show();
+        });
+
+        btnShare.setOnClickListener(v -> {
+            if (genBmp[0] == null) return;
+            Uri saved = saveQrToGallery(genBmp[0]);
+            if (saved == null) { Toast.makeText(this, "Lưu thất bại", Toast.LENGTH_SHORT).show(); return; }
+            Intent share = new Intent(Intent.ACTION_SEND);
+            share.setType("image/png");
+            share.putExtra(Intent.EXTRA_STREAM, saved);
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(Intent.createChooser(share, "Chia sẻ mã QR"));
+        });
+
+        btnClose2.setOnClickListener(v -> hideCreateQrOverlay());
+
+        createQrOverlay = card;
+        root.addView(card, lp);
+    }
+
+    private void hideCreateQrOverlay() {
+        if (createQrOverlay == null) return;
+        root.removeView(createQrOverlay);
+        createQrOverlay = null;
+        restartScanning();
+    }
+
+    private Bitmap generateQrBitmap(String text, int size) {
+        try {
+            QRCodeWriter writer = new QRCodeWriter();
+            BitMatrix matrix = writer.encode(text, BarcodeFormat.QR_CODE, size, size);
+            Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565);
+            for (int x = 0; x < size; x++)
+                for (int y = 0; y < size; y++)
+                    bmp.setPixel(x, y, matrix.get(x, y) ? Color.BLACK : Color.WHITE);
+            return bmp;
+        } catch (Exception e) { return null; }
+    }
+
+    private Uri saveQrToGallery(Bitmap bmp) {
+        try {
+            String name = "EdgeBar_QR_" + System.currentTimeMillis() + ".png";
+            android.content.ContentValues cv = new android.content.ContentValues();
+            cv.put(MediaStore.Images.Media.DISPLAY_NAME, name);
+            cv.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+            if (Build.VERSION.SDK_INT >= 29)
+                cv.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/EdgeBar");
+            Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+            if (uri == null) return null;
+            try (java.io.OutputStream os = getContentResolver().openOutputStream(uri)) {
+                bmp.compress(Bitmap.CompressFormat.PNG, 100, os);
+            }
+            return uri;
+        } catch (Exception e) { return null; }
+    }
     /** [MỚI] Vẽ tay dấu X bằng 2 đường chéo — không phụ thuộc font,
      *  luôn hiển thị đúng hình X trên mọi máy/mọi bộ font hệ thống. */
     private View buildCloseXView() {
@@ -263,7 +525,10 @@ public class QrScanActivity extends Activity {
                 // [MỚI] Tắt hẳn camera ngay khi vừa quét được — chống nóng máy/hao pin,
                 // preview sẽ đứng hình ở khung cuối cùng (đủ để làm nền cho bảng kết quả).
                 stopCameraHardware();
-                runOnUiThread(() -> playDetectAnimThenShow(result.getText(), result));
+                runOnUiThread(() -> {
+                    fireDetectFeedback(); // [MỚI] rung + tiếng "tít" báo hiệu quét thành công
+                    playDetectAnimThenShow(result.getText(), result);
+                });
             }
         } catch (Exception ignored) {
         } finally { img.close(); }
@@ -301,6 +566,7 @@ public class QrScanActivity extends Activity {
     /** [MỚI] Hết giờ mà chưa quét được QR -> tắt cam, hiện bảng "Không tìm thấy mã QR". */
     private void showTimeoutOverlay() {
         if (resultCard != null) root.removeView(resultCard);
+        if (bottomBar != null) bottomBar.setVisibility(View.GONE); // [MỚI]
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -335,6 +601,7 @@ public class QrScanActivity extends Activity {
     private void restartScanning() {
         paused = false;
         cameraClosed = false;
+        if (bottomBar != null) bottomBar.setVisibility(View.VISIBLE); // [MỚI]
         GradientDrawable fd = new GradientDrawable();
         fd.setStroke(10, Color.parseColor("#00E5FF"));
         fd.setCornerRadius(32f);
@@ -422,7 +689,7 @@ public class QrScanActivity extends Activity {
     // ===================== PHÂN LOẠI & HÀNH ĐỘNG =====================
     private void showResult(String raw) {
         if (resultCard != null) root.removeView(resultCard);
-
+        if (bottomBar != null) bottomBar.setVisibility(View.GONE); // [MỚI]
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(makeRounded("#F0121212", 28f));
