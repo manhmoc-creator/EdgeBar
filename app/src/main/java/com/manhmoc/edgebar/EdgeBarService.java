@@ -1085,7 +1085,14 @@ private void triggerBlacklistAutoHomeb() {
         }, 150);
     } catch (Exception ignored) {}
 }
-private void showScreenRecordOptionsThenCapture() {
+// [FIX BADTOKEN + TỐI ƯU PIXEL 2XL] Dialog gọi từ Context của AccessibilityService
+    // KHÔNG có Activity window token — .show() trực tiếp sẽ ném BadTokenException âm
+    // thầm (bị nuốt bởi try-catch của exec()). Ép window type sang loại Overlay hệ
+    // thống (TYPE_ACCESSIBILITY_OVERLAY vì đây là AccessibilityService) để dialog vẽ
+    // được mà không cần token Activity nào — đây là dialog TẠM (chỉ tồn tại lúc user
+    // đang chọn tùy chọn ghi), Zero RAM dư thừa vì object bị GC thu hồi ngay khi dismiss,
+    // không giữ reference nào ở field cấp class.
+    private void showScreenRecordOptionsThenCapture() {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(40, 30, 40, 10);
@@ -1100,7 +1107,7 @@ private void showScreenRecordOptionsThenCapture() {
         cbTouches.setChecked(prefs.getBoolean("screenrec_showtouches_en", true));
         box.addView(cbTouches);
 
-        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        android.app.AlertDialog dlgSR = new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Bắt đầu ghi?")
             .setView(box)
             .setPositiveButton("Bắt đầu", (d, w) -> {
@@ -1113,7 +1120,11 @@ private void showScreenRecordOptionsThenCapture() {
                 startActivity(permIntent);
             })
             .setNegativeButton("Hủy", null)
-            .show();
+            .create();
+        if (dlgSR.getWindow() != null) {
+            dlgSR.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY);
+        }
+        dlgSR.show();
     }
     private void exec(String a) {
         if (a == null || a.equals("NONE")) return;

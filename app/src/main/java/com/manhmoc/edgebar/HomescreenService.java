@@ -475,7 +475,10 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
         IntentFilter f = new IntentFilter("com.manhmoc.edgebar.ACTION_SCREENSHOT_GRANTED");
         registerReceiver(screenshotReceiver, f, Context.RECEIVER_NOT_EXPORTED);
     }
-// [MỚI] Hộp thoại chọn Ghi âm + Hiện thao tác chạm trước khi xin quyền quay màn hình
+// [FIX BADTOKEN + TỐI ƯU PIXEL 2XL] Homeb chạy dưới Service thường (không phải
+// AccessibilityService) — dùng TYPE_APPLICATION_OVERLAY (đã có quyền SYSTEM_ALERT_WINDOW
+// sẵn trong Manifest) thay vì TYPE_ACCESSIBILITY_OVERLAY. Không set type -> .show() ném
+// BadTokenException bị nuốt câm trong try-catch của exec(), khiến dialog "biến mất" vô hình.
     private void showScreenRecordOptionsThenCapture() {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -491,7 +494,7 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
         cbTouches.setChecked(prefs.getBoolean("screenrec_showtouches_en", true));
         box.addView(cbTouches);
 
-        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        android.app.AlertDialog dlgSR = new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Bắt đầu ghi?")
             .setView(box)
             .setPositiveButton("Bắt đầu", (d, w) -> {
@@ -504,7 +507,11 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
                 startActivity(permIntent);
             })
             .setNegativeButton("Hủy", null)
-            .show();
+            .create();
+        if (dlgSR.getWindow() != null) {
+            dlgSR.getWindow().setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY);
+        }
+        dlgSR.show();
     }
     /** Action SYSTEM: Screenshot — gọi hàm này khi người dùng bấm nút Screenshot trong Homeb */
     private void doScreenshot() {
