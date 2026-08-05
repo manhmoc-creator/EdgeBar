@@ -41,7 +41,6 @@ static {
     ACT_LABEL_MAP.put("YTDL_DOWNLOAD","Tải video");
     ACT_LABEL_MAP.put("SPLIT_SCREEN","Chia đôi màn hình");
     ACT_LABEL_MAP.put("QUICK_SETTINGS","Cài đặt nhanh");
-    ACT_LABEL_MAP.put("ACC_BUTTON_CHOOSER","Bảng Trợ Năng Nhanh");
     ACT_LABEL_MAP.put("SCREEN_RECORD","Quay màn hình");
     ACT_LABEL_MAP.put("AUTO_ROTATE_TOGGLE","Tự động xoay");
 }
@@ -63,7 +62,6 @@ static {
 ACT_ICON_RES.put("TOGGLE_OVERLAY", android.R.drawable.ic_menu_view);
 ACT_ICON_RES.put("YTDL_DOWNLOAD", android.R.drawable.ic_menu_upload);
 ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
-        ACT_ICON_RES.put("ACC_BUTTON_CHOOSER", android.R.drawable.ic_menu_help);
         ACT_ICON_RES.put("SCREEN_RECORD", android.R.drawable.presence_video_online);
         ACT_ICON_RES.put("AUTO_ROTATE_TOGGLE", android.R.drawable.ic_menu_always_landscape_portrait);
     }

@@ -1151,10 +1151,6 @@ case "SCREEN_ON":
                     break;
                 }
                 case "QUICK_SETTINGS": performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS); break;
-                case "ACC_BUTTON_CHOOSER":
-                    if (Build.VERSION.SDK_INT >= 30) performGlobalAction(GLOBAL_ACTION_ACCESSIBILITY_BUTTON_CHOOSER);
-                    else Toast.makeText(this, "Cần Android 11 trở lên", Toast.LENGTH_SHORT).show();
-                    break;
                 case "FLASH": fOn = !fOn; cm.setTorchMode(cId, fOn); break;
                 case "CAMERA": Intent c = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE); c.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(c); break;
                 case "VOLUME": ((AudioManager) getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI); break;
