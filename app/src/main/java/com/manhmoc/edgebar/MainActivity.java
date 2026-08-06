@@ -1814,6 +1814,7 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
             String pfx = isBar ? "pack_bar_" : "pack_corner_";
             String name = prefs.getString(pfx + id + "_name", "Data Pack");
             String tag = isBar ? "B" : "C";
+            boolean sel = selectedTargets.contains(itemKey);
 
             FrameLayout cardWrap = new FrameLayout(this);
             LinearLayout.LayoutParams wLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -1821,7 +1822,6 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
 
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
-            boolean sel = selectedTargets.contains(itemKey);
             card.setBackground(getRounded(sel ? "#0D4A52" : "#202124", 20f));
             card.setPadding(24, 22, 24, 22);
             TextView tv = new TextView(this);
@@ -1835,7 +1835,7 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
             selDot.setText(sel ? "🟢" : "⚪");
             selDot.setTextSize(16);
             FrameLayout.LayoutParams dLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-            dLp.gravity = Gravity.BOTTOM | Gravity.START; dLp.setMargins(10,0,0,6);
+            dLp.gravity = Gravity.BOTTOM | Gravity.END; dLp.setMargins(0,0,10,6);
             selDot.setLayoutParams(dLp);
             cardWrap.addView(selDot);
 
@@ -1854,7 +1854,6 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
             row.addView(dummy);
         }
     };
-
     View.OnClickListener tabClick = v -> {
         curTab[0] = v == bHomeb ? 0 : v == bHomacc ? 1 : 2;
         styleTabs[0].run();
