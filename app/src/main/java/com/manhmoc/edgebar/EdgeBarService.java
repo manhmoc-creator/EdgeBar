@@ -1157,8 +1157,9 @@ case "SCREEN_ON":
         stopIntent.setAction("STOP");
         startService(stopIntent);
     } else {
-        // [FIX 1 CHẠM] Bỏ hộp thoại xác nhận nội bộ — bấm 1 lần là bắn thẳng
-        // sang hộp thoại xin quyền MediaProjection của hệ thống luôn.
+        // [1 CHẠM] Bỏ hẳn dialog tùy chọn nội bộ — bấm nút là bắn thẳng
+        // sang bảng "Bắt đầu ngay" của hệ thống (Android bắt buộc phải có
+        // bảng này, không có API nào bỏ qua được — đây là bước duy nhất còn lại).
         Intent permIntent = new Intent(this, ScreenRecordPermissionActivity.class);
         permIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
         startActivity(permIntent);

@@ -3297,14 +3297,12 @@ btnCopy.setOnClickListener(v -> {
         if (ecoSelectMode) {
             // Chế độ chọn nhiều: chấm tròn góc dưới-trái, chạm để tick/bỏ tick
             TextView selDot = new TextView(this);
-            boolean sel = ecoSelectedItems.contains(ecoItemKey);
-            selDot.setText(sel ? "🟢" : "⚪");
-            selDot.setTextSize(18);
-            FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-            dotLp.gravity = Gravity.BOTTOM | Gravity.START;
-            dotLp.setMargins(10, 0, 0, 6);
-            selDot.setLayoutParams(dotLp);
-            cardWrap.addView(selDot);
+selDot.setText(sel ? "🟢" : "⚪");
+selDot.setTextSize(16);
+FrameLayout.LayoutParams dLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+dLp.gravity = Gravity.BOTTOM | Gravity.END; dLp.setMargins(0,0,10,6);
+selDot.setLayoutParams(dLp);
+cardWrap.addView(selDot);
             card.setOnClickListener(v -> {
                 if (ecoSelectedItems.contains(ecoItemKey)) ecoSelectedItems.remove(ecoItemKey);
                 else ecoSelectedItems.add(ecoItemKey);
