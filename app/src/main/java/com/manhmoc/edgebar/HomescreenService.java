@@ -99,14 +99,15 @@ private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap
     private boolean recIndicatorTestMode = false;
 private boolean recIndicatorTestPaused = false;
     private void ensureRippleView() {
-        if (rippleView != null) return;
+        if (rippleView != null) return; // [OPT] chỉ addView đúng 1 lần, tái dùng cho mọi cử chỉ sau đó
         rippleView = new GestureRippleView(this);
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(-1,-1,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, // [FIX] Homeb không có Accessibility -> phải dùng type này (khớp với bars/corners/fV cùng file), TYPE_ACCESSIBILITY_OVERLAY luôn bị hệ thống từ chối âm thầm khiến icon-jump vô hình
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT);
-        try { wm.addView(rippleView, p); } catch (Exception ignored) {}
+        try { wm.addView(rippleView, p); }
+        catch (Exception e) { rippleView = null; } // [FIX] addView thất bại thì trả về null thay vì giữ object "ma" — lần touch kế tiếp sẽ tự thử tạo lại, không bao giờ bị kẹt ở trạng thái "tưởng có nhưng vô hình"
     }
     private void removeRippleViewIfIdle() {
         if (rippleView == null) return;
