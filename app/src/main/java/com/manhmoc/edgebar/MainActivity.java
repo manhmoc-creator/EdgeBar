@@ -3295,6 +3295,7 @@ btnCopy.setOnClickListener(v -> {
 
         if (ecoSelectMode) {
             // Chế độ chọn nhiều: chấm tròn góc dưới-trái, chạm để tick/bỏ tick
+            boolean sel = ecoSelectedItems.contains(ecoItemKey);
             TextView selDot = new TextView(this);
 selDot.setText(sel ? "🟢" : "⚪");
 selDot.setTextSize(16);
