@@ -68,7 +68,10 @@ private String[] PANEL_COLOR_KEYS = {"SLATE","STEEL","MIST","GRAPHITE","INDIGO_M
 private String[] PANEL_COLOR_HEX  = {"#607D8B","#78909C","#90A4AE","#455A64","#5C6BC0","#4DB6AC","#B0BEC5","#37474F"};
 private String[] PANEL_COLOR_NAMES; // set trong reloadActionLabels()
 private String[] PANEL_POS_NAMES;   // 9 vị trí, set trong reloadActionLabels()
-private Button btnVolKey, btnEditAnim, btnEditPanel;
+// THAY BẰNG:
+private Button btnEditAnim, btnEditPanel;
+private LinearLayout gesMenuContainer, gesSubHeader;
+private TextView tvGesSubTitle;
 private int currentPanelIdx = 1; // 1-3, panel nào đang được chỉnh trong tab PANEL
 private boolean panelSelectMode = false;
 private boolean trashSelectMode = false;
@@ -397,14 +400,12 @@ if (currentMainTab == 0) {
     fab.setOnClickListener(v -> openEmptyPillDialog());
 }
     } else if (currentMainTab == 1) { // Condition Space
+        if (currentGesTab == 5) { // FRONTIER — nút NEW EB đã chuyển vào từng dòng Homeb/Homacc/Lock
+            fab.setVisibility(View.GONE);
+        } else {
             fab.setVisibility(View.VISIBLE);
-            if (currentGesTab == 5) { // FRONTIER — nút “NEW EB” gọi Data Pack từ PIECE
-    fab.setText("NEW EB");
-    fab.setOnClickListener(v -> showCallPTDropdownFrontier());
-} else {
-                fab.setText("NEW EB");
-                fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
-            }
+            fab.setText("NEW EB");
+            fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
         } else if (currentMainTab == 2) { // Ecosystem Space
         fab.setVisibility(View.VISIBLE);
         if (ecoType == 0 || ecoType == 1 || ecoType == 2) {
@@ -797,39 +798,54 @@ private void showMainMenu() {
     private void buildConditionsSpace() {
     pageConditions.addView(createBackRow(T("Gestures & Touch Zones","Cử chỉ & Vùng chạm")));
 
-    LinearLayout tabContainer = new LinearLayout(this);
-    tabContainer.setOrientation(LinearLayout.HORIZONTAL);
-    tabContainer.setPadding(0, 0, 0, 20);
-    // [BỎ HOMACC CẠNH TEXTURE] UX đã gộp về Frontier > HOMACC (dùng chung
-    // đúng 1 prefix "homacc_" nên không mất bất kỳ dữ liệu nào đã cấu hình).
-    Button btnFrontier = createTabBtn("Frontier");
-    Button btnTexture = createTabBtn("Texture");
-    btnVolKey = createTabBtn("VolKey");
-    LinearLayout.LayoutParams pMargR3 = new LinearLayout.LayoutParams(0, -2, 1f);
-    pMargR3.setMargins(0, 0, 10, 0);
-    btnFrontier.setLayoutParams(pMargR3);
-    btnTexture.setLayoutParams(pMargR3);
-    btnVolKey.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    tabContainer.addView(btnFrontier);
-    tabContainer.addView(btnTexture);
-    tabContainer.addView(btnVolKey);
-    pageConditions.addView(tabContainer);
+    gesMenuContainer = new LinearLayout(this);
+    gesMenuContainer.setOrientation(LinearLayout.VERTICAL);
+    pageConditions.addView(gesMenuContainer);
+
+    gesMenuContainer.addView(createSettingsRow("👆", "Frontier",
+        T("Lock · Homeb · Homacc", "Lock · Homeb · Homacc"),
+        () -> openGesTab(5, "Frontier")));
+    gesMenuContainer.addView(createSettingsRow("🖐️", "Texture",
+        T("Fingerprint gestures", "Cử chỉ vân tay"),
+        () -> openGesTab(4, "Texture")));
+    gesMenuContainer.addView(createSettingsRow("🔊", "VolKey",
+        T("Volume key gestures", "Cử chỉ phím âm lượng"),
+        () -> openGesTab(3, "VolKey")));
+
+    gesSubHeader = new LinearLayout(this);
+    gesSubHeader.setOrientation(LinearLayout.HORIZONTAL);
+    gesSubHeader.setGravity(Gravity.CENTER_VERTICAL);
+    gesSubHeader.setPadding(0, 0, 0, 20);
+    gesSubHeader.setVisibility(View.GONE);
+    Button btnBackToGesMenu = createCircleBtn("←", "#222222");
+    btnBackToGesMenu.setOnClickListener(v -> {
+        gesMenuContainer.setVisibility(View.VISIBLE);
+        gesSubHeader.setVisibility(View.GONE);
+        listRules.setVisibility(View.GONE);
+        updateFabVisibility();
+    });
+    tvGesSubTitle = new TextView(this);
+    tvGesSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvGesSubTitle.setTextSize(18);
+    LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-2, -2); tlp.setMargins(20, 0, 0, 0);
+    tvGesSubTitle.setLayoutParams(tlp);
+    gesSubHeader.addView(btnBackToGesMenu); gesSubHeader.addView(tvGesSubTitle);
+    pageConditions.addView(gesSubHeader);
 
     listRules = new LinearLayout(this);
     listRules.setOrientation(LinearLayout.VERTICAL);
+    listRules.setVisibility(View.GONE);
     pageConditions.addView(listRules);
+}
 
-    Runnable styleAll = () -> {
-        styleTabActive(btnFrontier, currentGesTab == 5);
-        styleTabActive(btnTexture, currentGesTab == 4);
-        styleTabActive(btnVolKey, currentGesTab == 3);
-    };
-    btnFrontier.setOnClickListener(v -> { currentGesTab = 5; refreshPreview(); styleAll.run(); updateFabVisibility(); renderRulesList(); });
-    btnTexture.setOnClickListener(v -> { currentGesTab = 4; refreshPreview(); styleAll.run(); updateFabVisibility(); renderRulesList(); });
-    btnVolKey.setOnClickListener(v -> { currentGesTab = 3; refreshPreview(); styleAll.run(); updateFabVisibility(); renderRulesList(); });
-
-    styleAll.run();
-    btnFrontier.performClick();
+private void openGesTab(int tab, String title) {
+    currentGesTab = tab;
+    refreshPreview();
+    gesMenuContainer.setVisibility(View.GONE);
+    gesSubHeader.setVisibility(View.VISIBLE);
+    tvGesSubTitle.setText(title);
+    listRules.setVisibility(View.VISIBLE);
+    updateFabVisibility();
+    renderRulesList();
 }
 private String getSpacePrefix() {
     if (currentGesTab == 3) return "volkey_";
@@ -1516,13 +1532,8 @@ private String cloneDataPackDeep(String itemKey) {
 }
     private void renderFrontierSpace() {
     LinearLayout subTab = new LinearLayout(this);
-    subTab.setOrientation(LinearLayout.HORIZONTAL);
-    subTab.setPadding(0,0,0,20);
-    Button b1 = createTabBtn("LOCK"), b2 = createTabBtn("HOMEB"), b3 = createTabBtn("HOMACC");
-    LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0,-2,1f); lp1.setMargins(0,0,10,0);
-    LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(0,-2,1f); lp2.setMargins(0,0,10,0);
-    b1.setLayoutParams(lp1); b2.setLayoutParams(lp2); b3.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-    subTab.addView(b2); subTab.addView(b3); subTab.addView(b1);
+    subTab.setOrientation(LinearLayout.VERTICAL);
+    subTab.setPadding(0, 0, 0, 10);
     listRules.addView(subTab);
     listRules.addView(buildGestureIconDrawer());
 
@@ -1530,17 +1541,76 @@ private String cloneDataPackDeep(String itemKey) {
     body.setOrientation(LinearLayout.VERTICAL);
     listRules.addView(body);
 
-    Runnable styleTabs = () -> {
-        styleTabActive(b1, frontierSubTab==0);
-        styleTabActive(b2, frontierSubTab==1);
-        styleTabActive(b3, frontierSubTab==2);
+    // {icon, tiêu đề, phụ đề, index không gian: 0=Lock,1=Homeb,2=Homacc}
+    Object[][] spaces = {
+        {"🏠", "HOMEB", T("Không cần Trợ năng","Không cần Trợ năng"), 1},
+        {"♿", "HOMACC", T("Có Trợ năng","Có Trợ năng"), 2},
+        {"🔒", "LOCK", T("Màn hình khoá","Màn hình khoá"), 0},
     };
-    b1.setOnClickListener(v -> { frontierSubTab=0; refreshPreview(); styleTabs.run(); redrawFrontierBody(body); updateFabVisibility(); });
-    b2.setOnClickListener(v -> { frontierSubTab=1; ensureHomeServiceForPreview(); refreshPreview(); styleTabs.run(); redrawFrontierBody(body); updateFabVisibility(); });
-    b3.setOnClickListener(v -> { frontierSubTab=2; refreshPreview(); styleTabs.run(); redrawFrontierBody(body); updateFabVisibility(); });
+    LinearLayout[] rowRefs = new LinearLayout[spaces.length];
+    Runnable[] styleTabs = new Runnable[1];
+
+    for (int si = 0; si < spaces.length; si++) {
+        final int spaceIdx = (int) spaces[si][3];
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(30, 26, 20, 26);
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-1, -2);
+        rlp.setMargins(0, 0, 0, 10);
+        row.setLayoutParams(rlp);
+
+        TextView tvIcon = new TextView(this);
+        tvIcon.setText((String) spaces[si][0]); tvIcon.setTextSize(20);
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-2,-2); ilp.setMargins(0,0,20,0);
+        tvIcon.setLayoutParams(ilp);
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+        TextView tvTitle = new TextView(this);
+        tvTitle.setText((String) spaces[si][1]); tvTitle.setTextColor(Color.parseColor("#E8EAED")); tvTitle.setTextSize(15.5f);
+        tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        TextView tvSub = new TextView(this);
+        tvSub.setText((String) spaces[si][2]); tvSub.setTextColor(Color.parseColor("#9AA0A6")); tvSub.setTextSize(11.5f); tvSub.setPadding(0,3,0,0);
+        col.addView(tvTitle); col.addView(tvSub);
+
+        // [ĐỔI] Nút "+NEW EB" nằm ngay trên dòng này thay vì FAB dưới nav bar
+        Button btnNewEb = new Button(this);
+        btnNewEb.setText("+ NEW EB");
+        btnNewEb.setBackground(getRounded(ACCENT_COLOR, 40f));
+        btnNewEb.setTextColor(Color.BLACK);
+        btnNewEb.setTextSize(11.5f);
+        btnNewEb.setPadding(24, 10, 24, 10);
+        btnNewEb.setOnClickListener(v -> {
+            frontierSubTab = spaceIdx;
+            if (spaceIdx == 1) ensureHomeServiceForPreview();
+            showCallPTDropdownFrontier();
+        });
+
+        row.addView(tvIcon); row.addView(col); row.addView(btnNewEb);
+        rowRefs[si] = row;
+        subTab.addView(row);
+
+        row.setOnClickListener(v -> {
+            frontierSubTab = spaceIdx;
+            refreshPreview();
+            if (spaceIdx == 1) ensureHomeServiceForPreview();
+            styleTabs[0].run();
+            redrawFrontierBody(body);
+            updateFabVisibility();
+        });
+    }
+
+    styleTabs[0] = () -> {
+        for (int si = 0; si < spaces.length; si++) {
+            int spaceIdx = (int) spaces[si][3];
+            rowRefs[si].setBackground(getRounded(spaceIdx == frontierSubTab ? "#0D4A52" : "#161616", 20f));
+        }
+    };
 
     if (frontierSubTab == 1) ensureHomeServiceForPreview();
-    styleTabs.run();
+    styleTabs[0].run();
     redrawFrontierBody(body);
 }
 private void redrawFrontierBody(LinearLayout body) {
@@ -2899,7 +2969,7 @@ private void buildMainMenuList() {
         {"🔒", T("Security","Bảo mật"), "Blacklist · Locklist", (Runnable)() -> openEco(5, false)},
         {"🧩", T("Ecosystem","Hệ sinh thái"), "YTDLnis · Island", (Runnable)this::openEcoShowcase},
         {"⚙️", T("System","Hệ thống"), T("Backup · Restore · QR...","Sao lưu · Khôi phục · QR..."), (Runnable)this::openSystemSpace},
-        {"ℹ️", T("About EB","Giới thiệu về EB"), "Premium", (Runnable)this::showPremiumDialog},
+        {"ℹ️", T("About Edge Bar","Giới thiệu về Edge Bar"), "Premium", (Runnable)this::showPremiumDialog},
     };
     for (Object[] it : items) {
         LinearLayout row = new LinearLayout(this);
@@ -2952,7 +3022,41 @@ private LinearLayout createBackRow(String title) {
     row.addView(btnBack); row.addView(tvTitle);
     return row;
 }
+private LinearLayout createSettingsRow(String icon, String title, String sub, Runnable onClick) {
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setGravity(Gravity.CENTER_VERTICAL);
+    row.setBackground(getRounded("#161616", 20f));
+    row.setPadding(30, 30, 30, 30);
+    LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-1, -2);
+    rlp.setMargins(0, 0, 0, 14);
+    row.setLayoutParams(rlp);
 
+    TextView tvIcon = new TextView(this);
+    tvIcon.setText(icon); tvIcon.setTextSize(22);
+    LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-2, -2);
+    ilp.setMargins(0, 0, 25, 0);
+    tvIcon.setLayoutParams(ilp);
+    row.addView(tvIcon);
+
+    LinearLayout col = new LinearLayout(this);
+    col.setOrientation(LinearLayout.VERTICAL);
+    col.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    TextView tvTitle = new TextView(this);
+    tvTitle.setText(title); tvTitle.setTextColor(Color.parseColor("#E8EAED")); tvTitle.setTextSize(16.5f);
+    tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    TextView tvSub = new TextView(this);
+    tvSub.setText(sub); tvSub.setTextColor(Color.parseColor("#9AA0A6")); tvSub.setTextSize(12f); tvSub.setPadding(0,4,0,0);
+    col.addView(tvTitle); col.addView(tvSub);
+    row.addView(col);
+
+    TextView tvChevron = new TextView(this);
+    tvChevron.setText("›"); tvChevron.setTextColor(Color.parseColor("#5F6368")); tvChevron.setTextSize(22);
+    row.addView(tvChevron);
+
+    row.setOnClickListener(v -> onClick.run());
+    return row;
+}
 private LinearLayout buildShowcaseItem(String icon, String title, String sub, Runnable onClick) {
     LinearLayout row = new LinearLayout(this);
     row.setOrientation(LinearLayout.HORIZONTAL);
