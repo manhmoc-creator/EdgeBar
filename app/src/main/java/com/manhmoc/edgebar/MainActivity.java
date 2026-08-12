@@ -373,67 +373,18 @@ private String[] getVolKeyActLabs() {
     }
 }
     @Override public void onBackPressed() {
-        goBackLevels(1); // Mặc định nút Back cứng của điện thoại lùi 1 cấp
-    }
-
-    private void goBackLevels(int levels) {
-        for (int i = 0; i < levels; i++) {
-            boolean handled = handleBackStep();
-            if (!handled) {
-                // Nếu lùi mà không có gì để lùi (đã ở Home) -> Thoát app ở lần nhấn đầu tiên
-                if (i == 0) super.onBackPressed(); 
-                break;
-            }
-        }
-    }
-
-    private boolean handleBackStep() {
-        // 1. Nếu đang ở không gian Design
-        if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) {
-            if (designSliderContainer != null && designSliderContainer.getVisibility() == View.VISIBLE) {
-                designSliderContainer.setVisibility(View.GONE);
-                if (designBackRow != null) designBackRow.setVisibility(View.GONE);
-                designSpaceMenu.setVisibility(View.VISIBLE);
-                if (designTopBackRow != null) designTopBackRow.setVisibility(View.VISIBLE);
-                updateFabVisibility();
-                return true;
-            }
-            showMainMenu(); return true;
-        }
-        // 2. Nếu đang ở không gian Conditions
-        if (pageConditions != null && pageConditions.getVisibility() == View.VISIBLE) {
-            // Đang sâu bên trong Frontier (Lock/Homeb/Homacc)
-            if (currentGesTab == 5 && listRules != null && listRules.getChildCount() > 2) {
-                View subTab = listRules.getChildAt(0);
-                View frontierBackRow = listRules.getChildAt(1);
-                View body = listRules.getChildAt(2);
-                if (body != null && body.getVisibility() == View.VISIBLE) {
-                    body.setVisibility(View.GONE);
-                    if (frontierBackRow != null) frontierBackRow.setVisibility(View.GONE);
-                    if (subTab != null) subTab.setVisibility(View.VISIBLE);
-                    if (gesSubHeader != null) gesSubHeader.setVisibility(View.VISIBLE);
-                    updateFabVisibility();
-                    return true;
-                }
-            }
-            // Đang xem danh sách Rule của 1 mục bất kỳ
-            if (listRules != null && listRules.getVisibility() == View.VISIBLE) {
-                listRules.setVisibility(View.GONE);
-                if (gesSubHeader != null) gesSubHeader.setVisibility(View.GONE);
-                if (gesMenuContainer != null) gesMenuContainer.setVisibility(View.VISIBLE);
-                if (condBackRow != null) condBackRow.setVisibility(View.VISIBLE);
-                updateFabVisibility();
-                return true;
-            }
-            showMainMenu(); return true;
-        }
-        // 3. Các không gian khác (Ecosystem, System...)
-        if ((pageEcosystem != null && pageEcosystem.getVisibility() == View.VISIBLE)
+        if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); return; }
+        if ((pageConditions != null && pageConditions.getVisibility() == View.VISIBLE)
+            || (pageEcosystem != null && pageEcosystem.getVisibility() == View.VISIBLE)
             || (pageEcoShowcase != null && pageEcoShowcase.getVisibility() == View.VISIBLE)
             || (pageSystemSpace != null && pageSystemSpace.getVisibility() == View.VISIBLE)) {
-            showMainMenu(); return true;
+            showMainMenu(); return;
         }
-        return false;
+        super.onBackPressed();
+    }
+    private void closeDesignSpace() {
+    pageDesign.setVisibility(View.GONE);
+    showMainMenu();
     }
 private void openDesignSpace() { 
     currentMainTab = 0; refreshPreview();
