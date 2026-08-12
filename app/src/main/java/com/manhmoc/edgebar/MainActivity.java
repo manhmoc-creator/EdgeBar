@@ -788,56 +788,40 @@ private void showMainMenu() {
 }
     // ==================== KHÔNG GIAN ĐIỀU KIỆN ====================
     private void buildConditionsSpace() {
+    pageConditions.addView(createBackRow(T("Gestures & Touch Zones","Cử chỉ & Vùng chạm")));
+
     LinearLayout tabContainer = new LinearLayout(this);
     tabContainer.setOrientation(LinearLayout.HORIZONTAL);
     tabContainer.setPadding(0, 0, 0, 20);
     // [BỎ HOMACC CẠNH TEXTURE] UX đã gộp về Frontier > HOMACC (dùng chung
     // đúng 1 prefix "homacc_" nên không mất bất kỳ dữ liệu nào đã cấu hình).
-    btnVolKey = createTabBtn("VOLKEY");
-    Button btnTexture = createTabBtn("TEXTURE");
-    Button btnFrontier = createTabBtn("FRONTIER");
+    Button btnFrontier = createTabBtn("Frontier");
+    Button btnTexture = createTabBtn("Texture");
+    btnVolKey = createTabBtn("VolKey");
     LinearLayout.LayoutParams pMargR3 = new LinearLayout.LayoutParams(0, -2, 1f);
     pMargR3.setMargins(0, 0, 10, 0);
-    btnVolKey.setLayoutParams(pMargR3);
+    btnFrontier.setLayoutParams(pMargR3);
     btnTexture.setLayoutParams(pMargR3);
-    btnFrontier.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    tabContainer.addView(btnTexture);
+    btnVolKey.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
     tabContainer.addView(btnFrontier);
+    tabContainer.addView(btnTexture);
     tabContainer.addView(btnVolKey);
-    btnTexture.setOnClickListener(v -> {
-        currentGesTab = 4; refreshPreview();
-        btnVolKey.setBackground(getRounded("#222222", 20f));
-        btnVolKey.setTextColor(Color.WHITE);
-        btnTexture.setBackground(getRounded("#4CAF50", 20f));
-        btnTexture.setTextColor(Color.BLACK);
-        btnFrontier.setBackground(getRounded("#222222", 20f));
-        btnFrontier.setTextColor(Color.WHITE);
-        updateFabVisibility(); renderRulesList();
-    });
-    btnFrontier.setOnClickListener(v -> {
-        currentGesTab = 5; refreshPreview();
-        btnVolKey.setBackground(getRounded("#222222", 20f));
-        btnVolKey.setTextColor(Color.WHITE);
-        btnTexture.setBackground(getRounded("#222222", 20f));
-        btnTexture.setTextColor(Color.WHITE);
-        btnFrontier.setBackground(getRounded("#E91E63", 20f));
-        btnFrontier.setTextColor(Color.WHITE);
-        updateFabVisibility(); renderRulesList();
-    });
     pageConditions.addView(tabContainer);
+
     listRules = new LinearLayout(this);
     listRules.setOrientation(LinearLayout.VERTICAL);
     pageConditions.addView(listRules);
-    btnVolKey.setOnClickListener(v -> {
-        currentGesTab = 3; refreshPreview();
-        btnVolKey.setBackground(getRounded("#FFC107", 20f));
-        btnVolKey.setTextColor(Color.BLACK);
-        btnTexture.setBackground(getRounded("#222222", 20f));
-        btnTexture.setTextColor(Color.WHITE);
-        btnFrontier.setBackground(getRounded("#222222", 20f));
-        btnFrontier.setTextColor(Color.WHITE);
-        updateFabVisibility(); renderRulesList();
-    });
+
+    Runnable styleAll = () -> {
+        styleTabActive(btnFrontier, currentGesTab == 5);
+        styleTabActive(btnTexture, currentGesTab == 4);
+        styleTabActive(btnVolKey, currentGesTab == 3);
+    };
+    btnFrontier.setOnClickListener(v -> { currentGesTab = 5; refreshPreview(); styleAll.run(); updateFabVisibility(); renderRulesList(); });
+    btnTexture.setOnClickListener(v -> { currentGesTab = 4; refreshPreview(); styleAll.run(); updateFabVisibility(); renderRulesList(); });
+    btnVolKey.setOnClickListener(v -> { currentGesTab = 3; refreshPreview(); styleAll.run(); updateFabVisibility(); renderRulesList(); });
+
+    styleAll.run();
     btnFrontier.performClick();
 }
 private String getSpacePrefix() {
@@ -1540,9 +1524,9 @@ private String cloneDataPackDeep(String itemKey) {
     listRules.addView(body);
 
     Runnable styleTabs = () -> {
-        b1.setBackground(getRounded(frontierSubTab==0?"#00E5FF":"#222222",20f)); b1.setTextColor(frontierSubTab==0?Color.BLACK:Color.WHITE);
-        b2.setBackground(getRounded(frontierSubTab==1?"#00E5FF":"#222222",20f)); b2.setTextColor(frontierSubTab==1?Color.BLACK:Color.WHITE);
-        b3.setBackground(getRounded(frontierSubTab==2?"#00E5FF":"#222222",20f)); b3.setTextColor(frontierSubTab==2?Color.BLACK:Color.WHITE);
+        styleTabActive(b1, frontierSubTab==0);
+        styleTabActive(b2, frontierSubTab==1);
+        styleTabActive(b3, frontierSubTab==2);
     };
     b1.setOnClickListener(v -> { frontierSubTab=0; refreshPreview(); styleTabs.run(); redrawFrontierBody(body); updateFabVisibility(); });
     b2.setOnClickListener(v -> { frontierSubTab=1; ensureHomeServiceForPreview(); refreshPreview(); styleTabs.run(); redrawFrontierBody(body); updateFabVisibility(); });
@@ -6442,7 +6426,40 @@ private String formatPruleActionLabel(String rId) {
         Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); 
         Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); 
         SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); 
-        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ public void onProgressChanged(SeekBar s, int p, boolean b){ tv.setText(t + ": " + p); prefs.edit().putInt(k, p).apply(); } public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){} }); 
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            public void onProgressChanged(SeekBar s, int p, boolean fromUser){
+                tv.setText(t + ": " + p);
+                if (!fromUser) return; // bỏ qua sự kiện lập trình gọi setProgress() (VD: nút +/-), chỉ throttle thao tác kéo tay thật
+                long now = System.currentTimeMillis();
+                Long last = sliderLastWriteMs.get(k);
+                Runnable pendingOld = sliderPendingRunnable.get(k);
+                if (pendingOld != null) sliderPrefHandler.removeCallbacks(pendingOld);
+                if (last == null || now - last >= SLIDER_WRITE_THROTTLE_MS) {
+                    // Đủ lâu kể từ lần ghi trước -> ghi ngay, giữ cảm giác preview real-time
+                    prefs.edit().putInt(k, p).apply();
+                    sliderLastWriteMs.put(k, now);
+                } else {
+                    // Ghi quá gần lần trước -> hoãn tới đúng mốc throttle tiếp theo thay vì ghi ngay
+                    long delay = SLIDER_WRITE_THROTTLE_MS - (now - last);
+                    Runnable r = () -> {
+                        prefs.edit().putInt(k, p).apply();
+                        sliderLastWriteMs.put(k, System.currentTimeMillis());
+                    };
+                    sliderPendingRunnable.put(k, r);
+                    sliderPrefHandler.postDelayed(r, delay);
+                }
+            }
+            public void onStartTrackingTouch(SeekBar s){}
+            public void onStopTrackingTouch(SeekBar s){
+                // [BẮT BUỘC] Nhả tay -> huỷ throttle đang chờ, ghi NGAY giá trị cuối cùng.
+                // Đảm bảo tuyệt đối không mất giá trị dù throttle đang giữ 1 write dở dang.
+                Runnable pending = sliderPendingRunnable.remove(k);
+                if (pending != null) sliderPrefHandler.removeCallbacks(pending);
+                int p = s.getProgress();
+                prefs.edit().putInt(k, p).apply();
+                sliderLastWriteMs.put(k, System.currentTimeMillis());
+            }
+        }); 
         btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); }); btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) sb.setProgress(p+1); }); 
         row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); 
         return l; 

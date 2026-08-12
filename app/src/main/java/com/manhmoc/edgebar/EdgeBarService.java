@@ -131,7 +131,13 @@ private Runnable homaccDebounceRunnable = null;
 private final Handler panelDebounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable panelDebounceRunnable = null;
 private static final long PANEL_DEBOUNCE_MS = 120;
-
+// [TỐI ƯU PIN/RAM] Throttle ghi prefs khi kéo Slider — leading-edge throttle +
+// write bắt buộc lúc nhả tay. Giảm số lần apply() từ "mỗi pixel kéo" (40-100+ lần
+// mỗi lần vuốt) xuống tối đa ~16 lần/giây, vẫn giữ cảm giác preview real-time.
+private final Handler sliderPrefHandler = new Handler(android.os.Looper.getMainLooper());
+private final java.util.Map<String, Long> sliderLastWriteMs = new java.util.HashMap<>();
+private final java.util.Map<String, Runnable> sliderPendingRunnable = new java.util.HashMap<>();
+private static final long SLIDER_WRITE_THROTTLE_MS = 60;
 private final Handler debounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable debounceRunnable = null;
 
