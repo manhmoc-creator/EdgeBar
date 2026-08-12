@@ -406,6 +406,7 @@ if (currentMainTab == 0) {
             fab.setVisibility(View.VISIBLE);
             fab.setText("NEW EB");
             fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
+        }
         } else if (currentMainTab == 2) { // Ecosystem Space
         fab.setVisibility(View.VISIBLE);
         if (ecoType == 0 || ecoType == 1 || ecoType == 2) {
