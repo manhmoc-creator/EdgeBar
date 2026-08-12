@@ -62,6 +62,9 @@ private String[] C_GESTURE_NAMES;
     private final java.util.Map<String, Runnable> sliderPendingRunnable = new java.util.HashMap<>();
     private static final long SLIDER_WRITE_THROTTLE_MS = 60;
 private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain;
+private LinearLayout condBackRow;
+private LinearLayout designTopBackRow, designSpaceMenu, designBackRow;
+private TextView tvDesignSubTitle;
     private LinearLayout pageMainMenu, pageEcoShowcase, pageSystemSpace; // [MỚI] màn chính 9-mục
     private Button navCondBtnRef, navEcoBtnRef; // [MỚI] tham chiếu để mở thẳng tab từ Intent action
 private String[] PANEL_COLOR_KEYS = {"SLATE","STEEL","MIST","GRAPHITE","INDIGO_MIST","TEAL_GREY","COOL_ASH","DEEP_BLUE"};
@@ -99,7 +102,7 @@ private WindowManager.LayoutParams livePreviewLp;
     // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "🎭19.12.3.6.38";
+    private final String CURRENT_VERSION = "🎭V19.12.3.6.38";
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
     private Button btnWriteSettings; // MỚI
@@ -517,20 +520,23 @@ leftCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 TextView title = new TextView(this);
 title.setText(CURRENT_VERSION);
 title.setTextColor(Color.parseColor("#E8EAED"));
-title.setTextSize(22f); // Tăng từ 18f lên 22f cho chuẩn tỷ lệ thị giác
+title.setTextSize(13f); // Đồng bộ cỡ chữ với nút Uninstall
 title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+title.setSingleLine(true);
 leftCol.addView(title);
-
 // Cột phải: Backup/Restore và English (Nới rộng tỷ lệ weight 1.35f để không bao giờ bị nhảy dòng)
 LinearLayout rightCol = new LinearLayout(this);
 rightCol.setOrientation(LinearLayout.VERTICAL);
+rightCol.setGravity(Gravity.END);
 rightCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.35f));
 
 Button btnUninstallTop = createSystemBtn("Uninstall", "#D32F2F", "#FFFFFF");
 btnUninstallTop.setTextSize(16f);
+btnUninstallTop.setPadding(24, 8, 24, 8);
 
-LinearLayout.LayoutParams unTopLp = new LinearLayout.LayoutParams(-1, -2);
+LinearLayout.LayoutParams unTopLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, -2);
 unTopLp.setMargins(4, 10, 4, 0);
+unTopLp.gravity = Gravity.END;
 btnUninstallTop.setLayoutParams(unTopLp);
 btnUninstallTop.setOnClickListener(v -> confirmThenUninstallApp());
 rightCol.addView(btnUninstallTop);
@@ -658,7 +664,8 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
 
         LinearLayout bottomBar = new LinearLayout(this); bottomBar.setOrientation(LinearLayout.HORIZONTAL); bottomBar.setGravity(Gravity.CENTER_VERTICAL); bottomBar.setBackground(getRounded("#1E1E1E", 100f)); bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
-        Button btnUpdate = createCircleBtn("⬆", "#333333"); btnUpdate.setTextSize(20); btnUpdate.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
+        ImageButton btnUpdate = createIconCircleBtn(customIconRes("cycle_24px"), "#333333");
+btnUpdate.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
         etNavSearch = new EditText(this);
 etNavSearch.setHint(T("Search Settings", "Tìm kiếm"));
 etNavSearch.setTextSize(16f); // [MỚI] cỡ chữ chuẩn dùng chung
@@ -675,7 +682,7 @@ etNavSearch.addTextChangedListener(new android.text.TextWatcher() {
 });
 
 // nút tròn icon, thay cho fab dạng viên thuốc — cùng icon compass cho mọi trạng thái
-fab = createIconCircleBtn(android.R.drawable.ic_menu_compass, "#333333"); // xem ghi chú bên dưới về createCircleBtn
+fab = createIconCircleBtn(customIconRes("explore_24px"), "#333333"); // icon la bàn trong bộ 100 icon
 fab.setTag("fab");
 fab.setOnClickListener(v -> {
 if (currentMainTab == 1) {
@@ -776,7 +783,8 @@ private void showMainMenu() {
 }
     // ==================== KHÔNG GIAN ĐIỀU KIỆN ====================
     private void buildConditionsSpace() {
-    pageConditions.addView(createBackRow(T("Gestures & Touch Zones","Cử chỉ & Vùng chạm")));
+    condBackRow = createBackRow(T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"));
+    pageConditions.addView(condBackRow);
 
     gesMenuContainer = new LinearLayout(this);
     gesMenuContainer.setOrientation(LinearLayout.VERTICAL);
@@ -802,6 +810,7 @@ private void showMainMenu() {
         gesMenuContainer.setVisibility(View.VISIBLE);
         gesSubHeader.setVisibility(View.GONE);
         listRules.setVisibility(View.GONE);
+        condBackRow.setVisibility(View.VISIBLE);
         updateFabVisibility();
     });
     tvGesSubTitle = new TextView(this);
@@ -819,9 +828,10 @@ private void showMainMenu() {
 private void openGesTab(int tab, String title) {
     currentGesTab = tab;
     refreshPreview();
+    condBackRow.setVisibility(View.GONE);
     gesMenuContainer.setVisibility(View.GONE);
     gesSubHeader.setVisibility(View.VISIBLE);
-    tvGesSubTitle.setText(T("Back", "Trở lại")); // [ĐỔI] bỏ lặp tên mục, chỉ còn "Trở lại"
+    tvGesSubTitle.setText(T("Back", "Trở lại"));
     listRules.setVisibility(View.VISIBLE);
     updateFabVisibility();
     renderRulesList();
@@ -1083,7 +1093,7 @@ body.addView(createSlider(T("Jump Icon Opacity", "Độ đậm Icon Nhảy"), "h
         body.setVisibility(willOpen ? View.VISIBLE : View.GONE);
         header.setText((willOpen ? "📂 " : "📁 ")
             + T("ICON FOR 13 GESTURES", "ICON CHO 13 CỬ CHỈ")
-            + (willOpen ? " (Đóng ▲)" : " (Mở ▼)"));
+            + (willOpen ? " (▲)" : " (▼)"));
         header.setBackground(getRounded(willOpen ? "#333333" : "#202124", 25f));
     });
 
@@ -1514,43 +1524,55 @@ private String cloneDataPackDeep(String itemKey) {
     subTab.setOrientation(LinearLayout.VERTICAL);
     subTab.setPadding(0, 0, 0, 10);
     listRules.addView(subTab);
+
+    LinearLayout frontierBackRow = new LinearLayout(this);
+    frontierBackRow.setOrientation(LinearLayout.HORIZONTAL);
+    frontierBackRow.setGravity(Gravity.CENTER_VERTICAL);
+    frontierBackRow.setPadding(0, 0, 0, 20);
+    frontierBackRow.setVisibility(View.GONE);
+    Button btnBackToSpaces = createCircleBtn("‹", "#222222");
+    TextView tvFrontierSubTitle = new TextView(this);
+    tvFrontierSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvFrontierSubTitle.setTextSize(16);
+    LinearLayout.LayoutParams ftlp = new LinearLayout.LayoutParams(-2, -2); ftlp.setMargins(20, 0, 0, 0);
+    tvFrontierSubTitle.setLayoutParams(ftlp);
+    frontierBackRow.addView(btnBackToSpaces); frontierBackRow.addView(tvFrontierSubTitle);
+    listRules.addView(frontierBackRow);
+
     LinearLayout body = new LinearLayout(this);
     body.setOrientation(LinearLayout.VERTICAL);
+    body.setVisibility(View.GONE);
     listRules.addView(body);
 
-    // {icon, tiêu đề, phụ đề, index không gian: 0=Lock,1=Homeb,2=Homacc}
     Object[][] spaces = {
-    {"routine_24px", "HOMEB", T("No Accessibility needed","Không cần Trợ năng"), 1},
-    {"accessible_menu_24px", "HOMACC", T("Accessibility ON","Có Trợ năng"), 2},
-    {"mobile_lock_portrait_24px", "LOCK", T("Lock screen","Màn hình khoá"), 0},
-};
-LinearLayout[] rowRefs = new LinearLayout[spaces.length];
-Runnable[] styleTabs = new Runnable[1];
-
-for (int si = 0; si < spaces.length; si++) {
-    final int spaceIdx = (int) spaces[si][3];
-    LinearLayout row = createSettingsRow((String) spaces[si][0], (String) spaces[si][1], (String) spaces[si][2],
-        () -> {
-            frontierSubTab = spaceIdx;
-            refreshPreview();
-            if (spaceIdx == 1) ensureHomeServiceForPreview();
-            styleTabs[0].run();
-            redrawFrontierBody(body);
-            updateFabVisibility();
-        });
-    rowRefs[si] = row;
-    subTab.addView(row);
-}
-
-styleTabs[0] = () -> {
-    for (int si = 0; si < spaces.length; si++) {
-        boolean active = (int) spaces[si][3] == frontierSubTab;
-        rowRefs[si].setBackground(getRounded(active ? "#222222" : "#161616", 20f));
+        {"routine_24px", "HOMEB", T("No Accessibility needed","Không cần Trợ năng"), 1},
+        {"accessible_menu_24px", "HOMACC", T("Accessibility ON","Có Trợ năng"), 2},
+        {"mobile_lock_portrait_24px", "LOCK", T("Lock screen","Màn hình khoá"), 0},
+    };
+    for (Object[] space : spaces) {
+        final int spaceIdx = (int) space[3];
+        final String spaceLabel = (String) space[1];
+        LinearLayout row = createSettingsRow((String) space[0], spaceLabel, (String) space[2],
+            () -> {
+                frontierSubTab = spaceIdx;
+                refreshPreview();
+                if (spaceIdx == 1) ensureHomeServiceForPreview();
+                subTab.setVisibility(View.GONE);
+                gesSubHeader.setVisibility(View.GONE);
+                frontierBackRow.setVisibility(View.VISIBLE);
+                tvFrontierSubTitle.setText(spaceLabel);
+                body.setVisibility(View.VISIBLE);
+                redrawFrontierBody(body);
+                updateFabVisibility();
+            });
+        subTab.addView(row);
     }
-};
-    if (frontierSubTab == 1) ensureHomeServiceForPreview();
-    styleTabs[0].run();
-    redrawFrontierBody(body);
+    btnBackToSpaces.setOnClickListener(v -> {
+        body.setVisibility(View.GONE);
+        frontierBackRow.setVisibility(View.GONE);
+        subTab.setVisibility(View.VISIBLE);
+        gesSubHeader.setVisibility(View.VISIBLE);
+        updateFabVisibility();
+    });
 }
 private void redrawFrontierBody(LinearLayout body) {
         body.removeAllViews();
@@ -2948,7 +2970,7 @@ private LinearLayout createBackRow(String title) {
     row.setOrientation(LinearLayout.HORIZONTAL);
     row.setGravity(Gravity.CENTER_VERTICAL);
     row.setPadding(0, 0, 0, 30);
-    Button btnBack = createCircleBtn("‹", "#222222");
+    ImageButton btnBack = createIconCircleBtn(customIconRes("arrow_back_24px"), "#222222");
     btnBack.setOnClickListener(v -> showMainMenu());
     TextView tvTitle = new TextView(this);
     tvTitle.setText(T("Back", "Trở lại")); tvTitle.setTextColor(Color.parseColor("#00E5FF")); tvTitle.setTextSize(18);
@@ -3057,6 +3079,7 @@ private void buildSystemSpace() {
     // riêng ở "Hệ sinh thái"/"Bộ nhớ"/"Âm thanh & Media"/"Hệ thống". Mỗi tính năng chỉ còn
     // ĐÚNG 1 nơi truy cập -> ít View trùng lặp phải dựng, đỡ RAM/pin trên Pixel 2XL.
     private void buildEcosystemSpace() {
+    pageEcosystem.addView(createBackRow(T("Custom Actions","Hành động tùy chỉnh")));
     LinearLayout ecoNav = new LinearLayout(this);
     ecoNav.setOrientation(LinearLayout.HORIZONTAL);
     ecoNav.setPadding(0, 0, 0, 35);
@@ -4328,31 +4351,61 @@ private void openTileEditorV2(String id) {
 
     // ==================== KHÔNG GIAN THIẾT KẾ ====================
     private void buildDesignSpace() {
-    pageDesign.addView(createSectionTitle(T("CORE DESIGN (COLOR/SIZE)", "THIẾT KẾ CỐT LÕI (MÀU/KÍCH THƯỚC)")));
-    designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
+    designTopBackRow = createBackRow(T("Display","Hiển thị"));
+    pageDesign.addView(designTopBackRow);
 
-    // [ĐỔI] ANIMA/LENAP -> 2 thẻ "không gian" dạng card, đồng bộ style với Frontier/Texture/VolKey
-    LinearLayout spaceMenu = new LinearLayout(this);
-    spaceMenu.setOrientation(LinearLayout.VERTICAL);
+    designSpaceMenu = new LinearLayout(this);
+    designSpaceMenu.setOrientation(LinearLayout.VERTICAL);
+
+    designBackRow = new LinearLayout(this);
+    designBackRow.setOrientation(LinearLayout.HORIZONTAL);
+    designBackRow.setGravity(Gravity.CENTER_VERTICAL);
+    designBackRow.setPadding(0, 0, 0, 20);
+    designBackRow.setVisibility(View.GONE);
+    Button btnBackToDesignMenu = createCircleBtn("‹", "#222222");
+    tvDesignSubTitle = new TextView(this);
+    tvDesignSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvDesignSubTitle.setTextSize(16);
+    LinearLayout.LayoutParams dtlp = new LinearLayout.LayoutParams(-2, -2); dtlp.setMargins(20, 0, 0, 0);
+    tvDesignSubTitle.setLayoutParams(dtlp);
+    designBackRow.addView(btnBackToDesignMenu); designBackRow.addView(tvDesignSubTitle);
+
+    designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
+    designSliderContainer.setVisibility(View.GONE);
 
     btnEditAnim = createSettingsRow("flash_on_24px", "ANIMA",
         T("Animation & Recording indicator", "Hiệu ứng & Chỉ báo ghi âm"),
-        () -> { designTabState = 3; ensureHomeServiceForPreview(); refreshPreview(); updateVisTabs(); renderSliders(); });
+        () -> openDesignSubSpace(3, "ANIMA"));
 
     btnEditPanel = createSettingsRow("routine_24px", "LENAP",
         T("Floating panel data packs", "Bảng nút nổi (Data Pack)"),
-        () -> { designTabState = 5; refreshPreview(); updateVisTabs(); renderSliders(); });
+        () -> openDesignSubSpace(5, "LENAP"));
 
-    spaceMenu.addView(btnEditAnim);
-    spaceMenu.addView(btnEditPanel);
+    designSpaceMenu.addView(btnEditAnim);
+    designSpaceMenu.addView(btnEditPanel);
 
-    pageDesign.addView(spaceMenu);
+    pageDesign.addView(designSpaceMenu);
+    pageDesign.addView(designBackRow);
     pageDesign.addView(designSliderContainer);
+
+    btnBackToDesignMenu.setOnClickListener(v -> {
+        designSliderContainer.setVisibility(View.GONE);
+        designBackRow.setVisibility(View.GONE);
+        designSpaceMenu.setVisibility(View.VISIBLE);
+        designTopBackRow.setVisibility(View.VISIBLE);
+        updateFabVisibility();
+    });
 }
-    private void updateVisTabs() {
+private void openDesignSubSpace(int tabState, String title) {
+    designTabState = tabState;
+    if (tabState == 3) ensureHomeServiceForPreview();
+    refreshPreview();
+    designTopBackRow.setVisibility(View.GONE);
+    designSpaceMenu.setVisibility(View.GONE);
+    designBackRow.setVisibility(View.VISIBLE);
+    tvDesignSubTitle.setText(title);
+    designSliderContainer.setVisibility(View.VISIBLE);
     updateFabVisibility();
-    btnEditAnim.setBackground(getRounded(designTabState == 3 ? "#222222" : "#161616", 20f));
-    btnEditPanel.setBackground(getRounded(designTabState == 5 ? "#222222" : "#161616", 20f));
+    renderSliders();
 }
 private void renderSliders() {
 designSliderContainer.removeAllViews();
@@ -4369,21 +4422,6 @@ if (designTabState == 5) { renderPanelDesign(); return; }
     btnTest.setLayoutParams(testLp);
     btnTest.setOnClickListener(v -> { Intent i = new Intent("com.manhmoc.edgebar.TEST_ANIM"); i.setPackage(getPackageName()); sendBroadcast(i); Toast.makeText(this, "Playing Animation...", Toast.LENGTH_SHORT).show(); });
     dEffect.addView(btnTest);
-
-    Button btnTestRec = new Button(this);
-    btnTestRec.setText(recIndicatorTestOn ? "⏹ DONE" : "🔴 TEST ANIMATION RECORD");
-    btnTestRec.setBackground(getRounded(recIndicatorTestOn ? "#D32F2F" : "#FFC107", 20f));
-    btnTestRec.setTextColor(recIndicatorTestOn ? Color.WHITE : Color.BLACK);
-    btnTestRec.setPadding(0,30,0,30);
-    LinearLayout.LayoutParams testRecLp = new LinearLayout.LayoutParams(-1,-2); testRecLp.setMargins(0,0,0,20);
-    btnTestRec.setLayoutParams(testRecLp);
-    btnTestRec.setOnClickListener(v -> {
-        recIndicatorTestOn = !recIndicatorTestOn;
-        Intent i = new Intent("com.manhmoc.edgebar.TEST_REC_INDICATOR");
-        i.setPackage(getPackageName()); i.putExtra("on", recIndicatorTestOn);
-        sendBroadcast(i); renderSliders();
-    });
-    dEffect.addView(btnTestRec);
 
     LinearLayout lC = new LinearLayout(this); lC.setOrientation(LinearLayout.HORIZONTAL); lC.setPadding(0,10,0,10);
     TextView tC = new TextView(this); tC.setText("Chủ đề:"); tC.setTextColor(Color.WHITE); tC.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
@@ -4412,6 +4450,22 @@ if (designTabState == 5) { renderPanelDesign(); return; }
     // DRAWER 2: CHỈ BÁO GHI ÂM
     LinearLayout dRec = new LinearLayout(this);
     dRec.setOrientation(LinearLayout.VERTICAL); dRec.setPadding(20,10,20,20);
+
+    Button btnTestRec = new Button(this);
+    btnTestRec.setText(recIndicatorTestOn ? "⏹ DONE" : "🔴 TEST ANIMATION RECORD");
+    btnTestRec.setBackground(getRounded(recIndicatorTestOn ? "#D32F2F" : "#FFC107", 20f));
+    btnTestRec.setTextColor(recIndicatorTestOn ? Color.WHITE : Color.BLACK);
+    btnTestRec.setPadding(0,30,0,30);
+    LinearLayout.LayoutParams testRecLp = new LinearLayout.LayoutParams(-1,-2); testRecLp.setMargins(0,0,0,20);
+    btnTestRec.setLayoutParams(testRecLp);
+    btnTestRec.setOnClickListener(v -> {
+        recIndicatorTestOn = !recIndicatorTestOn;
+        Intent i = new Intent("com.manhmoc.edgebar.TEST_REC_INDICATOR");
+        i.setPackage(getPackageName()); i.putExtra("on", recIndicatorTestOn);
+        sendBroadcast(i); renderSliders();
+    });
+    dRec.addView(btnTestRec);
+
     dRec.addView(createSlider(T("Indicator X position","Vị trí X chỉ báo"), "anim_rec_x", 2000, 1000));
     dRec.addView(createSlider(T("Indicator Y position","Vị trí Y chỉ báo"), "anim_rec_y", 4000, 1000));
     dRec.addView(createSlider(T("Indicator size","Kích thước chỉ báo"), "anim_rec_size", 300, 140));
