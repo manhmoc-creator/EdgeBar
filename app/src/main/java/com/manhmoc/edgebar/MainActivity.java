@@ -2985,7 +2985,7 @@ private LinearLayout createSettingsRow(String icon, String title, String sub, Ru
     rlp.setMargins(0, 0, 0, 14);
     row.setLayoutParams(rlp);
 
-    ImageView tvIcon = makeMenuIcon((String) it[0], 52);
+    ImageView tvIcon = makeMenuIcon(icon, 52);
         LinearLayout.LayoutParams ilp = (LinearLayout.LayoutParams) tvIcon.getLayoutParams();
         ilp.setMargins(0, 0, 25, 0);
         row.addView(tvIcon);
