@@ -442,26 +442,29 @@ if (currentMainTab == 0) {
             boolean recOn = VoiceRecorderService.isRunning;
             boolean recPaused = VoiceRecorderService.isPaused;
             fab.setOnClickListener(v -> {
-    if (!recOn) {
-        if (android.content.pm.PackageManager.PERMISSION_GRANTED != checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)) {
-            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 201);
-            return;
+                if (!recOn) {
+                    if (android.content.pm.PackageManager.PERMISSION_GRANTED != checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)) {
+                        requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 201);
+                        return;
+                    }
+                    Intent i = new Intent(this, VoiceRecorderService.class);
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+                } else if (recPaused) {
+                    Intent i = new Intent(this, VoiceRecorderService.class);
+                    i.setAction(VoiceRecorderService.ACTION_PAUSE_TOGGLE);
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+                } else {
+                    Intent i = new Intent(this, VoiceRecorderService.class);
+                    i.setAction(VoiceRecorderService.ACTION_STOP);
+                    startService(i);
+                }
+                new Handler().postDelayed(this::updateFabVisibility, 300);
+            });
+        } else {
+            fab.setOnClickListener(v -> showPremiumDialog());
         }
-        Intent i = new Intent(this, VoiceRecorderService.class);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
-    } else if (recPaused) {
-        Intent i = new Intent(this, VoiceRecorderService.class);
-        i.setAction(VoiceRecorderService.ACTION_PAUSE_TOGGLE); // tiếp tục ghi
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
-    } else {
-        Intent i = new Intent(this, VoiceRecorderService.class);
-        i.setAction(VoiceRecorderService.ACTION_STOP);
-        startService(i);
-    }
-    new Handler().postDelayed(this::updateFabVisibility, 300);
-});
-        }
-    } else if (currentMainTab == -1) { // Màn chính 9 mục — nút tròn mở Premium
+    } else if (currentMainTab == -1 || currentMainTab == -2 || currentMainTab == -3) { 
+        // Hiện FAB ở Màn Chính, Màn Hệ Sinh Thái, Màn Hệ Thống để mở mục Premium
         fab.setVisibility(View.VISIBLE);
         fab.setOnClickListener(v -> showPremiumDialog());
     } else {
@@ -507,38 +510,46 @@ if (currentMainTab == 0) {
     main.setOrientation(LinearLayout.VERTICAL); main.setPadding(30,50,30,40);
 
     // Xây dựng Header theo bản vẽ tay image_95ae3d.jpg
-    // Xây dựng Header theo bản vẽ tay image_95ae3d.jpg
 LinearLayout headerRow = new LinearLayout(this);
 headerRow.setOrientation(LinearLayout.HORIZONTAL);
 headerRow.setPadding(0, 0, 0, 45);
 headerRow.setGravity(Gravity.CENTER_VERTICAL);
 
-// Cột trái: Tên App và Version (Tăng lên 22sp cực to rõ, vượt trội so với Conditions/Ecosystem)
+// Cột trái: Tên App và Version (Phóng to lên 18sp)
 LinearLayout leftCol = new LinearLayout(this);
 leftCol.setOrientation(LinearLayout.VERTICAL);
 leftCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 TextView title = new TextView(this);
 title.setText(CURRENT_VERSION);
 title.setTextColor(Color.parseColor("#E8EAED"));
-title.setTextSize(13f); // Đồng bộ cỡ chữ với nút Uninstall
+title.setTextSize(18f); // Đã phóng to ngang hàng
 title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
 title.setSingleLine(true);
 leftCol.addView(title);
-// Cột phải: Backup/Restore và English (Nới rộng tỷ lệ weight 1.35f để không bao giờ bị nhảy dòng)
+
+// Cột phải: Gộp nút Update và Uninstall nằm ngang nhau
 LinearLayout rightCol = new LinearLayout(this);
-rightCol.setOrientation(LinearLayout.VERTICAL);
-rightCol.setGravity(Gravity.END);
+rightCol.setOrientation(LinearLayout.HORIZONTAL); // Đổi thành ngang
+rightCol.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
 rightCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.35f));
 
-Button btnUninstallTop = createSystemBtn("Uninstall", "#D32F2F", "#FFFFFF");
-btnUninstallTop.setTextSize(16f);
-btnUninstallTop.setPadding(24, 8, 24, 8);
+Button btnUpdateTop = createSystemBtn("Update", "#333333", "#00E5FF");
+btnUpdateTop.setTextSize(14f);
+btnUpdateTop.setPadding(24, 8, 24, 8);
+LinearLayout.LayoutParams upLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, -2);
+upLp.setMargins(4, 10, 4, 0);
+btnUpdateTop.setLayoutParams(upLp);
+btnUpdateTop.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
 
+Button btnUninstallTop = createSystemBtn("Uninstall", "#D32F2F", "#FFFFFF");
+btnUninstallTop.setTextSize(14f);
+btnUninstallTop.setPadding(24, 8, 24, 8);
 LinearLayout.LayoutParams unTopLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, -2);
 unTopLp.setMargins(4, 10, 4, 0);
-unTopLp.gravity = Gravity.END;
 btnUninstallTop.setLayoutParams(unTopLp);
 btnUninstallTop.setOnClickListener(v -> confirmThenUninstallApp());
+
+rightCol.addView(btnUpdateTop);
 rightCol.addView(btnUninstallTop);
 headerRow.addView(leftCol); headerRow.addView(rightCol);
 main.addView(headerRow);
@@ -664,38 +675,42 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
 
         LinearLayout bottomBar = new LinearLayout(this); bottomBar.setOrientation(LinearLayout.HORIZONTAL); bottomBar.setGravity(Gravity.CENTER_VERTICAL); bottomBar.setBackground(getRounded("#1E1E1E", 100f)); bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
-        ImageButton btnUpdate = createIconCircleBtn(customIconRes("cycle_24px"), "#333333");
-btnUpdate.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
-        etNavSearch = new EditText(this);
-etNavSearch.setHint(T("Search Settings", "Tìm kiếm"));
-etNavSearch.setTextSize(16f); // [MỚI] cỡ chữ chuẩn dùng chung
-etNavSearch.setHintTextColor(Color.GRAY);
-etNavSearch.setTextColor(Color.WHITE);
-etNavSearch.setSingleLine(true);
-etNavSearch.setBackground(getRounded("#2C2C2C", 100f));
-etNavSearch.setPadding(30, 20, 30, 20);
-etNavSearch.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-etNavSearch.addTextChangedListener(new android.text.TextWatcher() {
-    public void afterTextChanged(android.text.Editable s) { liveSearchSettings(s.toString()); }
-    public void beforeTextChanged(CharSequence s,int a,int b,int c){}
-    public void onTextChanged(CharSequence s,int a,int b,int c){}
-});
+        // Đưa nút Back xuống Nav Bar, thay thế vị trí Update cũ
+        ImageButton btnBack = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#333333");
+        btnBack.setOnClickListener(v -> onBackPressed());
 
-// nút tròn icon, thay cho fab dạng viên thuốc — cùng icon compass cho mọi trạng thái
-fab = createIconCircleBtn(customIconRes("explore_24px"), "#333333"); // icon la bàn trong bộ 100 icon
-fab.setTag("fab");
-fab.setOnClickListener(v -> {
-if (currentMainTab == 1) {
-        openRuleBuilderDialog(null, -1, -1, ""); 
-    } else if (currentMainTab == 2) {
-        String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
-        String newId = addDynamicId(listKey);
-        if (ecoType == 0) openIntentEditorV2(newId);
-        else if (ecoType == 1) openTileEditorV2(newId);
-        else openMacroEditorV2(newId);
-    }
-});
-bottomBar.addView(btnUpdate); bottomBar.addView(etNavSearch); bottomBar.addView(fab);
+        etNavSearch = new EditText(this);
+        etNavSearch.setHint(T("Search", "Tìm kiếm"));
+        etNavSearch.setTextSize(16f);
+        etNavSearch.setHintTextColor(Color.GRAY);
+        etNavSearch.setTextColor(Color.WHITE);
+        etNavSearch.setSingleLine(true);
+        etNavSearch.setBackground(getRounded("#2C2C2C", 100f));
+        etNavSearch.setPadding(30, 20, 30, 20);
+        etNavSearch.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        etNavSearch.addTextChangedListener(new android.text.TextWatcher() {
+            public void afterTextChanged(android.text.Editable s) { liveSearchSettings(s.toString()); }
+            public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+            public void onTextChanged(CharSequence s,int a,int b,int c){}
+        });
+
+        // Đổi icon Compass thành touch_app_24px, cho kích thước to lên (Padding giảm từ 34 -> 24)
+        fab = createIconCircleBtn(customIconRes("touch_app_24px"), "#333333"); 
+        fab.setTag("fab");
+        fab.setPadding(24, 24, 24, 24);
+        fab.setOnClickListener(v -> {
+            if (currentMainTab == 1) {
+                openRuleBuilderDialog(null, -1, -1, ""); 
+            } else if (currentMainTab == 2) {
+                String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
+                String newId = addDynamicId(listKey);
+                if (ecoType == 0) openIntentEditorV2(newId);
+                else if (ecoType == 1) openTileEditorV2(newId);
+                else openMacroEditorV2(newId);
+            }
+        });
+
+        bottomBar.addView(btnBack); bottomBar.addView(etNavSearch); bottomBar.addView(fab);
         rootLayout.addView(bottomBar);
 showMainMenu();
         setContentView(rootLayout);
@@ -1530,7 +1545,7 @@ private String cloneDataPackDeep(String itemKey) {
     frontierBackRow.setGravity(Gravity.CENTER_VERTICAL);
     frontierBackRow.setPadding(0, 0, 0, 20);
     frontierBackRow.setVisibility(View.GONE);
-    Button btnBackToSpaces = createCircleBtn("‹", "#222222");
+    ImageButton btnBackToSpaces = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#222222");
     TextView tvFrontierSubTitle = new TextView(this);
     tvFrontierSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvFrontierSubTitle.setTextSize(16);
     LinearLayout.LayoutParams ftlp = new LinearLayout.LayoutParams(-2, -2); ftlp.setMargins(20, 0, 0, 0);
@@ -1818,7 +1833,7 @@ ctrlCol.addView(btnCopy);
         fabNew.setPadding(55, 0, 55, 0);
 
         fabNew.setOnClickListener(v -> openPackRuleEditor(appliedItemKey, null, null, renderRules[0], isHomebSpace));
-        Button btnBack = createCircleBtn("<", "#333333");
+        ImageButton btnBack = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#333333");
         btnBack.setOnClickListener(v -> d.dismiss());
 
         bottomBar.addView(btnUpdate);
@@ -2970,7 +2985,7 @@ private LinearLayout createBackRow(String title) {
     row.setOrientation(LinearLayout.HORIZONTAL);
     row.setGravity(Gravity.CENTER_VERTICAL);
     row.setPadding(0, 0, 0, 30);
-    ImageButton btnBack = createIconCircleBtn(customIconRes("arrow_back_24px"), "#222222");
+    ImageButton btnBack = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#222222"); 
     btnBack.setOnClickListener(v -> showMainMenu());
     TextView tvTitle = new TextView(this);
     tvTitle.setText(T("Back", "Trở lại")); tvTitle.setTextColor(Color.parseColor("#00E5FF")); tvTitle.setTextSize(18);
@@ -4362,7 +4377,7 @@ private void openTileEditorV2(String id) {
     designBackRow.setGravity(Gravity.CENTER_VERTICAL);
     designBackRow.setPadding(0, 0, 0, 20);
     designBackRow.setVisibility(View.GONE);
-    Button btnBackToDesignMenu = createCircleBtn("‹", "#222222");
+    ImageButton btnBackToDesignMenu = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#222222");
     tvDesignSubTitle = new TextView(this);
     tvDesignSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvDesignSubTitle.setTextSize(16);
     LinearLayout.LayoutParams dtlp = new LinearLayout.LayoutParams(-2, -2); dtlp.setMargins(20, 0, 0, 0);
@@ -6270,6 +6285,7 @@ private void liveSearchSettings(String query) {
         searchPopup.setAnchorView(etNavSearch);
         searchPopup.setModal(false);
         searchPopup.setInputMethodMode(android.widget.ListPopupWindow.INPUT_METHOD_NEEDED);
+        searchPopup.setBackgroundDrawable(getRounded("#1E1E1E", 24f)); // Bo tròn 4 góc
     }
     final List<Object[]> finalMatched = matched;
     BaseAdapter adapter = new BaseAdapter() {
@@ -6280,7 +6296,7 @@ private void liveSearchSettings(String query) {
             TextView tv = new TextView(MainActivity.this);
             tv.setText((String) finalMatched.get(p)[0]);
             tv.setTextColor(Color.WHITE); tv.setTextSize(15);
-            tv.setBackgroundColor(Color.parseColor("#1E1E1E"));
+            tv.setBackgroundColor(Color.TRANSPARENT);
             tv.setPadding(30, 26, 30, 26);
             return tv;
         }
@@ -6288,9 +6304,11 @@ private void liveSearchSettings(String query) {
     searchPopup.setAdapter(adapter);
     searchPopup.setWidth(etNavSearch.getWidth() > 0 ? etNavSearch.getWidth() : 600);
     searchPopup.setOnItemClickListener((parent, v, position, id) -> {
-        ((Runnable) finalMatched.get(position)[2]).run();
-        etNavSearch.setText("");
+        Runnable action = (Runnable) finalMatched.get(position)[2];
         searchPopup.dismiss();
+        etNavSearch.setText("");
+        // Dùng Handler đẩy sự kiện ra luồng sau để chống Crash
+        new Handler(android.os.Looper.getMainLooper()).postDelayed(action, 150);
     });
     searchPopup.show();
 }

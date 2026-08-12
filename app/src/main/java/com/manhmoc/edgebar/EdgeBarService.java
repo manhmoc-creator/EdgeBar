@@ -503,6 +503,7 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
                     if (jumpIconBmp == null) {
                         rippleAlpha = 0f; rippleRadius = 0f; touchX = -1; touchY = -1;
                         setVisibility(View.GONE);
+                        removeRippleViewIfIdle(); // Giải phóng View vĩnh viễn khỏi WM chống Tapjacking
                     }
                 }
             });
@@ -563,7 +564,10 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
             fallAnim.addListener(new AnimatorListenerAdapter() {
                 @Override public void onAnimationEnd(Animator a) {
                     jumpIconBmp = null;
-                    if (rippleAlpha <= 0f) setVisibility(View.GONE);
+                    if (rippleAlpha <= 0f) {
+                        setVisibility(View.GONE);
+                        removeRippleViewIfIdle(); // Giải phóng View vĩnh viễn khỏi WM chống Tapjacking
+                    }
                     invalidate();
                 }
             });
@@ -1061,14 +1065,6 @@ android.app.usage.UsageEvents events = usm.queryEvents(now - 24 * 60 * 60 * 1000
         } catch (Exception ignored) {}
     }, 700);
 }
-/**
- * Tự tắt Accessibility của EdgeBar rồi chuyển hẳn sang Homeb (chỉ cần
- * SYSTEM_ALERT_WINDOW) để bar không "để lộ" Accessibility đang bật trong
- * app nhạy cảm. LƯU Ý: BACK/RECENTS/SCREENSHOT... sẽ ngừng hoạt động vì
- * cần Accessibility, không có API thay thế công khai — HOME vẫn chạy
- * (xem case "HOME" mới trong HomescreenService.exec()). Việc tự bật lại
- * Accessibility sau khi rời app blacklist sẽ làm ở lần sau.
- */
 private void triggerBlacklistAutoHomeb() {
     try {
         String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
