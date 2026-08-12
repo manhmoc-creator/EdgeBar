@@ -55,8 +55,8 @@ private String[] M_BAR_NAMES;
 private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold"};
 private String[] C_GESTURE_NAMES;
 private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain;
+    private LinearLayout pageMainMenu, pageEcoShowcase, pageSystemSpace; // [MỚI] màn chính 9-mục
     private Button navCondBtnRef, navEcoBtnRef; // [MỚI] tham chiếu để mở thẳng tab từ Intent action
-
 private String[] PANEL_COLOR_KEYS = {"SLATE","STEEL","MIST","GRAPHITE","INDIGO_MIST","TEAL_GREY","COOL_ASH","DEEP_BLUE"};
 private String[] PANEL_COLOR_HEX  = {"#607D8B","#78909C","#90A4AE","#455A64","#5C6BC0","#4DB6AC","#B0BEC5","#37474F"};
 private String[] PANEL_COLOR_NAMES; // set trong reloadActionLabels()
@@ -85,7 +85,7 @@ private WindowManager.LayoutParams livePreviewLp;
     // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "V19.12.3.6.37";
+    private final String CURRENT_VERSION = "V19.12.3.6.38";
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
     private Button btnWriteSettings; // MỚI
@@ -344,13 +344,25 @@ private String[] getVolKeyActLabs() {
         recreate(); // ẩn nút nếu đã cấp quyền, giống cách các nút quyền khác refresh trạng thái
     }
 }
-    @Override public void onBackPressed() { if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); Button btnD = rootLayout.findViewWithTag("btnDesign"); if(btnD!=null){btnD.setText("⚙️"); btnD.setBackground(getRounded("#333333", 100f));} } else super.onBackPressed(); }
-    private void closeDesignSpace() { 
-    currentMainTab = 1; pageDesign.setVisibility(View.GONE); navMain.setVisibility(View.VISIBLE); pageConditions.setVisibility(View.VISIBLE); updateFabVisibility(); refreshPreview();
+    @Override public void onBackPressed() {
+        if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); return; }
+        if ((pageConditions != null && pageConditions.getVisibility() == View.VISIBLE)
+            || (pageEcosystem != null && pageEcosystem.getVisibility() == View.VISIBLE)
+            || (pageEcoShowcase != null && pageEcoShowcase.getVisibility() == View.VISIBLE)
+            || (pageSystemSpace != null && pageSystemSpace.getVisibility() == View.VISIBLE)) {
+            showMainMenu(); return;
+        }
+        super.onBackPressed();
+    }
+    private void closeDesignSpace() {
+    pageDesign.setVisibility(View.GONE);
+    showMainMenu();
     }
 private void openDesignSpace() { 
-    currentMainTab = 0; refreshPreview(); navMain.setVisibility(View.GONE); pageConditions.setVisibility(View.GONE); pageEcosystem.setVisibility(View.GONE); pageDesign.setVisibility(View.VISIBLE); updateFabVisibility();
-    // [FIX] Tự động mở ANIMA ngay khi vào Design Space — tránh màn hình trống chỉ có 2 nút
+    currentMainTab = 0; refreshPreview();
+    pageMainMenu.setVisibility(View.GONE); pageConditions.setVisibility(View.GONE);
+    pageEcosystem.setVisibility(View.GONE); pageEcoShowcase.setVisibility(View.GONE); pageSystemSpace.setVisibility(View.GONE);
+    pageDesign.setVisibility(View.VISIBLE); updateFabVisibility();
     if (btnEditAnim != null) btnEditAnim.performClick();
 }
     // V19.12.3.6.10: FAB "+NEW EB" hiện ở mọi tab Điều kiện (kể cả LOCK) —
@@ -626,19 +638,31 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
             startActivity(intent);
         });
         main.addView(btnDeviceAdmin);
-    // Navigation Tab đẩy ra đầu dòng kèm icon
-    navMain = new LinearLayout(this);
-    navMain.setOrientation(LinearLayout.HORIZONTAL); navMain.setPadding(0, 0, 0, 40);
-        Button btnNavCond = createNavBtn(T("🎯 CONDITIONS", "ĐIỀU KIỆN"));
-        Button btnNavEco = createNavBtn(" 🎭 ECOSYSTEM");
-        navCondBtnRef = btnNavCond; navEcoBtnRef = btnNavEco; // [MỚI]
-        navMain.addView(btnNavCond); navMain.addView(btnNavEco); main.addView(navMain);
-        pageDesign = new LinearLayout(this); pageDesign.setOrientation(LinearLayout.VERTICAL); pageDesign.setVisibility(View.GONE); buildDesignSpace();
-        pageConditions = new LinearLayout(this); pageConditions.setOrientation(LinearLayout.VERTICAL); buildConditionsSpace();
-        pageEcosystem = new LinearLayout(this); pageEcosystem.setOrientation(LinearLayout.VERTICAL); buildEcosystemSpace();
+    // [ĐỔI] Bỏ 2 nút nav cứng — thay bằng ô tìm kiếm cố định đầu màn + màn chính 9-mục
+    EditText etMainSearch = new EditText(this);
+    etMainSearch.setHint("🔍 " + T("Search settings...", "Tìm kiếm cài đặt..."));
+    etMainSearch.setHintTextColor(Color.GRAY); etMainSearch.setTextColor(Color.WHITE);
+    etMainSearch.setBackground(getRounded("#1A1A1A", 100f));
+    etMainSearch.setPadding(35, 25, 35, 25);
+    etMainSearch.setFocusable(false); etMainSearch.setFocusableInTouchMode(false);
+    LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, -2);
+    searchLp.setMargins(0, 0, 0, 30);
+    etMainSearch.setLayoutParams(searchLp);
+    etMainSearch.setOnClickListener(v -> showSearchDialog());
+    main.addView(etMainSearch);
 
-        main.addView(pageDesign); main.addView(pageConditions); main.addView(pageEcosystem);
-        scroll.addView(main); rootLayout.addView(scroll);
+    navMain = new LinearLayout(this); navMain.setVisibility(View.GONE); // giữ field cũ, không dùng nữa
+
+    pageMainMenu = new LinearLayout(this); pageMainMenu.setOrientation(LinearLayout.VERTICAL); buildMainMenuList();
+    pageDesign = new LinearLayout(this); pageDesign.setOrientation(LinearLayout.VERTICAL); pageDesign.setVisibility(View.GONE); buildDesignSpace();
+    pageConditions = new LinearLayout(this); pageConditions.setOrientation(LinearLayout.VERTICAL); pageConditions.setVisibility(View.GONE); buildConditionsSpace();
+    pageEcosystem = new LinearLayout(this); pageEcosystem.setOrientation(LinearLayout.VERTICAL); pageEcosystem.setVisibility(View.GONE); buildEcosystemSpace();
+    pageEcoShowcase = new LinearLayout(this); pageEcoShowcase.setOrientation(LinearLayout.VERTICAL); pageEcoShowcase.setVisibility(View.GONE); buildEcoShowcaseSpace();
+    pageSystemSpace = new LinearLayout(this); pageSystemSpace.setOrientation(LinearLayout.VERTICAL); pageSystemSpace.setVisibility(View.GONE); buildSystemSpace();
+
+    main.addView(pageMainMenu); main.addView(pageDesign); main.addView(pageConditions);
+    main.addView(pageEcosystem); main.addView(pageEcoShowcase); main.addView(pageSystemSpace);
+    scroll.addView(main); rootLayout.addView(scroll);
 
         LinearLayout bottomBar = new LinearLayout(this); bottomBar.setOrientation(LinearLayout.HORIZONTAL); bottomBar.setGravity(Gravity.CENTER_VERTICAL); bottomBar.setBackground(getRounded("#1E1E1E", 100f)); bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
@@ -671,9 +695,12 @@ if (currentMainTab == 1) { // Đang ở Condition Space
         else openMacroEditorV2(newId);
     }
 });
-        Button btnDesign = createCircleBtn("⚙️", "#333333"); btnDesign.setTag("btnDesign");
-        btnDesign.setOnClickListener(v -> { if(pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); btnDesign.setText("⚙️"); btnDesign.setBackground(getRounded("#333333", 100f)); } else { openDesignSpace(); btnDesign.setText("⚔️"); btnDesign.setBackground(getRounded("#333333", 100f)); } });
-        bottomBar.addView(btnUpdate); bottomBar.addView(btnPremium); bottomBar.addView(spacer); bottomBar.addView(fab); bottomBar.addView(btnDesign);
+        // [ĐỔI HÀNH VI] Bỏ nút bánh răng — nav bar giờ dùng nút Tìm kiếm làm cửa ngõ
+        // duy nhất tới Anima/Lenap và mọi không gian khác. Không gian Design vẫn còn
+        // nguyên (openDesignSpace/closeDesignSpace không đổi), chỉ đổi CÁCH vào.
+        Button btnSearch = createCircleBtn("🔍", "#333333"); btnSearch.setTag("btnSearch");
+        btnSearch.setOnClickListener(v -> showSearchDialog());
+        bottomBar.addView(btnUpdate); bottomBar.addView(btnPremium); bottomBar.addView(spacer); bottomBar.addView(fab); bottomBar.addView(btnSearch);
         rootLayout.addView(bottomBar);
 btnNavCond.setOnClickListener(v -> switchMainTab(1, btnNavCond, btnNavEco));
 btnNavEco.setOnClickListener(v -> switchMainTab(2, btnNavCond, btnNavEco));
@@ -713,6 +740,53 @@ private void switchMainTab(int idx, Button b1, Button b2) {
     b2.setBackground(getRounded(idx==2?"#222222":"#00000000", 20f)); b2.setTextColor(idx==2?Color.parseColor("#00E5FF"):Color.GRAY);
     if(idx==1) renderRulesList();
     if(idx==2) renderEcosystem();
+}
+private void openSpace(int mainTabIdx) {
+    currentMainTab = mainTabIdx;
+    refreshPreview();
+    pageMainMenu.setVisibility(View.GONE);
+    pageDesign.setVisibility(View.GONE);
+    pageEcoShowcase.setVisibility(View.GONE);
+    pageSystemSpace.setVisibility(View.GONE);
+    pageConditions.setVisibility(mainTabIdx == 1 ? View.VISIBLE : View.GONE);
+    pageEcosystem.setVisibility(mainTabIdx == 2 ? View.VISIBLE : View.GONE);
+    updateFabVisibility();
+    if (mainTabIdx == 1) renderRulesList();
+    if (mainTabIdx == 2) renderEcosystem();
+}
+private void openEco(int type, boolean showSubNav) {
+    ecoType = type;
+    openSpace(2);
+    if (ecoNavRef != null) ecoNavRef.setVisibility(showSubNav ? View.VISIBLE : View.GONE);
+    updateFabVisibility();
+    renderEcosystem();
+}
+private void openEcoShowcase() {
+    currentMainTab = -2;
+    pageMainMenu.setVisibility(View.GONE); pageDesign.setVisibility(View.GONE);
+    pageConditions.setVisibility(View.GONE); pageEcosystem.setVisibility(View.GONE);
+    pageSystemSpace.setVisibility(View.GONE);
+    pageEcoShowcase.setVisibility(View.VISIBLE);
+    updateFabVisibility();
+}
+private void openSystemSpace() {
+    currentMainTab = -3;
+    pageMainMenu.setVisibility(View.GONE); pageDesign.setVisibility(View.GONE);
+    pageConditions.setVisibility(View.GONE); pageEcosystem.setVisibility(View.GONE);
+    pageEcoShowcase.setVisibility(View.GONE);
+    pageSystemSpace.setVisibility(View.VISIBLE);
+    updateFabVisibility();
+}
+private void showMainMenu() {
+    currentMainTab = -1;
+    pageDesign.setVisibility(View.GONE);
+    pageConditions.setVisibility(View.GONE);
+    pageEcosystem.setVisibility(View.GONE);
+    pageEcoShowcase.setVisibility(View.GONE);
+    pageSystemSpace.setVisibility(View.GONE);
+    pageMainMenu.setVisibility(View.VISIBLE);
+    updateFabVisibility();
+    refreshPreview();
 }
     // ==================== KHÔNG GIAN ĐIỀU KIỆN ====================
     private void buildConditionsSpace() {
@@ -2824,6 +2898,130 @@ private void showActionCategoryPicker(String title, List<String[]> items,
     });
 
     d.setContentView(root); d.show();
+}
+private void buildMainMenuList() {
+    pageMainMenu.removeAllViews();
+    Object[][] items = {
+        {"👆", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Frontier · Texture · VolKey", (Runnable)() -> openSpace(1)},
+        {"🖥️", T("Display","Hiển thị"), "Anima · Lenap · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
+        {"⚡", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)() -> openEco(0, true)},
+        {"💾", T("Storage","Bộ nhớ"), T("Storage scan","Quét dung lượng"), (Runnable)() -> openEco(3, true)},
+        {"🎙️", T("Sound & Media","Âm thanh & Media"), T("Voice / screen recording","Ghi âm / Quay màn hình"), (Runnable)() -> openEco(4, true)},
+        {"🔒", T("Security","Bảo mật"), "Blacklist · Locklist", (Runnable)() -> openEco(5, false)},
+        {"🧩", T("Ecosystem","Hệ sinh thái"), "YTDLnis · Island", (Runnable)this::openEcoShowcase},
+        {"⚙️", T("System","Hệ thống"), T("Backup · Restore · QR...","Sao lưu · Khôi phục · QR..."), (Runnable)this::openSystemSpace},
+        {"ℹ️", T("About EB","Giới thiệu về EB"), "Premium", (Runnable)this::showPremiumDialog},
+    };
+    for (Object[] it : items) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackground(getRounded("#161616", 20f));
+        row.setPadding(30, 30, 30, 30);
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-1, -2);
+        rlp.setMargins(0, 0, 0, 14);
+        row.setLayoutParams(rlp);
+
+        TextView tvIcon = new TextView(this);
+        tvIcon.setText((String) it[0]); tvIcon.setTextSize(22);
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-2, -2);
+        ilp.setMargins(0, 0, 25, 0);
+        tvIcon.setLayoutParams(ilp);
+        row.addView(tvIcon);
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView tvTitle = new TextView(this);
+        tvTitle.setText((String) it[1]); tvTitle.setTextColor(Color.parseColor("#E8EAED")); tvTitle.setTextSize(15.5f);
+        TextView tvSub = new TextView(this);
+        tvSub.setText((String) it[2]); tvSub.setTextColor(Color.parseColor("#9AA0A6")); tvSub.setTextSize(11.5f); tvSub.setPadding(0,4,0,0);
+        col.addView(tvTitle); col.addView(tvSub);
+        row.addView(col);
+
+        TextView tvChevron = new TextView(this);
+        tvChevron.setText("›"); tvChevron.setTextColor(Color.parseColor("#5F6368")); tvChevron.setTextSize(20);
+        row.addView(tvChevron);
+
+        Runnable action = (Runnable) it[3];
+        row.setOnClickListener(v -> action.run());
+        pageMainMenu.addView(row);
+    }
+}
+
+private LinearLayout createBackRow(String title) {
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setGravity(Gravity.CENTER_VERTICAL);
+    row.setPadding(0, 0, 0, 30);
+    Button btnBack = createCircleBtn("←", "#222222");
+    btnBack.setOnClickListener(v -> showMainMenu());
+    TextView tvTitle = new TextView(this);
+    tvTitle.setText(title); tvTitle.setTextColor(Color.parseColor("#00E5FF")); tvTitle.setTextSize(18);
+    LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-2, -2); tlp.setMargins(20, 0, 0, 0);
+    tvTitle.setLayoutParams(tlp);
+    row.addView(btnBack); row.addView(tvTitle);
+    return row;
+}
+
+private LinearLayout buildShowcaseItem(String icon, String title, String sub, Runnable onClick) {
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setGravity(Gravity.CENTER_VERTICAL);
+    TextView tvIcon = new TextView(this); tvIcon.setText(icon); tvIcon.setTextSize(22);
+    LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-2, -2); ilp.setMargins(0, 0, 20, 0);
+    tvIcon.setLayoutParams(ilp);
+    LinearLayout col = new LinearLayout(this); col.setOrientation(LinearLayout.VERTICAL);
+    col.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    TextView tvT = new TextView(this); tvT.setText(title); tvT.setTextColor(Color.WHITE); tvT.setTextSize(15);
+    TextView tvS = new TextView(this); tvS.setText(sub); tvS.setTextColor(Color.parseColor("#9AA0A6")); tvS.setTextSize(11.5f);
+    col.addView(tvT); col.addView(tvS);
+    row.addView(tvIcon); row.addView(col);
+    row.setOnClickListener(v -> onClick.run());
+    return row;
+}
+
+private void buildEcoShowcaseSpace() {
+    pageEcoShowcase.addView(createBackRow(T("Ecosystem","Hệ sinh thái")));
+    pageEcoShowcase.addView(wrapCard(buildShowcaseItem("🎵", "YTDLnis",
+        T("Quick music/video download","Tải nhạc/video nhanh"), this::showYTDLDialog)));
+    pageEcoShowcase.addView(wrapCard(buildShowcaseItem("🏝️", "Island",
+        T("Toggle Island (Work Profile)","Bật/Tắt Đảo (Island)"), () -> {
+            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            ipc.putExtra("act", "TOGGLE_WORK_PROFILE");
+            sendBroadcast(ipc);
+            Toast.makeText(this, T("Toggled","Đã bật/tắt"), Toast.LENGTH_SHORT).show();
+        })));
+}
+
+private void buildSystemSpace() {
+    pageSystemSpace.addView(createBackRow(T("System","Hệ thống")));
+    pageSystemSpace.addView(wrapCard(buildShowcaseItem("💾", T("Backup","Sao lưu"),
+        T("Export config to JSON","Xuất cấu hình ra JSON"), () -> {
+            Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("application/json");
+            i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup_" + System.currentTimeMillis() + ".json");
+            startActivityForResult(i, 101);
+        })));
+    pageSystemSpace.addView(wrapCard(buildShowcaseItem("📁", T("Restore","Khôi phục"),
+        T("Import config from JSON","Nạp cấu hình từ JSON"), () -> {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*");
+            startActivityForResult(i, 102);
+        })));
+    pageSystemSpace.addView(wrapCard(buildShowcaseItem("🔄", T("Update","Cập nhật"),
+        "GitHub Actions", () -> startActivity(new Intent(Intent.ACTION_VIEW,
+            Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions"))))));
+    pageSystemSpace.addView(wrapCard(buildShowcaseItem("🗑️", T("Trash","Kho cũ"),
+        T("Restore or permanently delete","Khôi phục hoặc xóa vĩnh viễn"), () -> openEco(6, true))));
+    pageSystemSpace.addView(wrapCard(buildShowcaseItem("🔳", T("Scan QR","Quét QR"), "",
+        () -> startActivity(new Intent(this, QrScanActivity.class)))));
+    pageSystemSpace.addView(wrapCard(buildShowcaseItem("🏦", T("QR Banks","QR Ngân hàng"),
+        T("Choose bank apps for VietQR","Chọn app ngân hàng cho VietQR"),
+        () -> showPanelMultiPicker("qr_bank_apps", true))));
+    pageSystemSpace.addView(wrapCard(buildShowcaseItem("🔑", T("Permissions","Quyền cần cấp"),
+        T("Grant remaining permissions","Cấp các quyền còn thiếu"),
+        () -> Toast.makeText(this, T("Scroll to top of this screen","Cuộn lên đầu màn hình chính"), Toast.LENGTH_LONG).show())));
 }
     // ==================== KHÔNG GIAN HỆ SINH THÁI (ECOSYSTEM) ====================
     private void buildEcosystemSpace() {
@@ -5946,6 +6144,131 @@ private void showPanelAppPicker() {
         "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần trọn đời):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 TĂNG TỐC BẰNG ADB (chạy 1 lần):\nadb shell settings put global window_animation_scale 0\nadb shell settings put global transition_animation_scale 0\nadb shell settings put global animator_duration_scale 0"); 
         ScrollView sv = new ScrollView(this); sv.setPadding(50,50,50,50); TextView tv = new TextView(this); tv.setText(t); tv.setTextColor(Color.WHITE); tv.setTextSize(15f); tv.setLineSpacing(0, 1.3f); sv.addView(tv); 
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("👑 PREMIUM ARCHITECT INFO").setView(sv).setPositiveButton("OK", null).show(); 
+    }
+// ==================== TÌM KIẾM (thay thế nút bánh răng ở nav bar) ====================
+    // [TỐI ƯU PIXEL 2XL] Index tra cứu KHÔNG cần internet, KHÔNG quét runtime — chỉ là
+    // 1 List<Object[]>{nhãn, từ khoá, Runnable điều hướng} dựng lại mỗi lần MỞ dialog
+    // (rẻ: toàn tham chiếu object có sẵn, không cấp phát nặng). Dialog + adapter bị GC
+    // thu hồi hoàn toàn ngay khi đóng — Zero RAM dư thừa so với nav bar cố định cũ.
+    private void showSearchDialog() {
+        List<Object[]> index = new ArrayList<>();
+        index.add(new Object[]{T("Frontier - Lock", "Frontier - Khoá màn hình"), "frontier lock khoa man hinh bar corner", (Runnable) () -> {
+            switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 5; frontierSubTab = 0; renderRulesList();
+        }});
+        index.add(new Object[]{T("Frontier - Homeb", "Frontier - Homeb (không Trợ năng)"), "frontier homeb", (Runnable) () -> {
+            switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 5; frontierSubTab = 1; renderRulesList();
+        }});
+        index.add(new Object[]{T("Frontier - Homacc", "Frontier - Homacc (có Trợ năng)"), "frontier homacc", (Runnable) () -> {
+            switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 5; frontierSubTab = 2; renderRulesList();
+        }});
+        index.add(new Object[]{T("Texture (Vân tay)", "Texture - Vân tay"), "texture van tay fingerprint", (Runnable) () -> {
+            switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 4; renderRulesList();
+        }});
+        index.add(new Object[]{T("VolKey (Phím âm lượng)", "VolKey - Phím âm lượng"), "volkey phim am luong volume", (Runnable) () -> {
+            switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 3; renderRulesList();
+        }});
+        index.add(new Object[]{T("Anima (Hiệu ứng)", "Anima - Hiệu ứng phản hồi"), "anima hieu ung animation record viền border", (Runnable) this::openDesignSpace});
+        index.add(new Object[]{T("Lenap (Bảng nút nổi)", "Lenap - Bảng nút nổi"), "lenap panel bang nut noi", (Runnable) () -> {
+            openDesignSpace(); if (btnEditPanel != null) btnEditPanel.performClick();
+        }});
+        index.add(new Object[]{"Intents", "intent hanh dong tuy chinh", (Runnable) () -> {
+            ecoType = 0; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
+        }});
+        index.add(new Object[]{"QS Tiles", "qs tile o vuong cai dat nhanh", (Runnable) () -> {
+            ecoType = 1; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
+        }});
+        index.add(new Object[]{"Macros", "macro chuoi hanh dong", (Runnable) () -> {
+            ecoType = 2; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
+        }});
+        index.add(new Object[]{T("Storage (Bộ nhớ)", "Bộ nhớ - Storage"), "bo nho storage dung luong", (Runnable) () -> {
+            ecoType = 3; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
+        }});
+        index.add(new Object[]{T("Voice Recording (Ghi âm)", "Ghi âm"), "ghi am voice recording", (Runnable) () -> {
+            ecoType = 4; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
+        }});
+        index.add(new Object[]{T("Hệ thống (Blacklist/Locklist/YTDL/QR NH)", "Hành vi hệ thống - Blacklist/Locklist/YTDL/QR Ngân hàng"), "blacklist locklist ytdl qr ngan hang bao mat he thong", (Runnable) () -> {
+            ecoType = 5; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.GONE); updateFabVisibility(); renderEcosystem();
+        }});
+        index.add(new Object[]{T("Kho Cũ (Trash)", "Kho Cũ"), "kho cu trash thung rac", (Runnable) () -> {
+            ecoType = 6; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
+        }});
+        index.add(new Object[]{"Scan QR", "quet ma qr scan", (Runnable) () -> {
+            Intent qr = new Intent(this, QrScanActivity.class);
+            qr.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(qr);
+        }});
+        index.add(new Object[]{"Premium", "premium adb quyen", (Runnable) this::showPremiumDialog});
+        index.add(new Object[]{T("Backup", "Sao lưu cấu hình"), "backup sao luu", (Runnable) () -> {
+            Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("application/json");
+            i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup_" + System.currentTimeMillis() + ".json");
+            startActivityForResult(i, 101);
+        }});
+        index.add(new Object[]{T("Restore", "Khôi phục cấu hình"), "restore khoi phuc", (Runnable) () -> {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*");
+            startActivityForResult(i, 102);
+        }});
+        index.add(new Object[]{T("Language / Ngôn ngữ", "Đổi ngôn ngữ"), "language ngon ngu tieng viet english", (Runnable) () -> {
+            prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate();
+        }});
+
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30, 80, 30, 30);
+
+        EditText etSearch = new EditText(this);
+        etSearch.setHint("🔍 " + T("Search settings...", "Tìm kiếm cài đặt..."));
+        etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
+        etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30, 25, 30, 25);
+        root.addView(etSearch);
+
+        ListView lv = new ListView(this);
+        lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+        root.addView(lv);
+
+        List<Object[]> shown = new ArrayList<>(index);
+        BaseAdapter adapter = new BaseAdapter() {
+            @Override public int getCount() { return shown.size(); }
+            @Override public Object getItem(int p) { return shown.get(p); }
+            @Override public long getItemId(int p) { return p; }
+            @Override public View getView(int p, View cv, ViewGroup parent) {
+                TextView tv = new TextView(MainActivity.this);
+                tv.setText((String) shown.get(p)[0]);
+                tv.setTextColor(Color.WHITE); tv.setTextSize(15);
+                tv.setPadding(20, 28, 20, 28);
+                return tv;
+            }
+        };
+        lv.setAdapter(adapter);
+        lv.setOnItemClickListener((parent, v, position, id) -> {
+            ((Runnable) shown.get(position)[2]).run();
+            d.dismiss();
+        });
+
+        etSearch.addTextChangedListener(new android.text.TextWatcher() {
+            public void afterTextChanged(android.text.Editable s) {
+                String q = s.toString().trim().toLowerCase();
+                shown.clear();
+                for (Object[] item : index) {
+                    String label = ((String) item[0]).toLowerCase();
+                    String keys = (String) item[1];
+                    if (q.isEmpty() || label.contains(q) || keys.contains(q)) shown.add(item);
+                }
+                adapter.notifyDataSetChanged();
+            }
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            public void onTextChanged(CharSequence s, int a, int b, int c) {}
+        });
+
+        Button bClose = new Button(this); bClose.setText(T("CLOSE", "ĐÓNG"));
+        bClose.setBackground(getRounded("#333333", 20f)); bClose.setTextColor(Color.WHITE);
+        bClose.setOnClickListener(v -> d.dismiss());
+        root.addView(bClose);
+
+        d.setContentView(root);
+        d.show();
+        etSearch.requestFocus();
     }
 private void confirmThenUninstallApp() {
     if (Build.VERSION.SDK_INT >= 30) {

@@ -1366,7 +1366,9 @@ for (String a : acts) {
                     break;
                 }
                 case "TOGGLE_OVERLAY": {
-                    sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC"));
+                    Intent toggleIntent = new Intent(this, ToggleReceiver.class);
+                    toggleIntent.setAction("com.manhmoc.edgebar.TOGGLE_ACC");
+                    sendBroadcast(toggleIntent);
                     break;
                 }
                 case "TOGGLE_WORK_PROFILE": {
@@ -1768,6 +1770,11 @@ PixelFormat.TRANSLUCENT);
     appLockPollHandler.removeCallbacksAndMessages(null); // [MỚI] dừng poll, tránh leak Handler
     try { unregisterReceiver(syncReceiver); } catch (Exception e) {}
     prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
+    removeYtdlOverlay(); // [FIX TAPJACKING] BẮT BUỘC gỡ trước tiên — đây là overlay
+    // TYPE_APPLICATION_OVERLAY + FLAG_LAYOUT_NO_LIMITS phủ toàn màn hình. Trước đây bị
+    // sót khỏi onDestroy(), nếu Service chết đúng lúc ô nhập YTDL đang mở, cửa sổ này
+    // "mồ côi" vĩnh viễn trên WindowManager (không còn ai gọi removeView được nữa) ->
+    // Android bật cơ chế lọc chạm chống tapjacking -> chặn thao tác toàn hệ thống.
     for (int i = 0; i < 5; i++) if (bars[i] != null) wm.removeView(bars[i]);
     for (int i = 0; i < 4; i++) if (corners[i] != null) wm.removeView(corners[i]);
     if (rippleView != null) wm.removeView(rippleView);

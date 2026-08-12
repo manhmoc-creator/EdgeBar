@@ -1217,11 +1217,12 @@ case "SCREEN_ON":
                     break;
                 }
                 case "TOGGLE_OVERLAY": {
-                    // [MỚI] Bật/tắt Trợ năng (Homeb ⇄ Overlay Trợ năng) ngay từ Action —
-                    // tái sử dụng NGUYÊN VẸN pipeline PAUSE_WM_OPS -> ghi Settings.Secure ->
-                    // RESUME_WM_OPS đã có sẵn và ổn định trong ToggleReceiver. Zero code
-                    // trùng lặp, Zero RAM/CPU thêm ngoài 1 Intent nội bộ nhỏ cùng process.
-                    sendBroadcast(new Intent("com.manhmoc.edgebar.TOGGLE_ACC"));
+                    // [FIX] Explicit Intent (chỉ thẳng class) thay vì implicit broadcast —
+                    // đảm bảo ToggleReceiver (khai báo tĩnh trong Manifest) luôn nhận được,
+                    // không phụ thuộc giới hạn implicit-broadcast của Android 8+.
+                    Intent toggleIntent = new Intent(this, ToggleReceiver.class);
+                    toggleIntent.setAction("com.manhmoc.edgebar.TOGGLE_ACC");
+                    sendBroadcast(toggleIntent);
                     break;
                 }
                 case "TOGGLE_WORK_PROFILE": {
