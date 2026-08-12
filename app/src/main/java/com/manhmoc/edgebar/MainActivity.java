@@ -874,10 +874,19 @@ private void showMainMenu() {
     gesSubHeader.setGravity(Gravity.CENTER_VERTICAL);
     gesSubHeader.setPadding(0, 0, 0, 20);
     gesSubHeader.setVisibility(View.GONE);
-    // Bỏ hẳn nút btnBackToGesMenu
+    ImageButton btnBackToGesMenu = createIconCircleBtn(android.R.drawable.ic_menu_close_clear_cancel, "#222222");
+    btnBackToGesMenu.setOnClickListener(v -> {
+        gesMenuContainer.setVisibility(View.VISIBLE);
+        gesSubHeader.setVisibility(View.GONE);
+        listRules.setVisibility(View.GONE);
+        condBackRow.setVisibility(View.VISIBLE);
+        updateFabVisibility();
+    });
     tvGesSubTitle = new TextView(this);
     tvGesSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvGesSubTitle.setTextSize(18);
-    gesSubHeader.addView(tvGesSubTitle);
+    LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-2, -2); tlp.setMargins(20, 0, 0, 0);
+    tvGesSubTitle.setLayoutParams(tlp);
+    gesSubHeader.addView(btnBackToGesMenu); gesSubHeader.addView(tvGesSubTitle);
     pageConditions.addView(gesSubHeader);
 
     listRules = new LinearLayout(this);
@@ -1590,13 +1599,49 @@ private String cloneDataPackDeep(String itemKey) {
     frontierBackRow.setGravity(Gravity.CENTER_VERTICAL);
     frontierBackRow.setPadding(0, 0, 0, 20);
     frontierBackRow.setVisibility(View.GONE);
-    // Đã bỏ hoàn toàn btnBackToSpaces
+    ImageButton btnBackToSpaces = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#222222");
     TextView tvFrontierSubTitle = new TextView(this);
-    tvFrontierSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvFrontierSubTitle.setTextSize(18);
-    frontierBackRow.addView(tvFrontierSubTitle);
+    tvFrontierSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvFrontierSubTitle.setTextSize(16);
+    LinearLayout.LayoutParams ftlp = new LinearLayout.LayoutParams(-2, -2); ftlp.setMargins(20, 0, 0, 0);
+    tvFrontierSubTitle.setLayoutParams(ftlp);
+    frontierBackRow.addView(btnBackToSpaces); frontierBackRow.addView(tvFrontierSubTitle);
     listRules.addView(frontierBackRow);
-    
-    // (Listener của nút back cũ đã bị xóa)
+
+    LinearLayout body = new LinearLayout(this);
+    body.setOrientation(LinearLayout.VERTICAL);
+    body.setVisibility(View.GONE);
+    listRules.addView(body);
+
+    Object[][] spaces = {
+        {"routine_24px", "HOMEB", T("No Accessibility needed","Không cần Trợ năng"), 1},
+        {"accessible_menu_24px", "HOMACC", T("Accessibility ON","Có Trợ năng"), 2},
+        {"mobile_lock_portrait_24px", "LOCK", T("Lock screen","Màn hình khoá"), 0},
+    };
+    for (Object[] space : spaces) {
+        final int spaceIdx = (int) space[3];
+        final String spaceLabel = (String) space[1];
+        LinearLayout row = createSettingsRow((String) space[0], spaceLabel, (String) space[2],
+            () -> {
+                frontierSubTab = spaceIdx;
+                refreshPreview();
+                if (spaceIdx == 1) ensureHomeServiceForPreview();
+                subTab.setVisibility(View.GONE);
+                gesSubHeader.setVisibility(View.GONE);
+                frontierBackRow.setVisibility(View.VISIBLE);
+                tvFrontierSubTitle.setText(spaceLabel);
+                body.setVisibility(View.VISIBLE);
+                redrawFrontierBody(body);
+                updateFabVisibility();
+            });
+        subTab.addView(row);
+    }
+    btnBackToSpaces.setOnClickListener(v -> {
+        body.setVisibility(View.GONE);
+        frontierBackRow.setVisibility(View.GONE);
+        subTab.setVisibility(View.VISIBLE);
+        gesSubHeader.setVisibility(View.VISIBLE);
+        updateFabVisibility();
+    });
 }
 private void redrawFrontierBody(LinearLayout body) {
         body.removeAllViews();
