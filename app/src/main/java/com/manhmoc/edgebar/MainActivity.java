@@ -647,21 +647,9 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
             startActivity(intent);
         });
         main.addView(btnDeviceAdmin);
-    // [ĐỔI] Bỏ 2 nút nav cứng — thay bằng ô tìm kiếm cố định đầu màn + màn chính 9-mục
-    EditText etMainSearch = new EditText(this);
-    etMainSearch.setHint("🔍 " + T("Search settings...", "Tìm kiếm cài đặt..."));
-    etMainSearch.setHintTextColor(Color.GRAY); etMainSearch.setTextColor(Color.WHITE);
-    etMainSearch.setBackground(getRounded("#1A1A1A", 100f));
-    etMainSearch.setPadding(35, 25, 35, 25);
-    etMainSearch.setFocusable(false); etMainSearch.setFocusableInTouchMode(false);
-    LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, -2);
-    searchLp.setMargins(0, 0, 0, 30);
-    etMainSearch.setLayoutParams(searchLp);
-    etMainSearch.setOnClickListener(v -> showSearchDialog());
-    main.addView(etMainSearch);
-
+    // [XÓA] Ô tìm kiếm cố định đầu màn — cổng vào tìm kiếm giờ CHỈ còn nút 🔍 ở
+    // bottomBar (btnSearch), tránh 2 cổng vào trùng chức năng cùng lúc chiếm RAM layout.
     navMain = new LinearLayout(this); navMain.setVisibility(View.GONE); // giữ field cũ, không dùng nữa
-
     pageMainMenu = new LinearLayout(this); pageMainMenu.setOrientation(LinearLayout.VERTICAL); buildMainMenuList();
     pageDesign = new LinearLayout(this); pageDesign.setOrientation(LinearLayout.VERTICAL); pageDesign.setVisibility(View.GONE); buildDesignSpace();
     pageConditions = new LinearLayout(this); pageConditions.setOrientation(LinearLayout.VERTICAL); pageConditions.setVisibility(View.GONE); buildConditionsSpace();
@@ -837,13 +825,12 @@ private void showMainMenu() {
     listRules.setVisibility(View.GONE);
     pageConditions.addView(listRules);
 }
-
 private void openGesTab(int tab, String title) {
     currentGesTab = tab;
     refreshPreview();
     gesMenuContainer.setVisibility(View.GONE);
     gesSubHeader.setVisibility(View.VISIBLE);
-    tvGesSubTitle.setText(title);
+    tvGesSubTitle.setText(T("Back", "Trở lại")); // [ĐỔI] bỏ lặp tên mục, chỉ còn "Trở lại"
     listRules.setVisibility(View.VISIBLE);
     updateFabVisibility();
     renderRulesList();
@@ -1548,52 +1535,26 @@ private String cloneDataPackDeep(String itemKey) {
         {"♿", "HOMACC", T("Có Trợ năng","Có Trợ năng"), 2},
         {"🔒", "LOCK", T("Màn hình khoá","Màn hình khoá"), 0},
     };
-    LinearLayout[] rowRefs = new LinearLayout[spaces.length];
+    // [ĐỔI] Thay 3 hàng to (icon+tên+phụ đề+nút riêng) bằng 1 thanh tab gọn — chỉ còn
+    // ĐÚNG 1 nút "+ NEW EB" cho không gian đang chọn, không còn cảnh Homeb vẫn thấy
+    // nút của Homacc/Lock. Ít View hơn = ít RAM/CPU inflate hơn mỗi lần mở Frontier.
+    Button[] rowRefs = new Button[spaces.length];
     Runnable[] styleTabs = new Runnable[1];
 
+    LinearLayout tabRow = new LinearLayout(this);
+    tabRow.setOrientation(LinearLayout.HORIZONTAL);
+    tabRow.setPadding(0, 0, 0, 20);
     for (int si = 0; si < spaces.length; si++) {
         final int spaceIdx = (int) spaces[si][3];
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(30, 26, 20, 26);
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-1, -2);
-        rlp.setMargins(0, 0, 0, 10);
-        row.setLayoutParams(rlp);
-
-        TextView tvIcon = new TextView(this);
-        tvIcon.setText((String) spaces[si][0]); tvIcon.setTextSize(20);
-        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-2,-2); ilp.setMargins(0,0,20,0);
-        tvIcon.setLayoutParams(ilp);
-
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-        TextView tvTitle = new TextView(this);
-        tvTitle.setText((String) spaces[si][1]); tvTitle.setTextColor(Color.parseColor("#E8EAED")); tvTitle.setTextSize(15.5f);
-        tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        TextView tvSub = new TextView(this);
-        tvSub.setText((String) spaces[si][2]); tvSub.setTextColor(Color.parseColor("#9AA0A6")); tvSub.setTextSize(11.5f); tvSub.setPadding(0,3,0,0);
-        col.addView(tvTitle); col.addView(tvSub);
-
-        // [ĐỔI] Nút "+NEW EB" nằm ngay trên dòng này thay vì FAB dưới nav bar
-        Button btnNewEb = new Button(this);
-        btnNewEb.setText("+ NEW EB");
-        btnNewEb.setBackground(getRounded(ACCENT_COLOR, 40f));
-        btnNewEb.setTextColor(Color.BLACK);
-        btnNewEb.setTextSize(11.5f);
-        btnNewEb.setPadding(24, 10, 24, 10);
-        btnNewEb.setOnClickListener(v -> {
-            frontierSubTab = spaceIdx;
-            if (spaceIdx == 1) ensureHomeServiceForPreview();
-            showCallPTDropdownFrontier();
-        });
-
-        row.addView(tvIcon); row.addView(col); row.addView(btnNewEb);
-        rowRefs[si] = row;
-        subTab.addView(row);
-
-        row.setOnClickListener(v -> {
+        Button tabBtn = new Button(this);
+        tabBtn.setText((String) spaces[si][0] + " " + (String) spaces[si][1]);
+        tabBtn.setTextSize(12f);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, -2, 1f);
+        tlp.setMargins(4, 0, 4, 0);
+        tabBtn.setLayoutParams(tlp);
+        rowRefs[si] = tabBtn;
+        tabRow.addView(tabBtn);
+        tabBtn.setOnClickListener(v -> {
             frontierSubTab = spaceIdx;
             refreshPreview();
             if (spaceIdx == 1) ensureHomeServiceForPreview();
@@ -1602,14 +1563,31 @@ private String cloneDataPackDeep(String itemKey) {
             updateFabVisibility();
         });
     }
+    subTab.addView(tabRow);
+
+    Button btnNewEb = new Button(this);
+    btnNewEb.setText("+ NEW EB");
+    btnNewEb.setBackground(getRounded(ACCENT_COLOR, 40f));
+    btnNewEb.setTextColor(Color.BLACK);
+    btnNewEb.setTextSize(12.5f);
+    btnNewEb.setPadding(24, 14, 24, 14);
+    LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(-1, -2);
+    nlp.setMargins(0, 0, 0, 15);
+    btnNewEb.setLayoutParams(nlp);
+    btnNewEb.setOnClickListener(v -> {
+        if (frontierSubTab == 1) ensureHomeServiceForPreview();
+        showCallPTDropdownFrontier();
+    });
+    subTab.addView(btnNewEb);
 
     styleTabs[0] = () -> {
         for (int si = 0; si < spaces.length; si++) {
             int spaceIdx = (int) spaces[si][3];
-            rowRefs[si].setBackground(getRounded(spaceIdx == frontierSubTab ? "#0D4A52" : "#161616", 20f));
+            boolean active = spaceIdx == frontierSubTab;
+            rowRefs[si].setBackground(getRounded(active ? ACCENT_COLOR : "#222222", 20f));
+            rowRefs[si].setTextColor(active ? Color.BLACK : Color.parseColor("#9AA0A6"));
         }
     };
-
     if (frontierSubTab == 1) ensureHomeServiceForPreview();
     styleTabs[0].run();
     redrawFrontierBody(body);
@@ -2962,16 +2940,18 @@ private void showActionCategoryPicker(String title, List<String[]> items,
 private void buildMainMenuList() {
     pageMainMenu.removeAllViews();
     Object[][] items = {
-        {"👆", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Frontier · Texture · VolKey", (Runnable)() -> openSpace(1)},
-        {"🖥️", T("Display","Hiển thị"), "Anima · Lenap · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
-        {"⚡", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)() -> openEco(0, true)},
-        {"💾", T("Storage","Bộ nhớ"), T("Storage scan","Quét dung lượng"), (Runnable)() -> openEco(3, true)},
-        {"🎙️", T("Sound & Media","Âm thanh & Media"), T("Voice / screen recording","Ghi âm / Quay màn hình"), (Runnable)() -> openEco(4, true)},
-        {"🔒", T("Security","Bảo mật"), "Blacklist · Locklist", (Runnable)() -> openEco(5, false)},
-        {"🧩", T("Ecosystem","Hệ sinh thái"), "YTDLnis · Island", (Runnable)this::openEcoShowcase},
-        {"⚙️", T("System","Hệ thống"), T("Backup · Restore · QR...","Sao lưu · Khôi phục · QR..."), (Runnable)this::openSystemSpace},
-        {"ℹ️", T("About Edge Bar","Giới thiệu về Edge Bar"), "Premium", (Runnable)this::showPremiumDialog},
-    };
+    {"👆", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Frontier · Texture · VolKey", (Runnable)() -> openSpace(1)},
+    {"🖥️", T("Display","Hiển thị"), "Anima · Lenap · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
+    {"⚡", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)() -> openEco(0, true)},
+    // [FIX] showSubNav = false — Storage/Sound&Media KHÔNG cần thanh tab Intents/QS
+    // Tiles/Macros của Custom Actions đè lên trên. true trước đây là bug gây lộ chéo.
+    {"💾", T("Storage","Bộ nhớ"), T("Storage scan","Quét dung lượng"), (Runnable)() -> openEco(3, false)},
+    {"🎙️", T("Sound & Media","Âm thanh & Media"), T("Voice / screen recording","Ghi âm / Quay màn hình"), (Runnable)() -> openEco(4, false)},
+    {"🔒", T("Security","Bảo mật"), "Blacklist · Locklist", (Runnable)() -> openEco(5, false)},
+    {"🧩", T("Ecosystem","Hệ sinh thái"), "YTDLnis · Island", (Runnable)this::openEcoShowcase},
+    {"⚙️", T("System","Hệ thống"), T("Backup · Restore · QR...","Sao lưu · Khôi phục · QR..."), (Runnable)this::openSystemSpace},
+    {"ℹ️", T("About Edge Bar","Giới thiệu về Edge Bar"), "Premium", (Runnable)this::showPremiumDialog},
+};
     for (Object[] it : items) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -3017,12 +2997,13 @@ private LinearLayout createBackRow(String title) {
     Button btnBack = createCircleBtn("←", "#222222");
     btnBack.setOnClickListener(v -> showMainMenu());
     TextView tvTitle = new TextView(this);
-    tvTitle.setText(title); tvTitle.setTextColor(Color.parseColor("#00E5FF")); tvTitle.setTextSize(18);
+    tvTitle.setText(T("Back", "Trở lại")); tvTitle.setTextColor(Color.parseColor("#00E5FF")); tvTitle.setTextSize(18);
     LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-2, -2); tlp.setMargins(20, 0, 0, 0);
     tvTitle.setLayoutParams(tlp);
     row.addView(btnBack); row.addView(tvTitle);
     return row;
 }
+
 private LinearLayout createSettingsRow(String icon, String title, String sub, Runnable onClick) {
     LinearLayout row = new LinearLayout(this);
     row.setOrientation(LinearLayout.HORIZONTAL);
@@ -3106,8 +3087,9 @@ private void buildSystemSpace() {
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("🔄", T("Update","Cập nhật"),
         "GitHub Actions", () -> startActivity(new Intent(Intent.ACTION_VIEW,
             Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions"))))));
+    // [FIX] showSubNav = false — Kho cũ cũng không cần thanh tab Custom Actions
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("🗑️", T("Trash","Kho cũ"),
-        T("Restore or permanently delete","Khôi phục hoặc xóa vĩnh viễn"), () -> openEco(6, true))));
+        T("Restore or permanently delete","Khôi phục hoặc xóa vĩnh viễn"), () -> openEco(6, false))));
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("🔳", T("Scan QR","Quét QR"), "",
         () -> startActivity(new Intent(this, QrScanActivity.class)))));
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("🏦", T("QR Banks","QR Ngân hàng"),
@@ -3117,69 +3099,37 @@ private void buildSystemSpace() {
         T("Grant remaining permissions","Cấp các quyền còn thiếu"),
         () -> Toast.makeText(this, T("Scroll to top of this screen","Cuộn lên đầu màn hình chính"), Toast.LENGTH_LONG).show())));
 }
-    // ==================== KHÔNG GIAN HỆ SINH THÁI (ECOSYSTEM) ====================
+    // ==================== KHÔNG GIAN HÀNH ĐỘNG TUỲ CHỈNH (CHỈ INTENTS/QS TILES/MACROS) ====================
+    // [ĐỔI] Bỏ hẳn nút "SYSTEM BEHAVIOR" và "KHO CŨ" khỏi đây — Blacklist/Locklist đã có
+    // cổng vào riêng ở mục "Bảo mật", YTDL/QR Bank/Storage/Ghi âm/Kho cũ đã có cổng vào
+    // riêng ở "Hệ sinh thái"/"Bộ nhớ"/"Âm thanh & Media"/"Hệ thống". Mỗi tính năng chỉ còn
+    // ĐÚNG 1 nơi truy cập -> ít View trùng lặp phải dựng, đỡ RAM/pin trên Pixel 2XL.
     private void buildEcosystemSpace() {
-    // TẦNG 1: Nút Không Gian System Behavior bao bọc các tính năng hệ thống (Ngay trên 3 nút Intents/QS/Macros)
-    Button btnSystemBehavior = new Button(this);
-    btnSystemBehavior.setText(T("⚙️ SYSTEM BEHAVIOR (BLACKLIST / YTDL / STORAGE)", "⚙️ HÀNH VI HỆ THỐNG (BLACKLIST / YTDL / LƯU TRỮ)"));
-    btnSystemBehavior.setBackground(getRounded("#202124", 30f));
-    btnSystemBehavior.setTextColor(Color.parseColor("#00E5FF"));
-    btnSystemBehavior.setTextSize(13.5f);
-    btnSystemBehavior.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    LinearLayout.LayoutParams sysLp = new LinearLayout.LayoutParams(-1, -2);
-    sysLp.setMargins(0, 0, 0, 20);
-    btnSystemBehavior.setLayoutParams(sysLp);
-    pageEcosystem.addView(btnSystemBehavior);
-
-    // TẦNG 2: 3 Nút Không Gian Intents / QS Tiles / Macros
     LinearLayout ecoNav = new LinearLayout(this);
     ecoNav.setOrientation(LinearLayout.HORIZONTAL);
     ecoNav.setPadding(0, 0, 0, 35);
-    ecoNavRef = ecoNav; // [MỚI]
+    ecoNavRef = ecoNav;
     Button btnIntents = new Button(this); btnIntents.setText("INTENTS");
     btnIntents.setBackground(getRounded("#D32F2F", 40f)); btnIntents.setTextColor(Color.WHITE); btnIntents.setTextSize(13.5f);
     Button btnTiles = new Button(this); btnTiles.setText("QS TILES");
     btnTiles.setBackground(getRounded("#4CAF50", 40f)); btnTiles.setTextColor(Color.WHITE); btnTiles.setTextSize(13.5f);
     Button btnMacros = new Button(this); btnMacros.setText("MACROS");
-        btnMacros.setBackground(getRounded("#2196F3", 40f));
-        btnMacros.setTextColor(Color.WHITE); btnMacros.setTextSize(11f);
-        
-        Button btnTrash = new Button(this); btnTrash.setText("KHO CŨ");
-        btnTrash.setBackground(getRounded("#9E9E9E", 40f));
-        btnTrash.setTextColor(Color.WHITE); btnTrash.setTextSize(11f);
-        
-        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, -2, 1f);
-        btnLp.setMargins(6, 0, 6, 0);
-        btnIntents.setLayoutParams(btnLp); btnTiles.setLayoutParams(btnLp);
-        btnMacros.setLayoutParams(btnLp); btnTrash.setLayoutParams(btnLp);
-        btnIntents.setTextSize(11f); btnTiles.setTextSize(11f); // Giảm font để vừa 4 ô
-        
-        ecoNav.addView(btnIntents); ecoNav.addView(btnTiles);
-        ecoNav.addView(btnMacros); ecoNav.addView(btnTrash);
-        pageEcosystem.addView(ecoNav);
-        ecoContainer = new LinearLayout(this);
-        ecoContainer.setOrientation(LinearLayout.VERTICAL);
-        pageEcosystem.addView(ecoContainer);
-        // Thuật toán bật/tắt (Toggle) che lấp hoàn toàn nút không gian bên dưới
-        btnSystemBehavior.setOnClickListener(v -> {
-            if (ecoType == 5) {
-                ecoType = 0;
-                ecoNav.setVisibility(View.VISIBLE);
-            } else {
-                ecoType = 5;
-                ecoNav.setVisibility(View.GONE);
-            }
-            updateFabVisibility();
-            renderEcosystem();
-        });
-        btnIntents.setOnClickListener(v -> { ecoType = 0;
-            ecoNav.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem(); });
-        btnTiles.setOnClickListener(v -> { ecoType = 1;
-            ecoNav.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem(); });
-        btnMacros.setOnClickListener(v -> { ecoType = 2;
-            ecoNav.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem(); });
-        btnTrash.setOnClickListener(v -> { ecoType = 6;
-            ecoNav.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem(); });
+    btnMacros.setBackground(getRounded("#2196F3", 40f));
+    btnMacros.setTextColor(Color.WHITE); btnMacros.setTextSize(13.5f);
+
+    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, -2, 1f);
+    btnLp.setMargins(6, 0, 6, 0);
+    btnIntents.setLayoutParams(btnLp); btnTiles.setLayoutParams(btnLp); btnMacros.setLayoutParams(btnLp);
+
+    ecoNav.addView(btnIntents); ecoNav.addView(btnTiles); ecoNav.addView(btnMacros);
+    pageEcosystem.addView(ecoNav);
+    ecoContainer = new LinearLayout(this);
+    ecoContainer.setOrientation(LinearLayout.VERTICAL);
+    pageEcosystem.addView(ecoContainer);
+
+    btnIntents.setOnClickListener(v -> { ecoType = 0; updateFabVisibility(); renderEcosystem(); });
+    btnTiles.setOnClickListener(v -> { ecoType = 1; updateFabVisibility(); renderEcosystem(); });
+    btnMacros.setOnClickListener(v -> { ecoType = 2; updateFabVisibility(); renderEcosystem(); });
     }
     // ==================== DANH SÁCH ĐỘNG (KHÔNG GIỚI HẠN SỐ LƯỢNG) ====================
 // Thay cho kiểu "i1_.. i15_" cố định — dùng JSON array chứa list các ID (UUID rút gọn).
@@ -3678,35 +3628,8 @@ cardWrap.addView(selDot);
 
     appListRow.addView(btnPickBlacklist); appListRow.addView(btnPickLockList);
     secSys.addView(appListRow);
-    // [MỚI] Hàng riêng cho YTDL — đẩy xuống dưới Blacklist/LockList
-    LinearLayout ytdlRow = new LinearLayout(this);
-    ytdlRow.setOrientation(LinearLayout.HORIZONTAL);
-    LinearLayout.LayoutParams ytdlRowLp = new LinearLayout.LayoutParams(-1, -2);
-    ytdlRowLp.setMargins(0, 15, 0, 0);
-    ytdlRow.setLayoutParams(ytdlRowLp);
-    Button btnPickYtdl = new Button(this);
-    btnPickYtdl.setText("🎵 YTDL"); btnPickYtdl.setBackground(getRounded("#FFD700", 20f)); btnPickYtdl.setTextColor(Color.BLACK);
-    btnPickYtdl.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-    btnPickYtdl.setOnClickListener(v -> showYTDLDialog());
-    ytdlRow.addView(btnPickYtdl);
-    secSys.addView(ytdlRow);
-
-    // [MỚI] Chọn app ngân hàng — hiện khi quét trúng mã VietQR thanh toán.
-    // Không có API nào cho biết chắc "app nào là app ngân hàng", nên EdgeBar tự
-    // dò 1 danh sách package phổ biến (best-effort) rồi CỘNG THÊM danh sách này
-    // do bạn tự chọn — đảm bảo đúng 100% dù danh sách dò sẵn có thiếu/sai.
-    LinearLayout bankRow = new LinearLayout(this);
-    bankRow.setOrientation(LinearLayout.HORIZONTAL);
-    LinearLayout.LayoutParams bankRowLp = new LinearLayout.LayoutParams(-1, -2);
-    bankRowLp.setMargins(0, 15, 0, 0);
-    bankRow.setLayoutParams(bankRowLp);
-    Button btnPickBank = new Button(this);
-    btnPickBank.setText("🏦 " + T("QR BANKS", "CHỌN NGÂN HÀNG"));
-    btnPickBank.setBackground(getRounded("#2E7D32", 20f)); btnPickBank.setTextColor(Color.WHITE);
-    btnPickBank.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-    btnPickBank.setOnClickListener(v -> showPanelMultiPicker("qr_bank_apps", true));
-    bankRow.addView(btnPickBank);
-    secSys.addView(bankRow);
+    // [XÓA] Nút YTDL và QR Bank — đã có cổng vào riêng ở "Hệ sinh thái" (pageEcoShowcase)
+    // và "Hệ thống" (pageSystemSpace), không cần lặp lại ở trang Bảo mật nữa.
     // [MỚI] Slider grace period cho LockList
     secSys.addView(createSlider(T("Lock grace period after leaving app (sec)", "Thời gian ân hạn trước khi khoá lại (giây)"), "applock_grace_sec", 1000, 0));
 
@@ -3728,30 +3651,8 @@ secSys.addView(cbAutoHomeb);
     secSys.addView(btnUninstallSafe);
 
     ecoContainer.addView(wrapCard(secSys));
-    // [XÓA] addYTDLDesign(ecoContainer) — thay bằng Dialog showYTDLDialog() ở trên.
-    // (Hàm addYTDLDesign() vẫn còn trong file nhưng không còn nơi nào gọi tới —
-    //  có thể xóa hẳn hàm này để dọn dead code, không bắt buộc vì không tốn RAM khi không gọi.)
-    // Storage / Ghi âm giữ nguyên vị trí — luôn nằm NGAY DƯỚI card App List
-        LinearLayout toolRow = new LinearLayout(this);
-        toolRow.setOrientation(LinearLayout.HORIZONTAL);
-        toolRow.setPadding(0, 10, 0, 30);
-        Button btnStorage = new Button(this); btnStorage.setText("💾 STORAGE");
-        btnStorage.setBackground(getRounded("#202124", 30f));
-        btnStorage.setTextColor(Color.parseColor("#00E5FF"));
-        btnStorage.setTextSize(13.5f);
-        btnStorage.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        btnStorage.setOnClickListener(v -> { ecoType = 3; updateFabVisibility(); renderEcosystem(); });
-        Button btnRecorder = new Button(this); btnRecorder.setText("🎙️ GHI ÂM");
-        btnRecorder.setBackground(getRounded("#202124", 30f));
-        btnRecorder.setTextColor(Color.parseColor("#00E5FF"));
-        btnRecorder.setTextSize(13.5f);
-        LinearLayout.LayoutParams lpRec = new LinearLayout.LayoutParams(0, -2, 1f);
-        lpRec.setMargins(15, 0, 0, 0);
-        btnRecorder.setLayoutParams(lpRec);
-        btnRecorder.setOnClickListener(v -> { ecoType = 4; updateFabVisibility(); renderEcosystem(); });
-        toolRow.addView(btnStorage); toolRow.addView(btnRecorder);
-        ecoContainer.addView(toolRow);
-        
+    // [XÓA] toolRow (Storage/Ghi âm) — 2 mục này đã có cổng vào riêng ở main menu
+    // ("Bộ nhớ" và "Âm thanh & Media"), không cần lối tắt trùng trong trang Bảo mật.
     } else if (ecoType == 6) {
     cleanExpiredTrash(); // MỚI: tự dọn pack quá 15 ngày trước khi vẽ danh sách
 
