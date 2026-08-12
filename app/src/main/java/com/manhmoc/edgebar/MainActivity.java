@@ -413,8 +413,12 @@ if (currentMainTab == 0) {
     fab.setOnClickListener(v -> openEmptyPillDialog());
 }
     } else if (currentMainTab == 1) { // Condition Space
-        if (currentGesTab == 5) { // FRONTIER — nút NEW EB đã chuyển vào từng dòng Homeb/Homacc/Lock
-            fab.setVisibility(View.GONE);
+        if (currentGesTab == 5) { // FRONTIER — nút tròn compass thay cho "+NEW EB"
+            fab.setVisibility(View.VISIBLE);
+            fab.setOnClickListener(v -> {
+                if (frontierSubTab == 1) ensureHomeServiceForPreview();
+                showCallPTDropdownFrontier();
+            });
         } else {
             fab.setVisibility(View.VISIBLE);
             fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
@@ -454,6 +458,9 @@ if (currentMainTab == 0) {
     new Handler().postDelayed(this::updateFabVisibility, 300);
 });
         }
+    } else if (currentMainTab == -1) { // Màn chính 9 mục — nút tròn mở Premium
+        fab.setVisibility(View.VISIBLE);
+        fab.setOnClickListener(v -> showPremiumDialog());
     } else {
         fab.setVisibility(View.GONE);
     }
@@ -508,7 +515,7 @@ LinearLayout leftCol = new LinearLayout(this);
 leftCol.setOrientation(LinearLayout.VERTICAL);
 leftCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 TextView title = new TextView(this);
-title.setText("Edge Launcher\n" + CURRENT_VERSION);
+title.setText(CURRENT_VERSION);
 title.setTextColor(Color.parseColor("#E8EAED"));
 title.setTextSize(22f); // Tăng từ 18f lên 22f cho chuẩn tỷ lệ thị giác
 title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -519,7 +526,9 @@ LinearLayout rightCol = new LinearLayout(this);
 rightCol.setOrientation(LinearLayout.VERTICAL);
 rightCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.35f));
 
-Button btnUninstallTop = createSystemBtn("🔐 UNINSTALL SAFELY", "#D32F2F", "#FFFFFF");
+Button btnUninstallTop = createSystemBtn("🗑 Uninstall", "#D32F2F", "#FFFFFF");
+btnUninstallTop.setTextSize(11.5f);
+
 LinearLayout.LayoutParams unTopLp = new LinearLayout.LayoutParams(-1, -2);
 unTopLp.setMargins(4, 10, 4, 0);
 btnUninstallTop.setLayoutParams(unTopLp);
@@ -649,7 +658,7 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
 
         LinearLayout bottomBar = new LinearLayout(this); bottomBar.setOrientation(LinearLayout.HORIZONTAL); bottomBar.setGravity(Gravity.CENTER_VERTICAL); bottomBar.setBackground(getRounded("#1E1E1E", 100f)); bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
-        Button btnUpdate = createCircleBtn("U", "#333333"); btnUpdate.setTextSize(20); btnUpdate.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
+        Button btnUpdate = createCircleBtn("android.R.drawable.ic_menu_upload", "#333333"); btnUpdate.setTextSize(20); btnUpdate.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
         etNavSearch = new EditText(this);
 etNavSearch.setHint(T("Search settings...", "Tìm kiếm cài đặt..."));
 
@@ -666,7 +675,7 @@ etNavSearch.addTextChangedListener(new android.text.TextWatcher() {
 });
 
 // nút tròn icon, thay cho fab dạng viên thuốc — cùng icon compass cho mọi trạng thái
-fab = createIconCircleBtn(android.R.drawable.ic_menu_compass, "#00E5FF"); // xem ghi chú bên dưới về createCircleBtn
+fab = createIconCircleBtn(android.R.drawable.ic_menu_compass, "#333333"); // xem ghi chú bên dưới về createCircleBtn
 fab.setTag("fab");
 fab.setOnClickListener(v -> {
 if (currentMainTab == 1) {
@@ -773,13 +782,13 @@ private void showMainMenu() {
     gesMenuContainer.setOrientation(LinearLayout.VERTICAL);
     pageConditions.addView(gesMenuContainer);
 
-    gesMenuContainer.addView(createSettingsRow("👆", "Frontier",
+    gesMenuContainer.addView(createSettingsRow("explore_24px", "Frontier",
         T("Lock · Homeb · Homacc", "Lock · Homeb · Homacc"),
         () -> openGesTab(5, "Frontier")));
-    gesMenuContainer.addView(createSettingsRow("🖐️", "Texture",
+    gesMenuContainer.addView(createSettingsRow("fingerprint_24px", "Texture",
         T("Fingerprint gestures", "Cử chỉ vân tay"),
         () -> openGesTab(4, "Texture")));
-    gesMenuContainer.addView(createSettingsRow("🔊", "VolKey",
+    gesMenuContainer.addView(createSettingsRow("volume_up_24px", "VolKey",
         T("Volume key gestures", "Cử chỉ phím âm lượng"),
         () -> openGesTab(3, "VolKey")));
 
@@ -788,7 +797,7 @@ private void showMainMenu() {
     gesSubHeader.setGravity(Gravity.CENTER_VERTICAL);
     gesSubHeader.setPadding(0, 0, 0, 20);
     gesSubHeader.setVisibility(View.GONE);
-    Button btnBackToGesMenu = createCircleBtn("android.R.drawable.ic_menu_close_clear_cancel", "#222222");
+    ImageButton btnBackToGesMenu = createIconCircleBtn(android.R.drawable.ic_menu_close_clear_cancel, "#222222");
     btnBackToGesMenu.setOnClickListener(v -> {
         gesMenuContainer.setVisibility(View.VISIBLE);
         gesSubHeader.setVisibility(View.GONE);
@@ -1547,22 +1556,7 @@ private String cloneDataPackDeep(String itemKey) {
     }
     subTab.addView(tabRow);
 
-    Button btnNewEb = new Button(this);
-    btnNewEb.setText("+ NEW EB");
-    btnNewEb.setBackground(getRounded(ACCENT_COLOR, 40f));
-    btnNewEb.setTextColor(Color.BLACK);
-    btnNewEb.setTextSize(12.5f);
-    btnNewEb.setPadding(24, 14, 24, 14);
-    LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(-1, -2);
-    nlp.setMargins(0, 0, 0, 15);
-    btnNewEb.setLayoutParams(nlp);
-    btnNewEb.setOnClickListener(v -> {
-        if (frontierSubTab == 1) ensureHomeServiceForPreview();
-        showCallPTDropdownFrontier();
-    });
-    subTab.addView(btnNewEb);
-
-    styleTabs[0] = () -> {
+       styleTabs[0] = () -> {
         for (int si = 0; si < spaces.length; si++) {
             int spaceIdx = (int) spaces[si][3];
             boolean active = spaceIdx == frontierSubTab;
@@ -1792,8 +1786,7 @@ ctrlCol.addView(btnCopy);
         bLp.setMargins(40, 0, 40, 60);
         bottomBar.setLayoutParams(bLp);
 
-        Button btnUpdate = createCircleBtn("android.R.drawable.ic_menu_upload", "#333333");
-        btnUpdate.setTextSize(20);
+        ImageButton btnUpdate = createIconCircleBtn(android.R.drawable.ic_menu_upload, "#333333");
 
         Button btnPremium = new Button(this);
         btnPremium.setText("PREMIUM");
@@ -2922,17 +2915,15 @@ private void showActionCategoryPicker(String title, List<String[]> items,
 private void buildMainMenuList() {
     pageMainMenu.removeAllViews();
     Object[][] items = {
-    {"👆", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Frontier · Texture · VolKey", (Runnable)() -> openSpace(1)},
-    {"🖥️", T("Display","Hiển thị"), "Anima · Lenap · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
-    {"⚡", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)() -> openEco(0, true)},
-    // [FIX] showSubNav = false — Storage/Sound&Media KHÔNG cần thanh tab Intents/QS
-    // Tiles/Macros của Custom Actions đè lên trên. true trước đây là bug gây lộ chéo.
-    {"💾", T("Storage","Bộ nhớ"), T("Storage scan","Quét dung lượng"), (Runnable)() -> openEco(3, false)},
-    {"🎙️", T("Sound & Media","Âm thanh & Media"), T("Voice / screen recording","Ghi âm / Quay màn hình"), (Runnable)() -> openEco(4, false)},
-    {"🔒", T("Security","Bảo mật"), "Blacklist · Locklist", (Runnable)() -> openEco(5, false)},
-    {"🧩", T("Ecosystem","Hệ sinh thái"), "YTDLnis · Island", (Runnable)this::openEcoShowcase},
-    {"⚙️", T("System","Hệ thống"), T("Backup · Restore · QR...","Sao lưu · Khôi phục · QR..."), (Runnable)this::openSystemSpace},
-    {"ℹ️", T("About Edge Bar","Giới thiệu về Edge Bar"), "Premium", (Runnable)this::showPremiumDialog},
+    {"touch_app_24px", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Frontier · Texture · VolKey", (Runnable)() -> openSpace(1)},
+    {"light_mode_24px", T("Display","Hiển thị"), "Anima · Lenap · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
+    {"flash_on_24px", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)() -> openEco(0, true)},
+    {"file_present_24px", T("Storage","Bộ nhớ"), T("Storage scan","Quét dung lượng"), (Runnable)() -> openEco(3, false)},
+    {"music_note_24px", T("Sound & Media","Âm thanh & Media"), T("Voice / screen recording","Ghi âm / Quay màn hình"), (Runnable)() -> openEco(4, false)},
+    {"security_24px", T("Security","Bảo mật"), "Blacklist · Locklist", (Runnable)() -> openEco(5, false)},
+    {"routine_24px", T("Ecosystem","Hệ sinh thái"), "YTDLnis · Island", (Runnable)this::openEcoShowcase},
+    {"settings_24px", T("System","Hệ thống"), T("Backup · Restore · QR...","Sao lưu · Khôi phục · QR..."), (Runnable)this::openSystemSpace},
+    {"help_24px", T("About Edge Bar","Giới thiệu về Edge Bar"), "Premium", (Runnable)this::showPremiumDialog},
 };
     for (Object[] it : items) {
         LinearLayout row = new LinearLayout(this);
@@ -2944,11 +2935,9 @@ private void buildMainMenuList() {
         rlp.setMargins(0, 0, 0, 14);
         row.setLayoutParams(rlp);
 
-        TextView tvIcon = new TextView(this);
-        tvIcon.setText((String) it[0]); tvIcon.setTextSize(22);
-        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-2, -2);
+        ImageView tvIcon = makeMenuIcon((String) it[0], 52);
+        LinearLayout.LayoutParams ilp = (LinearLayout.LayoutParams) tvIcon.getLayoutParams();
         ilp.setMargins(0, 0, 25, 0);
-        tvIcon.setLayoutParams(ilp);
         row.addView(tvIcon);
 
         LinearLayout col = new LinearLayout(this);
@@ -2996,12 +2985,10 @@ private LinearLayout createSettingsRow(String icon, String title, String sub, Ru
     rlp.setMargins(0, 0, 0, 14);
     row.setLayoutParams(rlp);
 
-    TextView tvIcon = new TextView(this);
-    tvIcon.setText(icon); tvIcon.setTextSize(22);
-    LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-2, -2);
-    ilp.setMargins(0, 0, 25, 0);
-    tvIcon.setLayoutParams(ilp);
-    row.addView(tvIcon);
+    ImageView tvIcon = makeMenuIcon((String) it[0], 52);
+        LinearLayout.LayoutParams ilp = (LinearLayout.LayoutParams) tvIcon.getLayoutParams();
+        ilp.setMargins(0, 0, 25, 0);
+        row.addView(tvIcon);
 
     LinearLayout col = new LinearLayout(this);
     col.setOrientation(LinearLayout.VERTICAL);
@@ -6363,6 +6350,17 @@ private void styleTabActive(Button b, boolean active) {
         tvVal.setText("  " + states[next] + "  ");
     });
     l.addView(tv); l.addView(tvVal); return l;
+}
+private int customIconRes(String name) {
+    int id = getResources().getIdentifier(name, "drawable", getPackageName());
+    return id;
+}
+private ImageView makeMenuIcon(String iconName, int sizePx) {
+    ImageView iv = new ImageView(this);
+    int resId = customIconRes(iconName);
+    if (resId != 0) { iv.setImageResource(resId); iv.setColorFilter(Color.parseColor("#00E5FF")); }
+    iv.setLayoutParams(new LinearLayout.LayoutParams(sizePx, sizePx));
+    return iv;
 }
     private LinearLayout wrapCard(View content) { LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setBackground(getRounded("#1E1E1E", 40f)); card.setPadding(40,40,40,40); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,0,0,40); card.setLayoutParams(lp); card.addView(content); return card; }
     private String formatPruleGestureLabel(String rId) {
