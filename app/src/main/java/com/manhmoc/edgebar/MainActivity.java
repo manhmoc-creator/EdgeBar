@@ -702,9 +702,7 @@ if (currentMainTab == 1) { // Đang ở Condition Space
         btnSearch.setOnClickListener(v -> showSearchDialog());
         bottomBar.addView(btnUpdate); bottomBar.addView(btnPremium); bottomBar.addView(spacer); bottomBar.addView(fab); bottomBar.addView(btnSearch);
         rootLayout.addView(bottomBar);
-btnNavCond.setOnClickListener(v -> switchMainTab(1, btnNavCond, btnNavEco));
-btnNavEco.setOnClickListener(v -> switchMainTab(2, btnNavCond, btnNavEco));
-switchMainTab(1, btnNavCond, btnNavEco);
+showMainMenu();
         setContentView(rootLayout);
     }
 
