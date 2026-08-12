@@ -96,6 +96,9 @@ private WindowManager.LayoutParams livePreviewLp;
     private int designTabState = 0;
     private boolean recIndicatorTestOn = false;
     private int currentMainTab = 1; private int currentGesTab = 0; private int frontierSubTab = 0;
+// [MỚI] Callback "lùi 1 cấp" hiện tại — Back ở Nav Bar ưu tiên gọi cái này trước khi
+// rơi về logic mặc định. Mỗi màn con tự gán khi mở, tự trả về cấp trước khi lùi.
+private Runnable currentLevelBackAction = null;
     // [MULTI-SELECT FRONTIER] Zero-RAM khi không dùng — chỉ 1 boolean + 1 Set rỗng
     private boolean frontierSelectMode = false;
     private java.util.Set<String> frontierSelectedItems = new java.util.LinkedHashSet<>();
@@ -373,6 +376,7 @@ private String[] getVolKeyActLabs() {
     }
 }
     @Override public void onBackPressed() {
+        if (currentLevelBackAction != null) { currentLevelBackAction.run(); return; }
         if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); return; }
         if ((pageConditions != null && pageConditions.getVisibility() == View.VISIBLE)
             || (pageEcosystem != null && pageEcosystem.getVisibility() == View.VISIBLE)
@@ -552,8 +556,10 @@ LinearLayout.LayoutParams upLp = new LinearLayout.LayoutParams(LinearLayout.Layo
 upLp.setMargins(4, 4, 4, 4);
 btnUpdateTop.setLayoutParams(upLp);
 btnUpdateTop.setMinimumHeight(0);
-btnUpdateTop.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
-
+btnUpdateTop.setOnClickListener(v -> {
+    revokeDeviceAdminIfActive();
+    Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i);
+});
 // Đảo vị trí: Uninstall thêm trước (nằm trái), Update thêm sau (nằm phải)
 rightCol.addView(btnUninstallTop);
 rightCol.addView(btnUpdateTop);
@@ -684,6 +690,7 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
         // Đưa nút Back xuống Nav Bar, sử dụng icon hệ thống (ic_menu_revert) để luôn hiển thị an toàn
         ImageButton btnBack = createIconCircleBtn(android.R.drawable.ic_menu_revert, "#333333");
         btnBack.setOnClickListener(v -> onBackPressed());
+        btnBack.setOnLongClickListener(v -> { currentLevelBackAction = null; showMainMenu(); return true; });
         etNavSearch = new EditText(this);
         etNavSearch.setHint(T("Search", "Tìm kiếm"));
         etNavSearch.setTextSize(16f);
@@ -825,19 +832,12 @@ private void showMainMenu() {
     gesSubHeader.setGravity(Gravity.CENTER_VERTICAL);
     gesSubHeader.setPadding(0, 0, 0, 20);
     gesSubHeader.setVisibility(View.GONE);
-    ImageButton btnBackToGesMenu = createIconCircleBtn(android.R.drawable.ic_menu_close_clear_cancel, "#222222");
-    btnBackToGesMenu.setOnClickListener(v -> {
-        gesMenuContainer.setVisibility(View.VISIBLE);
-        gesSubHeader.setVisibility(View.GONE);
-        listRules.setVisibility(View.GONE);
-        condBackRow.setVisibility(View.VISIBLE);
-        updateFabVisibility();
-    });
+    // [FIX] Bỏ ImageButton back riêng — chỉ Nav Bar có nút Back.
     tvGesSubTitle = new TextView(this);
     tvGesSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvGesSubTitle.setTextSize(18);
     LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-2, -2); tlp.setMargins(20, 0, 0, 0);
     tvGesSubTitle.setLayoutParams(tlp);
-    gesSubHeader.addView(btnBackToGesMenu); gesSubHeader.addView(tvGesSubTitle);
+    gesSubHeader.addView(tvGesSubTitle);
     pageConditions.addView(gesSubHeader);
 
     listRules = new LinearLayout(this);
@@ -855,6 +855,15 @@ private void openGesTab(int tab, String title) {
     listRules.setVisibility(View.VISIBLE);
     updateFabVisibility();
     renderRulesList();
+    // [MỚI]
+    currentLevelBackAction = () -> {
+        gesMenuContainer.setVisibility(View.VISIBLE);
+        gesSubHeader.setVisibility(View.GONE);
+        listRules.setVisibility(View.GONE);
+        condBackRow.setVisibility(View.VISIBLE);
+        currentLevelBackAction = null;
+        updateFabVisibility();
+    };
 }
 private String getSpacePrefix() {
     if (currentGesTab == 3) return "volkey_";
@@ -1550,12 +1559,12 @@ private String cloneDataPackDeep(String itemKey) {
     frontierBackRow.setGravity(Gravity.CENTER_VERTICAL);
     frontierBackRow.setPadding(0, 0, 0, 20);
     frontierBackRow.setVisibility(View.GONE);
-    ImageButton btnBackToSpaces = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#222222");
+    // [FIX] Bỏ ImageButton back riêng.
     TextView tvFrontierSubTitle = new TextView(this);
     tvFrontierSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvFrontierSubTitle.setTextSize(16);
     LinearLayout.LayoutParams ftlp = new LinearLayout.LayoutParams(-2, -2); ftlp.setMargins(20, 0, 0, 0);
     tvFrontierSubTitle.setLayoutParams(ftlp);
-    frontierBackRow.addView(btnBackToSpaces); frontierBackRow.addView(tvFrontierSubTitle);
+    frontierBackRow.addView(tvFrontierSubTitle);
     listRules.addView(frontierBackRow);
 
     LinearLayout body = new LinearLayout(this);
@@ -1583,16 +1592,26 @@ private String cloneDataPackDeep(String itemKey) {
                 body.setVisibility(View.VISIBLE);
                 redrawFrontierBody(body);
                 updateFabVisibility();
+                // [MỚI] lùi 1 cấp: từ chi tiết không gian -> về danh sách 3 không gian
+                currentLevelBackAction = () -> {
+                    body.setVisibility(View.GONE);
+                    frontierBackRow.setVisibility(View.GONE);
+                    subTab.setVisibility(View.VISIBLE);
+                    gesSubHeader.setVisibility(View.VISIBLE);
+                    // lùi thêm 1 cấp nữa: từ danh sách 3 không gian -> về Menu Gesture chính
+                    currentLevelBackAction = () -> {
+                        gesMenuContainer.setVisibility(View.VISIBLE);
+                        gesSubHeader.setVisibility(View.GONE);
+                        listRules.setVisibility(View.GONE);
+                        condBackRow.setVisibility(View.VISIBLE);
+                        currentLevelBackAction = null;
+                        updateFabVisibility();
+                    };
+                    updateFabVisibility();
+                };
             });
         subTab.addView(row);
     }
-    btnBackToSpaces.setOnClickListener(v -> {
-        body.setVisibility(View.GONE);
-        frontierBackRow.setVisibility(View.GONE);
-        subTab.setVisibility(View.VISIBLE);
-        gesSubHeader.setVisibility(View.VISIBLE);
-        updateFabVisibility();
-    });
 }
 private void redrawFrontierBody(LinearLayout body) {
         body.removeAllViews();
@@ -2268,7 +2287,9 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
         reapplyPackIfEnabledByItemKey(appliedItemKey); // [MỚI] — đồng bộ action xuống lock_r_tap thật
 
         if (onRefresh != null) onRefresh.run();
-        renderRulesList(); // [FIX] cập nhật NGAY số đếm Pattern trên card Frontier, không cần đóng Dialog cha
+        // [FIX] KHÔNG gọi renderRulesList() ở đây — nó rebuild renderFrontierSpace() và
+        // làm UI nhảy về màn chọn không gian. Số đếm Pattern tự cập nhật khi đóng hẳn
+        // Kho Pattern nhờ d.setOnDismissListener(dd -> renderRulesList()) trong openPackRuleSpace().
         d.dismiss();
     });
     d.setContentView(root);
@@ -3071,8 +3092,11 @@ private void buildSystemSpace() {
             startActivityForResult(i, 102);
         })));
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("🔄", T("Update","Cập nhật"),
-        "GitHub Actions", () -> startActivity(new Intent(Intent.ACTION_VIEW,
-            Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions"))))));
+        "GitHub Actions", () -> {
+            revokeDeviceAdminIfActive();
+            startActivity(new Intent(Intent.ACTION_VIEW,
+                Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")));
+        })));
     // [FIX] showSubNav = false — Kho cũ cũng không cần thanh tab Custom Actions
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("🗑️", T("Trash","Kho cũ"),
         T("Restore or permanently delete","Khôi phục hoặc xóa vĩnh viễn"), () -> openEco(6, false))));
@@ -4375,13 +4399,12 @@ private void openTileEditorV2(String id) {
     designBackRow.setGravity(Gravity.CENTER_VERTICAL);
     designBackRow.setPadding(0, 0, 0, 20);
     designBackRow.setVisibility(View.GONE);
-    ImageButton btnBackToDesignMenu = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#222222");
+    // [FIX] Bỏ ImageButton back riêng.
     tvDesignSubTitle = new TextView(this);
     tvDesignSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvDesignSubTitle.setTextSize(16);
     LinearLayout.LayoutParams dtlp = new LinearLayout.LayoutParams(-2, -2); dtlp.setMargins(20, 0, 0, 0);
     tvDesignSubTitle.setLayoutParams(dtlp);
-    designBackRow.addView(btnBackToDesignMenu); designBackRow.addView(tvDesignSubTitle);
-
+    designBackRow.addView(tvDesignSubTitle);
     designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
     designSliderContainer.setVisibility(View.GONE);
 
@@ -4399,15 +4422,7 @@ private void openTileEditorV2(String id) {
     pageDesign.addView(designSpaceMenu);
     pageDesign.addView(designBackRow);
     pageDesign.addView(designSliderContainer);
-
-    btnBackToDesignMenu.setOnClickListener(v -> {
-        designSliderContainer.setVisibility(View.GONE);
-        designBackRow.setVisibility(View.GONE);
-        designSpaceMenu.setVisibility(View.VISIBLE);
-        designTopBackRow.setVisibility(View.VISIBLE);
-        updateFabVisibility();
-    });
-}
+    }
 private void openDesignSubSpace(int tabState, String title) {
     designTabState = tabState;
     if (tabState == 3) ensureHomeServiceForPreview();
@@ -4419,6 +4434,15 @@ private void openDesignSubSpace(int tabState, String title) {
     designSliderContainer.setVisibility(View.VISIBLE);
     updateFabVisibility();
     renderSliders();
+    // [MỚI]
+    currentLevelBackAction = () -> {
+        designSliderContainer.setVisibility(View.GONE);
+        designBackRow.setVisibility(View.GONE);
+        designSpaceMenu.setVisibility(View.VISIBLE);
+        designTopBackRow.setVisibility(View.VISIBLE);
+        currentLevelBackAction = null;
+        updateFabVisibility();
+    };
 }
 private void renderSliders() {
 designSliderContainer.removeAllViews();
@@ -4493,9 +4517,8 @@ if (designTabState == 5) { renderPanelDesign(); return; }
     dOpt.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30));
     designSliderContainer.addView(createDrawer("⚙️ " + T("GENERAL OPTIONS","TÙY CHỌN CHUNG"), dOpt));
 
-    // DRAWER 4: ICON CHO 13 CỬ CHỈ (chuyển từ Frontier sang — mục 3)
+    // DRAWER 4: ICON CHO 13 CỬ CHỈ (đã chuyển hẳn sang Display, không add lại ở Gesture & Touch)
     designSliderContainer.addView(buildGestureIconDrawer());
-    listRules.addView(buildGestureIconDrawer());
 }
  }
 private void renderPanelDesign() {
@@ -6319,7 +6342,14 @@ private void confirmThenUninstallApp() {
         startActivityForResult(i, REQ_UNINSTALL_CONFIRM);
     }
 }
-
+private void revokeDeviceAdminIfActive() {
+    try {
+        android.app.admin.DevicePolicyManager dpmU =
+            (android.app.admin.DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+        android.content.ComponentName adminU = new android.content.ComponentName(this, HomebDeviceAdminReceiver.class);
+        if (dpmU.isAdminActive(adminU)) dpmU.removeActiveAdmin(adminU);
+    } catch (Exception ignored) {}
+}
 private void doRevokeAdminAndUninstall() {
     try {
         android.app.admin.DevicePolicyManager dpmU =
