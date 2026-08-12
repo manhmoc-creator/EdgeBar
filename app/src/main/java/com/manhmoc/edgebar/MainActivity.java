@@ -2923,7 +2923,7 @@ private void buildMainMenuList() {
     {"security_24px", T("Security","Bảo mật"), "Blacklist · Locklist", (Runnable)() -> openEco(5, false)},
     {"routine_24px", T("Ecosystem","Hệ sinh thái"), "YTDLnis · Island", (Runnable)this::openEcoShowcase},
     {"settings_24px", T("System","Hệ thống"), T("Backup · Restore · QR...","Sao lưu · Khôi phục · QR..."), (Runnable)this::openSystemSpace},
-    {"help_24px", T("About Edge Bar","Giới thiệu về Edge Bar"), "Premium", (Runnable)this::showPremiumDialog},
+    {"help_24px", T("Infomation","Giới thiệu về Edge Bar"), "Premium", (Runnable)this::showPremiumDialog},
 };
     for (Object[] it : items) {
         LinearLayout row = new LinearLayout(this);
@@ -2935,7 +2935,7 @@ private void buildMainMenuList() {
         rlp.setMargins(0, 0, 0, 14);
         row.setLayoutParams(rlp);
 
-        ImageView tvIcon = makeMenuIcon((String) it[0], 52);
+        ImageView tvIcon = makeMenuIcon((String) it[0], 72);
         LinearLayout.LayoutParams ilp = (LinearLayout.LayoutParams) tvIcon.getLayoutParams();
         ilp.setMargins(0, 0, 25, 0);
         row.addView(tvIcon);
@@ -2984,7 +2984,7 @@ private LinearLayout createSettingsRow(String icon, String title, String sub, Ru
     rlp.setMargins(0, 0, 0, 14);
     row.setLayoutParams(rlp);
 
-    ImageView tvIcon = makeMenuIcon(icon, 52);
+    ImageView tvIcon = makeMenuIcon(icon, 72);
         LinearLayout.LayoutParams ilp = (LinearLayout.LayoutParams) tvIcon.getLayoutParams();
         ilp.setMargins(0, 0, 25, 0);
         row.addView(tvIcon);
@@ -6315,7 +6315,9 @@ private Button createSystemBtn(String text, String bgHex, String textHex) {
 // [THIẾT KẾ THỐNG NHẤT] 1 màu nhấn duy nhất cho toàn bộ tab trong app — thay vì
 // mỗi nơi tự chọn màu riêng (#00E5FF/#FFC107/#E91E63/#4CAF50 lẫn lộn). Dùng lại
 // đúng createTabBtn() đã có, chỉ chuẩn hoá cách tô màu active/inactive.
-private static final String ACCENT_COLOR = "#00E5FF";
+private static final String ACCENT_COLOR = "#8AB4F8";      // Google Blue - accent chính
+private static final String SURFACE_COLOR = "#202124";     // Nền card/nút
+private static final String TEXT_MUTED_COLOR = "#9AA0A6";  // Text phụ/icon mờ
 private void styleTabActive(Button b, boolean active) {
     b.setBackground(getRounded(active ? ACCENT_COLOR : "#222222", 20f));
     b.setTextColor(active ? Color.BLACK : Color.parseColor("#9AA0A6"));
@@ -6357,7 +6359,7 @@ private int customIconRes(String name) {
 private ImageView makeMenuIcon(String iconName, int sizePx) {
     ImageView iv = new ImageView(this);
     int resId = customIconRes(iconName);
-    if (resId != 0) { iv.setImageResource(resId); iv.setColorFilter(Color.parseColor("#00E5FF")); }
+    if (resId != 0) { iv.setImageResource(resId); iv.setColorFilter(Color.parseColor(ACCENT_COLOR)); }
     iv.setLayoutParams(new LinearLayout.LayoutParams(sizePx, sizePx));
     return iv;
 }
