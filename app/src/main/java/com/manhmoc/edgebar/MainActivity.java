@@ -54,6 +54,13 @@ private String[] M_BARS = {"r", "l", "t_r", "t_l", "t_c", "m_b_c", "m_mid_t", "m
 private String[] M_BAR_NAMES;
 private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold"};
 private String[] C_GESTURE_NAMES;
+// [TỐI ƯU PIN/RAM] Throttle ghi prefs khi kéo Slider — leading-edge throttle +
+    // write bắt buộc lúc nhả tay. Giảm số lần apply() từ "mỗi pixel kéo" (40-100+ lần
+    // mỗi lần vuốt) xuống tối đa ~16 lần/giây, vẫn giữ cảm giác preview real-time.
+    private final Handler sliderPrefHandler = new Handler(android.os.Looper.getMainLooper());
+    private final java.util.Map<String, Long> sliderLastWriteMs = new java.util.HashMap<>();
+    private final java.util.Map<String, Runnable> sliderPendingRunnable = new java.util.HashMap<>();
+    private static final long SLIDER_WRITE_THROTTLE_MS = 60;
 private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain;
     private LinearLayout pageMainMenu, pageEcoShowcase, pageSystemSpace; // [MỚI] màn chính 9-mục
     private Button navCondBtnRef, navEcoBtnRef; // [MỚI] tham chiếu để mở thẳng tab từ Intent action
