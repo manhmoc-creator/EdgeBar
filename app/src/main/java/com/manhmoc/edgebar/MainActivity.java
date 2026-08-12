@@ -99,7 +99,7 @@ private WindowManager.LayoutParams livePreviewLp;
     // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "V19.12.3.6.38";
+    private final String CURRENT_VERSION = "🎭 V19.12.3.6.38";
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
     private Button btnWriteSettings; // MỚI
@@ -658,7 +658,7 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
 
         LinearLayout bottomBar = new LinearLayout(this); bottomBar.setOrientation(LinearLayout.HORIZONTAL); bottomBar.setGravity(Gravity.CENTER_VERTICAL); bottomBar.setBackground(getRounded("#1E1E1E", 100f)); bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
-        Button btnUpdate = createCircleBtn(android.R.drawable.ic_menu_upload, "#333333"); btnUpdate.setTextSize(20); btnUpdate.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
+        Button btnUpdate = createCircleBtn("⬆", "#333333"); btnUpdate.setTextSize(20); btnUpdate.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
         etNavSearch = new EditText(this);
 etNavSearch.setHint(T("Search settings...", "Tìm kiếm cài đặt..."));
 
@@ -2959,13 +2959,12 @@ private void buildMainMenuList() {
         pageMainMenu.addView(row);
     }
 }
-
 private LinearLayout createBackRow(String title) {
     LinearLayout row = new LinearLayout(this);
     row.setOrientation(LinearLayout.HORIZONTAL);
     row.setGravity(Gravity.CENTER_VERTICAL);
     row.setPadding(0, 0, 0, 30);
-    Button btnBack = createCircleBtn(android.R.drawable.ic_menu_close_clear_cancel, "#222222");
+    Button btnBack = createCircleBtn("‹", "#222222");
     btnBack.setOnClickListener(v -> showMainMenu());
     TextView tvTitle = new TextView(this);
     tvTitle.setText(T("Back", "Trở lại")); tvTitle.setTextColor(Color.parseColor("#00E5FF")); tvTitle.setTextSize(18);
