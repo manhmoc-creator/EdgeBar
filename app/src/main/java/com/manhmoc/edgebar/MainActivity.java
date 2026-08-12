@@ -6334,6 +6334,15 @@ private Button createSystemBtn(String text, String bgHex, String textHex) {
     return b;
 }
     private Button createTabBtn(String t) { Button b = new Button(this); b.setText(t); return b; }
+
+// [THIẾT KẾ THỐNG NHẤT] 1 màu nhấn duy nhất cho toàn bộ tab trong app — thay vì
+// mỗi nơi tự chọn màu riêng (#00E5FF/#FFC107/#E91E63/#4CAF50 lẫn lộn). Dùng lại
+// đúng createTabBtn() đã có, chỉ chuẩn hoá cách tô màu active/inactive.
+private static final String ACCENT_COLOR = "#00E5FF";
+private void styleTabActive(Button b, boolean active) {
+    b.setBackground(getRounded(active ? ACCENT_COLOR : "#222222", 20f));
+    b.setTextColor(active ? Color.BLACK : Color.parseColor("#9AA0A6"));
+}
     private TextView createSectionTitle(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.parseColor("#00E5FF")); tv.setPadding(0,10,0,20); return tv; }
     private Spinner createSpinner() { Spinner sp = new Spinner(this); sp.setBackground(getRounded("#2C2C2C", 20f)); sp.setPadding(20,20,20,20); return sp; }
     private EditText createInput(String h, String k) { EditText et = new EditText(this); et.setHint(h); et.setHintTextColor(Color.GRAY); et.setTextColor(Color.WHITE); et.setText(prefs.getString(k,"")); et.setBackground(getRounded("#2C2C2C", 20f)); et.setPadding(30,30,30,30); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,10,0,10); et.setLayoutParams(lp); et.addTextChangedListener(new android.text.TextWatcher(){public void afterTextChanged(android.text.Editable s){prefs.edit().putString(k,s.toString()).apply();}public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}}); return et; }
