@@ -96,6 +96,8 @@ private WindowManager.LayoutParams livePreviewLp;
     private int designTabState = 0;
     private boolean recIndicatorTestOn = false;
     private int currentMainTab = 1; private int currentGesTab = 0; private int frontierSubTab = 0;
+private LinearLayout frontierBodyContainer, frontierBackRowRef;
+private boolean frontierSpaceBuilt = false;
 // [MỚI] Callback "lùi 1 cấp" hiện tại — Back ở Nav Bar ưu tiên gọi cái này trước khi
 // rơi về logic mặc định. Mỗi màn con tự gán khi mở, tự trả về cấp trước khi lùi.
 private Runnable currentLevelBackAction = null;
@@ -386,6 +388,63 @@ private String[] getVolKeyActLabs() {
         }
         super.onBackPressed();
     }
+// ==================== TEST ACTION (thử nghiệm nhanh, không cần Save) ====================
+// Dùng chung cơ chế IPC_ACTION đã có sẵn — đúng đường mà Rule/Panel/Tile thật sự chạy.
+// Zero Service mới, hoạt động ở mọi trạng thái Lock/Homeb/Homacc vì cả 2 Service đều nghe.
+private void fireTestAction(String actKey, String launchPkg, String shortcutId) {
+    if (actKey == null || actKey.trim().isEmpty() || actKey.equals("NONE")) {
+        Toast.makeText(this, T("Pick an action first!", "Hãy chọn hành động trước!"), Toast.LENGTH_SHORT).show();
+        return;
+    }
+    String at = actKey.trim();
+    Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+    if (at.equals("LAUNCH_APP")) {
+        if (launchPkg == null || launchPkg.isEmpty()) {
+            Toast.makeText(this, T("Pick an app first!", "Hãy chọn app trước!"), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        ipc.putExtra("act", "LAUNCH_APP"); ipc.putExtra("launch_pkg", launchPkg);
+    } else if (at.equals("RUN_SHORTCUT")) {
+        if (shortcutId == null || shortcutId.isEmpty()) {
+            Toast.makeText(this, T("Pick a shortcut first!", "Hãy chọn shortcut trước!"), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        ipc.putExtra("act", "RUN_SHORTCUT"); ipc.putExtra("shortcut_id", shortcutId);
+    } else if (at.startsWith("RUN_SHORTCUT_")) {
+        ipc.putExtra("act", "RUN_SHORTCUT"); ipc.putExtra("shortcut_id", at.substring("RUN_SHORTCUT_".length()));
+    } else {
+        ipc.putExtra("act", at);
+    }
+    sendBroadcast(ipc);
+    Toast.makeText(this, "▶ " + T("Testing: ", "Đang thử: ") + getActionLabelSmart(at, launchPkg), Toast.LENGTH_SHORT).show();
+}
+
+// 1 Rule có thể gán nhiều Action -> thử lần lượt, cách nhau 120ms (Zero Thread mới)
+private void fireTestActions(java.util.Collection<String> acts, String launchPkg, String shortcutId) {
+    if (acts == null || acts.isEmpty()) {
+        Toast.makeText(this, T("Select at least 1 Action!", "Hãy chọn ít nhất 1 hành động!"), Toast.LENGTH_SHORT).show();
+        return;
+    }
+    int delay = 0;
+    for (String a : acts) {
+        final String fa = a;
+        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> fireTestAction(fa, launchPkg, shortcutId), delay);
+        delay += 120;
+    }
+}
+
+private Button buildTestButton() {
+    Button b = new Button(this);
+    b.setText("▶ " + T("TEST", "THỬ NGAY"));
+    b.setBackground(getRounded("#FFC107", 20f));
+    b.setTextColor(Color.BLACK);
+    b.setTextSize(13.5f);
+    b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+    lp.setMargins(0, 10, 0, 0);
+    b.setLayoutParams(lp);
+    return b;
+}
     private void closeDesignSpace() {
     pageDesign.setVisibility(View.GONE);
     showMainMenu();
@@ -688,7 +747,7 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
         LinearLayout bottomBar = new LinearLayout(this); bottomBar.setOrientation(LinearLayout.HORIZONTAL); bottomBar.setGravity(Gravity.CENTER_VERTICAL); bottomBar.setBackground(getRounded("#1E1E1E", 100f)); bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
         // Đưa nút Back xuống Nav Bar, sử dụng icon hệ thống (ic_menu_revert) để luôn hiển thị an toàn
-        ImageButton btnBack = createIconCircleBtn(android.R.drawable.ic_menu_revert, "#333333");
+        ImageButton btnBack = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#333333");
         btnBack.setOnClickListener(v -> onBackPressed());
         btnBack.setOnLongClickListener(v -> { currentLevelBackAction = null; showMainMenu(); return true; });
         etNavSearch = new EditText(this);
@@ -848,6 +907,7 @@ private void showMainMenu() {
 private void openGesTab(int tab, String title) {
     currentGesTab = tab;
     refreshPreview();
+    if (tab == 5) frontierSpaceBuilt = false; // [FIX] mỗi lần vào lại Frontier -> dựng UI sạch từ đầu
     condBackRow.setVisibility(View.GONE);
     gesMenuContainer.setVisibility(View.GONE);
     gesSubHeader.setVisibility(View.VISIBLE);
@@ -877,8 +937,18 @@ private String getSpacePrefix() {
     }
 }
     private void renderRulesList() {
+    if (currentGesTab == 5) {
+        if (!frontierSpaceBuilt) {
+            listRules.removeAllViews();
+            buildFrontierSpaceOnce();
+        } else if (frontierBackRowRef != null && frontierBackRowRef.getVisibility() == View.VISIBLE) {
+            // [FIX] Đang đứng trong 1 không gian con -> CHỈ vẽ lại nội dung Data Pack,
+            // KHÔNG dựng lại toàn bộ UI (đây là nguyên nhân gây "nhảy ra ngoài").
+            redrawFrontierBody(frontierBodyContainer);
+        }
+        return;
+    }
     listRules.removeAllViews();
-    if (currentGesTab == 5) { renderFrontierSpace(); return; } // THÊM
     final boolean isVolKeyMode = (currentGesTab == 3);
     final boolean isTextureMode = (currentGesTab == 4);
     String prefix = getSpacePrefix();
@@ -1548,7 +1618,8 @@ private String cloneDataPackDeep(String itemKey) {
     ed.apply();
     return newItemKey;
 }
-    private void renderFrontierSpace() {
+    private void buildFrontierSpaceOnce() {
+    frontierSpaceBuilt = true;
     LinearLayout subTab = new LinearLayout(this);
     subTab.setOrientation(LinearLayout.VERTICAL);
     subTab.setPadding(0, 0, 0, 10);
@@ -1559,18 +1630,19 @@ private String cloneDataPackDeep(String itemKey) {
     frontierBackRow.setGravity(Gravity.CENTER_VERTICAL);
     frontierBackRow.setPadding(0, 0, 0, 20);
     frontierBackRow.setVisibility(View.GONE);
-    // [FIX] Bỏ ImageButton back riêng.
     TextView tvFrontierSubTitle = new TextView(this);
     tvFrontierSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvFrontierSubTitle.setTextSize(16);
     LinearLayout.LayoutParams ftlp = new LinearLayout.LayoutParams(-2, -2); ftlp.setMargins(20, 0, 0, 0);
     tvFrontierSubTitle.setLayoutParams(ftlp);
     frontierBackRow.addView(tvFrontierSubTitle);
     listRules.addView(frontierBackRow);
+    frontierBackRowRef = frontierBackRow;
 
     LinearLayout body = new LinearLayout(this);
     body.setOrientation(LinearLayout.VERTICAL);
     body.setVisibility(View.GONE);
     listRules.addView(body);
+    frontierBodyContainer = body;
 
     Object[][] spaces = {
         {"routine_24px", "HOMEB", T("No Accessibility needed","Không cần Trợ năng"), 1},
@@ -1592,13 +1664,11 @@ private String cloneDataPackDeep(String itemKey) {
                 body.setVisibility(View.VISIBLE);
                 redrawFrontierBody(body);
                 updateFabVisibility();
-                // [MỚI] lùi 1 cấp: từ chi tiết không gian -> về danh sách 3 không gian
                 currentLevelBackAction = () -> {
                     body.setVisibility(View.GONE);
                     frontierBackRow.setVisibility(View.GONE);
                     subTab.setVisibility(View.VISIBLE);
                     gesSubHeader.setVisibility(View.VISIBLE);
-                    // lùi thêm 1 cấp nữa: từ danh sách 3 không gian -> về Menu Gesture chính
                     currentLevelBackAction = () -> {
                         gesMenuContainer.setVisibility(View.VISIBLE);
                         gesSubHeader.setVisibility(View.GONE);
@@ -2225,6 +2295,16 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick);
     bTrig.performClick();
 
+    // [MỚI] Nút TEST cho Pattern
+    Button bTest = buildTestButton();
+    bTest.setOnClickListener(v -> {
+        java.util.LinkedHashSet<String> testActs = new java.util.LinkedHashSet<>(selectedActs);
+        if (launchAppSelected[0]) testActs.add("LAUNCH_APP");
+        if (shortcutSelected[0]) testActs.add("RUN_SHORTCUT");
+        fireTestActions(testActs, launchAppPkg[0], shortcutId[0]);
+    });
+    root.addView(bTest);
+
     LinearLayout footer = new LinearLayout(this);
     footer.setOrientation(LinearLayout.HORIZONTAL);
     footer.setPadding(0, 20, 0, 0);
@@ -2647,6 +2727,17 @@ vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE);
 };
 bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick);
 bTrig.performClick();
+
+        // [MỚI] Nút TEST — bắn thử NGAY tổ hợp action đang chọn trên tab ACTION, không cần Save
+        Button bTest = buildTestButton();
+        bTest.setOnClickListener(v -> {
+            java.util.LinkedHashSet<String> testActs = new java.util.LinkedHashSet<>(selectedActs);
+            if (launchAppSelected[0]) testActs.add("LAUNCH_APP");
+            if (shortcutSelected[0]) testActs.add("RUN_SHORTCUT");
+            fireTestActions(testActs, launchAppPkg[0], shortcutId[0]);
+        });
+        root.addView(bTest);
+
         LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL);
         Button bCancel = new Button(this); bCancel.setText(T("CANCEL", "HỦY")); bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
         Button bSave = new Button(this); bSave.setText(T("SAVE RULE", "LƯU QUY TẮC")); bSave.setBackground(getRounded("#4CAF50", 20f)); bSave.setTextColor(Color.WHITE); LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0); bSave.setLayoutParams(slp);
@@ -2966,10 +3057,10 @@ private void buildMainMenuList() {
     {"light_mode_24px", T("Display","Hiển thị"), "Anima · Lenap · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
     {"flash_on_24px", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)() -> openEco(0, true)},
     {"file_present_24px", T("Storage","Bộ nhớ"), T("Storage scan","Quét dung lượng"), (Runnable)() -> openEco(3, false)},
-    {"music_note_24px", T("Sound & Media","Âm thanh & Media"), T("Voice / screen recording","Ghi âm / Quay màn hình"), (Runnable)() -> openEco(4, false)},
+    {"music_note_24px", T("Sound & Media","Âm thanh & Media"), T("Voice · Screen Recording","Ghi âm / Quay màn hình"), (Runnable)() -> openEco(4, false)},
     {"security_24px", T("Security","Bảo mật"), "Blacklist · Locklist", (Runnable)() -> openEco(5, false)},
     {"routine_24px", T("Ecosystem","Hệ sinh thái"), "YTDLnis · Island", (Runnable)this::openEcoShowcase},
-    {"settings_24px", T("System","Hệ thống"), T("Backup · Restore · QR...","Sao lưu · Khôi phục · QR..."), (Runnable)this::openSystemSpace},
+    {"settings_24px", T("System","Hệ thống"), T("Backup · Restore · Update · QR Scan · Trash · Permissions","Sao lưu · Khôi phục · Nâng cấp · Quét QR · Kho cũ · Quyền"), (Runnable)this::openSystemSpace},
     {"help_24px", T("Infomation","Giới thiệu về Edge Bar"), "Premium", (Runnable)this::showPremiumDialog},
 };
     for (Object[] it : items) {
@@ -4223,6 +4314,23 @@ private void openInFilesByGoogle(android.net.Uri uri) {
     EditText etFlags = createEcoInput("Flags", prefs.getString("intent_"+id+"_flags",""));
     CheckBox cbBr = new CheckBox(this); cbBr.setText("Send as Broadcast"); cbBr.setTextColor(Color.WHITE); cbBr.setChecked(prefs.getBoolean("intent_"+id+"_br", false));
     content.addView(etName); content.addView(etAct); content.addView(etPkg); content.addView(etCls); content.addView(etData); content.addView(etCat); content.addView(etFlags); content.addView(cbBr);
+    // [MỚI] Test Intent — tự lưu tạm field hiện tại (không đóng dialog) rồi bắn thử ngay
+    Button bTest = buildTestButton();
+    bTest.setOnClickListener(v -> {
+        prefs.edit()
+            .putString("intent_"+id+"_name", etName.getText().toString())
+            .putString("intent_"+id+"_act", etAct.getText().toString())
+            .putString("intent_"+id+"_pkg", etPkg.getText().toString())
+            .putString("intent_"+id+"_cls", etCls.getText().toString())
+            .putString("intent_"+id+"_data", etData.getText().toString())
+            .putString("intent_"+id+"_cat", etCat.getText().toString())
+            .putString("intent_"+id+"_flags", etFlags.getText().toString())
+            .putBoolean("intent_"+id+"_br", cbBr.isChecked())
+            .apply();
+        fireTestAction("INTENT_" + id, "", "");
+    });
+    content.addView(bTest);
+
     LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
     Button bCancel = new Button(this); bCancel.setText("HỦY"); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     Button bSave = new Button(this); bSave.setText("LƯU"); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); bSave.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
@@ -4252,6 +4360,18 @@ private void openMacroEditorV2(String id) {
     EditText etName = createEcoInput("Tên gợi nhớ", prefs.getString("macro_"+id+"_name",""));
     EditText etSvcs = createEcoInput("Services (com.pkg/.Class)", prefs.getString("macro_"+id+"_svcs",""));
     content.addView(etName); content.addView(etSvcs);
+    // [MỚI] Test Macro — bắn TOGGLE_MACRO với đúng nội dung Services đang gõ, không cần Lưu
+    Button bTest = buildTestButton();
+    bTest.setOnClickListener(v -> {
+        String svcs = etSvcs.getText().toString().trim();
+        if (svcs.isEmpty()) { Toast.makeText(this, T("Enter services first!","Nhập Services trước!"), Toast.LENGTH_SHORT).show(); return; }
+        Intent iM = new Intent("com.manhmoc.edgebar.TOGGLE_MACRO");
+        iM.putExtra("services", svcs);
+        sendBroadcast(iM);
+        Toast.makeText(this, "▶ " + T("Testing macro...", "Đang thử Macro..."), Toast.LENGTH_SHORT).show();
+    });
+    content.addView(bTest);
+
     LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
     Button bCancel = new Button(this); bCancel.setText("HỦY"); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     Button bSave = new Button(this); bSave.setText("LƯU"); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); bSave.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
@@ -4348,6 +4468,11 @@ private void openTileEditorV2(String id) {
     if (curSlotPos >= 0) spSlot.setSelection(curSlotPos);
     content.addView(spSlot);
 
+    // [MỚI] Test QS Tile — dùng đúng action đang chọn trong bộ nhớ tạm (chưa cần Lưu)
+    Button bTest = buildTestButton();
+    bTest.setOnClickListener(v -> fireTestAction(chosenAct[0], chosenPkg[0], chosenScId[0]));
+    content.addView(bTest);
+
     LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
     Button bCancel = new Button(this); bCancel.setText("HỦY"); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     Button bSave = new Button(this); bSave.setText("LƯU"); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); bSave.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
@@ -4416,9 +4541,13 @@ private void openTileEditorV2(String id) {
         T("Floating panel data packs", "Bảng nút nổi (Data Pack)"),
         () -> openDesignSubSpace(5, "LENAP"));
 
+    LinearLayout btnEditLang = createSettingsRow("translate_24px", "LANGUAGE",
+        T("US-English / Tiếng Việt", "US-English / Tiếng Việt"),
+        this::showLanguagePicker);
+
     designSpaceMenu.addView(btnEditAnim);
     designSpaceMenu.addView(btnEditPanel);
-
+    designSpaceMenu.addView(btnEditLang);
     pageDesign.addView(designSpaceMenu);
     pageDesign.addView(designBackRow);
     pageDesign.addView(designSliderContainer);
@@ -4443,6 +4572,17 @@ private void openDesignSubSpace(int tabState, String title) {
         currentLevelBackAction = null;
         updateFabVisibility();
     };
+}
+private void showLanguagePicker() {
+    String[] opts = {"🇺🇸 US - English", "🇻🇳 Tiếng Việt"};
+    boolean curVi = prefs.getBoolean("lang_vi", true);
+    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle(T("Choose Language", "Chọn ngôn ngữ"))
+        .setSingleChoiceItems(opts, curVi ? 1 : 0, (d, which) -> {
+            prefs.edit().putBoolean("lang_vi", which == 1).apply();
+            d.dismiss();
+            recreate();
+        }).show();
 }
 private void renderSliders() {
 designSliderContainer.removeAllViews();
