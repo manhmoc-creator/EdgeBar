@@ -1838,49 +1838,9 @@ ctrlCol.addView(btnCopy);
         fabNew.setPadding(55, 0, 55, 0);
 
         fabNew.setOnClickListener(v -> openPackRuleEditor(appliedItemKey, null, null, renderRules[0], isHomebSpace));
-        // Đưa nút Back xuống Nav Bar: Custom Icon mịn màng + Quyền năng lùi đa cấp
+        // Đưa nút Back xuống Nav Bar, thay thế vị trí Update cũ
         ImageButton btnBack = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#333333");
-        btnBack.setPadding(24, 24, 24, 24); // Cân xứng với nút bên phải
-        btnBack.setOnTouchListener(new View.OnTouchListener() {
-            Handler h = new Handler(android.os.Looper.getMainLooper());
-            Runnable singleTap = () -> goBackLevels(1);
-            boolean isLong = false;
-            long lastTap = 0;
-            Runnable longPress = () -> {
-                isLong = true;
-                try {
-                    android.os.Vibrator vib = (android.os.Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-                    if (vib != null) vib.vibrate(30);
-                } catch (Exception ignored) {}
-                showMainMenu(); // Nhấn giữ: Về thẳng màn hình 9 mục
-            };
-            @Override
-            public boolean onTouch(View v, MotionEvent e) {
-                switch(e.getAction()) {
-                    case MotionEvent.ACTION_DOWN:
-                        isLong = false;
-                        h.postDelayed(longPress, 400); // 400ms để nhận diện nhấn giữ
-                        break;
-                    case MotionEvent.ACTION_UP:
-                        h.removeCallbacks(longPress);
-                        if (isLong) return true;
-                        long now = System.currentTimeMillis();
-                        if (now - lastTap < 300) { // Double tap: lùi 2 cấp
-                            h.removeCallbacks(singleTap);
-                            lastTap = 0;
-                            goBackLevels(2);
-                        } else { // Single tap: lùi 1 cấp
-                            lastTap = now;
-                            h.postDelayed(singleTap, 300);
-                        }
-                        break;
-                    case MotionEvent.ACTION_CANCEL:
-                        h.removeCallbacks(longPress);
-                        break;
-                }
-                return true;
-            }
-        });
+        btnBack.setOnClickListener(v -> onBackPressed());
         bottomBar.addView(btnUpdate);
         bottomBar.addView(btnPremium);
         bottomBar.addView(spacer);
@@ -4415,10 +4375,12 @@ private void openTileEditorV2(String id) {
     designBackRow.setGravity(Gravity.CENTER_VERTICAL);
     designBackRow.setPadding(0, 0, 0, 20);
     designBackRow.setVisibility(View.GONE);
-    // Bỏ hẳn ImageButton thừa thãi
+    ImageButton btnBackToDesignMenu = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#222222");
     tvDesignSubTitle = new TextView(this);
-    tvDesignSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvDesignSubTitle.setTextSize(18);
-    designBackRow.addView(tvDesignSubTitle);
+    tvDesignSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvDesignSubTitle.setTextSize(16);
+    LinearLayout.LayoutParams dtlp = new LinearLayout.LayoutParams(-2, -2); dtlp.setMargins(20, 0, 0, 0);
+    tvDesignSubTitle.setLayoutParams(dtlp);
+    designBackRow.addView(btnBackToDesignMenu); designBackRow.addView(tvDesignSubTitle);
 
     designSliderContainer = new LinearLayout(this); designSliderContainer.setOrientation(LinearLayout.VERTICAL); designSliderContainer.setPadding(0,20,0,0);
     designSliderContainer.setVisibility(View.GONE);
@@ -4431,21 +4393,20 @@ private void openTileEditorV2(String id) {
         T("Floating panel data packs", "Bảng nút nổi (Data Pack)"),
         () -> openDesignSubSpace(5, "LENAP"));
 
-    LinearLayout btnLang = createSettingsRow("translate_24px", T("Language", "Ngôn ngữ"),
-        T("English / Tiếng Việt", "Tiếng Việt / English"),
-        () -> {
-            prefs.edit().putBoolean("lang_vi", !isVi).apply();
-            recreate();
-        });
-
     designSpaceMenu.addView(btnEditAnim);
     designSpaceMenu.addView(btnEditPanel);
-    designSpaceMenu.addView(btnLang); // Thêm chức năng ngôn ngữ vào đúng vị trí
 
     pageDesign.addView(designSpaceMenu);
     pageDesign.addView(designBackRow);
     pageDesign.addView(designSliderContainer);
-    // Xóa listener onClick btnBackToDesignMenu vì nút đã bị loại bỏ
+
+    btnBackToDesignMenu.setOnClickListener(v -> {
+        designSliderContainer.setVisibility(View.GONE);
+        designBackRow.setVisibility(View.GONE);
+        designSpaceMenu.setVisibility(View.VISIBLE);
+        designTopBackRow.setVisibility(View.VISIBLE);
+        updateFabVisibility();
+    });
 }
 private void openDesignSubSpace(int tabState, String title) {
     designTabState = tabState;
