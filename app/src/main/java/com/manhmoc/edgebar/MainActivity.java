@@ -83,7 +83,11 @@ private java.util.Set<String> ecoSelectedItems = new java.util.LinkedHashSet<>()
 // [MỚI] Multi-select cho danh sách ghi âm (voice recordings)
 private boolean voiceSelectMode = false;
 private java.util.Set<String> voiceSelectedItems = new java.util.LinkedHashSet<>();
-private Button fab;
+private ImageButton fab;
+private EditText etNavSearch;
+private List<Object[]> searchIndexCache;
+private android.widget.ListPopupWindow searchPopup;
+
 private View livePreviewOverlay;
 private WindowManager.LayoutParams livePreviewLp;
     private int designTabState = 0;
@@ -108,7 +112,18 @@ private static List<String[]> cachedAppList = null; // mỗi phần tử: {name,
 private static long cachedAppListTs = 0;
 private static final long APP_LIST_CACHE_MS = 5 * 60 * 1000; // 5 phút
 private static final java.util.Map<String,String> appLabelCache = new java.util.HashMap<>();
-
+private ImageButton createIconCircleBtn(int resId, String color) {
+    ImageButton b = new ImageButton(this);
+    b.setImageResource(resId);
+    b.setColorFilter(Color.WHITE);
+    b.setBackground(getRounded(color, 100f));
+    b.setScaleType(ImageView.ScaleType.FIT_CENTER);
+    b.setPadding(34,34,34,34);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130);
+    lp.setMargins(10, 0, 10, 0);
+    b.setLayoutParams(lp);
+    return b;
+}
 private String getAppLabelCached(String pkg) {
     if (pkg == null || pkg.isEmpty()) return T("(Not selected)", "(Chưa chọn)");
     String cached = appLabelCache.get(pkg);
@@ -385,7 +400,6 @@ private void updateFabVisibility() {
 if (currentMainTab == 0) {
     fab.setVisibility(View.VISIBLE);
     if (designTabState == 5) {
-    fab.setText("FORMAT");
     fab.setOnClickListener(v -> {
         String newId = addDynamicId("pack_panel_ids");
         // [FIX] Bật sẵn "_en" ngay khi tạo — hộp thoại openDataPackEditor(type==2)
@@ -396,7 +410,6 @@ if (currentMainTab == 0) {
         openDataPackEditor(2, newId);
     });
 } else {
-    fab.setText(" ");
     fab.setOnClickListener(v -> openEmptyPillDialog());
 }
     } else if (currentMainTab == 1) { // Condition Space
@@ -404,13 +417,11 @@ if (currentMainTab == 0) {
             fab.setVisibility(View.GONE);
         } else {
             fab.setVisibility(View.VISIBLE);
-            fab.setText("NEW EB");
             fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
         }
         } else if (currentMainTab == 2) { // Ecosystem Space
         fab.setVisibility(View.VISIBLE);
         if (ecoType == 0 || ecoType == 1 || ecoType == 2) {
-            fab.setText(ecoType == 0 ? "+INTENT" : (ecoType == 1 ? "QS TILE" : "+ MACRO"));
             fab.setOnClickListener(v -> {
                 String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
                 String newId = addDynamicId(listKey);
@@ -419,12 +430,10 @@ if (currentMainTab == 0) {
                 else openMacroEditorV2(newId);
             });
         } else if (ecoType == 3) {
-            fab.setText("+SOURCE");
             fab.setOnClickListener(v -> runDeepStorageScan());
         } else if (ecoType == 4) {
             boolean recOn = VoiceRecorderService.isRunning;
             boolean recPaused = VoiceRecorderService.isPaused;
-            fab.setText(!recOn ? "+RECORD" : (recPaused ? " ▶ TIẾP TỤC " : " ⏸ END 🎙 "));
             fab.setOnClickListener(v -> {
     if (!recOn) {
         if (android.content.pm.PackageManager.PERMISSION_GRANTED != checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)) {
@@ -510,35 +519,12 @@ LinearLayout rightCol = new LinearLayout(this);
 rightCol.setOrientation(LinearLayout.VERTICAL);
 rightCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.35f));
 
-LinearLayout topBtns = new LinearLayout(this);
-topBtns.setOrientation(LinearLayout.HORIZONTAL);
-Button btnBackup = createSystemBtn("💾BACKUP", "#202124", "#8AB4F8");
-Button btnRestore = createSystemBtn("📁RESTORE", "#202124", "#8AB4F8");
-btnBackup.setOnClickListener(v -> {
-    Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-    i.addCategory(Intent.CATEGORY_OPENABLE);
-    i.setType("application/json");
-    i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup_" + System.currentTimeMillis() + ".json");
-    startActivityForResult(i, 101);
-});
-btnRestore.setOnClickListener(v -> {
-    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-    i.addCategory(Intent.CATEGORY_OPENABLE);
-    i.setType("*/*");
-    startActivityForResult(i, 102);
-});
-topBtns.addView(btnBackup); topBtns.addView(btnRestore);
-
-Button btnLang = createSystemBtn(isVi ? " 🇻🇳 TIẾNG VIỆT" : "🇺🇸 ENGLISH", "#202124", "#E8EAED");
-btnLang.setOnClickListener(v -> {
-    prefs.edit().putBoolean("lang_vi", !isVi).apply();
-    Toast.makeText(this, isVi ? "Switching to English..." : "Đang chuyển Tiếng Việt...", Toast.LENGTH_SHORT).show();
-    recreate(); // Tái tạo toàn bộ Activity để giải phóng RAM các chuỗi ngôn ngữ cũ
-});
-LinearLayout.LayoutParams langLp = new LinearLayout.LayoutParams(-1, -2);
-langLp.setMargins(4, 10, 4, 0);
-btnLang.setLayoutParams(langLp);
-rightCol.addView(topBtns); rightCol.addView(btnLang);
+Button btnUninstallTop = createSystemBtn("🔐 UNINSTALL SAFELY", "#D32F2F", "#FFFFFF");
+LinearLayout.LayoutParams unTopLp = new LinearLayout.LayoutParams(-1, -2);
+unTopLp.setMargins(4, 10, 4, 0);
+btnUninstallTop.setLayoutParams(unTopLp);
+btnUninstallTop.setOnClickListener(v -> confirmThenUninstallApp());
+rightCol.addView(btnUninstallTop);
 headerRow.addView(leftCol); headerRow.addView(rightCol);
 main.addView(headerRow);
 reloadActionLabels();
@@ -664,27 +650,28 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
         LinearLayout bottomBar = new LinearLayout(this); bottomBar.setOrientation(LinearLayout.HORIZONTAL); bottomBar.setGravity(Gravity.CENTER_VERTICAL); bottomBar.setBackground(getRounded("#1E1E1E", 100f)); bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
         Button btnUpdate = createCircleBtn("U", "#333333"); btnUpdate.setTextSize(20); btnUpdate.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i); });
-        Button btnPremium = new Button(this); btnPremium.setText("PREMIUM");
-btnPremium.setTextColor(Color.BLACK);
-btnPremium.setTextSize(13.5f); // Chuẩn hóa kích thước mốc Premium
-btnPremium.setBackground(getRounded("#00E5FF", 100f));
-btnPremium.setOnClickListener(v -> showPremiumDialog());
-LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-2, -1);
-pLp.setMargins(10, 0, 10, 0); btnPremium.setLayoutParams(pLp);
-btnPremium.setPadding(35, 0, 35, 0);
+        etNavSearch = new EditText(this);
+etNavSearch.setHint(T("Search settings...", "Tìm kiếm cài đặt..."));
 
-View spacer = new View(this); spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+etNavSearch.setHintTextColor(Color.GRAY);
+etNavSearch.setTextColor(Color.WHITE);
+etNavSearch.setSingleLine(true);
+etNavSearch.setBackground(getRounded("#2C2C2C", 100f));
+etNavSearch.setPadding(30, 20, 30, 20);
+etNavSearch.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+etNavSearch.addTextChangedListener(new android.text.TextWatcher() {
+    public void afterTextChanged(android.text.Editable s) { liveSearchSettings(s.toString()); }
+    public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+    public void onTextChanged(CharSequence s,int a,int b,int c){}
+});
 
-fab = new Button(this); fab.setText("+NEW EB"); fab.setTextColor(Color.BLACK);
-fab.setBackground(getRounded("#00E5FF", 100f)); fab.setTag("fab");
-fab.setTextSize(13.5f); // Giảm từ 16f về đúng 13.5f bằng với Premium!
-LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, 135);
-fLp.setMargins(10, 0, 10, 0); fab.setLayoutParams(fLp); fab.setPadding(55, 0, 55, 0);
-
+// nút tròn icon, thay cho fab dạng viên thuốc — cùng icon compass cho mọi trạng thái
+fab = createIconCircleBtn(android.R.drawable.ic_menu_compass, "#00E5FF"); // xem ghi chú bên dưới về createCircleBtn
+fab.setTag("fab");
 fab.setOnClickListener(v -> {
-if (currentMainTab == 1) { // Đang ở Condition Space
+if (currentMainTab == 1) {
         openRuleBuilderDialog(null, -1, -1, ""); 
-    } else if (currentMainTab == 2) { // Đang ở Ecosystem Space
+    } else if (currentMainTab == 2) {
         String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
         String newId = addDynamicId(listKey);
         if (ecoType == 0) openIntentEditorV2(newId);
@@ -692,12 +679,7 @@ if (currentMainTab == 1) { // Đang ở Condition Space
         else openMacroEditorV2(newId);
     }
 });
-        // [ĐỔI HÀNH VI] Bỏ nút bánh răng — nav bar giờ dùng nút Tìm kiếm làm cửa ngõ
-        // duy nhất tới Anima/Lenap và mọi không gian khác. Không gian Design vẫn còn
-        // nguyên (openDesignSpace/closeDesignSpace không đổi), chỉ đổi CÁCH vào.
-        Button btnSearch = createCircleBtn("🔍", "#333333"); btnSearch.setTag("btnSearch");
-        btnSearch.setOnClickListener(v -> showSearchDialog());
-        bottomBar.addView(btnUpdate); bottomBar.addView(btnPremium); bottomBar.addView(spacer); bottomBar.addView(fab); bottomBar.addView(btnSearch);
+bottomBar.addView(btnUpdate); bottomBar.addView(etNavSearch); bottomBar.addView(fab);
         rootLayout.addView(bottomBar);
 showMainMenu();
         setContentView(rootLayout);
@@ -806,7 +788,7 @@ private void showMainMenu() {
     gesSubHeader.setGravity(Gravity.CENTER_VERTICAL);
     gesSubHeader.setPadding(0, 0, 0, 20);
     gesSubHeader.setVisibility(View.GONE);
-    Button btnBackToGesMenu = createCircleBtn("←", "#222222");
+    Button btnBackToGesMenu = createCircleBtn("android.R.drawable.ic_menu_close_clear_cancel", "#222222");
     btnBackToGesMenu.setOnClickListener(v -> {
         gesMenuContainer.setVisibility(View.VISIBLE);
         gesSubHeader.setVisibility(View.GONE);
@@ -1810,7 +1792,7 @@ ctrlCol.addView(btnCopy);
         bLp.setMargins(40, 0, 40, 60);
         bottomBar.setLayoutParams(bLp);
 
-        Button btnUpdate = createCircleBtn("U", "#333333");
+        Button btnUpdate = createCircleBtn("android.R.drawable.ic_menu_upload", "#333333");
         btnUpdate.setTextSize(20);
 
         Button btnPremium = new Button(this);
@@ -2994,7 +2976,7 @@ private LinearLayout createBackRow(String title) {
     row.setOrientation(LinearLayout.HORIZONTAL);
     row.setGravity(Gravity.CENTER_VERTICAL);
     row.setPadding(0, 0, 0, 30);
-    Button btnBack = createCircleBtn("←", "#222222");
+    Button btnBack = createCircleBtn("android.R.drawable.ic_menu_close_clear_cancel", "#222222");
     btnBack.setOnClickListener(v -> showMainMenu());
     TextView tvTitle = new TextView(this);
     tvTitle.setText(T("Back", "Trở lại")); tvTitle.setTextColor(Color.parseColor("#00E5FF")); tvTitle.setTextSize(18);
@@ -3640,16 +3622,6 @@ cbAutoHomeb.setTextColor(Color.parseColor("#FFC107"));
 cbAutoHomeb.setChecked(prefs.getBoolean("blacklist_auto_homeb_en", false));
 cbAutoHomeb.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("blacklist_auto_homeb_en", c).apply());
 secSys.addView(cbAutoHomeb);
-    Button btnUninstallSafe = new Button(this);
-    btnUninstallSafe.setText(T("🔐 Uninstall Safely", "🔐 Gỡ Cài Đặt An Toàn"));
-    btnUninstallSafe.setBackground(getRounded("#D32F2F", 25f));
-    btnUninstallSafe.setTextColor(Color.WHITE);
-    LinearLayout.LayoutParams unLp2 = new LinearLayout.LayoutParams(-1, -2);
-    unLp2.setMargins(0, 20, 0, 0);
-    btnUninstallSafe.setLayoutParams(unLp2);
-    btnUninstallSafe.setOnClickListener(v -> confirmThenUninstallApp());
-    secSys.addView(btnUninstallSafe);
-
     ecoContainer.addView(wrapCard(secSys));
     // [XÓA] toolRow (Storage/Ghi âm) — 2 mục này đã có cổng vào riêng ở main menu
     // ("Bộ nhớ" và "Âm thanh & Media"), không cần lối tắt trùng trong trang Bảo mật.
@@ -6145,126 +6117,139 @@ private void showPanelAppPicker() {
     // 1 List<Object[]>{nhãn, từ khoá, Runnable điều hướng} dựng lại mỗi lần MỞ dialog
     // (rẻ: toàn tham chiếu object có sẵn, không cấp phát nặng). Dialog + adapter bị GC
     // thu hồi hoàn toàn ngay khi đóng — Zero RAM dư thừa so với nav bar cố định cũ.
-    private void showSearchDialog() {
-        List<Object[]> index = new ArrayList<>();
-        index.add(new Object[]{T("Frontier - Lock", "Frontier - Khoá màn hình"), "frontier lock khoa man hinh bar corner", (Runnable) () -> {
-            switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 5; frontierSubTab = 0; renderRulesList();
-        }});
-        index.add(new Object[]{T("Frontier - Homeb", "Frontier - Homeb (không Trợ năng)"), "frontier homeb", (Runnable) () -> {
-            switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 5; frontierSubTab = 1; renderRulesList();
-        }});
-        index.add(new Object[]{T("Frontier - Homacc", "Frontier - Homacc (có Trợ năng)"), "frontier homacc", (Runnable) () -> {
-            switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 5; frontierSubTab = 2; renderRulesList();
-        }});
-        index.add(new Object[]{T("Texture (Vân tay)", "Texture - Vân tay"), "texture van tay fingerprint", (Runnable) () -> {
-            switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 4; renderRulesList();
-        }});
-        index.add(new Object[]{T("VolKey (Phím âm lượng)", "VolKey - Phím âm lượng"), "volkey phim am luong volume", (Runnable) () -> {
-            switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 3; renderRulesList();
-        }});
-        index.add(new Object[]{T("Anima (Hiệu ứng)", "Anima - Hiệu ứng phản hồi"), "anima hieu ung animation record viền border", (Runnable) this::openDesignSpace});
-        index.add(new Object[]{T("Lenap (Bảng nút nổi)", "Lenap - Bảng nút nổi"), "lenap panel bang nut noi", (Runnable) () -> {
-            openDesignSpace(); if (btnEditPanel != null) btnEditPanel.performClick();
-        }});
-        index.add(new Object[]{"Intents", "intent hanh dong tuy chinh", (Runnable) () -> {
-            ecoType = 0; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
-        }});
-        index.add(new Object[]{"QS Tiles", "qs tile o vuong cai dat nhanh", (Runnable) () -> {
-            ecoType = 1; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
-        }});
-        index.add(new Object[]{"Macros", "macro chuoi hanh dong", (Runnable) () -> {
-            ecoType = 2; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
-        }});
-        index.add(new Object[]{T("Storage (Bộ nhớ)", "Bộ nhớ - Storage"), "bo nho storage dung luong", (Runnable) () -> {
-            ecoType = 3; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
-        }});
-        index.add(new Object[]{T("Voice Recording (Ghi âm)", "Ghi âm"), "ghi am voice recording", (Runnable) () -> {
-            ecoType = 4; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
-        }});
-        index.add(new Object[]{T("Hệ thống (Blacklist/Locklist/YTDL/QR NH)", "Hành vi hệ thống - Blacklist/Locklist/YTDL/QR Ngân hàng"), "blacklist locklist ytdl qr ngan hang bao mat he thong", (Runnable) () -> {
-            ecoType = 5; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.GONE); updateFabVisibility(); renderEcosystem();
-        }});
-        index.add(new Object[]{T("Kho Cũ (Trash)", "Kho Cũ"), "kho cu trash thung rac", (Runnable) () -> {
-            ecoType = 6; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
-        }});
-        index.add(new Object[]{"Scan QR", "quet ma qr scan", (Runnable) () -> {
-            Intent qr = new Intent(this, QrScanActivity.class);
-            qr.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(qr);
-        }});
-        index.add(new Object[]{"Premium", "premium adb quyen", (Runnable) this::showPremiumDialog});
-        index.add(new Object[]{T("Backup", "Sao lưu cấu hình"), "backup sao luu", (Runnable) () -> {
-            Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-            i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("application/json");
-            i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup_" + System.currentTimeMillis() + ".json");
-            startActivityForResult(i, 101);
-        }});
-        index.add(new Object[]{T("Restore", "Khôi phục cấu hình"), "restore khoi phuc", (Runnable) () -> {
-            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*");
-            startActivityForResult(i, 102);
-        }});
-        index.add(new Object[]{T("Language / Ngôn ngữ", "Đổi ngôn ngữ"), "language ngon ngu tieng viet english", (Runnable) () -> {
-            prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate();
-        }});
 
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
-        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30, 80, 30, 30);
+private List<Object[]> buildSearchIndex() {
+    if (searchIndexCache != null) return searchIndexCache;
+    List<Object[]> index = new ArrayList<>();
+    index.add(new Object[]{T("Frontier - Lock", "Frontier - Khoá màn hình"), "frontier lock khoa man hinh bar corner", (Runnable) () -> {
+        switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 5; frontierSubTab = 0; renderRulesList();
+    }});
+    index.add(new Object[]{T("Frontier - Homeb", "Frontier - Homeb (không Trợ năng)"), "frontier homeb", (Runnable) () -> {
+        switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 5; frontierSubTab = 1; renderRulesList();
+    }});
+    index.add(new Object[]{T("Frontier - Homacc", "Frontier - Homacc (có Trợ năng)"), "frontier homacc", (Runnable) () -> {
+        switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 5; frontierSubTab = 2; renderRulesList();
+    }});
+    index.add(new Object[]{T("Texture (Vân tay)", "Texture - Vân tay"), "texture van tay fingerprint", (Runnable) () -> {
+        switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 4; renderRulesList();
+    }});
+    index.add(new Object[]{T("VolKey (Phím âm lượng)", "VolKey - Phím âm lượng"), "volkey phim am luong volume", (Runnable) () -> {
+        switchMainTab(1, navCondBtnRef, navEcoBtnRef); currentGesTab = 3; renderRulesList();
+    }});
+    index.add(new Object[]{T("Anima (Hiệu ứng)", "Anima - Hiệu ứng phản hồi"), "anima hieu ung animation record vien border", (Runnable) this::openDesignSpace});
+    index.add(new Object[]{T("Lenap (Bảng nút nổi)", "Lenap - Bảng nút nổi"), "lenap panel bang nut noi", (Runnable) () -> {
+        openDesignSpace(); if (btnEditPanel != null) btnEditPanel.performClick();
+    }});
+    index.add(new Object[]{"Intents", "intent hanh dong tuy chinh", (Runnable) () -> {
+        ecoType = 0; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
+    }});
+    index.add(new Object[]{"QS Tiles", "qs tile o vuong cai dat nhanh", (Runnable) () -> {
+        ecoType = 1; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
+    }});
+    index.add(new Object[]{"Macros", "macro chuoi hanh dong", (Runnable) () -> {
+        ecoType = 2; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
+    }});
+    index.add(new Object[]{T("Storage (Bộ nhớ)", "Bộ nhớ - Storage"), "bo nho storage dung luong", (Runnable) () -> {
+        ecoType = 3; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
+    }});
+    index.add(new Object[]{T("Voice Recording (Ghi âm)", "Ghi âm"), "ghi am voice recording", (Runnable) () -> {
+        ecoType = 4; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
+    }});
+    index.add(new Object[]{T("Hệ thống (Blacklist/Locklist)", "Bảo mật - Blacklist/Locklist"), "blacklist locklist bao mat he thong", (Runnable) () -> {
+        ecoType = 5; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.GONE); updateFabVisibility(); renderEcosystem();
+    }});
+    index.add(new Object[]{T("Kho Cũ (Trash)", "Kho Cũ"), "kho cu trash thung rac", (Runnable) () -> {
+        ecoType = 6; switchMainTab(2, navCondBtnRef, navEcoBtnRef); if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE); updateFabVisibility(); renderEcosystem();
+    }});
+    index.add(new Object[]{"Scan QR", "quet ma qr scan", (Runnable) () -> {
+        Intent qr = new Intent(this, QrScanActivity.class);
+        qr.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(qr);
+    }});
+    index.add(new Object[]{T("Backup", "Sao lưu cấu hình"), "backup sao luu", (Runnable) () -> {
+        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("application/json");
+        i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup_" + System.currentTimeMillis() + ".json");
+        startActivityForResult(i, 101);
+    }});
+    index.add(new Object[]{T("Restore", "Khôi phục cấu hình"), "restore khoi phuc", (Runnable) () -> {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*");
+        startActivityForResult(i, 102);
+    }});
+    index.add(new Object[]{T("Language / Ngôn ngữ", "Đổi ngôn ngữ"), "language ngon ngu tieng viet english", (Runnable) () -> {
+        prefs.edit().putBoolean("lang_vi", !isVi).apply(); recreate();
+    }});
+    index.add(new Object[]{T("Uninstall Safely", "Gỡ cài đặt an toàn"), "uninstall go cai dat", (Runnable) this::confirmThenUninstallApp});
+    searchIndexCache = index;
+    return index;
+}
 
-        EditText etSearch = new EditText(this);
-        etSearch.setHint("🔍 " + T("Search settings...", "Tìm kiếm cài đặt..."));
-        etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
-        etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30, 25, 30, 25);
-        root.addView(etSearch);
+// Levenshtein distance đơn giản — dùng khi contains() không khớp gì, để trả về
+// kết quả "gần đúng nhất" thay vì rỗng.
+private int levenshtein(String a, String b) {
+    int[][] dp = new int[a.length()+1][b.length()+1];
+    for (int i=0;i<=a.length();i++) dp[i][0]=i;
+    for (int j=0;j<=b.length();j++) dp[0][j]=j;
+    for (int i=1;i<=a.length();i++)
+        for (int j=1;j<=b.length();j++)
+            dp[i][j] = Math.min(Math.min(dp[i-1][j]+1, dp[i][j-1]+1),
+                dp[i-1][j-1] + (a.charAt(i-1)==b.charAt(j-1) ? 0 : 1));
+    return dp[a.length()][b.length()];
+}
 
-        ListView lv = new ListView(this);
-        lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-        root.addView(lv);
-
-        List<Object[]> shown = new ArrayList<>(index);
-        BaseAdapter adapter = new BaseAdapter() {
-            @Override public int getCount() { return shown.size(); }
-            @Override public Object getItem(int p) { return shown.get(p); }
-            @Override public long getItemId(int p) { return p; }
-            @Override public View getView(int p, View cv, ViewGroup parent) {
-                TextView tv = new TextView(MainActivity.this);
-                tv.setText((String) shown.get(p)[0]);
-                tv.setTextColor(Color.WHITE); tv.setTextSize(15);
-                tv.setPadding(20, 28, 20, 28);
-                return tv;
-            }
-        };
-        lv.setAdapter(adapter);
-        lv.setOnItemClickListener((parent, v, position, id) -> {
-            ((Runnable) shown.get(position)[2]).run();
-            d.dismiss();
-        });
-
-        etSearch.addTextChangedListener(new android.text.TextWatcher() {
-            public void afterTextChanged(android.text.Editable s) {
-                String q = s.toString().trim().toLowerCase();
-                shown.clear();
-                for (Object[] item : index) {
-                    String label = ((String) item[0]).toLowerCase();
-                    String keys = (String) item[1];
-                    if (q.isEmpty() || label.contains(q) || keys.contains(q)) shown.add(item);
-                }
-                adapter.notifyDataSetChanged();
-            }
-            public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
-            public void onTextChanged(CharSequence s, int a, int b, int c) {}
-        });
-
-        Button bClose = new Button(this); bClose.setText(T("CLOSE", "ĐÓNG"));
-        bClose.setBackground(getRounded("#333333", 20f)); bClose.setTextColor(Color.WHITE);
-        bClose.setOnClickListener(v -> d.dismiss());
-        root.addView(bClose);
-
-        d.setContentView(root);
-        d.show();
-        etSearch.requestFocus();
+private void liveSearchSettings(String query) {
+    List<Object[]> all = buildSearchIndex();
+    String q = query.trim().toLowerCase();
+    List<Object[]> matched = new ArrayList<>();
+    if (q.isEmpty()) {
+        if (searchPopup != null && searchPopup.isShowing()) searchPopup.dismiss();
+        return;
     }
+    for (Object[] item : all) {
+        String label = ((String) item[0]).toLowerCase();
+        String keys = (String) item[1];
+        if (label.contains(q) || keys.contains(q)) matched.add(item);
+    }
+    if (matched.isEmpty()) {
+        // Không khớp trực tiếp -> tìm mục có khoảng cách Levenshtein nhỏ nhất (gần đúng nhất)
+        Object[] best = null; int bestDist = Integer.MAX_VALUE;
+        for (Object[] item : all) {
+            int d = levenshtein(q, ((String) item[0]).toLowerCase());
+            if (d < bestDist) { bestDist = d; best = item; }
+        }
+        if (best != null) matched.add(best);
+    }
+
+    if (searchPopup == null) {
+        searchPopup = new android.widget.ListPopupWindow(this);
+        searchPopup.setAnchorView(etNavSearch);
+        searchPopup.setModal(false);
+        searchPopup.setInputMethodMode(android.widget.ListPopupWindow.INPUT_METHOD_NEEDED);
+    }
+    final List<Object[]> finalMatched = matched;
+    BaseAdapter adapter = new BaseAdapter() {
+        @Override public int getCount() { return finalMatched.size(); }
+        @Override public Object getItem(int p) { return finalMatched.get(p); }
+        @Override public long getItemId(int p) { return p; }
+        @Override public View getView(int p, View cv, ViewGroup parent) {
+            TextView tv = new TextView(MainActivity.this);
+            tv.setText((String) finalMatched.get(p)[0]);
+            tv.setTextColor(Color.WHITE); tv.setTextSize(15);
+            tv.setBackgroundColor(Color.parseColor("#1E1E1E"));
+            tv.setPadding(30, 26, 30, 26);
+            return tv;
+        }
+    };
+    searchPopup.setAdapter(adapter);
+    searchPopup.setWidth(etNavSearch.getWidth() > 0 ? etNavSearch.getWidth() : 600);
+    searchPopup.setOnItemClickListener((parent, v, position, id) -> {
+        ((Runnable) finalMatched.get(position)[2]).run();
+        etNavSearch.setText("");
+        searchPopup.dismiss();
+    });
+    searchPopup.show();
+}
 private void confirmThenUninstallApp() {
     if (Build.VERSION.SDK_INT >= 30) {
         android.hardware.biometrics.BiometricPrompt prompt =
