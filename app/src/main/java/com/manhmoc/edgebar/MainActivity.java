@@ -122,10 +122,14 @@ private static final java.util.Map<String,String> appLabelCache = new java.util.
 private ImageButton createIconCircleBtn(int resId, String color) {
     ImageButton b = new ImageButton(this);
     b.setImageResource(resId);
-    b.setColorFilter(Color.WHITE);
+    // [FIX] Đồng bộ màu icon Nav Bar với icon 9 mục Menu chính (ACCENT_COLOR = #8AB4F8),
+    // thay vì trắng thuần như trước.
+    b.setColorFilter(Color.parseColor(ACCENT_COLOR));
     b.setBackground(getRounded(color, 100f));
     b.setScaleType(ImageView.ScaleType.FIT_CENTER);
-    b.setPadding(34,34,34,34);
+    // [FIX] Giảm padding 34 -> 22 để icon to/dày ra, khớp kích thước ~81px như
+    // icon đầu 9 mục (khung 130px, padding 22 mỗi bên -> icon còn lại ~86px).
+    b.setPadding(22,22,22,22);
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130);
     lp.setMargins(10, 0, 10, 0);
     b.setLayoutParams(lp);
@@ -850,8 +854,8 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
 
         // Đổi icon Compass thành touch_app_24px, cho kích thước to lên (Padding giảm từ 34 -> 24)
         fab = createIconCircleBtn(customIconRes("bubble_chart_24px"), "#333333"); 
-        fab.setTag("fab");
-        fab.setPadding(24, 24, 24, 24);
+fab.setTag("fab");
+fab.setPadding(22, 22, 22, 22); // đồng bộ với padding mới trong createIconCircleBtn
         fab.setOnClickListener(v -> {
             if (currentMainTab == 1) {
                 openRuleBuilderDialog(null, -1, -1, ""); 
@@ -1858,6 +1862,9 @@ private void ensureHomeServiceForPreview() {
         listContainer.setOrientation(LinearLayout.VERTICAL);
         content.addView(listContainer);
 
+        // [MỚI] Ô tìm kiếm Pattern — lọc theo text Gesture + Action đang hiển thị trên card
+        final String[] searchQuery = {""};
+
         Runnable[] renderRules = new Runnable[1];
         renderRules[0] = () -> {
             listContainer.removeAllViews();
@@ -1865,6 +1872,13 @@ private void ensureHomeServiceForPreview() {
             java.util.List<String> rules = getDynamicIds(listKey);
             if (prulesSelectMode) {
                 listContainer.addView(buildPruleSelectionToolbar(appliedItemKey, rules, renderRules));
+            }
+            java.util.List<String> shownRules = new java.util.ArrayList<>();
+            String q = searchQuery[0].trim().toLowerCase();
+            for (String rIdF : rules) {
+                if (q.isEmpty()) { shownRules.add(rIdF); continue; }
+                String hay = (formatPruleGestureLabel(rIdF) + " " + formatPruleActionLabel(rIdF)).toLowerCase();
+                if (hay.contains(q)) shownRules.add(rIdF);
             }
             if (rules.isEmpty()) {
                 TextView empty = new TextView(this);
@@ -1878,7 +1892,7 @@ private void ensureHomeServiceForPreview() {
             
             LinearLayout currentRow = null;
             int count = 0;
-            for (String rId : rules) {
+            for (String rId : shownRules) {
                 // Thuật toán chia cột (2 item / 1 hàng)
                 if (count % 2 == 0) {
                     currentRow = new LinearLayout(this);
@@ -2012,43 +2026,48 @@ ctrlCol.addView(btnCopy);
         scroll.addView(content);
         rootLayout.addView(scroll);
 
-        // Thanh Bottom Bar y hệt ảnh thiết kế
+        // [FIX] Đồng bộ cấu trúc Nav Bar với màn chính: Back (trái) — Ô tìm kiếm (giữa)
+        // — Nút tròn tạo Pattern (phải, dùng icon bubble_chart_24px giống FAB ngoài).
         LinearLayout bottomBar = new LinearLayout(this);
         bottomBar.setOrientation(LinearLayout.HORIZONTAL);
         bottomBar.setGravity(Gravity.CENTER_VERTICAL);
-        bottomBar.setBackground(getRounded("#1A1A1A", 100f));
+        bottomBar.setBackground(getRounded("#1E1E1E", 100f));
         bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2);
         bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
         bLp.setMargins(40, 0, 40, 60);
         bottomBar.setLayoutParams(bLp);
 
-        // [FIX] Bỏ 2 nút chết (Update/Premium không có onClick, chỉ chiếm chỗ vô ích).
-// Nút tròn bên phải giờ chính là nút "back" (icon cycle), nút PATTERN giữ chức năng gốc.
-View spacer = new View(this);
-spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+        ImageButton btnBack = createIconCircleBtn(customIconRes("cycle_24px"), "#333333");
+        // [FIX] Gọi d.dismiss() trực tiếp — onBackPressed() của Activity KHÔNG đóng
+        // được Dialog này, khiến nút back trông như không hoạt động.
+        btnBack.setOnClickListener(v -> {
+            if (prulesSelectMode) { prulesSelectMode = false; prulesSelectedItems.clear(); renderRules[0].run(); }
+            else d.dismiss();
+        });
 
-Button fabNew = new Button(this);
-fabNew.setText("PATTERN");
-fabNew.setTextColor(Color.BLACK);
-fabNew.setBackground(getRounded("#00E5FF", 100f));
-fabNew.setTextSize(13.5f);
-LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, 135);
-fLp.setMargins(10, 0, 10, 0);
-fabNew.setLayoutParams(fLp);
-fabNew.setPadding(55, 0, 55, 0);
-fabNew.setOnClickListener(v -> openPackRuleEditor(appliedItemKey, null, null, renderRules[0], isHomebSpace));
+        EditText etSearchPattern = new EditText(this);
+        etSearchPattern.setHint(T("Search", "Tìm kiếm"));
+        etSearchPattern.setTextSize(16f);
+        etSearchPattern.setHintTextColor(Color.GRAY);
+        etSearchPattern.setTextColor(Color.WHITE);
+        etSearchPattern.setSingleLine(true);
+        etSearchPattern.setBackground(getRounded("#2C2C2C", 100f));
+        etSearchPattern.setPadding(30, 20, 30, 20);
+        etSearchPattern.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        etSearchPattern.addTextChangedListener(new android.text.TextWatcher() {
+            public void afterTextChanged(android.text.Editable s) { searchQuery[0] = s.toString(); renderRules[0].run(); }
+            public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+            public void onTextChanged(CharSequence s,int a,int b,int c){}
+        });
 
-ImageButton btnBack = createIconCircleBtn(customIconRes("cycle_24px"), "#333333");
-// [FIX] Trước đây gọi onBackPressed() của Activity -> KHÔNG đóng Dialog này (d),
-// khiến "back" trông như không hoạt động. Phải gọi d.dismiss() trực tiếp.
-btnBack.setOnClickListener(v -> {
-    if (prulesSelectMode) { prulesSelectMode = false; prulesSelectedItems.clear(); renderRules[0].run(); }
-    else d.dismiss();
-});
-bottomBar.addView(spacer);
-bottomBar.addView(fabNew);
-bottomBar.addView(btnBack);
+        ImageButton fabNew = createIconCircleBtn(customIconRes("bubble_chart_24px"), "#333333");
+        fabNew.setPadding(22, 22, 22, 22);
+        fabNew.setOnClickListener(v -> openPackRuleEditor(appliedItemKey, null, null, renderRules[0], isHomebSpace));
+
+        bottomBar.addView(btnBack);
+        bottomBar.addView(etSearchPattern);
+        bottomBar.addView(fabNew);
         rootLayout.addView(bottomBar);
         d.setOnDismissListener(dd -> renderRulesList());
         d.setContentView(rootLayout);
