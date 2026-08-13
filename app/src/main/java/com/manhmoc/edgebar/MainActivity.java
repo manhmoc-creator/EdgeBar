@@ -100,6 +100,7 @@ private boolean frontierSpaceBuilt = false;
 // [MỚI] Callback "lùi 1 cấp" hiện tại — Back ở Nav Bar ưu tiên gọi cái này trước khi
 // rơi về logic mặc định. Mỗi màn con tự gán khi mở, tự trả về cấp trước khi lùi.
 private final java.util.ArrayDeque<Runnable> navBackStack = new java.util.ArrayDeque<>();
+private Runnable currentLevelBackAction = null;
     // [MULTI-SELECT FRONTIER] Zero-RAM khi không dùng — chỉ 1 boolean + 1 Set rỗng
     private boolean frontierSelectMode = false;
     private java.util.Set<String> frontierSelectedItems = new java.util.LinkedHashSet<>();
@@ -386,7 +387,7 @@ private String[] getVolKeyActLabs() {
     if (panelSelectMode) { panelSelectMode = false; panelSelectedItems.clear(); renderPanelDesign(); return; }
     if (trashSelectMode) { trashSelectMode = false; trashSelectedItems.clear(); renderEcosystem(); return; }
     if (voiceSelectMode) { voiceSelectMode = false; voiceSelectedItems.clear(); renderEcosystem(); return; }
-    if (currentLevelBackAction != null) { currentLevelBackAction.run(); return; }
+    if (!navBackStack.isEmpty()) { navBackStack.pop().run(); return; }
     if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); return; }
     if ((pageConditions != null && pageConditions.getVisibility() == View.VISIBLE)
         || (pageEcosystem != null && pageEcosystem.getVisibility() == View.VISIBLE)
@@ -841,7 +842,7 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
         // Đưa nút Back xuống Nav Bar, sử dụng icon hệ thống (ic_menu_revert) để luôn hiển thị an toàn
         ImageButton btnBack = createIconCircleBtn(customIconRes("cycle_24px"), "#333333");
 btnBack.setOnClickListener(v -> performBack());
-btnBack.setOnLongClickListener(v -> { currentLevelBackAction = null; showMainMenu(); return true; });
+btnBack.setOnLongClickListener(v -> { navBackStack.clear(); showMainMenu(); return true; });
 // [FIX] Phóng to vùng chạm thật sự của nút Back — icon chỉ ~86px nhưng touch target
 // nên rộng hơn để không bị "trượt" khi chạm hơi lệch mép, đặc biệt lúc thao tác 1 tay.
 btnBack.post(() -> {
@@ -934,7 +935,7 @@ private void openSpace(int mainTabIdx) {
 }
 private void openEco(int type, boolean showSubNav) {
     ecoType = type;
-    if (type == 4) { soundMediaSubTab = -1; currentLevelBackAction = null; }
+    if (type == 4) { soundMediaSubTab = -1; navBackStack.clear(); }
     openSpace(2);
     if (ecoMenuContainer != null) ecoMenuContainer.setVisibility(View.GONE);
     if (ecoSubHeader != null) ecoSubHeader.setVisibility(View.VISIBLE);
@@ -7158,11 +7159,30 @@ private String formatPruleActionLabel(String rId) {
 }
     private LinearLayout createSlider(String t, String k, int max, int def) { 
         LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); 
-        TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv); 
+        TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv);
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); 
         Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); 
         Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); 
         SeekBar sb = new SeekBar(this); sb.setMax(max); sb.setProgress(prefs.getInt(k, def)); sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); 
+tv.setOnClickListener(v2 -> {
+    EditText et = new EditText(this);
+    et.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+    et.setText(String.valueOf(sb.getProgress()));
+    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle(t)
+        .setView(et)
+        .setPositiveButton("OK", (d, w) -> {
+            try {
+                int p = Math.max(0, Math.min(max, Integer.parseInt(et.getText().toString().trim())));
+                sb.setProgress(p);
+                tv.setText(t + ": " + p);
+                Runnable pendingOld = sliderPendingRunnable.remove(k);
+                if (pendingOld != null) sliderPrefHandler.removeCallbacks(pendingOld);
+                prefs.edit().putInt(k, p).apply();
+                sliderLastWriteMs.put(k, System.currentTimeMillis());
+            } catch (Exception ignored) {}
+        }).setNegativeButton("HỦY", null).show();
+});
         sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             public void onProgressChanged(SeekBar s, int p, boolean fromUser){
                 tv.setText(t + ": " + p);
@@ -7197,7 +7217,27 @@ private String formatPruleActionLabel(String rId) {
                 sliderLastWriteMs.put(k, System.currentTimeMillis());
             }
         }); 
-        btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); }); btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) sb.setProgress(p+1); }); 
+        btnMinus.setOnClickListener(v -> {
+    int p = Math.max(0, sb.getProgress() - 1);
+    sb.setProgress(p);
+    tv.setText(t + ": " + p);
+    // Huỷ mọi write đang chờ throttle (nếu có) — tránh nó ghi đè giá trị cũ
+    // lên trên giá trị vừa bấm nút, đúng gốc gây ra lỗi "kéo 21, bấm + lên 27
+    // nhưng Lưu lại ra 21".
+    Runnable pendingOld = sliderPendingRunnable.remove(k);
+    if (pendingOld != null) sliderPrefHandler.removeCallbacks(pendingOld);
+    prefs.edit().putInt(k, p).apply();
+    sliderLastWriteMs.put(k, System.currentTimeMillis());
+});
+btnPlus.setOnClickListener(v -> {
+    int p = Math.min(max, sb.getProgress() + 1);
+    sb.setProgress(p);
+    tv.setText(t + ": " + p);
+    Runnable pendingOld = sliderPendingRunnable.remove(k);
+    if (pendingOld != null) sliderPrefHandler.removeCallbacks(pendingOld);
+    prefs.edit().putInt(k, p).apply();
+    sliderLastWriteMs.put(k, System.currentTimeMillis());
+});
         row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); 
         return l; 
     }
