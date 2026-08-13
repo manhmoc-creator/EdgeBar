@@ -965,13 +965,13 @@ filter.addAction("com.manhmoc.edgebar.TEST_REC_INDICATOR");
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(
     1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
             try { wm.addView(bars[i], p); } catch (Exception e) {}
-            bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], bars[i]));
+            bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], bars[i], i==0 || i==1));
         }
         for (int i = 0; i < 4; i++) {
             corners[i] = new CornerView(this, i, "home_");
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
             try { wm.addView(corners[i], p); } catch (Exception e) {}
-            corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i]));
+            corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i], false));
         }
 
         // HYBRID HOME V2: Lắng nghe thay đổi Accessibility bằng ContentObserver
@@ -1482,22 +1482,39 @@ default:
 
     private class SidebarTouchListener implements View.OnTouchListener {
         private String prefKeyBase;
-private View myView;
-private float sx, sy;
-private long st;
-private Handler longPressHandler = new Handler(); // dùng chung cho cả nhánh Morse lẫn nhánh thường
-private boolean longPressTriggered = false;
-private long lastTapUpTime = 0;
-private static final long DTAP_WINDOW_MS = 300;
-private static final float SWIPE_CANCEL_SLOP_PX = 60f;
-public SidebarTouchListener(String keyBase, View v) {
-    this.prefKeyBase = keyBase;
-    this.myView = v;
-}
+        private View myView;
+        private boolean isEdgeSideBar; // [MỚI]
+        private boolean suppressedAsOsEdge = false; // [MỚI]
+        private float sx, sy;
+        private long st;
+        private Handler longPressHandler = new Handler();
+        private boolean longPressTriggered = false;
+        private long lastTapUpTime = 0;
+        private static final long DTAP_WINDOW_MS = 300;
+        private static final float SWIPE_CANCEL_SLOP_PX = 60f;
+        private static final float OS_GESTURE_EDGE_DP = 24f;
+
+        public SidebarTouchListener(String keyBase, View v, boolean isEdgeSideBar) {
+            this.prefKeyBase = keyBase;
+            this.myView = v;
+            this.isEdgeSideBar = isEdgeSideBar;
+        }
+
+        private final int[] locBuf = new int[2];
+        private float getFixedX(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[0] + e.getX(); }
+        private float getFixedY(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[1] + e.getY(); }
+
+        private boolean isNearScreenEdge(float xAbs) {
+            float density = getResources().getDisplayMetrics().density;
+            float thresholdPx = OS_GESTURE_EDGE_DP * density;
+            int screenW = getResources().getDisplayMetrics().widthPixels;
+            return xAbs <= thresholdPx || xAbs >= (screenW - thresholdPx);
+        }
+
  private float[] computeJumpDir() {
         float dxDir = 0f, dyDir = 0f;
         if (myView instanceof CornerView) {
-            int idx = ((CornerView) myView).getCornerType(); // 0=BR,1=BL,2=TR,3=TL
+            int idx = ((CornerView) myView).getCornerType();
             dxDir = (idx == 0 || idx == 2) ? -1f : 1f;
             dyDir = (idx == 0 || idx == 1) ? -1f : 1f;
         } else {
@@ -1508,7 +1525,7 @@ public SidebarTouchListener(String keyBase, View v) {
     }
     private float[] computeJumpDirForTap() {
         float[] auto = computeJumpDir();
-        int mode = prefs.getInt(prefKeyBase + "_jumpdir", 0); // 0=Auto,1=Chéo lên,2=Chéo xuống,3=Thẳng lên,4=Thẳng xuống,5=Thẳng trái,6=Thẳng phải
+        int mode = prefs.getInt(prefKeyBase + "_jumpdir", 0);
         switch (mode) {
             case 1: return new float[]{auto[0], -1f};
             case 2: return new float[]{auto[0], 1f};
@@ -1521,19 +1538,27 @@ public SidebarTouchListener(String keyBase, View v) {
     }
         @Override
         public boolean onTouch(View v, MotionEvent e) {
+            if (e.getAction() == MotionEvent.ACTION_DOWN) {
+                suppressedAsOsEdge = isEdgeSideBar && isNearScreenEdge(getFixedX(e));
+            }
+            if (suppressedAsOsEdge) {
+                if (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL) suppressedAsOsEdge = false;
+                return true;
+            }
+
             if (myView instanceof CornerView) ((CornerView) myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView) myView).triggerFlash();
 switch (e.getAction()) {
     case MotionEvent.ACTION_MOVE: {
-    if (rippleView != null) rippleView.moveTo(e.getRawX(), e.getRawY());
-    float mdx = e.getRawX() - sx, mdy = e.getRawY() - sy;
+    if (rippleView != null) rippleView.moveTo(getFixedX(e), getFixedY(e));
+    float mdx = getFixedX(e) - sx, mdy = getFixedY(e) - sy;
     if (!longPressTriggered && (Math.abs(mdx) > SWIPE_CANCEL_SLOP_PX || Math.abs(mdy) > SWIPE_CANCEL_SLOP_PX)) {
         longPressHandler.removeCallbacksAndMessages(null);
     }
     return true;
 }
     case MotionEvent.ACTION_DOWN:
-        sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis();
+        sx = getFixedX(e); sy = getFixedY(e); st = System.currentTimeMillis();
         longPressTriggered = false;
         longPressHandler.removeCallbacksAndMessages(null);
         ensureRippleView();
@@ -1546,7 +1571,7 @@ switch (e.getAction()) {
         return true;
     case MotionEvent.ACTION_UP: {
         longPressHandler.removeCallbacksAndMessages(null);
-        float dx = e.getRawX() - sx, dy = e.getRawY() - sy;
+        float dx = getFixedX(e) - sx, dy = getFixedY(e) - sy;
         long duration = System.currentTimeMillis() - st;
         if (Math.abs(dx) > SWIPE_CANCEL_SLOP_PX || Math.abs(dy) > SWIPE_CANCEL_SLOP_PX) {
             if (longPressTriggered) return true;
@@ -1565,20 +1590,18 @@ switch (e.getAction()) {
                 float swipeMag = (float) Math.sqrt(dx * dx + dy * dy);
                 float dirX = swipeMag > 0.001f ? dx / swipeMag : 0f;
                 float dirY = swipeMag > 0.001f ? dy / swipeMag : 0f;
-                rippleView.jumpIcon(e.getRawX(), e.getRawY(), actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
+                rippleView.jumpIcon(getFixedX(e), getFixedY(e), actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
             }
             return true;
         }
         if (longPressTriggered) return true;
-        // [FIX LONG-PRESS] Dự phòng giống EdgeBarService — tránh phụ thuộc hoàn toàn vào
-        // Handler.postDelayed() có kịp tự bắn trước ACTION_UP hay không.
         if (duration >= prefs.getInt("hold_dur", 600)) {
             longPressTriggered = true;
             handleAction(prefKeyBase + "_long");
             return true;
         }
         long now = System.currentTimeMillis();
-        final float upX = e.getRawX(), upY = e.getRawY();
+        final float upX = getFixedX(e), upY = getFixedY(e);
         boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
         if (!hasDtap) {
             lastTapUpTime = 0;
@@ -1605,22 +1628,20 @@ switch (e.getAction()) {
         return true;
     }
     case MotionEvent.ACTION_CANCEL: {
-    longPressHandler.removeCallbacksAndMessages(null);
-    if (!longPressTriggered) {
-        long duration = System.currentTimeMillis() - st;
-        float cdx = e.getRawX() - sx, cdy = e.getRawY() - sy;
-        if (duration >= prefs.getInt("hold_dur", 600)
-                && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
-            longPressTriggered = true;
-            handleAction(prefKeyBase + "_long");
-            if (rippleView != null) { float[] dirC = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dirC[0], dirC[1]); }
+        longPressHandler.removeCallbacksAndMessages(null);
+        if (!longPressTriggered) {
+            long duration = System.currentTimeMillis() - st;
+            float cdx = getFixedX(e) - sx, cdy = getFixedY(e) - sy;
+            if (duration >= prefs.getInt("hold_dur", 600)
+                    && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
+                longPressTriggered = true;
+                handleAction(prefKeyBase + "_long");
+                if (rippleView != null) { float[] dirC = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dirC[0], dirC[1]); }
+            }
         }
+        if (rippleView != null) rippleView.popRipple();
+        return true;
     }
-    // [FIX] Bổ sung popRipple() giống EdgeBarService — chấm ripple lúc ACTION_DOWN
-    // không được dọn nếu cử chỉ bị CANCEL thay vì UP.
-    if (rippleView != null) rippleView.popRipple();
-    return true;
-}
 }
 return true;
         }
@@ -1730,9 +1751,10 @@ WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
 PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         lp.x = prefs.getInt("anim_rec_x", 1000) - 1000;
-        lp.y = prefs.getInt("anim_rec_y", 1000) - 1000;
+        // [FIX] Ép khoảng cách an toàn tối thiểu 100px với mép dưới màn hình —
+        // tránh đè lên vùng cử chỉ vuốt-về (back gesture) của hệ thống.
+        lp.y = Math.max(100, prefs.getInt("anim_rec_y", 1000) - 1000);
         try { wm.addView(recIndicatorView, lp); } catch (Exception ignored) {}
-
         recBlinkAnim = ValueAnimator.ofFloat(1f, 0.25f, 1f);
         recBlinkAnim.setDuration(1000);
         recBlinkAnim.setRepeatCount(ValueAnimator.INFINITE);
@@ -1745,7 +1767,7 @@ PixelFormat.TRANSLUCENT);
         if (recIndicatorView == null) return;
         WindowManager.LayoutParams lp = (WindowManager.LayoutParams) recIndicatorView.getLayoutParams();
         lp.x = prefs.getInt("anim_rec_x", 1000) - 1000;
-        lp.y = prefs.getInt("anim_rec_y", 1000) - 1000;
+        lp.y = Math.max(100, prefs.getInt("anim_rec_y", 1000) - 1000); // [FIX] xem ensureRecIndicator()
         try { wm.updateViewLayout(recIndicatorView, lp); } catch (Exception ignored) {}
         recIndicatorView.setMinimumWidth(prefs.getInt("anim_rec_width", 260));
         recIndicatorView.setMinimumHeight(prefs.getInt("anim_rec_height", 90));

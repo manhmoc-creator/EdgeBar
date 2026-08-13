@@ -1591,13 +1591,13 @@ private void refreshFingerprintRegistration() {
             bars[i] = new BarView(this);
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,0,PixelFormat.TRANSLUCENT);
             try { wm.addView(bars[i], p); } catch(Exception e){}
-            bars[i].setOnTouchListener(new SidebarTouchListener("lock_"+BARS[i], bars[i]));
+            bars[i].setOnTouchListener(new SidebarTouchListener("lock_"+BARS[i], bars[i], i==0 || i==1));
         }
         for (int i=0;i<4;i++) {
             corners[i] = new CornerView(this, i, "lock_");
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,0,PixelFormat.TRANSLUCENT);
             try { wm.addView(corners[i], p); } catch(Exception e){}
-            corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_"+CORNERS[i], corners[i]));
+            corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_"+CORNERS[i], corners[i], false));
         }
         updateVisibility();
     }
@@ -1689,6 +1689,8 @@ if (panelEngine != null) panelEngine.rebuildAll();
     private class SidebarTouchListener implements View.OnTouchListener {
     private String prefKeyBase;
     private View myView;
+    private boolean isEdgeSideBar; // [MỚI] true nếu là 1 trong 2 Bar cạnh trái/phải (BARS[0]="r", BARS[1]="l")
+    private boolean suppressedAsOsEdge = false; // [MỚI] chuỗi chạm hiện tại có bị coi là cử chỉ OS không
     private float sx, sy;
     private long st;
     private boolean longFired = false;
@@ -1699,15 +1701,33 @@ if (panelEngine != null) panelEngine.rebuildAll();
         if (rippleView != null) { float[] dir = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
     };
     private long lastTapUpTime = 0;
-private static final long DTAP_WINDOW_MS = 300;
-// Ngưỡng "coi là vuốt" — dùng CHUNG cho việc huỷ timer long-press (MOVE) lẫn
-// phân loại swipe-vs-tap (UP). Đặt 60px raw (~17dp trên Pixel 2XL) — đủ lớn để
-// không bị kích hoạt bởi rung tay tự nhiên lúc giữ yên, đủ nhỏ để vẫn nhạy swipe.
-private static final float SWIPE_CANCEL_SLOP_PX = 60f;
-    public SidebarTouchListener(String keyBase, View v) {
+    private static final long DTAP_WINDOW_MS = 300;
+    private static final float SWIPE_CANCEL_SLOP_PX = 60f;
+    // [MỚI] Vùng an toàn sát mép vật lý màn hình — trùng vùng cử chỉ điều hướng
+    // hệ thống mặc định của Android (~24dp).
+    private static final float OS_GESTURE_EDGE_DP = 24f;
+
+    public SidebarTouchListener(String keyBase, View v, boolean isEdgeSideBar) {
         this.prefKeyBase = keyBase;
         this.myView = v;
+        this.isEdgeSideBar = isEdgeSideBar;
     }
+
+    // [MỚI] Toạ độ tuyệt đối chuẩn xác — getLocationOnScreen() được hệ thống
+    // đảm bảo đúng 100% sau layout, không lệch như getRawX/Y() với overlay window
+    // định vị bằng Gravity + hay bị đổi kích thước động.
+    private final int[] locBuf = new int[2];
+    private float getFixedX(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[0] + e.getX(); }
+    private float getFixedY(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[1] + e.getY(); }
+
+    // [MỚI] Điểm chạm có sát mép vật lý màn hình không
+    private boolean isNearScreenEdge(float xAbs) {
+        float density = getResources().getDisplayMetrics().density;
+        float thresholdPx = OS_GESTURE_EDGE_DP * density;
+        int screenW = getResources().getDisplayMetrics().widthPixels;
+        return xAbs <= thresholdPx || xAbs >= (screenW - thresholdPx);
+    }
+
 private float[] computeJumpDir() {
         float dxDir = 0f, dyDir = 0f;
         if (myView instanceof CornerView) {
@@ -1721,7 +1741,6 @@ private float[] computeJumpDir() {
         return new float[]{dxDir, dyDir};
     }
 
-// ===== THÊM ĐÚNG CHỖ NÀY =====
 private float[] computeJumpDirForTap() {
     float[] auto = computeJumpDir();
     int mode = prefs.getInt(prefKeyBase + "_jumpdir", 0);
@@ -1735,23 +1754,32 @@ private float[] computeJumpDirForTap() {
         default: return auto;
     }
 }
-// ===============================
+
 @Override public boolean onTouch(View v, MotionEvent e) {
+        // [MỚI] Chặn từ gốc: nếu là Bar cạnh (trái/phải) và điểm CHẠM XUỐNG nằm sát
+        // mép vật lý màn hình -> coi toàn bộ chuỗi chạm này là cử chỉ vuốt hệ thống
+        // đi ngang qua, không hiện sóng chạm/đổi màu/kích hoạt hành động nào.
+        if (e.getAction() == MotionEvent.ACTION_DOWN) {
+            suppressedAsOsEdge = isEdgeSideBar && isNearScreenEdge(getFixedX(e));
+        }
+        if (suppressedAsOsEdge) {
+            if (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL) suppressedAsOsEdge = false;
+            return true;
+        }
+
         if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
         else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
         switch (e.getAction()) {
             case MotionEvent.ACTION_MOVE: {
-    if (rippleView != null) rippleView.moveTo(e.getRawX(), e.getRawY());
-    // [FIX LONG-PRESS] Ngưỡng dùng chung SWIPE_CANCEL_SLOP_PX — chỉ huỷ timer khi
-    // tay THỰC SỰ đang vuốt, không phải rung tay tự nhiên lúc giữ yên 600ms.
-    float mdx = e.getRawX() - sx, mdy = e.getRawY() - sy;
+    if (rippleView != null) rippleView.moveTo(getFixedX(e), getFixedY(e));
+    float mdx = getFixedX(e) - sx, mdy = getFixedY(e) - sy;
     if (!longFired && (Math.abs(mdx) > SWIPE_CANCEL_SLOP_PX || Math.abs(mdy) > SWIPE_CANCEL_SLOP_PX)) {
         lpHandler.removeCallbacks(longPressRunnable);
     }
     return true;
 }
             case MotionEvent.ACTION_DOWN:
-                sx = e.getRawX(); sy = e.getRawY(); st = System.currentTimeMillis();
+                sx = getFixedX(e); sy = getFixedY(e); st = System.currentTimeMillis();
                 longFired = false;
                 lpHandler.removeCallbacks(longPressRunnable);
                 ensureRippleView();
@@ -1760,7 +1788,7 @@ private float[] computeJumpDirForTap() {
                 return true;
             case MotionEvent.ACTION_UP: {
                 lpHandler.removeCallbacks(longPressRunnable);
-                float dx = e.getRawX() - sx, dy = e.getRawY() - sy;
+                float dx = getFixedX(e) - sx, dy = getFixedY(e) - sy;
                 long duration = System.currentTimeMillis() - st;
                 if (Math.abs(dx) > SWIPE_CANCEL_SLOP_PX || Math.abs(dy) > SWIPE_CANCEL_SLOP_PX) {
                     if (longFired) return true;
@@ -1779,23 +1807,18 @@ private float[] computeJumpDirForTap() {
                         float swipeMag = (float) Math.sqrt(dx * dx + dy * dy);
                         float dirX = swipeMag > 0.001f ? dx / swipeMag : 0f;
                         float dirY = swipeMag > 0.001f ? dy / swipeMag : 0f;
-                        rippleView.jumpIcon(e.getRawX(), e.getRawY(), actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
+                        rippleView.jumpIcon(getFixedX(e), getFixedY(e), actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
                     }
                     return true;
                 }
                 if (longFired) return true;
-                // [FIX LONG-PRESS] Dự phòng: nếu Handler.postDelayed(longPressRunnable) chưa
-                // kịp tự bắn trước khi ACTION_UP tới (main thread bận, hoặc buông tay đúng lúc
-                // callback đang chờ trong hàng đợi), tính lại duration tại đây — y hệt cách
-                // ACTION_CANCEL đã làm bên dưới. Zero cost: chỉ 1 phép so sánh số, không tạo
-                // thêm Handler/timer nào.
                 if (duration >= prefs.getInt("hold_dur", 600)) {
                     longFired = true;
                     handleAction(prefKeyBase + "_long");
                     return true;
                 }
                 long now = System.currentTimeMillis();
-                final float upX = e.getRawX(), upY = e.getRawY();
+                final float upX = getFixedX(e), upY = getFixedY(e);
                 boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
                 float[] dirTap = computeJumpDirForTap();
                 if (!hasDtap) {
@@ -1821,377 +1844,22 @@ private float[] computeJumpDirForTap() {
                 return true;
        }
             case MotionEvent.ACTION_CANCEL: {
-    lpHandler.removeCallbacks(longPressRunnable);
-    if (!longFired) {
-        long duration = System.currentTimeMillis() - st;
-        float cdx = e.getRawX() - sx, cdy = e.getRawY() - sy;
-        if (duration >= prefs.getInt("hold_dur", 600)
-                && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
-            longFired = true;
-            handleAction(prefKeyBase + "_long");
-            if (rippleView != null) { float[] dir = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
-        }
-    }
-    // [FIX] Trước đây thiếu popRipple() ở nhánh CANCEL — chấm trắng vừa hiện lúc
-    // ACTION_DOWN (showAt) bị "đứng hình" vĩnh viễn nếu hệ thống huỷ cử chỉ giữa
-    // chừng. Luôn gọi popRipple() ở đây để đảm bảo ripple luôn tự mờ dần và biến
-    // mất, bất kể cử chỉ kết thúc bằng UP hay bị CANCEL.
-    if (rippleView != null) rippleView.popRipple();
-    return true;
-}
+                lpHandler.removeCallbacks(longPressRunnable);
+                if (!longFired) {
+                    long duration = System.currentTimeMillis() - st;
+                    float cdx = getFixedX(e) - sx, cdy = getFixedY(e) - sy;
+                    if (duration >= prefs.getInt("hold_dur", 600)
+                            && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
+                        longFired = true;
+                        handleAction(prefKeyBase + "_long");
+                        if (rippleView != null) { float[] dir = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
+                    }
+                }
+                if (rippleView != null) rippleView.popRipple();
+                return true;
+            }
         }
         return true;
     }
 }
-    @Override public void onInterrupt() {}
-    private void ensureRecIndicator() {
-        if (recIndicatorView != null) return;
-        recIndicatorView = new LinearLayout(this);
-        recIndicatorView.setOrientation(LinearLayout.HORIZONTAL);
-        recIndicatorView.setGravity(Gravity.CENTER_VERTICAL);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.argb(200, 20, 20, 20));
-        bg.setCornerRadius(100f);
-        recIndicatorView.setBackground(bg);
-        int pad = 16;
-        recIndicatorView.setPadding(pad*2, pad, pad*2, pad);
-        recIndicatorView.setMinimumWidth(prefs.getInt("anim_rec_width", 260));
-        recIndicatorView.setMinimumHeight(prefs.getInt("anim_rec_height", 90));
-        recIndicatorDot = new View(this);
-        GradientDrawable dot = new GradientDrawable();
-        dot.setShape(GradientDrawable.OVAL);
-        dot.setColor(Color.parseColor("#FF3B30"));
-        recIndicatorDot.setBackground(dot);
-        int dotSize = Math.round(24 * (prefs.getInt("anim_rec_size", 140) / 140f));
-        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dotSize, dotSize);
-        dotLp.setMargins(0, 0, 16, 0);
-        recIndicatorDot.setLayoutParams(dotLp);
-
-        recIndicatorText = new TextView(this);
-        recIndicatorText.setTextColor(Color.WHITE);
-        recIndicatorText.setTextSize(13 * (prefs.getInt("anim_rec_size", 140) / 140f));
-        recIndicatorText.setText("00:00");
-
-        recIndicatorView.addView(recIndicatorDot);
-        recIndicatorView.addView(recIndicatorText);
-
-        // [MỚI] Chạm để Tạm dừng/Tiếp tục — ghi âm thật thì điều khiển service thật,
-        // đang ở chế độ THỬ thì chỉ đổi trạng thái hiển thị, không đụng MediaRecorder.
-        recIndicatorView.setOnClickListener(v -> {
-    if (VoiceRecorderService.isRunning) {
-        Intent p2 = new Intent(this, VoiceRecorderService.class);
-        p2.setAction(VoiceRecorderService.ACTION_PAUSE_TOGGLE);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(p2); else startService(p2);
-    } else if (ScreenRecorderService.isRunning) {
-        Intent p3 = new Intent(this, ScreenRecorderService.class);
-        p3.setAction(ScreenRecorderService.ACTION_PAUSE_TOGGLE);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(p3); else startService(p3);
-    } else if (recIndicatorTestMode) {
-        recIndicatorTestPaused = !recIndicatorTestPaused;
-        updateRecIndicator(recIndicatorTestPaused ? "PAUSED" : "RECORDING", 0);
-    }
-});
-// [MỚI] Giữ chấm đỏ -> tắt ngay, không cần mở Notification kéo xuống
-recIndicatorView.setOnLongClickListener(v -> {
-    doVibrate(35);
-    if (VoiceRecorderService.isRunning) {
-        Intent s2 = new Intent(this, VoiceRecorderService.class);
-        s2.setAction(VoiceRecorderService.ACTION_STOP);
-        startService(s2);
-    } else if (ScreenRecorderService.isRunning) {
-        Intent s3 = new Intent(this, ScreenRecorderService.class);
-        s3.setAction(ScreenRecorderService.ACTION_STOP);
-        startService(s3);
-    } else if (recIndicatorTestMode) {
-        recIndicatorTestMode = false;
-        recIndicatorTestPaused = false;
-        updateRecIndicator("STOPPED", 0);
-    }
-    return true;
-});
-            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-| WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-PixelFormat.TRANSLUCENT);
-        lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        lp.x = prefs.getInt("anim_rec_x", 1000) - 1000;
-        lp.y = prefs.getInt("anim_rec_y", 1000) - 1000;
-        try { wm.addView(recIndicatorView, lp); } catch (Exception ignored) {}
-
-        recBlinkAnim = ValueAnimator.ofFloat(1f, 0.25f, 1f);
-        recBlinkAnim.setDuration(1000);
-        recBlinkAnim.setRepeatCount(ValueAnimator.INFINITE);
-        recBlinkAnim.addUpdateListener(a -> { if (recIndicatorDot != null) recIndicatorDot.setAlpha((float) a.getAnimatedValue()); });
-    }
-
-    // [MỚI] Cập nhật vị trí/kích thước TẠI CHỖ khi kéo slider anim_rec_x/y/size —
-    // chỉ updateViewLayout(), KHÔNG removeView/addView -> rẻ CPU/pin, mượt tức thì.
-    private void liveUpdateRecIndicatorPosition() {
-        if (recIndicatorView == null) return;
-        WindowManager.LayoutParams lp = (WindowManager.LayoutParams) recIndicatorView.getLayoutParams();
-        lp.x = prefs.getInt("anim_rec_x", 1000) - 1000;
-        lp.y = prefs.getInt("anim_rec_y", 1000) - 1000;
-        try { wm.updateViewLayout(recIndicatorView, lp); } catch (Exception ignored) {}
-        float scale = prefs.getInt("anim_rec_size", 140) / 140f;
-        int dotSize = Math.round(24 * scale);
-        if (recIndicatorDot != null) {
-            LinearLayout.LayoutParams dlp = (LinearLayout.LayoutParams) recIndicatorDot.getLayoutParams();
-            dlp.width = dotSize; dlp.height = dotSize;
-            recIndicatorDot.setLayoutParams(dlp);
-        }
-        if (recIndicatorText != null) recIndicatorText.setTextSize(scale * 13);
-    }
-    private void updateRecIndicator(String state, long sec) {
-        if (state == null || "STOPPED".equals(state)) {
-            if (recBlinkAnim != null) recBlinkAnim.cancel();
-            if (recIndicatorView != null) { try { wm.removeView(recIndicatorView); } catch (Exception ignored) {} recIndicatorView = null; }
-            return;
-        }
-        ensureRecIndicator();
-        recIndicatorText.setText(String.format("%02d:%02d", sec/60, sec%60));
-        if ("PAUSED".equals(state)) {
-            if (recBlinkAnim != null && recBlinkAnim.isRunning()) recBlinkAnim.cancel();
-            if (recIndicatorDot != null) recIndicatorDot.setAlpha(1f);
-        } else {
-            if (recBlinkAnim != null && !recBlinkAnim.isRunning()) recBlinkAnim.start();
-        }
-    }
-    @Override public void onDestroy() {
-        super.onDestroy();
-        // [AUTO-HOMEB] Trợ năng vừa bị tắt — Lock/Homacc từ giờ vô hiệu vì cả
-        // hai đều cần Accessibility. Tự bật Homeb (chỉ cần quyền Overlay) để
-        // vẫn còn 1 lớp bảo vệ hoạt động.
-        // [DUAL-SOUL] Accessibility vừa tắt -> Homacc PHẢI dừng hẳn NGAY LẬP TỨC.
-if (AccessibleHomeService.isRunning) {
-    try { stopService(new Intent(this, AccessibleHomeService.class)); } catch (Exception ignored) {}
-}
-try {
-    HomebWatchdogReceiver.scheduleImmediate(this);
-} catch (Exception ignored) {}
-        try{ unregisterReceiver(stateReceiver); }catch(Exception e){}
-        try{ unregisterReceiver(ipcReceiver); }catch(Exception e){}
-        if (accHomeReceiver != null) try{ unregisterReceiver(accHomeReceiver); }catch(Exception e){}
-        if (fpRegistered && fpController != null && fpCallback != null) {
-    try { fpController.unregisterFingerprintGestureCallback(fpCallback); } catch (Exception e) {}
-}
-        prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
-        for (int i=0;i<5;i++) if (bars[i]!=null) wm.removeView(bars[i]);
-        for (int i=0;i<4;i++) if (corners[i]!=null) wm.removeView(corners[i]);
-        if (fV != null) wm.removeView(fV);
-        if (rippleView != null) wm.removeView(rippleView);
-        removeYtdlOverlay(); // MỚI: tránh treo overlay "ma" nếu service chết giữa lúc đang mở YTDL
-        if (recIndicatorView != null) { try { wm.removeView(recIndicatorView); } catch (Exception ignored) {} }
-        if (recBlinkAnim != null) recBlinkAnim.cancel();
-        removeAccessibleHome(); 
-    }
-    // SAU (code thay thế):
-private void drawAccessibleHome() {
-    // V19.12.3.6.9 TWIN-ENGINE PHANTOM — Fix Bug A:
-    // FLAG_SHOW_WHEN_LOCKED KHÔNG có tác dụng với TYPE_ACCESSIBILITY_OVERLAY
-    // (chỉ có tác dụng với Activity) — đây là lý do checkbox cũ vô hiệu.
-    // Guard cứng tại gốc: locked thì không vẽ, y hệt Homeb.
-    if (km != null && km.isKeyguardLocked()) return;
-
-    removeAccessibleHome();
-    SharedPreferences p = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-    String px = "homacc_";
-    WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-    if (wm == null) return;
-    int type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
-    // Đã xoá pref "homacc_show_on_lock" và FLAG_SHOW_WHEN_LOCKED — hành vi
-    // giờ cố định, không còn là tuỳ chọn.
-    boolean avoidKbd = p.getBoolean("avoid_kbd", true);
-boolean pushForKbd = avoidKbd && cachedKbdHeight > 0;
-int baseF = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-              | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-              | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-              | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-              | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-    // --- 5 EDGE BARS ---
-    for (int i = 0; i < 5; i++) {
-        boolean en = p.getBoolean(px + BARS[i] + "_en", false);
-        if (!en) { accHomeBars[i] = null; continue; }
-
-        BarView bar = new BarView(this);
-        int alpha   = p.getInt(px + BARS[i] + "_alpha", 50);
-        int w       = p.getInt(px + BARS[i] + "_w", 300);
-        int h       = p.getInt(px + BARS[i] + "_h", 60);
-        int x       = p.getInt(px + BARS[i] + "_x", 0);
-        int y       = p.getInt(px + BARS[i] + "_y", 0);
-        int priMode = p.getInt(px + BARS[i] + "_pri_mode", 0);
-
-        int visMode = p.getInt(px + BARS[i] + "_vis_mode", 0);
-        int barHideDur = p.getInt(px + "bar_hide_dur", 2500);
-        bar.updateProps(alpha, visMode == 1, barHideDur, visMode == 2, p.getInt(px + "bar_radius", 24));
-        int iconSizeH = p.getInt(px + BARS[i] + "_icon_size", p.getInt(px+"bar_icon_size", 40));
-int iconAlphaH = p.getInt(px + BARS[i] + "_icon_alpha", p.getInt(px+"bar_icon_alpha", 255));
-        bar.setIcons(resolveBarIcons(p.getString(px + BARS[i] + "_icons",""), iconSizeH), iconAlphaH);
-        int f = baseF;
-        // priMode==1: xuyên thấu hoàn toàn — KHÔNG nhận touch
-        if (priMode == 1) f |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-            w, h, type, f, PixelFormat.TRANSLUCENT);
-        int pushY = (pushForKbd && (i==0 || i==1)) ? cachedKbdHeight : 0; // r,l = 2 bar đáy
-lp.x = x; lp.y = y + pushY;
-lp.gravity = GRAV[i];
-        try {
-            wm.addView(bar, lp);
-            accHomeBars[i] = bar;
-        } catch (Exception e) {
-            accHomeBars[i] = null;
-            continue;
-        }
-        if (priMode == 0) applyAntiTapjacking(bar, w, h);
-        final int barIdx = i;
-        bar.setOnTouchListener(new SidebarTouchListener("homacc_" + BARS[barIdx], bar));
-    }
-
-    // --- 4 FRAME CORNERS ---
-    for (int i = 0; i < 4; i++) {
-        boolean en = p.getBoolean(px + "corner_" + CORNERS[i] + "_en", false);
-        if (!en) { accHomeCorners[i] = null; continue; }
-
-        CornerView corner = new CornerView(this, i, "homacc_");
-
-        int moonAlpha   = p.getInt(px + "corner_moon_alpha", 100);
-        int strokeAlpha = p.getInt(px + "corner_stroke_alpha", 200);
-        int hideDelay   = p.getInt(px + "corner_hide_dur", 2500);
-        int visMode     = p.getInt(px + "corner_" + CORNERS[i] + "_vis_mode", 0);
-        int priMode     = p.getInt(px + "corner_" + CORNERS[i] + "_pri_mode", 0);
-
-        corner.updateProps(
-            p.getInt(px + "corner_thick", 8),
-            moonAlpha, strokeAlpha,
-            visMode == 1,  // auto-hide
-            hideDelay,
-            visMode == 2   // invisible
-        );
-
-        int f = baseF;
-        if (priMode == 1) f |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-
-        String ck = px + "corner_" + CORNERS[i] + "_";
-        int wP    = p.getInt(ck + "w", 100),       hP    = p.getInt(ck + "h", 100);
-        int mwP   = p.getInt(ck + "moon_w", 100),  mhP   = p.getInt(ck + "moon_h", 100);
-        int mxOff = Math.abs(p.getInt(ck + "moon_x", 1250) - 1250);
-        int myOff = Math.abs(p.getInt(ck + "moon_y", 1250) - 1250);
-        int cw = Math.max(10, Math.max(wP, mwP) + mxOff);
-        int ch = Math.max(10, Math.max(hP, mhP) + myOff);
-
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-            cw, ch, type, f, PixelFormat.TRANSLUCENT);
-        int pushYc = (pushForKbd && (i==0 || i==1)) ? cachedKbdHeight : 0; // br,bl = 2 góc đáy
-lp.x = p.getInt(ck + "x", 0);
-lp.y = p.getInt(ck + "y", 0) + pushYc;
-lp.gravity = C_GRAV[i];
-        try {
-            wm.addView(corner, lp);
-            accHomeCorners[i] = corner;
-        } catch (Exception e) {
-            accHomeCorners[i] = null;
-            continue;
-        }
-
-        if (priMode == 0) applyAntiTapjacking(corner, cw, ch);
-        final int cornIdx = i;
-        corner.setOnTouchListener(
-            new SidebarTouchListener("homacc_corner_" + CORNERS[cornIdx], corner));
-    }
-    isHomaccDrawn = true; // Đánh dấu đã vẽ xong
-}
-
-    private void removeAccessibleHome() {
-    android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
-    for (int i = 0; i < 5; i++) {
-        if (accHomeBars[i] != null) { wm.removeView(accHomeBars[i]); accHomeBars[i] = null; }
-    }
-    for (int i = 0; i < 4; i++) {
-        if (accHomeCorners[i] != null) { wm.removeView(accHomeCorners[i]); accHomeCorners[i] = null; }
-    }
-    isHomaccDrawn = false; // Reset guard để lần sau có thể vẽ lại
-  }
-/**
- * V19.12.3.6.2 Obsidian Veil Phantom
- * updateHomaccLive(): Cập nhật Homacc overlay khi kéo slider trong Design.
- * KHÔNG removeView/addView — chỉ updateViewLayout + invalidate.
- * Zero object allocation → Adreno 540 không bị GC pause.
- */
-private void updateHomaccLive() {
-    if (!isHomaccDrawn) return;
-    SharedPreferences p = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-    String px = "homacc_";
-    boolean avoidKbd = p.getBoolean("avoid_kbd", true);
-boolean pushForKbd = avoidKbd && cachedKbdHeight > 0;
-    for (int i = 0; i < 5; i++) {
-        if (accHomeBars[i] == null) continue;
-        boolean en = p.getBoolean(px + BARS[i] + "_en", false);
-        accHomeBars[i].setVisibility(en ? View.VISIBLE : View.GONE);
-        if (!en) continue;
-        int alpha   = p.getInt(px + BARS[i] + "_alpha", 50);
-        int w       = p.getInt(px + BARS[i] + "_w", 300);
-        int h       = p.getInt(px + BARS[i] + "_h", 60);
-        int x       = p.getInt(px + BARS[i] + "_x", 0);
-        int y       = p.getInt(px + BARS[i] + "_y", 0);
-        int priMode = p.getInt(px + BARS[i] + "_pri_mode", 0);
-        int visMode = p.getInt(px + BARS[i] + "_vis_mode", 0);
-        int barHideDur = p.getInt(px + "bar_hide_dur", 2500);
-        ((BarView)accHomeBars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2, p.getInt(px + "bar_radius", 24));
-        int iconSizeL = p.getInt(px + BARS[i] + "_icon_size", p.getInt(px+"bar_icon_size", 40));
-        int iconAlphaL = p.getInt(px + BARS[i] + "_icon_alpha", p.getInt(px+"bar_icon_alpha", 255)); 
-        ((BarView)accHomeBars[i]).setIcons(resolveBarIcons(p.getString(px + BARS[i] + "_icons",""), iconSizeL), iconAlphaL);
-int f = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-              | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-              | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-              | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-              | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-              | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
-        if (priMode == 1) f |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        WindowManager.LayoutParams lp = (WindowManager.LayoutParams) accHomeBars[i].getLayoutParams();
-        int pushY = (pushForKbd && (i==0 || i==1)) ? cachedKbdHeight : 0;
-lp.flags = f; lp.width = w; lp.height = h; lp.x = x; lp.y = y + pushY;
-lp.gravity = GRAV[i];
-        try { updateLayoutIfChanged(accHomeBars[i], lp); } catch (Exception ignored) {}
-        if (priMode == 0) applyAntiTapjacking(accHomeBars[i], w, h);
-    }
-    for (int i = 0; i < 4; i++) {
-        if (accHomeCorners[i] == null) continue;
-        boolean en = p.getBoolean(px + "corner_" + CORNERS[i] + "_en", false);
-        accHomeCorners[i].setVisibility(en ? View.VISIBLE : View.GONE);
-        if (!en) continue;
-        String ck = px + "corner_" + CORNERS[i] + "_";
-        int moonAlpha   = p.getInt(px + "corner_moon_alpha", 100);
-        int strokeAlpha = p.getInt(px + "corner_stroke_alpha", 200);
-        int hideDelay   = p.getInt(px + "corner_hide_dur", 2500);
-        int visMode     = p.getInt(ck + "vis_mode", 0);
-        int priMode     = p.getInt(ck + "pri_mode", 0);
-        ((CornerView) accHomeCorners[i]).updateProps(
-            p.getInt(px + "corner_thick", 8),
-            moonAlpha, strokeAlpha,
-            visMode == 1, hideDelay, visMode == 2);
-        int f = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-              | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-              | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-              | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-              | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-              | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
-        if (priMode == 1) f |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        int wP  = p.getInt(ck + "w", 100),      hP  = p.getInt(ck + "h", 100);
-        int mwP = p.getInt(ck + "moon_w", 100), mhP = p.getInt(ck + "moon_h", 100);
-        int mxO = Math.abs(p.getInt(ck + "moon_x", 1250) - 1250);
-        int myO = Math.abs(p.getInt(ck + "moon_y", 1250) - 1250);
-        int cw = Math.max(10, Math.max(wP, mwP) + mxO);
-        int ch = Math.max(10, Math.max(hP, mhP) + myO);
-        WindowManager.LayoutParams lp = (WindowManager.LayoutParams) accHomeCorners[i].getLayoutParams();
-        int pushYc = (pushForKbd && (i==0 || i==1)) ? cachedKbdHeight : 0;
-lp.flags = f; lp.width = cw; lp.height = ch;
-lp.x = p.getInt(ck + "x", 0); lp.y = p.getInt(ck + "y", 0) + pushYc;
-lp.gravity = C_GRAV[i];
-        try { updateLayoutIfChanged(accHomeCorners[i], lp); } catch (Exception ignored) {}
-        if (priMode == 0) applyAntiTapjacking(accHomeCorners[i], cw, ch);
-        accHomeCorners[i].invalidate();
-    }
-  }
 } // <-- Dấu ngoặc nhọn kết thúc toàn bộ class EdgeBarService
