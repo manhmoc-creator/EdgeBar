@@ -3218,7 +3218,7 @@ private void buildMainMenuList() {
     Object[][] items = {
     {"touch_app_24px", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Frontier · Texture · VolKey", (Runnable)() -> openSpace(1)},
     {"light_mode_24px", T("Display","Hiển thị"), "Anima · Lenap · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
-    {"flash_on_24px", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)() -> openEco(0, true)},
+    {"flash_on_24px", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)this::openEcosystemMenu},
     {"file_present_24px", T("Storage","Bộ nhớ"), T("Storage Scan","Quét dung lượng"), (Runnable)() -> openEco(3, false)},
     {"music_note_24px", T("Sound & Media","Âm thanh & Media"), T("Voice · Screen Recording","Ghi âm / Quay màn hình"), (Runnable)() -> openEco(4, false)},
     {"security_24px", T("Security","Bảo mật"), "Blacklist · Locklist", (Runnable)() -> openEco(5, false)},
@@ -3368,6 +3368,13 @@ private void buildSystemSpace() {
     // cổng vào riêng ở mục "Bảo mật", YTDL/QR Bank/Storage/Ghi âm/Kho cũ đã có cổng vào
     // riêng ở "Hệ sinh thái"/"Bộ nhớ"/"Âm thanh & Media"/"Hệ thống". Mỗi tính năng chỉ còn
     // ĐÚNG 1 nơi truy cập -> ít View trùng lặp phải dựng, đỡ RAM/pin trên Pixel 2XL.
+    private void openEcosystemMenu() {
+    openSpace(2);
+    if (ecoMenuContainer != null) ecoMenuContainer.setVisibility(View.VISIBLE);
+    if (ecoSubHeader != null) ecoSubHeader.setVisibility(View.GONE);
+    if (ecoContainer != null) ecoContainer.setVisibility(View.GONE);
+    updateFabVisibility();
+}
     private LinearLayout ecoMenuContainer, ecoSubHeader;
 private TextView tvEcoSubTitle;
 
