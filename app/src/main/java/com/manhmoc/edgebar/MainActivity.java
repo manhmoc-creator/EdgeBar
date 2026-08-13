@@ -99,7 +99,7 @@ private LinearLayout frontierBodyContainer, frontierBackRowRef;
 private boolean frontierSpaceBuilt = false;
 // [MỚI] Callback "lùi 1 cấp" hiện tại — Back ở Nav Bar ưu tiên gọi cái này trước khi
 // rơi về logic mặc định. Mỗi màn con tự gán khi mở, tự trả về cấp trước khi lùi.
-private Runnable currentLevelBackAction = null;
+private final java.util.ArrayDeque<Runnable> navBackStack = new java.util.ArrayDeque<>();
     // [MULTI-SELECT FRONTIER] Zero-RAM khi không dùng — chỉ 1 boolean + 1 Set rỗng
     private boolean frontierSelectMode = false;
     private java.util.Set<String> frontierSelectedItems = new java.util.LinkedHashSet<>();
@@ -380,22 +380,27 @@ private String[] getVolKeyActLabs() {
         recreate(); // ẩn nút nếu đã cấp quyền, giống cách các nút quyền khác refresh trạng thái
     }
 }
-    @Override public void onBackPressed() {
-        if (frontierSelectMode) { frontierSelectMode = false; frontierSelectedItems.clear(); renderRulesList(); return; }
-        if (ecoSelectMode) { ecoSelectMode = false; ecoSelectedItems.clear(); renderEcosystem(); return; }
-        if (panelSelectMode) { panelSelectMode = false; panelSelectedItems.clear(); renderPanelDesign(); return; }
-        if (trashSelectMode) { trashSelectMode = false; trashSelectedItems.clear(); renderEcosystem(); return; }
-        if (voiceSelectMode) { voiceSelectMode = false; voiceSelectedItems.clear(); renderEcosystem(); return; }
-        if (currentLevelBackAction != null) { currentLevelBackAction.run(); return; }
-        if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); return; }
-        if ((pageConditions != null && pageConditions.getVisibility() == View.VISIBLE)
-            || (pageEcosystem != null && pageEcosystem.getVisibility() == View.VISIBLE)
-            || (pageEcoShowcase != null && pageEcoShowcase.getVisibility() == View.VISIBLE)
-            || (pageSystemSpace != null && pageSystemSpace.getVisibility() == View.VISIBLE)) {
-            showMainMenu(); return;
-        }
-        super.onBackPressed();
+    private void performBack() {
+    if (frontierSelectMode) { frontierSelectMode = false; frontierSelectedItems.clear(); renderRulesList(); return; }
+    if (ecoSelectMode) { ecoSelectMode = false; ecoSelectedItems.clear(); renderEcosystem(); return; }
+    if (panelSelectMode) { panelSelectMode = false; panelSelectedItems.clear(); renderPanelDesign(); return; }
+    if (trashSelectMode) { trashSelectMode = false; trashSelectedItems.clear(); renderEcosystem(); return; }
+    if (voiceSelectMode) { voiceSelectMode = false; voiceSelectedItems.clear(); renderEcosystem(); return; }
+    if (currentLevelBackAction != null) { currentLevelBackAction.run(); return; }
+    if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); return; }
+    if ((pageConditions != null && pageConditions.getVisibility() == View.VISIBLE)
+        || (pageEcosystem != null && pageEcosystem.getVisibility() == View.VISIBLE)
+        || (pageEcoShowcase != null && pageEcoShowcase.getVisibility() == View.VISIBLE)
+        || (pageSystemSpace != null && pageSystemSpace.getVisibility() == View.VISIBLE)) {
+        showMainMenu(); return;
     }
+    finish();
+}
+
+@Override public void onBackPressed() {
+    performBack();
+}
+
 // ==================== TEST ACTION (thử nghiệm nhanh, không cần Save) ====================
 // Dùng chung cơ chế IPC_ACTION đã có sẵn — đúng đường mà Rule/Panel/Tile thật sự chạy.
 // Zero Service mới, hoạt động ở mọi trạng thái Lock/Homeb/Homacc vì cả 2 Service đều nghe.
@@ -835,8 +840,17 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
         // Đưa nút Back xuống Nav Bar, sử dụng icon hệ thống (ic_menu_revert) để luôn hiển thị an toàn
         ImageButton btnBack = createIconCircleBtn(customIconRes("cycle_24px"), "#333333");
-        btnBack.setOnClickListener(v -> onBackPressed());
-        btnBack.setOnLongClickListener(v -> { currentLevelBackAction = null; showMainMenu(); return true; });
+btnBack.setOnClickListener(v -> performBack());
+btnBack.setOnLongClickListener(v -> { currentLevelBackAction = null; showMainMenu(); return true; });
+// [FIX] Phóng to vùng chạm thật sự của nút Back — icon chỉ ~86px nhưng touch target
+// nên rộng hơn để không bị "trượt" khi chạm hơi lệch mép, đặc biệt lúc thao tác 1 tay.
+btnBack.post(() -> {
+    android.graphics.Rect rect = new android.graphics.Rect();
+    btnBack.getHitRect(rect);
+    rect.top -= 24; rect.bottom += 24; rect.left -= 24; rect.right += 24;
+    View parentOfBtn = (View) btnBack.getParent();
+    parentOfBtn.setTouchDelegate(new android.view.TouchDelegate(rect, btnBack));
+});
         etNavSearch = new EditText(this);
         etNavSearch.setHint(T("Search", "Tìm kiếm"));
         etNavSearch.setTextSize(16f);
@@ -945,6 +959,7 @@ private void openSystemSpace() {
     updateFabVisibility();
 }
 private void showMainMenu() {
+navBackStack.clear(); // ← THÊM DÒNG NÀY 
     currentMainTab = -1;
     pageDesign.setVisibility(View.GONE);
     pageConditions.setVisibility(View.GONE);
@@ -1004,14 +1019,13 @@ tvGesSubTitle.setText("");
     updateFabVisibility();
     renderRulesList();
     // [MỚI]
-    currentLevelBackAction = () -> {
-        gesMenuContainer.setVisibility(View.VISIBLE);
-        gesSubHeader.setVisibility(View.GONE);
-        listRules.setVisibility(View.GONE);
-        condBackRow.setVisibility(View.VISIBLE);
-        currentLevelBackAction = null;
-        updateFabVisibility();
-    };
+    navBackStack.push(() -> {
+    gesMenuContainer.setVisibility(View.VISIBLE);
+    gesSubHeader.setVisibility(View.GONE);
+    listRules.setVisibility(View.GONE);
+    condBackRow.setVisibility(View.VISIBLE);
+    updateFabVisibility();
+});
 }
 private String getSpacePrefix() {
     if (currentGesTab == 3) return "volkey_";
@@ -1800,21 +1814,13 @@ private String cloneDataPackDeep(String itemKey) {
                 body.setVisibility(View.VISIBLE);
                 redrawFrontierBody(body);
                 updateFabVisibility();
-                currentLevelBackAction = () -> {
-                    body.setVisibility(View.GONE);
-                    frontierBackRow.setVisibility(View.GONE);
-                    subTab.setVisibility(View.VISIBLE);
-                    gesSubHeader.setVisibility(View.VISIBLE);
-                    currentLevelBackAction = () -> {
-                        gesMenuContainer.setVisibility(View.VISIBLE);
-                        gesSubHeader.setVisibility(View.GONE);
-                        listRules.setVisibility(View.GONE);
-                        condBackRow.setVisibility(View.VISIBLE);
-                        currentLevelBackAction = null;
-                        updateFabVisibility();
-                    };
-                    updateFabVisibility();
-                };
+                navBackStack.push(() -> {
+    body.setVisibility(View.GONE);
+    frontierBackRow.setVisibility(View.GONE);
+    subTab.setVisibility(View.VISIBLE);
+    gesSubHeader.setVisibility(View.VISIBLE);
+    updateFabVisibility();
+});
             });
         subTab.addView(row);
     }
@@ -3401,13 +3407,12 @@ private void openEcoSubTab(int type, String title) {
     ecoContainer.setVisibility(View.VISIBLE);
     updateFabVisibility();
     renderEcosystem();
-    currentLevelBackAction = () -> {
-        ecoContainer.setVisibility(View.GONE);
-        ecoSubHeader.setVisibility(View.GONE);
-        ecoMenuContainer.setVisibility(View.VISIBLE);
-        currentLevelBackAction = null;
-        updateFabVisibility();
-    };
+    navBackStack.push(() -> {
+    ecoContainer.setVisibility(View.GONE);
+    ecoSubHeader.setVisibility(View.GONE);
+    ecoMenuContainer.setVisibility(View.VISIBLE);
+    updateFabVisibility();
+});
 }
     // ==================== DANH SÁCH ĐỘNG (KHÔNG GIỚI HẠN SỐ LƯỢNG) ====================
 // Thay cho kiểu "i1_.. i15_" cố định — dùng JSON array chứa list các ID (UUID rút gọn).
@@ -4502,11 +4507,11 @@ private void renderSoundMediaMenu() {
         recOn ? T("Recording...", "Đang ghi âm...") : T("Tap to open", "Chạm để mở"),
         () -> {
             soundMediaSubTab = 0;
-            currentLevelBackAction = () -> {
-                soundMediaSubTab = -1;
-                updateFabVisibility();
-                renderEcosystem();
-            };
+            navBackStack.push(() -> {
+    soundMediaSubTab = -1;
+    updateFabVisibility();
+    renderEcosystem();
+});
             updateFabVisibility();
             renderEcosystem();
         }));
@@ -4514,11 +4519,11 @@ private void renderSoundMediaMenu() {
         vidOn ? T("Recording...", "Đang ghi màn hình...") : T("Tap to open", "Chạm để mở"),
         () -> {
             soundMediaSubTab = 1;
-            currentLevelBackAction = () -> {
-                soundMediaSubTab = -1;
-                updateFabVisibility();
-                renderEcosystem();
-            };
+            navBackStack.push(() -> {
+    soundMediaSubTab = -1;
+    updateFabVisibility();
+    renderEcosystem();
+});
             updateFabVisibility();
             renderEcosystem();
         }));
@@ -5030,14 +5035,13 @@ private void openDesignSubSpace(int tabState, String title) {
     updateFabVisibility();
     renderSliders();
     // [MỚI]
-    currentLevelBackAction = () -> {
-        designSliderContainer.setVisibility(View.GONE);
-        designBackRow.setVisibility(View.GONE);
-        designSpaceMenu.setVisibility(View.VISIBLE);
-        designTopBackRow.setVisibility(View.VISIBLE);
-        currentLevelBackAction = null;
-        updateFabVisibility();
-    };
+    navBackStack.push(() -> {
+    designSliderContainer.setVisibility(View.GONE);
+    designBackRow.setVisibility(View.GONE);
+    designSpaceMenu.setVisibility(View.VISIBLE);
+    designTopBackRow.setVisibility(View.VISIBLE);
+    updateFabVisibility();
+});
 }
 private void showLanguagePicker() {
     String[] opts = {"🇺🇸 US - English", "🇻🇳 Tiếng Việt"};
