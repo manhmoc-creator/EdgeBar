@@ -378,6 +378,11 @@ private String[] getVolKeyActLabs() {
     }
 }
     @Override public void onBackPressed() {
+        if (frontierSelectMode) { frontierSelectMode = false; frontierSelectedItems.clear(); renderRulesList(); return; }
+        if (ecoSelectMode) { ecoSelectMode = false; ecoSelectedItems.clear(); renderEcosystem(); return; }
+        if (panelSelectMode) { panelSelectMode = false; panelSelectedItems.clear(); renderPanelDesign(); return; }
+        if (trashSelectMode) { trashSelectMode = false; trashSelectedItems.clear(); renderEcosystem(); return; }
+        if (voiceSelectMode) { voiceSelectMode = false; voiceSelectedItems.clear(); renderEcosystem(); return; }
         if (currentLevelBackAction != null) { currentLevelBackAction.run(); return; }
         if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); return; }
         if ((pageConditions != null && pageConditions.getVisibility() == View.VISIBLE)
@@ -444,6 +449,75 @@ private Button buildTestButton() {
     lp.setMargins(0, 10, 0, 0);
     b.setLayoutParams(lp);
     return b;
+}
+// ==================== DRAG-TO-REORDER DÙNG CHUNG ====================
+// Nhấn giữ 1 card đã build sẵn -> kéo đổi vị trí với card khác trong cùng
+// list (áp dụng mọi lưới 2/3 cột). KHÔNG tạo View mới lúc kéo — chỉ hoán
+// đổi vị trí trong `order` rồi gọi lại `rerender` 1 lần khi thả tay, nên
+// Zero-RAM overhead ngoài lúc user thực sự đang kéo.
+private void attachDragReorder(View card, List<String> order, String key, Runnable rerender) {
+    final float[] startXY = new float[2];
+    final boolean[] dragging = {false};
+    card.setOnTouchListener((v, e) -> {
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                startXY[0] = e.getRawX(); startXY[1] = e.getRawY();
+                return false; // để onClick/onLongClick của card vẫn hoạt động bình thường
+            case MotionEvent.ACTION_MOVE:
+                if (!dragging[0]) return false;
+                // Tìm card khác đang bị đè lên bởi điểm chạm hiện tại
+                ViewGroup parent = (ViewGroup) v.getParent().getParent(); // row -> grid container
+                if (parent == null) return true;
+                View target = findCardUnderTouch(parent, e.getRawX(), e.getRawY(), v);
+                if (target != null) {
+                    String myId = (String) v.getTag(); String otherId = (String) target.getTag();
+                    if (myId != null && otherId != null) {
+                        int i1 = order.indexOf(myId), i2 = order.indexOf(otherId);
+                        if (i1 >= 0 && i2 >= 0 && i1 != i2) {
+                            java.util.Collections.swap(order, i1, i2);
+                            prefs.edit().putString(key, TextUtils.join(",", order)).apply();
+                            rerender.run();
+                        }
+                    }
+                }
+                return true;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                dragging[0] = false;
+                return false;
+        }
+        return false;
+    });
+    card.setOnLongClickListener(v -> { dragging[0] = true; v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS); return true; });
+}
+// Danh sách thứ tự hiển thị các rule đã gán (persist riêng, không ảnh hưởng logic gán action)
+private List<String> ruleOrderForKey(String prefix, String[] comps, String[] gestures) {
+    List<String> saved = getDynamicIds("rule_order_" + prefix);
+    List<String> real = new ArrayList<>();
+    for (String c : comps) for (String g : gestures)
+        if (!prefs.getString(prefix + c + "_" + g, "NONE").equals("NONE"))
+            real.add(prefix + c + "_" + g);
+    // giữ đúng thứ tự đã lưu, thêm rule mới vào cuối, bỏ rule đã xoá
+    List<String> ordered = new ArrayList<>();
+    for (String s : saved) if (real.contains(s)) ordered.add(s);
+    for (String r : real) if (!ordered.contains(r)) ordered.add(r);
+    return ordered;
+}
+private View findCardUnderTouch(ViewGroup grid, float rawX, float rawY, View exclude) {
+    int[] loc = new int[2];
+    for (int r = 0; r < grid.getChildCount(); r++) {
+        View rowOrCard = grid.getChildAt(r);
+        if (!(rowOrCard instanceof ViewGroup)) continue;
+        ViewGroup row = (ViewGroup) rowOrCard;
+        for (int c = 0; c < row.getChildCount(); c++) {
+            View cell = row.getChildAt(c);
+            if (cell == exclude || cell.getTag() == null) continue;
+            cell.getLocationOnScreen(loc);
+            if (rawX >= loc[0] && rawX <= loc[0] + cell.getWidth()
+                    && rawY >= loc[1] && rawY <= loc[1] + cell.getHeight()) return cell;
+        }
+    }
+    return null;
 }
     private void closeDesignSpace() {
     pageDesign.setVisibility(View.GONE);
@@ -747,7 +821,7 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
         LinearLayout bottomBar = new LinearLayout(this); bottomBar.setOrientation(LinearLayout.HORIZONTAL); bottomBar.setGravity(Gravity.CENTER_VERTICAL); bottomBar.setBackground(getRounded("#1E1E1E", 100f)); bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
         // Đưa nút Back xuống Nav Bar, sử dụng icon hệ thống (ic_menu_revert) để luôn hiển thị an toàn
-        ImageButton btnBack = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#333333");
+        ImageButton btnBack = createIconCircleBtn(customIconRes("directions_run_24px"), "#333333");
         btnBack.setOnClickListener(v -> onBackPressed());
         btnBack.setOnLongClickListener(v -> { currentLevelBackAction = null; showMainMenu(); return true; });
         etNavSearch = new EditText(this);
@@ -911,7 +985,7 @@ private void openGesTab(int tab, String title) {
     condBackRow.setVisibility(View.GONE);
     gesMenuContainer.setVisibility(View.GONE);
     gesSubHeader.setVisibility(View.VISIBLE);
-    tvGesSubTitle.setText(T("Back", "Trở lại"));
+tvGesSubTitle.setText("");
     listRules.setVisibility(View.VISIBLE);
     updateFabVisibility();
     renderRulesList();
@@ -958,12 +1032,25 @@ private String getSpacePrefix() {
     String[] gestureNamesUsed = isVolKeyMode ? VOLKEY_GESTURE_NAMES : C_GESTURE_NAMES;
     String[] actKeysUsed = isVolKeyMode ? getVolKeyActKeys() : ACT_KEYS;
     String[] actLabsUsed = isVolKeyMode ? getVolKeyActLabs() : ACT_LABS;
-    LinearLayout currentRow = null; int count = 0;
-    for (int c = 0; c < compsUsed.length; c++) {
+    // Thứ tự hiển thị được lưu riêng, kéo-thả đổi được, tự thêm rule mới vào cuối
+    List<String> ruleOrderKeys = new ArrayList<>();
+    java.util.Map<String, int[]> keyToCG = new java.util.HashMap<>();
+    for (int c = 0; c < compsUsed.length; c++)
         for (int g = 0; g < gesturesUsed.length; g++) {
-            String key = prefix + compsUsed[c] + "_" + gesturesUsed[g];
-String action = prefs.getString(key, "NONE");
-if (!action.equals("NONE")) {
+            String k2 = prefix + compsUsed[c] + "_" + gesturesUsed[g];
+            if (!prefs.getString(k2, "NONE").equals("NONE")) {
+                keyToCG.put(k2, new int[]{c, g});
+            }
+        }
+    List<String> savedOrder = getDynamicIds("rule_order_" + prefix);
+    for (String s : savedOrder) if (keyToCG.containsKey(s)) ruleOrderKeys.add(s);
+    for (String s : keyToCG.keySet()) if (!ruleOrderKeys.contains(s)) ruleOrderKeys.add(s);
+
+    LinearLayout currentRow = null; int count = 0;
+    for (String key : ruleOrderKeys) {
+        int c = keyToCG.get(key)[0], g = keyToCG.get(key)[1];
+        String action = prefs.getString(key, "NONE");
+        if (!action.equals("NONE")) {
     if (count % 2 == 0) { 
         currentRow = new LinearLayout(this);
         currentRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -1066,23 +1153,26 @@ swOn.setPadding(0, 0, 0, 10);
 final int finalC = c; final int finalG = g; final String finalActs = action;
 
 // Nút COPY phóng to +1.5 đơn vị (từ 11 lên 12.5sp), bố cục chống lẹm tuyệt đối
-Button btnCopy = new Button(this); btnCopy.setText("COPY");
-btnCopy.setBackground(getRounded("#303134", 14f));
-btnCopy.setTextColor(Color.WHITE);
-btnCopy.setTextSize(12.5f); // +1.5 đơn vị rõ ràng
+Button btnCopy = new Button(this); btnCopy.setText("TEST");
+btnCopy.setBackground(getRounded("#FFC107", 14f));
+btnCopy.setTextColor(Color.BLACK);
+btnCopy.setTextSize(12.5f);
 btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
 btnCopy.setPadding(12, 10, 12, 10);
 LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
 btnLp.setMargins(0, 8, 0, 0); btnCopy.setLayoutParams(btnLp);
-btnCopy.setMinimumHeight(88); // Đảm bảo độ cao chạm an toàn theo chuẩn Material Design
-btnCopy.setOnClickListener(v -> openRuleBuilderDialog(null, finalC, finalG, finalActs));
+btnCopy.setMinimumHeight(88);
+final String finalKeyForTest = key;
+btnCopy.setOnClickListener(v -> fireTestActions(java.util.Arrays.asList(action.split(",")),
+    prefs.getString(finalKeyForTest + "_launch_pkg", ""), prefs.getString(finalKeyForTest + "_shortcut_id", "")));
 ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
     card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
+    card.setTag(key);
 
     // THUẬT TOÁN UX: CHẠM 1 LẦN -> MỞ EDIT DIALOG
     card.setOnClickListener(v -> openRuleBuilderDialog(key, finalC, finalG, ""));
-
-    // CHẠM GIỮ -> XOÁ QUY TẮC NÀY
+    attachDragReorder(card, ruleOrderKeys, "rule_order_" + prefix, this::renderRulesList);
+        // CHẠM GIỮ -> XOÁ QUY TẮC NÀY
         card.setOnLongClickListener(v -> {
             new AlertDialog.Builder(this).setTitle(T("Delete this rule?", "Xoá quy tắc này?"))
                 .setPositiveButton(T("DELETE", "XOÁ"), (d,w) -> {
@@ -1094,8 +1184,7 @@ ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
         });
     currentRow.addView(card); count++;
 }
-            }
-        }
+    }
         if(count % 2 != 0 && currentRow != null) { View dummy = new View(this); dummy.setLayoutParams(new LinearLayout.LayoutParams(0,1,1f)); currentRow.addView(dummy); }
         if(count == 0) { TextView empty = new TextView(this); empty.setText(T("No rules yet.\nPress + NEW EB to create.", "Chưa có quy tắc nào.\nBấm + NEW EB để tạo.")); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); listRules.addView(empty); }
     }
@@ -1399,23 +1488,42 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
 });
         swEn.setPadding(0, 0, 0, 6);
 
-        Button btnCopy = new Button(this); btnCopy.setText("COPY");
-        btnCopy.setBackground(getRounded("#303134", 14f));
+        Button btnCopy = new Button(this);
+        btnCopy.setText(isFrontier ? "..." : "SHARE");
+        btnCopy.setBackground(getRounded(isFrontier ? "#303134" : "#7C4DFF", 14f));
         btnCopy.setTextColor(Color.WHITE);
         btnCopy.setTextSize(11f);
         btnCopy.setPadding(10, 8, 10, 8);
         LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(-2, -2); cpLp.setMargins(0, 4, 0, 0);
         btnCopy.setLayoutParams(cpLp); btnCopy.setMinimumHeight(64);
         final int fTabState = tabState;
+        final String fCopyItemKey = itemKey;
         btnCopy.setOnClickListener(v -> {
-    String newId = cloneDataPack(isBar, id);
-    String newItemKey = (isBar ? "bar_" : "corner_") + newId;
-    clonePackRules(itemKey, newItemKey);
-    appliedPacks.add(newItemKey);
-    prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
-    if (isFrontier) renderRulesList(); else renderSliders();
-    Toast.makeText(this, "Đã nhân bản Pack (độc lập)!", Toast.LENGTH_SHORT).show();
-});
+            if (isFrontier) {
+                String[] opts = {T("Duplicate", "Nhân bản"), T("Move to trash", "Chuyển vào Kho Cũ")};
+                new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setItems(opts, (dg, which) -> {
+                        if (which == 0) {
+                            String newId = cloneDataPack(isBar, id);
+                            String newItemKey = (isBar ? "bar_" : "corner_") + newId;
+                            clonePackRules(itemKey, newItemKey);
+                            appliedPacks.add(newItemKey);
+                            prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
+                            renderRulesList();
+                        } else {
+                            moveDataPackToTrash(fCopyItemKey);
+                            renderRulesList();
+                        }
+                    }).show();
+            } else {
+                java.util.Set<String> one = new java.util.LinkedHashSet<>();
+                one.add(fCopyItemKey);
+                java.util.Set<String> backup = frontierSelectedItems;
+                frontierSelectedItems = one;
+                showShareToSpaceDialog();
+                frontierSelectedItems = backup;
+            }
+        });
         // [ĐỔI HÀNH VI] Frontier: nút này đổi thành "PATTERN" -> mở kho biến con
         // (openPackRuleSpace), vì giờ chạm 1 lần vào card đã mở thẳng Editor cha rồi.
         final boolean fIsBar = isBar; final String fId = id;
@@ -1437,7 +1545,9 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
         card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
         cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
 
-        final String fItemKey = itemKey;
+      final String fItemKey = itemKey;
+        card.setTag(fItemKey);
+        cardWrap.setTag(fItemKey);
         if (isFrontier) {
             if (frontierSelectMode) {
                 // [YÊU CẦU 1] Chấm chọn dời xuống góc dưới-trái — dễ chạm bằng ngón cái hơn
@@ -1491,6 +1601,7 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
 });
         }
 
+        attachDragReorder(cardWrap, appliedPacks, listKey, isFrontier ? this::renderRulesList : this::renderSliders);
         currentRow.addView(cardWrap);
         count++;
     }
@@ -1531,11 +1642,19 @@ private LinearLayout buildFrontierSelectionToolbar(String listKey, java.util.Lis
             renderRulesList();
         }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
 });
-    Button btnCancel = new Button(this); btnCancel.setText(T("Cancel", "Hủy"));
-    btnCancel.setBackground(getRounded("#333333", 20f)); btnCancel.setTextColor(Color.WHITE); btnCancel.setTextSize(12.5f);
-    btnCancel.setOnClickListener(v -> { frontierSelectMode = false; frontierSelectedItems.clear(); renderRulesList(); });
+    Button btnAll = new Button(this); btnAll.setText(T("All", "Tất cả"));
+    btnAll.setBackground(getRounded("#333333", 20f)); btnAll.setTextColor(Color.WHITE); btnAll.setTextSize(12.5f);
+    LinearLayout.LayoutParams allLp = new LinearLayout.LayoutParams(-2, -2); allLp.setMargins(10, 0, 10, 0);
+    btnAll.setLayoutParams(allLp);
+    btnAll.setOnClickListener(v -> {
+        String listKey = (frontierSubTab==0?"lock_":frontierSubTab==1?"home_":"homacc_") + "applied_packs";
+        java.util.Set<String> allKeys = new java.util.LinkedHashSet<>(getDynamicIds(listKey));
+        if (frontierSelectedItems.equals(allKeys)) frontierSelectedItems.clear();
+        else { frontierSelectedItems.clear(); frontierSelectedItems.addAll(allKeys); }
+        renderRulesList();
+    });
 
-    bar.addView(tvCount); bar.addView(btnShare); bar.addView(btnDelete); bar.addView(btnCancel);
+    bar.addView(tvCount); bar.addView(btnShare); bar.addView(btnAll); bar.addView(btnDelete);
     return bar;
 }
 
@@ -1807,9 +1926,9 @@ tAct.setText(formatPruleActionLabel(rId));
                 swOn.setPadding(0, 0, 0, 10);
                 
                 Button btnCopy = new Button(this);
-                btnCopy.setText("COPY");
-                btnCopy.setBackground(getRounded("#303134", 14f));
-                btnCopy.setTextColor(Color.WHITE);
+                btnCopy.setText("TEST");
+                btnCopy.setBackground(getRounded("#FFC107", 14f));
+                btnCopy.setTextColor(Color.BLACK);
                 btnCopy.setTextSize(12.5f);
                 btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
                 btnCopy.setPadding(12, 10, 12, 10);
@@ -1817,25 +1936,13 @@ tAct.setText(formatPruleActionLabel(rId));
                 btnLp.setMargins(0, 8, 0, 0);
                 btnCopy.setLayoutParams(btnLp);
 btnCopy.setMinimumHeight(88);
+final String rIdForTest = rId;
 btnCopy.setOnClickListener(v -> {
-    String listKeyLocal = appliedItemKey + "_pack_rules";
-    List<String> rulesLocal = getDynamicIds(listKeyLocal);
-    String newRuleId = java.util.UUID.randomUUID().toString().substring(0, 8);
-    rulesLocal.add(newRuleId);
-    prefs.edit()
-        .putString(listKeyLocal, android.text.TextUtils.join(",", rulesLocal))
-        .putString("prule_" + newRuleId + "_gestures", prefs.getString("prule_" + rId + "_gestures", ""))
-        .putString("prule_" + newRuleId + "_acts", prefs.getString("prule_" + rId + "_acts", ""))
-        .putString("prule_" + newRuleId + "_launch_pkg", prefs.getString("prule_" + rId + "_launch_pkg", ""))
-        .putString("prule_" + newRuleId + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
-        .putBoolean("prule_" + newRuleId + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
-        .putBoolean("prule_" + newRuleId + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
-        .putBoolean("prule_" + newRuleId + "_en", true)
-        .apply();
-    renderRules[0].run();
-    Toast.makeText(this, T("Pattern copied!", "Đã nhân bản Pattern!"), Toast.LENGTH_SHORT).show();
+    String acts = prefs.getString("prule_" + rIdForTest + "_acts", "");
+    fireTestActions(java.util.Arrays.asList(acts.split(",")),
+        prefs.getString("prule_" + rIdForTest + "_launch_pkg", ""),
+        prefs.getString("prule_" + rIdForTest + "_shortcut_id", ""));
 });
-
 ctrlCol.addView(swOn);
 ctrlCol.addView(btnCopy);
                 card.addView(optCol);
@@ -1849,6 +1956,7 @@ ctrlCol.addView(btnCopy);
                 cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
 
                 final String fRId = rId;
+                cardWrap.setTag(fRId);
                 if (prulesSelectMode) {
                     TextView selDot = new TextView(this);
                     boolean sel = prulesSelectedItems.contains(fRId);
@@ -1876,6 +1984,7 @@ ctrlCol.addView(btnCopy);
                     });
                 }
 
+                attachDragReorder(cardWrap, rules, listKey, () -> renderRules[0].run());
                 currentRow.addView(cardWrap);
                 count++;
             }
@@ -1928,7 +2037,7 @@ ctrlCol.addView(btnCopy);
 
         fabNew.setOnClickListener(v -> openPackRuleEditor(appliedItemKey, null, null, renderRules[0], isHomebSpace));
         // Đưa nút Back xuống Nav Bar, thay thế vị trí Update cũ
-        ImageButton btnBack = createIconCircleBtn(customIconRes("keyboard_return_24px"), "#333333");
+        ImageButton btnBack = createIconCircleBtn(customIconRes("directions_run_24px"), "#333333");
         btnBack.setOnClickListener(v -> onBackPressed());
         bottomBar.addView(btnUpdate);
         bottomBar.addView(btnPremium);
@@ -1936,12 +2045,18 @@ ctrlCol.addView(btnCopy);
         bottomBar.addView(fabNew);
         bottomBar.addView(btnBack);
         rootLayout.addView(bottomBar);
-        // [FIX CẬP NHẬT CHẬM] Đóng kho Pattern bằng bất kỳ cách nào (nút "<" hay
-        // back cứng) đều tự vẽ lại danh sách Data Pack Frontier ngay lập tức
         d.setOnDismissListener(dd -> renderRulesList());
         d.setContentView(rootLayout);
+        d.setOnKeyListener((dg, keyCode, ev) -> {
+            if (keyCode == android.view.KeyEvent.KEYCODE_BACK && prulesSelectMode) {
+                prulesSelectMode = false; prulesSelectedItems.clear(); renderRules[0].run();
+                return true;
+            }
+            return false;
+        });
         d.show();
     }
+
 private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String currentItemKey, Runnable onDone) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
@@ -2144,11 +2259,17 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
             }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
     });
 
-    Button btnCancel = new Button(this); btnCancel.setText(T("Cancel", "Hủy"));
-    btnCancel.setBackground(getRounded("#333333", 20f)); btnCancel.setTextColor(Color.WHITE); btnCancel.setTextSize(12.5f);
-    btnCancel.setOnClickListener(v -> { prulesSelectMode = false; prulesSelectedItems.clear(); renderRules[0].run(); });
-
-    bar.addView(tvCount); bar.addView(btnShare); bar.addView(btnDelete); bar.addView(btnCancel);
+    Button btnAll = new Button(this); btnAll.setText(T("All", "Tất cả"));
+    btnAll.setBackground(getRounded("#333333", 20f)); btnAll.setTextColor(Color.WHITE); btnAll.setTextSize(12.5f);
+    LinearLayout.LayoutParams allLp = new LinearLayout.LayoutParams(-2, -2); allLp.setMargins(10, 0, 10, 0);
+    btnAll.setLayoutParams(allLp);
+    btnAll.setOnClickListener(v -> {
+        java.util.Set<String> allKeys = new java.util.LinkedHashSet<>(rules);
+        if (prulesSelectedItems.equals(allKeys)) prulesSelectedItems.clear();
+        else { prulesSelectedItems.clear(); prulesSelectedItems.addAll(allKeys); }
+        renderRules[0].run();
+    });
+    bar.addView(tvCount); bar.addView(btnShare); bar.addView(btnAll); bar.addView(btnDelete);
     return bar;
 }
 private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, String currentItemKey, Runnable onDone) {
@@ -3056,11 +3177,11 @@ private void buildMainMenuList() {
     {"touch_app_24px", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Frontier · Texture · VolKey", (Runnable)() -> openSpace(1)},
     {"light_mode_24px", T("Display","Hiển thị"), "Anima · Lenap · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
     {"flash_on_24px", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)() -> openEco(0, true)},
-    {"file_present_24px", T("Storage","Bộ nhớ"), T("Storage scan","Quét dung lượng"), (Runnable)() -> openEco(3, false)},
+    {"file_present_24px", T("Storage","Bộ nhớ"), T("Storage Scan","Quét dung lượng"), (Runnable)() -> openEco(3, false)},
     {"music_note_24px", T("Sound & Media","Âm thanh & Media"), T("Voice · Screen Recording","Ghi âm / Quay màn hình"), (Runnable)() -> openEco(4, false)},
     {"security_24px", T("Security","Bảo mật"), "Blacklist · Locklist", (Runnable)() -> openEco(5, false)},
     {"routine_24px", T("Ecosystem","Hệ sinh thái"), "YTDLnis · Island", (Runnable)this::openEcoShowcase},
-    {"settings_24px", T("System","Hệ thống"), T("Backup · Restore · Update · QR Scan · Trash · Permissions","Sao lưu · Khôi phục · Nâng cấp · Quét QR · Kho cũ · Quyền"), (Runnable)this::openSystemSpace},
+    {"settings_24px", T("System","Hệ thống"), T("Backup · Restore · Update · Trash · QR Scan · Permissions","Sao lưu · Khôi phục · Nâng cấp · Kho cũ · Quét QR · Quyền"), (Runnable)this::openSystemSpace},
     {"help_24px", T("Infomation","Giới thiệu về Edge Bar"), "Premium", (Runnable)this::showPremiumDialog},
 };
     for (Object[] it : items) {
@@ -3466,8 +3587,51 @@ private LinearLayout buildEcoSelectionToolbar() {
     tvCount.setTextColor(Color.parseColor("#00E5FF"));
     tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
+    Button btnDup = new Button(this); btnDup.setText("🧬 " + T("Duplicate", "Nhân bản"));
+    btnDup.setBackground(getRounded("#7C4DFF", 20f)); btnDup.setTextColor(Color.WHITE); btnDup.setTextSize(12.5f);
+    btnDup.setOnClickListener(v -> {
+        String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
+        String prefixBase = ecoType == 0 ? "intent_" : (ecoType == 1 ? "tilev2_" : "macro_");
+        for (String itemKey : new java.util.ArrayList<>(ecoSelectedItems)) {
+            String id = itemKey.substring(itemKey.indexOf('_') + 1);
+            String newId = addDynamicId(listKey);
+            java.util.Map<String, ?> all = prefs.getAll();
+            SharedPreferences.Editor ed = prefs.edit();
+            String oldPrefix = prefixBase + id + "_";
+            for (java.util.Map.Entry<String, ?> e : all.entrySet()) {
+                if (!e.getKey().startsWith(oldPrefix)) continue;
+                String newKey = prefixBase + newId + "_" + e.getKey().substring(oldPrefix.length());
+                Object v2 = e.getValue();
+                if (v2 instanceof Boolean) ed.putBoolean(newKey, (Boolean) v2);
+                else if (v2 instanceof Integer) ed.putInt(newKey, (Integer) v2);
+                else if (v2 instanceof String) ed.putString(newKey, (String) v2);
+            }
+            ed.apply();
+        }
+        ecoSelectMode = false; ecoSelectedItems.clear();
+        renderEcosystem();
+        Toast.makeText(this, T("Duplicated!", "Đã nhân bản!"), Toast.LENGTH_SHORT).show();
+    });
+
+    Button btnAll = new Button(this); btnAll.setText(T("All", "Tất cả"));
+    btnAll.setBackground(getRounded("#333333", 20f)); btnAll.setTextColor(Color.WHITE); btnAll.setTextSize(12.5f);
+    LinearLayout.LayoutParams allLp = new LinearLayout.LayoutParams(-2, -2); allLp.setMargins(10, 0, 10, 0);
+    btnAll.setLayoutParams(allLp);
+    btnAll.setOnClickListener(v -> {
+        String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
+        String prefixBase = ecoType == 0 ? "intent_" : (ecoType == 1 ? "tilev2_" : "macro_");
+        List<String> ids = getDynamicIds(listKey);
+        java.util.Set<String> allKeys = new java.util.LinkedHashSet<>();
+        for (String id : ids) allKeys.add(prefixBase + id);
+        if (ecoSelectedItems.equals(allKeys)) ecoSelectedItems.clear();
+        else { ecoSelectedItems.clear(); ecoSelectedItems.addAll(allKeys); }
+        renderEcosystem();
+    });
+
     Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", "Xóa"));
     btnDelete.setBackground(getRounded("#D32F2F", 20f)); btnDelete.setTextColor(Color.WHITE); btnDelete.setTextSize(12.5f);
+    LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(-2, -2); delLp.setMargins(10, 0, 0, 0);
+    btnDelete.setLayoutParams(delLp);
     btnDelete.setOnClickListener(v -> {
         new AlertDialog.Builder(this).setTitle(T("Move to trash?", "Chuyển vào Kho Cũ?"))
             .setPositiveButton(T("MOVE", "CHUYỂN"), (d, w) -> {
@@ -3477,14 +3641,8 @@ private LinearLayout buildEcoSelectionToolbar() {
                 renderEcosystem();
             }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
     });
-    LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(-2, -2); delLp.setMargins(10, 0, 10, 0);
-    btnDelete.setLayoutParams(delLp);
 
-    Button btnCancel = new Button(this); btnCancel.setText(T("Cancel", "Hủy"));
-    btnCancel.setBackground(getRounded("#333333", 20f)); btnCancel.setTextColor(Color.WHITE); btnCancel.setTextSize(12.5f);
-    btnCancel.setOnClickListener(v -> { ecoSelectMode = false; ecoSelectedItems.clear(); renderEcosystem(); });
-
-    bar.addView(tvCount); bar.addView(btnDelete); bar.addView(btnCancel);
+    bar.addView(tvCount); bar.addView(btnDup); bar.addView(btnAll); bar.addView(btnDelete);
     return bar;
 }
     private void renderEcosystem() {
@@ -3604,9 +3762,9 @@ r2.setOrientation(LinearLayout.HORIZONTAL);
 r2.setPadding(0, 12, 0, 0);
 final String finalId = id; final int finalType = ecoType;
 
-Button btnCopy = new Button(this); btnCopy.setText("COPY");
-btnCopy.setBackground(getRounded("#303134", 14f));
-btnCopy.setTextColor(Color.WHITE);
+Button btnCopy = new Button(this); btnCopy.setText("TEST");
+btnCopy.setBackground(getRounded("#FFC107", 14f));
+btnCopy.setTextColor(Color.BLACK);
 btnCopy.setTextSize(12.5f);
 btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
 btnCopy.setPadding(10, 12, 10, 12);
@@ -3614,18 +3772,25 @@ LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(-1, LinearLayout.
 cpLp.setMargins(0, 0, 0, 0); btnCopy.setLayoutParams(cpLp);
 btnCopy.setMinimumHeight(88);
 btnCopy.setOnClickListener(v -> {
-    String newId = addDynamicId(listKey);
-            prefs.edit().putString(prefixBase+newId+"_name", name + " Copy").apply();
-            if (finalType == 0) openIntentEditorV2(newId);
-            else if (finalType == 1) openTileEditorV2(newId);
-            else openMacroEditorV2(newId);
-        });
+    if (finalType == 0) {
+        fireTestAction("INTENT_" + finalId, "", "");
+    } else if (finalType == 1) {
+        String act = prefs.getString(prefixBase + finalId + "_act", "NONE");
+        fireTestAction(act, prefs.getString(prefixBase + finalId + "_launch_pkg", ""),
+            prefs.getString(prefixBase + finalId + "_shortcut_id", ""));
+    } else {
+        Intent iM = new Intent("com.manhmoc.edgebar.TOGGLE_MACRO");
+        iM.putExtra("services", prefs.getString(prefixBase + finalId + "_svcs", ""));
+        sendBroadcast(iM);
+    }
+});
         r2.addView(btnCopy);
         card.addView(r2);
 
         cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
         final String ecoItemKey = (finalType == 0 ? "intent_" : (finalType == 1 ? "tilev2_" : "macro_")) + finalId;
 
+        cardWrap.setTag(finalId);
         if (ecoSelectMode) {
             // Chế độ chọn nhiều: chấm tròn góc dưới-trái, chạm để tick/bỏ tick
             boolean sel = ecoSelectedItems.contains(ecoItemKey);
@@ -3658,6 +3823,7 @@ cardWrap.addView(selDot);
                 return true;
             });
         }
+        attachDragReorder(cardWrap, ids, listKey, this::renderEcosystem);
         currentRow.addView(cardWrap); count++;
     }
     // Đệm thêm view rỗng nếu hàng cuối không đủ 3 thẻ
@@ -3795,12 +3961,7 @@ cardWrap.addView(selDot);
                     renderEcosystem();
                 }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
         });
-
-        Button btnCancel = new Button(this); btnCancel.setText(T("Cancel", "Hủy"));
-        btnCancel.setBackground(getRounded("#333333", 20f)); btnCancel.setTextColor(Color.WHITE); btnCancel.setTextSize(12.5f);
-        btnCancel.setOnClickListener(v -> { trashSelectMode = false; trashSelectedItems.clear(); renderEcosystem(); });
-
-        bar.addView(tvCount); bar.addView(btnRestore); bar.addView(btnPerma); bar.addView(btnCancel);
+        bar.addView(tvCount); bar.addView(btnRestore); bar.addView(btnPerma);
         secTrash.addView(bar);
     }
 
@@ -3846,6 +4007,7 @@ cardWrap.addView(selDot);
         cardWrap.addView(card);
 
         final String fKey = itemKey;
+        cardWrap.setTag(fKey);
         if (trashSelectMode) {
             TextView selDot = new TextView(this);
             selDot.setText(trashSelectedItems.contains(fKey) ? "🟢" : "⚪");
@@ -3865,6 +4027,7 @@ cardWrap.addView(selDot);
                 return true;
             });
         }
+        attachDragReorder(cardWrap, trashIds, "trash_pack_ids", this::renderEcosystem);
         currentTrashRow.addView(cardWrap);
         trashCount++;
     }
@@ -4245,11 +4408,20 @@ private LinearLayout buildVoiceSelectionToolbar() {
     LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(-2, -2); delLp.setMargins(10, 0, 10, 0);
     btnDelete.setLayoutParams(delLp);
 
-    Button btnCancel = new Button(this); btnCancel.setText(T("Cancel", "Hủy"));
-    btnCancel.setBackground(getRounded("#333333", 20f)); btnCancel.setTextColor(Color.WHITE); btnCancel.setTextSize(12.5f);
-    btnCancel.setOnClickListener(v -> { voiceSelectMode = false; voiceSelectedItems.clear(); renderEcosystem(); });
+    Button btnAll = new Button(this); btnAll.setText(T("All", "Tất cả"));
+    btnAll.setBackground(getRounded("#333333", 20f)); btnAll.setTextColor(Color.WHITE); btnAll.setTextSize(12.5f);
+    LinearLayout.LayoutParams allLp = new LinearLayout.LayoutParams(-2, -2); allLp.setMargins(10, 0, 10, 0);
+    btnAll.setLayoutParams(allLp);
+    btnAll.setOnClickListener(v -> {
+        java.util.List<Object[]> list = getVoiceRecListCached(false);
+        java.util.Set<String> allKeys = new java.util.LinkedHashSet<>();
+        for (Object[] item : list) allKeys.add(((android.net.Uri) item[0]).toString());
+        if (voiceSelectedItems.equals(allKeys)) voiceSelectedItems.clear();
+        else { voiceSelectedItems.clear(); voiceSelectedItems.addAll(allKeys); }
+        renderEcosystem();
+    });
 
-    bar.addView(tvCount); bar.addView(btnDelete); bar.addView(btnCancel);
+    bar.addView(tvCount); bar.addView(btnDelete); bar.addView(btnAll);
     return bar;
 }
 /** Mở đúng file ghi âm trong Files by Google; nếu chưa cài thì fallback sang chooser. */
@@ -4778,30 +4950,40 @@ private void renderPanelDesign() {
             });
             swOn.setPadding(0, 0, 0, 10);
             
-            Button btnCopy = new Button(this); btnCopy.setText("COPY");
+            Button btnCopy = new Button(this); btnCopy.setText("···");
             btnCopy.setBackground(getRounded("#303134", 14f));
             btnCopy.setTextColor(Color.WHITE);
-            btnCopy.setTextSize(12.5f);
+            btnCopy.setTextSize(15f);
             btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-            btnCopy.setPadding(12, 10, 12, 10);
+            btnCopy.setPadding(12, 4, 12, 10);
             LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-2, -2);
             btnLp.setMargins(0, 8, 0, 0); btnCopy.setLayoutParams(btnLp);
-            btnCopy.setMinimumHeight(88);
-            
+            btnCopy.setMinimumHeight(64);
+            final String idForMenu = id;
             btnCopy.setOnClickListener(v -> {
-                String newId = addDynamicId("pack_panel_ids");
-                String copyName = prefs.getString("pack_panel_" + id + "_name", "Panel Pack") + " (Copy)";
-                prefs.edit()
-                    .putString("pack_panel_" + newId + "_name", copyName)
-                    .putBoolean("pack_panel_" + newId + "_en", true)
-                    .apply();
-                openDataPackEditor(2, newId);
+                String[] opts = {T("Duplicate", "Nhân bản"), T("Move to trash", "Chuyển vào Kho Cũ")};
+                new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setItems(opts, (dg, which) -> {
+                        if (which == 0) {
+                            String newId = addDynamicId("pack_panel_ids");
+                            String copyName = prefs.getString("pack_panel_" + idForMenu + "_name", "Panel Pack") + " (Copy)";
+                            prefs.edit()
+                                .putString("pack_panel_" + newId + "_name", copyName)
+                                .putBoolean("pack_panel_" + newId + "_en", true)
+                                .apply();
+                            openDataPackEditor(2, newId);
+                        } else {
+                            moveDataPackToTrash("panel_" + idForMenu);
+                            renderPanelDesign();
+                        }
+                    }).show();
             });
             ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
             card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
 
             cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
 
+           cardWrap.setTag(id);
             if (panelSelectMode) {
                 TextView selDot = new TextView(this);
                 boolean sel = panelSelectedItems.contains(id);
@@ -4830,6 +5012,7 @@ private void renderPanelDesign() {
                 });
             }
 
+            attachDragReorder(cardWrap, ids, "pack_panel_ids", this::renderPanelDesign);
             currentRow.addView(cardWrap);
             count++;
         }
@@ -4892,11 +5075,7 @@ private LinearLayout buildPanelSelectionToolbar(List<String> ids) {
             renderPanelDesign();
         }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
 });
-    Button btnCancel = new Button(this); btnCancel.setText(T("Cancel", "Hủy"));
-    btnCancel.setBackground(getRounded("#333333", 20f)); btnCancel.setTextColor(Color.WHITE); btnCancel.setTextSize(12.5f);
-    btnCancel.setOnClickListener(v -> { panelSelectMode = false; panelSelectedItems.clear(); renderPanelDesign(); });
-
-    bar.addView(tvCount); bar.addView(btnDup); bar.addView(btnAll); bar.addView(btnDelete); bar.addView(btnCancel);
+    bar.addView(tvCount); bar.addView(btnDup); bar.addView(btnAll); bar.addView(btnDelete);
     return bar;
 }
  // [FIX] Nếu 1 Data Pack đang được >1 không gian (Lock/Homeb/Homacc) tham chiếu cùng lúc
@@ -5343,8 +5522,20 @@ private LinearLayout createMiniSlider(String t, String k, int max, int def) {
         public void onStartTrackingTouch(SeekBar s){}
         public void onStopTrackingTouch(SeekBar s){}
     });
-    btnMinus.setOnClickListener(v -> { int p = sb.getProgress(); if(p>0) sb.setProgress(p-1); });
-    btnPlus.setOnClickListener(v -> { int p = sb.getProgress(); if(p<max) sb.setProgress(p+1); });
+    btnMinus.setOnClickListener(v -> {
+    int p = Math.max(0, sb.getProgress() - 1);
+    sb.setProgress(p);
+    tv.setText(t + ": " + p);
+    prefs.edit().putInt(k, p).apply();
+    sliderLastWriteMs.put(k, System.currentTimeMillis());
+});
+btnPlus.setOnClickListener(v -> {
+    int p = Math.min(max, sb.getProgress() + 1);
+    sb.setProgress(p);
+    tv.setText(t + ": " + p);
+    prefs.edit().putInt(k, p).apply();
+    sliderLastWriteMs.put(k, System.currentTimeMillis());
+});
     row.addView(btnMinus); row.addView(sb); row.addView(btnPlus);
     l.addView(row);
     return l;
