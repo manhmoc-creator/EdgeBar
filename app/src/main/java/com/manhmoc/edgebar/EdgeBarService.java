@@ -1591,13 +1591,13 @@ private void refreshFingerprintRegistration() {
             bars[i] = new BarView(this);
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,0,PixelFormat.TRANSLUCENT);
             try { wm.addView(bars[i], p); } catch(Exception e){}
-            bars[i].setOnTouchListener(new SidebarTouchListener("lock_"+BARS[i], bars[i], i==0 || i==1));
+            bars[i].setOnTouchListener(new SidebarTouchListener("lock_"+BARS[i], bars[i]));
         }
         for (int i=0;i<4;i++) {
             corners[i] = new CornerView(this, i, "lock_");
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,0,PixelFormat.TRANSLUCENT);
             try { wm.addView(corners[i], p); } catch(Exception e){}
-            corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_"+CORNERS[i], corners[i], false));
+            corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_"+CORNERS[i], corners[i]));
         }
         updateVisibility();
     }
@@ -1689,8 +1689,6 @@ if (panelEngine != null) panelEngine.rebuildAll();
     private class SidebarTouchListener implements View.OnTouchListener {
     private String prefKeyBase;
     private View myView;
-    private boolean isEdgeSideBar; // [MỚI] true nếu là 1 trong 2 Bar cạnh trái/phải (BARS[0]="r", BARS[1]="l")
-    private boolean suppressedAsOsEdge = false; // [MỚI] chuỗi chạm hiện tại có bị coi là cử chỉ OS không
     private float sx, sy;
     private long st;
     private boolean longFired = false;
@@ -1703,31 +1701,16 @@ if (panelEngine != null) panelEngine.rebuildAll();
     private long lastTapUpTime = 0;
     private static final long DTAP_WINDOW_MS = 300;
     private static final float SWIPE_CANCEL_SLOP_PX = 60f;
-    // [MỚI] Vùng an toàn sát mép vật lý màn hình — trùng vùng cử chỉ điều hướng
-    // hệ thống mặc định của Android (~24dp).
-    private static final float OS_GESTURE_EDGE_DP = 24f;
 
-    public SidebarTouchListener(String keyBase, View v, boolean isEdgeSideBar) {
+    public SidebarTouchListener(String keyBase, View v) {
         this.prefKeyBase = keyBase;
         this.myView = v;
-        this.isEdgeSideBar = isEdgeSideBar;
     }
 
-    // [MỚI] Toạ độ tuyệt đối chuẩn xác — getLocationOnScreen() được hệ thống
-    // đảm bảo đúng 100% sau layout, không lệch như getRawX/Y() với overlay window
-    // định vị bằng Gravity + hay bị đổi kích thước động.
+    // Toạ độ tuyệt đối chuẩn xác — getLocationOnScreen() luôn đúng 100% sau layout
     private final int[] locBuf = new int[2];
     private float getFixedX(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[0] + e.getX(); }
     private float getFixedY(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[1] + e.getY(); }
-
-    // [MỚI] Điểm chạm có sát mép vật lý màn hình không
-    private boolean isNearScreenEdge(float xAbs) {
-        float density = getResources().getDisplayMetrics().density;
-        float thresholdPx = OS_GESTURE_EDGE_DP * density;
-        int screenW = getResources().getDisplayMetrics().widthPixels;
-        return xAbs <= thresholdPx || xAbs >= (screenW - thresholdPx);
-    }
-
 private float[] computeJumpDir() {
         float dxDir = 0f, dyDir = 0f;
         if (myView instanceof CornerView) {
@@ -1756,17 +1739,6 @@ private float[] computeJumpDirForTap() {
 }
 
 @Override public boolean onTouch(View v, MotionEvent e) {
-        // [MỚI] Chặn từ gốc: nếu là Bar cạnh (trái/phải) và điểm CHẠM XUỐNG nằm sát
-        // mép vật lý màn hình -> coi toàn bộ chuỗi chạm này là cử chỉ vuốt hệ thống
-        // đi ngang qua, không hiện sóng chạm/đổi màu/kích hoạt hành động nào.
-        if (e.getAction() == MotionEvent.ACTION_DOWN) {
-            suppressedAsOsEdge = isEdgeSideBar && isNearScreenEdge(getFixedX(e));
-        }
-        if (suppressedAsOsEdge) {
-            if (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL) suppressedAsOsEdge = false;
-            return true;
-        }
-
         if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
         else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
         switch (e.getAction()) {
@@ -1869,7 +1841,7 @@ private void drawAccessibleHome() {
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT);
         try { wm.addView(bar, p); } catch (Exception e) { continue; }
-        bar.setOnTouchListener(new SidebarTouchListener("homacc_" + BARS[i], bar, i == 0 || i == 1));
+        corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_"+CORNERS[i], corners[i]));
         accHomeBars[i] = bar;
     }
     for (int i = 0; i < 4; i++) {
@@ -1877,7 +1849,7 @@ private void drawAccessibleHome() {
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT);
         try { wm.addView(corner, p); } catch (Exception e) { continue; }
-        corner.setOnTouchListener(new SidebarTouchListener("homacc_corner_" + CORNERS[i], corner, false));
+        corner.setOnTouchListener(new SidebarTouchListener("homacc_corner_" + CORNERS[i], corner));
         accHomeCorners[i] = corner;
     }
     isHomaccDrawn = true;

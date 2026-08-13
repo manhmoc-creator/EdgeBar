@@ -965,13 +965,13 @@ filter.addAction("com.manhmoc.edgebar.TEST_REC_INDICATOR");
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(
     1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
             try { wm.addView(bars[i], p); } catch (Exception e) {}
-            bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], bars[i], i==0 || i==1));
+            bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], bars[i]));
         }
         for (int i = 0; i < 4; i++) {
             corners[i] = new CornerView(this, i, "home_");
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
             try { wm.addView(corners[i], p); } catch (Exception e) {}
-            corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i], false));
+            corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i]));
         }
 
         // HYBRID HOME V2: Lắng nghe thay đổi Accessibility bằng ContentObserver
@@ -1483,8 +1483,6 @@ default:
     private class SidebarTouchListener implements View.OnTouchListener {
         private String prefKeyBase;
         private View myView;
-        private boolean isEdgeSideBar; // [MỚI]
-        private boolean suppressedAsOsEdge = false; // [MỚI]
         private float sx, sy;
         private long st;
         private Handler longPressHandler = new Handler();
@@ -1492,25 +1490,15 @@ default:
         private long lastTapUpTime = 0;
         private static final long DTAP_WINDOW_MS = 300;
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
-        private static final float OS_GESTURE_EDGE_DP = 24f;
 
-        public SidebarTouchListener(String keyBase, View v, boolean isEdgeSideBar) {
+        public SidebarTouchListener(String keyBase, View v) {
             this.prefKeyBase = keyBase;
             this.myView = v;
-            this.isEdgeSideBar = isEdgeSideBar;
         }
 
         private final int[] locBuf = new int[2];
         private float getFixedX(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[0] + e.getX(); }
         private float getFixedY(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[1] + e.getY(); }
-
-        private boolean isNearScreenEdge(float xAbs) {
-            float density = getResources().getDisplayMetrics().density;
-            float thresholdPx = OS_GESTURE_EDGE_DP * density;
-            int screenW = getResources().getDisplayMetrics().widthPixels;
-            return xAbs <= thresholdPx || xAbs >= (screenW - thresholdPx);
-        }
-
  private float[] computeJumpDir() {
         float dxDir = 0f, dyDir = 0f;
         if (myView instanceof CornerView) {
@@ -1538,14 +1526,6 @@ default:
     }
         @Override
         public boolean onTouch(View v, MotionEvent e) {
-            if (e.getAction() == MotionEvent.ACTION_DOWN) {
-                suppressedAsOsEdge = isEdgeSideBar && isNearScreenEdge(getFixedX(e));
-            }
-            if (suppressedAsOsEdge) {
-                if (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL) suppressedAsOsEdge = false;
-                return true;
-            }
-
             if (myView instanceof CornerView) ((CornerView) myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView) myView).triggerFlash();
 switch (e.getAction()) {
