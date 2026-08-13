@@ -962,10 +962,10 @@ private void showMainMenu() {
         T("Lock · Homeb · Homacc", "Lock · Homeb · Homacc"),
         () -> openGesTab(5, "Frontier")));
     gesMenuContainer.addView(createSettingsRow("fingerprint_24px", "Texture",
-        T("Fingerprint gestures", "Cử chỉ vân tay"),
+        T("Fingerprint Gestures", "Cử chỉ vân tay"),
         () -> openGesTab(4, "Texture")));
     gesMenuContainer.addView(createSettingsRow("volume_up_24px", "VolKey",
-        T("Volume key gestures", "Cử chỉ phím âm lượng"),
+        T("Volume Key Gestures", "Cử chỉ phím âm lượng"),
         () -> openGesTab(3, "VolKey")));
 
     gesSubHeader = new LinearLayout(this);
@@ -4659,10 +4659,10 @@ private void renderScreenRecordList() {
         card.addView(tName); card.addView(tSize);
         card.setOnClickListener(v -> {
             try {
-                Intent i = new Intent(Intent.ACTION_VIEW);
-                i.setDataAndType(uri, "video/*");
-                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(i);
+                Intent openIntent = new Intent(Intent.ACTION_VIEW);
+                openIntent.setDataAndType(uri, "video/*");
+                openIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(openIntent);
             } catch (Exception ignored) {
                 Toast.makeText(this, T("Cannot open file", "Không thể mở file"), Toast.LENGTH_SHORT).show();
             }
@@ -4944,11 +4944,11 @@ private void openTileEditorV2(String id) {
     designSliderContainer.setVisibility(View.GONE);
 
     btnEditAnim = createSettingsRow("flash_on_24px", "ANIMA",
-        T("Animation & Recording indicator", "Hiệu ứng & Chỉ báo ghi âm"),
+        T("Animation & Recording Indicator", "Hiệu ứng & Chỉ báo ghi âm"),
         () -> openDesignSubSpace(3, "ANIMA"));
 
     btnEditPanel = createSettingsRow("routine_24px", "LENAP",
-        T("Floating panel data packs", "Bảng nút nổi (Data Pack)"),
+        T("Floating Panel Data Packs", "Bảng nút nổi (Data Pack)"),
         () -> openDesignSubSpace(5, "LENAP"));
 
     LinearLayout btnEditLang = createSettingsRow("translate_24px", "LANGUAGE",
