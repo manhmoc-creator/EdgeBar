@@ -1647,13 +1647,12 @@ private LinearLayout buildFrontierSelectionToolbar(String listKey, java.util.Lis
     LinearLayout.LayoutParams allLp = new LinearLayout.LayoutParams(-2, -2); allLp.setMargins(10, 0, 10, 0);
     btnAll.setLayoutParams(allLp);
     btnAll.setOnClickListener(v -> {
-        String listKey = (frontierSubTab==0?"lock_":frontierSubTab==1?"home_":"homacc_") + "applied_packs";
-        java.util.Set<String> allKeys = new java.util.LinkedHashSet<>(getDynamicIds(listKey));
-        if (frontierSelectedItems.equals(allKeys)) frontierSelectedItems.clear();
-        else { frontierSelectedItems.clear(); frontierSelectedItems.addAll(allKeys); }
-        renderRulesList();
-    });
-
+    String allKeysListKey = (frontierSubTab==0?"lock_":frontierSubTab==1?"home_":"homacc_") + "applied_packs";
+    java.util.Set<String> allKeys = new java.util.LinkedHashSet<>(getDynamicIds(allKeysListKey));
+    if (frontierSelectedItems.equals(allKeys)) frontierSelectedItems.clear();
+    else { frontierSelectedItems.clear(); frontierSelectedItems.addAll(allKeys); }
+    renderRulesList();
+});
     bar.addView(tvCount); bar.addView(btnShare); bar.addView(btnAll); bar.addView(btnDelete);
     return bar;
 }
