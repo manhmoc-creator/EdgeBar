@@ -1605,19 +1605,22 @@ switch (e.getAction()) {
         return true;
     }
     case MotionEvent.ACTION_CANCEL: {
-        longPressHandler.removeCallbacksAndMessages(null);
-        if (!longPressTriggered) {
-            long duration = System.currentTimeMillis() - st;
-            float cdx = e.getRawX() - sx, cdy = e.getRawY() - sy;
-            if (duration >= prefs.getInt("hold_dur", 600)
-                    && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
-                longPressTriggered = true;
-                handleAction(prefKeyBase + "_long");
-                if (rippleView != null) { float[] dirC = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dirC[0], dirC[1]); }
-            }
+    longPressHandler.removeCallbacksAndMessages(null);
+    if (!longPressTriggered) {
+        long duration = System.currentTimeMillis() - st;
+        float cdx = e.getRawX() - sx, cdy = e.getRawY() - sy;
+        if (duration >= prefs.getInt("hold_dur", 600)
+                && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
+            longPressTriggered = true;
+            handleAction(prefKeyBase + "_long");
+            if (rippleView != null) { float[] dirC = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dirC[0], dirC[1]); }
         }
-        return true;
     }
+    // [FIX] Bổ sung popRipple() giống EdgeBarService — chấm ripple lúc ACTION_DOWN
+    // không được dọn nếu cử chỉ bị CANCEL thay vì UP.
+    if (rippleView != null) rippleView.popRipple();
+    return true;
+}
 }
 return true;
         }

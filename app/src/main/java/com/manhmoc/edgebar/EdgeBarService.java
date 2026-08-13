@@ -1821,19 +1821,24 @@ private float[] computeJumpDirForTap() {
                 return true;
        }
             case MotionEvent.ACTION_CANCEL: {
-                lpHandler.removeCallbacks(longPressRunnable);
-                if (!longFired) {
-                    long duration = System.currentTimeMillis() - st;
-                    float cdx = e.getRawX() - sx, cdy = e.getRawY() - sy;
-                    if (duration >= prefs.getInt("hold_dur", 600)
-                            && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
-                        longFired = true;
-                        handleAction(prefKeyBase + "_long");
-                        if (rippleView != null) { float[] dir = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
-                    }
-                }
-                return true;
-            }
+    lpHandler.removeCallbacks(longPressRunnable);
+    if (!longFired) {
+        long duration = System.currentTimeMillis() - st;
+        float cdx = e.getRawX() - sx, cdy = e.getRawY() - sy;
+        if (duration >= prefs.getInt("hold_dur", 600)
+                && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
+            longFired = true;
+            handleAction(prefKeyBase + "_long");
+            if (rippleView != null) { float[] dir = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
+        }
+    }
+    // [FIX] Trước đây thiếu popRipple() ở nhánh CANCEL — chấm trắng vừa hiện lúc
+    // ACTION_DOWN (showAt) bị "đứng hình" vĩnh viễn nếu hệ thống huỷ cử chỉ giữa
+    // chừng. Luôn gọi popRipple() ở đây để đảm bảo ripple luôn tự mờ dần và biến
+    // mất, bất kể cử chỉ kết thúc bằng UP hay bị CANCEL.
+    if (rippleView != null) rippleView.popRipple();
+    return true;
+}
         }
         return true;
     }
