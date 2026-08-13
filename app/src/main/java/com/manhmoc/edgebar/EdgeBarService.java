@@ -1841,7 +1841,7 @@ private void drawAccessibleHome() {
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT);
         try { wm.addView(bar, p); } catch (Exception e) { continue; }
-        corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_"+CORNERS[i], corners[i]));
+        bar.setOnTouchListener(new SidebarTouchListener("homacc_" + BARS[i], bar));
         accHomeBars[i] = bar;
     }
     for (int i = 0; i < 4; i++) {
