@@ -1862,4 +1862,103 @@ private float[] computeJumpDirForTap() {
         return true;
     }
 }
+private void drawAccessibleHome() {
+    if (isHomaccDrawn) return; // đã vẽ rồi, tránh addView() 2 lần gây crash
+    for (int i = 0; i < 5; i++) {
+        View bar = new BarView(this);
+        WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT);
+        try { wm.addView(bar, p); } catch (Exception e) { continue; }
+        bar.setOnTouchListener(new SidebarTouchListener("homacc_" + BARS[i], bar, i == 0 || i == 1));
+        accHomeBars[i] = bar;
+    }
+    for (int i = 0; i < 4; i++) {
+        View corner = new CornerView(this, i, "homacc_");
+        WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT);
+        try { wm.addView(corner, p); } catch (Exception e) { continue; }
+        corner.setOnTouchListener(new SidebarTouchListener("homacc_corner_" + CORNERS[i], corner, false));
+        accHomeCorners[i] = corner;
+    }
+    isHomaccDrawn = true;
+    updateHomaccLive();
+}
+
+private void removeAccessibleHome() {
+    if (!isHomaccDrawn) return;
+    for (int i = 0; i < 5; i++) {
+        if (accHomeBars[i] != null) {
+            try { wm.removeView(accHomeBars[i]); } catch (Exception ignored) {}
+            accHomeBars[i] = null;
+        }
+    }
+    for (int i = 0; i < 4; i++) {
+        if (accHomeCorners[i] != null) {
+            try { wm.removeView(accHomeCorners[i]); } catch (Exception ignored) {}
+            accHomeCorners[i] = null;
+        }
+    }
+    isHomaccDrawn = false;
+}
+
+private void updateHomaccLive() {
+    if (!isHomaccDrawn) return;
+    for (int i = 0; i < 5; i++) {
+        View v = accHomeBars[i];
+        if (v == null || !(v instanceof BarView)) continue;
+        boolean en = prefs.getBoolean("homacc_" + BARS[i] + "_en", false);
+        v.setVisibility(en ? View.VISIBLE : View.GONE);
+        if (!en) continue;
+        int alpha = prefs.getInt("homacc_" + BARS[i] + "_alpha", 50);
+        int w = prefs.getInt("homacc_" + BARS[i] + "_w", 300);
+        int h = prefs.getInt("homacc_" + BARS[i] + "_h", 60);
+        int x = prefs.getInt("homacc_" + BARS[i] + "_x", 0);
+        int y = prefs.getInt("homacc_" + BARS[i] + "_y", 0);
+        int visMode = prefs.getInt("homacc_" + BARS[i] + "_vis_mode", 0);
+        int hideDur = prefs.getInt("homacc_bar_hide_dur", 2500);
+        ((BarView) v).updateProps(alpha, visMode == 1, hideDur, visMode == 2, prefs.getInt("homacc_bar_radius", 24));
+        int iconSize = prefs.getInt("homacc_" + BARS[i] + "_icon_size", prefs.getInt("homacc_bar_icon_size", 40));
+        int iconAlpha = prefs.getInt("homacc_" + BARS[i] + "_icon_alpha", prefs.getInt("homacc_bar_icon_alpha", 255));
+        ((BarView) v).setIcons(resolveBarIcons(prefs.getString("homacc_" + BARS[i] + "_icons", ""), iconSize), iconAlpha);
+        WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
+        int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+        int priMode = prefs.getInt("homacc_" + BARS[i] + "_pri_mode", 0);
+        if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+        p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i];
+        updateLayoutIfChanged(v, p);
+        if (priMode == 0) applyAntiTapjacking(v, w, h);
+    }
+    for (int i = 0; i < 4; i++) {
+        View v = accHomeCorners[i];
+        if (v == null || !(v instanceof CornerView)) continue;
+        boolean en = prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_en", false);
+        v.setVisibility(en ? View.VISIBLE : View.GONE);
+        if (!en) continue;
+        String ck = "homacc_corner_" + CORNERS[i] + "_";
+        int moonAlpha = prefs.getInt("homacc_corner_moon_alpha", 100);
+        int strokeAlpha = prefs.getInt("homacc_corner_stroke_alpha", 200);
+        int hideDelay = prefs.getInt("homacc_corner_hide_dur", 2500);
+        int visMode = prefs.getInt(ck + "vis_mode", 0);
+        ((CornerView) v).updateProps(prefs.getInt("homacc_corner_thick", 8), moonAlpha, strokeAlpha,
+            visMode == 1, hideDelay, visMode == 2);
+        int priMode = prefs.getInt(ck + "pri_mode", 0);
+        WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
+        int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+        if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+        p.flags = baseFlags; p.gravity = C_GRAV[i];
+        int wPref = prefs.getInt(ck + "w", 100), hPref = prefs.getInt(ck + "h", 100);
+        int mwPref = prefs.getInt(ck + "moon_w", 100), mhPref = prefs.getInt(ck + "moon_h", 100);
+        int mxOff = Math.abs(prefs.getInt(ck + "moon_x", 1250) - 1250);
+        int myOff = Math.abs(prefs.getInt(ck + "moon_y", 1250) - 1250);
+        p.width = Math.max(10, Math.max(wPref, mwPref) + mxOff);
+        p.height = Math.max(10, Math.max(hPref, mhPref) + myOff);
+        p.x = prefs.getInt(ck + "x", 0); p.y = prefs.getInt(ck + "y", 0);
+        updateLayoutIfChanged(v, p);
+        if (priMode == 0) applyAntiTapjacking(v, p.width, p.height);
+    }
+}
 } // <-- Dấu ngoặc nhọn kết thúc toàn bộ class EdgeBarService
