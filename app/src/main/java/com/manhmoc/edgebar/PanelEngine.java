@@ -312,6 +312,11 @@ private String computeSignature(String id) {
 // PANEL BODY: luôn theo đúng vòng đời Lock/Home, KHÔNG phụ thuộc vis nữa
 private boolean shouldPanelBodyExistNow(String id) {
     String px = "pack_panel_" + id + "_";
+    // [FIX] Nút TEST phải bỏ qua điều kiện Enable/Lock — cho phép xem trước
+    // ngay cả khi Pack đang tắt hoặc đứng sai không gian.
+    Boolean forceTest = forceTestOn.get(id);
+    if (forceTest != null && forceTest) return true;
+
     if (!prefs.getBoolean(px+"en", false)) return false;
 
     boolean locked = km != null && km.isKeyguardLocked();
@@ -338,10 +343,11 @@ private boolean shouldHandleExistNow(String id) {
     if (!prefs.getBoolean(px+"en", false)) return false;
     return shouldPanelBodyExistNow(id);
 }
-// Gọi từ Activity (qua broadcast) khi bật/tắt checkbox TEST
+// Gọi từ Activity (qua broadcast) khi bấm nút TEST
 public void setForceTest(String id, boolean on) {
     forceTestOn.put(id, on);
-    rebuildOne(id);
+    rebuildOne(id); // dựng handle+panel body theo điều kiện mới (bypass en/lock)
+    if (on) openPanel(id); else closePanel(id); // [FIX] TEST phải TỰ TRƯỢT MỞ panel, không chỉ dựng View rồi để đóng
 }
     private boolean shouldOwnPanelNow() {
         if (!isAnyMode) return true; // Homeb: luôn được phép (chỉ cần unlock, check riêng bên dưới)

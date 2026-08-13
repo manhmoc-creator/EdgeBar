@@ -66,8 +66,7 @@ private LinearLayout condBackRow;
 private LinearLayout designTopBackRow, designSpaceMenu, designBackRow;
 private TextView tvDesignSubTitle;
     private LinearLayout pageMainMenu, pageEcoShowcase, pageSystemSpace; // [MỚI] màn chính 9-mục
-    private Button navCondBtnRef, navEcoBtnRef; // [MỚI] tham chiếu để mở thẳng tab từ Intent action
-private String[] PANEL_COLOR_KEYS = {"SLATE","STEEL","MIST","GRAPHITE","INDIGO_MIST","TEAL_GREY","COOL_ASH","DEEP_BLUE"};
+    private String[] PANEL_COLOR_KEYS = {"SLATE","STEEL","MIST","GRAPHITE","INDIGO_MIST","TEAL_GREY","COOL_ASH","DEEP_BLUE"};
 private String[] PANEL_COLOR_HEX  = {"#607D8B","#78909C","#90A4AE","#455A64","#5C6BC0","#4DB6AC","#B0BEC5","#37474F"};
 private String[] PANEL_COLOR_NAMES; // set trong reloadActionLabels()
 private String[] PANEL_POS_NAMES;   // 9 vị trí, set trong reloadActionLabels()
@@ -115,8 +114,7 @@ private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<
     private int ecoType = 0;
     private int soundMediaSubTab = -1; // -1 = menu chọn Ghi âm/Ghi màn hình, 0 = Ghi âm, 1 = Ghi màn hình
     private LinearLayout ecoContainer;
-    private LinearLayout ecoNavRef; // [MỚI] tham chiếu thanh nav Intents/QSTiles/Macros/Trash
-    // THÊM 2 field static này ngay dưới khai báo ecoContainer:
+        // THÊM 2 field static này ngay dưới khai báo ecoContainer:
 private static List<String[]> cachedAppList = null; // mỗi phần tử: {name, pkg}
 private static long cachedAppListTs = 0;
 private static final long APP_LIST_CACHE_MS = 5 * 60 * 1000; // 5 phút
@@ -580,11 +578,15 @@ if (currentMainTab == 0) {
         } else if (ecoType == 3) {
             fab.setOnClickListener(v -> runDeepStorageScan());
         } else if (ecoType == 4) {
-            if (soundMediaSubTab != 0) {
-                // Ở màn Menu hoặc không gian Ghi màn hình -> FAB không cần thiết
-                // (Ghi màn hình đã có nút Bắt đầu/Dừng riêng trong buildScreenRecordControlCard()).
-                fab.setVisibility(View.GONE);
-            } else {
+    if (soundMediaSubTab == -1) {
+        // Ở màn menu chọn Ghi âm/Ghi màn hình -> FAB dùng để quay lại danh mục cha
+        fab.setVisibility(View.VISIBLE);
+        fab.setOnClickListener(v -> onBackPressed());
+    } else if (soundMediaSubTab == 1) {
+        // Ghi màn hình đã có nút riêng trong buildScreenRecordControlCard() -> FAB dùng để back
+        fab.setVisibility(View.VISIBLE);
+        fab.setOnClickListener(v -> onBackPressed());
+    } else {
                 boolean recOn = VoiceRecorderService.isRunning;
                 boolean recPaused = VoiceRecorderService.isPaused;
                 fab.setOnClickListener(v -> {
@@ -881,15 +883,13 @@ showMainMenu();
      *  vì "prefs" đã có sẵn trong RAM) thay vì Intent extra dễ lệch thời điểm giữa
      *  các đời máy/ROM khác nhau. */
     private void checkPendingStorageScan() {
-        if (!prefs.getBoolean("pending_storage_scan", false)) return;
-        prefs.edit().putBoolean("pending_storage_scan", false).apply();
-        if (navCondBtnRef == null || navEcoBtnRef == null) return;
-        ecoType = 3;
-        switchMainTab(2, navCondBtnRef, navEcoBtnRef);
-        if (ecoNavRef != null) ecoNavRef.setVisibility(View.VISIBLE);
-        updateFabVisibility();
-        runDeepStorageScan();
-    }
+    if (!prefs.getBoolean("pending_storage_scan", false)) return;
+    prefs.edit().putBoolean("pending_storage_scan", false).apply();
+    // [FIX] navCondBtnRef/navEcoBtnRef không còn tồn tại sau khi bỏ nav bar cũ —
+    // dùng openEco() (cổng chuẩn hiện tại) để mở thẳng tab Storage.
+    openEco(3, false);
+    runDeepStorageScan();
+}
 private void switchMainTab(int idx, Button b1, Button b2) { 
     currentMainTab = idx; refreshPreview(); navMain.setVisibility(View.VISIBLE);
     pageDesign.setVisibility(View.GONE); 
@@ -918,7 +918,9 @@ private void openEco(int type, boolean showSubNav) {
     ecoType = type;
     if (type == 4) { soundMediaSubTab = -1; currentLevelBackAction = null; }
     openSpace(2);
-    if (ecoNavRef != null) ecoNavRef.setVisibility(showSubNav ? View.VISIBLE : View.GONE);
+    if (ecoMenuContainer != null) ecoMenuContainer.setVisibility(View.GONE);
+    if (ecoSubHeader != null) ecoSubHeader.setVisibility(View.VISIBLE);
+    if (ecoContainer != null) ecoContainer.setVisibility(View.VISIBLE);
     updateFabVisibility();
     renderEcosystem();
 }
@@ -1496,37 +1498,29 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
 });
         swEn.setPadding(0, 0, 0, 6);
 
-        Button btnCopy = new Button(this);
-        btnCopy.setText(isFrontier ? "TEST" : "SHARE");
-        btnCopy.setBackground(getRounded(isFrontier ? "#FFC107" : "#7C4DFF", 14f));
-        btnCopy.setTextColor(isFrontier ? Color.BLACK : Color.WHITE);
-        btnCopy.setTextSize(11f);
-        btnCopy.setPadding(10, 8, 10, 8);
-        LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(-2, -2); cpLp.setMargins(0, 4, 0, 0);
-        btnCopy.setLayoutParams(cpLp); btnCopy.setMinimumHeight(64);
-        final int fTabState = tabState;
-        final String fCopyItemKey = itemKey;
-        btnCopy.setOnClickListener(v -> {
-            if (isFrontier) {
-                java.util.LinkedHashSet<String> testActs = new java.util.LinkedHashSet<>();
-                String testPkg = "", testSc = "";
-                for (String rId : getDynamicIds(itemKey + "_pack_rules")) {
-                    if (!prefs.getBoolean("prule_" + rId + "_en", true)) continue;
-                    String acts = prefs.getString("prule_" + rId + "_acts", "");
-                    for (String a : acts.split(",")) if (!a.trim().isEmpty()) testActs.add(a.trim());
-                    if (testPkg.isEmpty()) testPkg = prefs.getString("prule_" + rId + "_launch_pkg", "");
-                    if (testSc.isEmpty()) testSc = prefs.getString("prule_" + rId + "_shortcut_id", "");
-                }
-                fireTestActions(testActs, testPkg, testSc);
-            } else {
-                java.util.Set<String> one = new java.util.LinkedHashSet<>();
-                one.add(fCopyItemKey);
-                java.util.Set<String> backup = frontierSelectedItems;
-                frontierSelectedItems = one;
-                showShareToSpaceDialog();
-                frontierSelectedItems = backup;
-            }
-        });
+        // [FIX] Bỏ nút TEST trên Data Pack MẸ (Frontier) — mẹ gộp nhiều Pattern/nhiều
+// Action lại có thể xung đột nhau khi bắn cùng lúc. TEST giờ chỉ còn ở từng
+// Pattern con (trong openPackRuleSpace), nơi 1 Pattern = 1 tổ hợp Action rõ ràng.
+Button btnCopy = null;
+if (!isFrontier) {
+    btnCopy = new Button(this);
+    btnCopy.setText("SHARE");
+    btnCopy.setBackground(getRounded("#7C4DFF", 14f));
+    btnCopy.setTextColor(Color.WHITE);
+    btnCopy.setTextSize(11f);
+    btnCopy.setPadding(10, 8, 10, 8);
+    LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(-2, -2); cpLp.setMargins(0, 4, 0, 0);
+    btnCopy.setLayoutParams(cpLp); btnCopy.setMinimumHeight(64);
+    final String fCopyItemKey = itemKey;
+    btnCopy.setOnClickListener(v -> {
+        java.util.Set<String> one = new java.util.LinkedHashSet<>();
+        one.add(fCopyItemKey);
+        java.util.Set<String> backup = frontierSelectedItems;
+        frontierSelectedItems = one;
+        showShareToSpaceDialog();
+        frontierSelectedItems = backup;
+    });
+}
         // [ĐỔI HÀNH VI] Frontier: nút này đổi thành "PATTERN" -> mở kho biến con
         // (openPackRuleSpace), vì giờ chạm 1 lần vào card đã mở thẳng Editor cha rồi.
         final boolean fIsBar = isBar; final String fId = id;
@@ -1544,7 +1538,7 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
             btnEdit.setText(T("EDIT", "SỬA"));
             btnEdit.setOnClickListener(v -> openDataPackEditor(fIsBar ? 0 : 1, fId));
         }
-        ctrlCol.addView(swEn); ctrlCol.addView(btnCopy); ctrlCol.addView(btnEdit);
+        ctrlCol.addView(swEn); if (btnCopy != null) ctrlCol.addView(btnCopy); ctrlCol.addView(btnEdit);
         card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
         cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
 
@@ -1583,30 +1577,12 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
                     openDataPackEditor(exIsBar ? 0 : 1, exId);
                 });
                 card.setOnLongClickListener(v -> {
-                    String[] opts = {T("Duplicate", "Nhân bản"), T("Select multiple", "Chọn nhiều"), T("Move to trash", "Chuyển vào Kho Cũ")};
-                    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                        .setItems(opts, (dg, which) -> {
-                            if (which == 0) {
-                                boolean fIsBarL = fItemKey.startsWith("bar_");
-                                String fIdL = fItemKey.replace(fIsBarL ? "bar_" : "corner_", "");
-                                String newId = cloneDataPack(fIsBarL, fIdL);
-                                String newItemKey = (fIsBarL ? "bar_" : "corner_") + newId;
-                                clonePackRules(fItemKey, newItemKey);
-                                appliedPacks.add(newItemKey);
-                                prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
-                                renderRulesList();
-                            } else if (which == 1) {
-                                frontierSelectMode = true;
-                                frontierSelectedItems.clear();
-                                frontierSelectedItems.add(fItemKey);
-                                renderRulesList();
-                            } else {
-                                moveDataPackToTrash(fItemKey);
-                                renderRulesList();
-                            }
-                        }).show();
-                    return true;
-                });
+    frontierSelectMode = true;
+    frontierSelectedItems.clear();
+    frontierSelectedItems.add(fItemKey);
+    renderRulesList();
+    return true;
+});
             }
         } else {
             card.setOnClickListener(btn -> openPackRuleSpace(fItemKey, fTabState));
@@ -1649,7 +1625,23 @@ private LinearLayout buildFrontierSelectionToolbar(String listKey, java.util.Lis
     Button btnShare = new Button(this); btnShare.setText("🔗 " + T("Share", "Chia sẻ"));
     btnShare.setBackground(getRounded("#7C4DFF", 20f)); btnShare.setTextColor(Color.WHITE); btnShare.setTextSize(12.5f);
     btnShare.setOnClickListener(v -> showShareToSpaceDialog());
-
+Button btnDup = new Button(this); btnDup.setText("🧬 " + T("Duplicate", "Nhân bản"));
+btnDup.setBackground(getRounded("#7C4DFF", 20f)); btnDup.setTextColor(Color.WHITE); btnDup.setTextSize(12.5f);
+LinearLayout.LayoutParams dupLp = new LinearLayout.LayoutParams(-2, -2); dupLp.setMargins(10, 0, 0, 0);
+btnDup.setLayoutParams(dupLp);
+btnDup.setOnClickListener(v -> {
+    for (String key : new java.util.ArrayList<>(frontierSelectedItems)) {
+        boolean isBarL = key.startsWith("bar_");
+        String idL = key.replace(isBarL ? "bar_" : "corner_", "");
+        String newId = cloneDataPack(isBarL, idL);
+        String newItemKey = (isBarL ? "bar_" : "corner_") + newId;
+        clonePackRules(key, newItemKey);
+        appliedPacks.add(newItemKey);
+    }
+    prefs.edit().putString(listKey, android.text.TextUtils.join(",", appliedPacks)).apply();
+    frontierSelectMode = false; frontierSelectedItems.clear();
+    renderRulesList();
+});
     Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", " 💫 Xóa"));
     btnDelete.setBackground(getRounded("#D32F2F", 20f)); btnDelete.setTextColor(Color.WHITE); btnDelete.setTextSize(12.5f);
     LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(-2, -2); delLp.setMargins(10, 0, 10, 0);
@@ -1674,7 +1666,7 @@ private LinearLayout buildFrontierSelectionToolbar(String listKey, java.util.Lis
     else { frontierSelectedItems.clear(); frontierSelectedItems.addAll(allKeys); }
     renderRulesList();
 });
-    bar.addView(tvCount); bar.addView(btnShare); bar.addView(btnAll); bar.addView(btnDelete);
+    bar.addView(tvCount); bar.addView(btnShare); bar.addView(btnDup); bar.addView(btnAll); bar.addView(btnDelete);
     return bar;
 }
 
@@ -2030,40 +2022,32 @@ ctrlCol.addView(btnCopy);
         bLp.setMargins(40, 0, 40, 60);
         bottomBar.setLayoutParams(bLp);
 
-        ImageButton btnUpdate = createIconCircleBtn(android.R.drawable.ic_menu_upload, "#333333");
+        // [FIX] Bỏ 2 nút chết (Update/Premium không có onClick, chỉ chiếm chỗ vô ích).
+// Nút tròn bên phải giờ chính là nút "back" (icon cycle), nút PATTERN giữ chức năng gốc.
+View spacer = new View(this);
+spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
 
-        Button btnPremium = new Button(this);
-        btnPremium.setText("PREMIUM");
-        btnPremium.setTextColor(Color.BLACK);
-        btnPremium.setTextSize(13.5f);
-        btnPremium.setBackground(getRounded("#00E5FF", 100f));
-        LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-2, -1);
-        pLp.setMargins(10, 0, 10, 0);
-        btnPremium.setLayoutParams(pLp);
-        btnPremium.setPadding(35, 0, 35, 0);
+Button fabNew = new Button(this);
+fabNew.setText("PATTERN");
+fabNew.setTextColor(Color.BLACK);
+fabNew.setBackground(getRounded("#00E5FF", 100f));
+fabNew.setTextSize(13.5f);
+LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, 135);
+fLp.setMargins(10, 0, 10, 0);
+fabNew.setLayoutParams(fLp);
+fabNew.setPadding(55, 0, 55, 0);
+fabNew.setOnClickListener(v -> openPackRuleEditor(appliedItemKey, null, null, renderRules[0], isHomebSpace));
 
-        View spacer = new View(this);
-        spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
-
-        Button fabNew = new Button(this);
-        fabNew.setText("PATTERN"); // Viên thuốc tạo trực tiếp Pack
-        fabNew.setTextColor(Color.BLACK);
-        fabNew.setBackground(getRounded("#00E5FF", 100f));
-        fabNew.setTextSize(13.5f);
-        LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-2, 135);
-        fLp.setMargins(10, 0, 10, 0);
-        fabNew.setLayoutParams(fLp);
-        fabNew.setPadding(55, 0, 55, 0);
-
-        fabNew.setOnClickListener(v -> openPackRuleEditor(appliedItemKey, null, null, renderRules[0], isHomebSpace));
-        // Đưa nút Back xuống Nav Bar, thay thế vị trí Update cũ
-        ImageButton btnBack = createIconCircleBtn(customIconRes("cycle_24px"), "#333333");
-        btnBack.setOnClickListener(v -> onBackPressed());
-        bottomBar.addView(btnUpdate);
-        bottomBar.addView(btnPremium);
-        bottomBar.addView(spacer);
-        bottomBar.addView(fabNew);
-        bottomBar.addView(btnBack);
+ImageButton btnBack = createIconCircleBtn(customIconRes("cycle_24px"), "#333333");
+// [FIX] Trước đây gọi onBackPressed() của Activity -> KHÔNG đóng Dialog này (d),
+// khiến "back" trông như không hoạt động. Phải gọi d.dismiss() trực tiếp.
+btnBack.setOnClickListener(v -> {
+    if (prulesSelectMode) { prulesSelectMode = false; prulesSelectedItems.clear(); renderRules[0].run(); }
+    else d.dismiss();
+});
+bottomBar.addView(spacer);
+bottomBar.addView(fabNew);
+bottomBar.addView(btnBack);
         rootLayout.addView(bottomBar);
         d.setOnDismissListener(dd -> renderRulesList());
         d.setContentView(rootLayout);
@@ -2263,7 +2247,28 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
     btnShare.setOnClickListener(v -> showShareMultipleRulesToPackDialog(prulesSelectedItems, appliedItemKey, () -> {
         prulesSelectMode = false; prulesSelectedItems.clear(); renderRules[0].run();
     }));
-
+Button btnDupP = new Button(this); btnDupP.setText("🧬 " + T("Duplicate", "Nhân bản"));
+btnDupP.setBackground(getRounded("#7C4DFF", 20f)); btnDupP.setTextColor(Color.WHITE); btnDupP.setTextSize(12.5f);
+LinearLayout.LayoutParams dpLp = new LinearLayout.LayoutParams(-2, -2); dpLp.setMargins(10, 0, 0, 0);
+btnDupP.setLayoutParams(dpLp);
+btnDupP.setOnClickListener(v -> {
+    for (String rId : new java.util.ArrayList<>(prulesSelectedItems)) {
+        String newRuleId = java.util.UUID.randomUUID().toString().substring(0, 8);
+        rules.add(newRuleId);
+        prefs.edit()
+            .putString("prule_" + newRuleId + "_gestures", prefs.getString("prule_" + rId + "_gestures", ""))
+            .putString("prule_" + newRuleId + "_acts", prefs.getString("prule_" + rId + "_acts", ""))
+            .putString("prule_" + newRuleId + "_launch_pkg", prefs.getString("prule_" + rId + "_launch_pkg", ""))
+            .putString("prule_" + newRuleId + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
+            .putBoolean("prule_" + newRuleId + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
+            .putBoolean("prule_" + newRuleId + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
+            .putBoolean("prule_" + newRuleId + "_en", true)
+            .apply();
+    }
+    prefs.edit().putString(listKey, android.text.TextUtils.join(",", rules)).apply();
+    prulesSelectMode = false; prulesSelectedItems.clear();
+    renderRules[0].run();
+});
     Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", "Xóa"));
     btnDelete.setBackground(getRounded("#D32F2F", 20f)); btnDelete.setTextColor(Color.WHITE); btnDelete.setTextSize(12.5f);
     LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(-2, -2); delLp.setMargins(10, 0, 10, 0);
@@ -2289,7 +2294,7 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
         else { prulesSelectedItems.clear(); prulesSelectedItems.addAll(allKeys); }
         renderRules[0].run();
     });
-    bar.addView(tvCount); bar.addView(btnShare); bar.addView(btnAll); bar.addView(btnDelete);
+    bar.addView(tvCount); bar.addView(btnShare); bar.addView(btnDupP); bar.addView(btnAll); bar.addView(btnDelete);
     return bar;
 }
 private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, String currentItemKey, Runnable onDone) {
@@ -3336,22 +3341,53 @@ private void buildSystemSpace() {
     // cổng vào riêng ở mục "Bảo mật", YTDL/QR Bank/Storage/Ghi âm/Kho cũ đã có cổng vào
     // riêng ở "Hệ sinh thái"/"Bộ nhớ"/"Âm thanh & Media"/"Hệ thống". Mỗi tính năng chỉ còn
     // ĐÚNG 1 nơi truy cập -> ít View trùng lặp phải dựng, đỡ RAM/pin trên Pixel 2XL.
-    private void buildEcosystemSpace() {
+    private LinearLayout ecoMenuContainer, ecoSubHeader;
+private TextView tvEcoSubTitle;
+
+private void buildEcosystemSpace() {
     pageEcosystem.addView(createBackRow(T("Custom Actions","Hành động tùy chỉnh")));
-    LinearLayout ecoNav = new LinearLayout(this);
-    ecoNav.setOrientation(LinearLayout.VERTICAL);
-    ecoNav.setPadding(0, 0, 0, 20);
-    ecoNavRef = ecoNav;
-    
-    // Giao diện thẻ (Card style) y hệt như Gesture & Touch
-    ecoNav.addView(createSettingsRow("flash_on_24px", "Intents", "Các kịch bản tùy chỉnh", () -> { ecoType = 0; updateFabVisibility(); renderEcosystem(); }));
-    ecoNav.addView(createSettingsRow("routine_24px", "QS Tiles", "Các phím cài đặt nhanh", () -> { ecoType = 1; updateFabVisibility(); renderEcosystem(); }));
-    ecoNav.addView(createSettingsRow("memory_24px", "Macros", "Chuỗi hành động đa nhiệm", () -> { ecoType = 2; updateFabVisibility(); renderEcosystem(); }));
-    
-    pageEcosystem.addView(ecoNav);
+
+    ecoMenuContainer = new LinearLayout(this);
+    ecoMenuContainer.setOrientation(LinearLayout.VERTICAL);
+    pageEcosystem.addView(ecoMenuContainer);
+
+    ecoMenuContainer.addView(createSettingsRow("flash_on_24px", "Intents", T("Custom scripts","Các kịch bản tùy chỉnh"), () -> openEcoSubTab(0, "Intents")));
+    ecoMenuContainer.addView(createSettingsRow("routine_24px", "QS Tiles", T("Quick Settings tiles","Các phím cài đặt nhanh"), () -> openEcoSubTab(1, "QS Tiles")));
+    ecoMenuContainer.addView(createSettingsRow("memory_24px", "Macros", T("Multi-action chains","Chuỗi hành động đa nhiệm"), () -> openEcoSubTab(2, "Macros")));
+
+    ecoSubHeader = new LinearLayout(this);
+    ecoSubHeader.setOrientation(LinearLayout.HORIZONTAL);
+    ecoSubHeader.setGravity(Gravity.CENTER_VERTICAL);
+    ecoSubHeader.setPadding(0, 0, 0, 20);
+    ecoSubHeader.setVisibility(View.GONE);
+    tvEcoSubTitle = new TextView(this);
+    tvEcoSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvEcoSubTitle.setTextSize(16);
+    LinearLayout.LayoutParams etlp = new LinearLayout.LayoutParams(-2, -2); etlp.setMargins(20, 0, 0, 0);
+    tvEcoSubTitle.setLayoutParams(etlp);
+    ecoSubHeader.addView(tvEcoSubTitle);
+    pageEcosystem.addView(ecoSubHeader);
+
     ecoContainer = new LinearLayout(this);
     ecoContainer.setOrientation(LinearLayout.VERTICAL);
+    ecoContainer.setVisibility(View.GONE);
     pageEcosystem.addView(ecoContainer);
+}
+
+private void openEcoSubTab(int type, String title) {
+    ecoType = type;
+    ecoMenuContainer.setVisibility(View.GONE);
+    ecoSubHeader.setVisibility(View.VISIBLE);
+    tvEcoSubTitle.setText(title);
+    ecoContainer.setVisibility(View.VISIBLE);
+    updateFabVisibility();
+    renderEcosystem();
+    currentLevelBackAction = () -> {
+        ecoContainer.setVisibility(View.GONE);
+        ecoSubHeader.setVisibility(View.GONE);
+        ecoMenuContainer.setVisibility(View.VISIBLE);
+        currentLevelBackAction = null;
+        updateFabVisibility();
+    };
 }
     // ==================== DANH SÁCH ĐỘNG (KHÔNG GIỚI HẠN SỐ LƯỢNG) ====================
 // Thay cho kiểu "i1_.. i15_" cố định — dùng JSON array chứa list các ID (UUID rút gọn).
@@ -5240,29 +5276,12 @@ private void renderPanelDesign() {
                 card.setOnClickListener(btn -> openDataPackEditor(2, id));
                 final String idForLong = id;
                 card.setOnLongClickListener(btn -> {
-                    String[] opts = {T("Duplicate", "Nhân bản"), T("Select multiple", "Chọn nhiều"), T("Move to trash", "Chuyển vào Kho Cũ")};
-                    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                        .setItems(opts, (dg, which) -> {
-                            if (which == 0) {
-                                String newId = addDynamicId("pack_panel_ids");
-                                String copyName = prefs.getString("pack_panel_" + idForLong + "_name", "Panel Pack") + " (Copy)";
-                                prefs.edit()
-                                    .putString("pack_panel_" + newId + "_name", copyName)
-                                    .putBoolean("pack_panel_" + newId + "_en", true)
-                                    .apply();
-                                openDataPackEditor(2, newId);
-                            } else if (which == 1) {
-                                panelSelectMode = true;
-                                panelSelectedItems.clear();
-                                panelSelectedItems.add(idForLong);
-                                renderPanelDesign();
-                            } else {
-                                moveDataPackToTrash("panel_" + idForLong);
-                                renderPanelDesign();
-                            }
-                        }).show();
-                    return true;
-                });
+    panelSelectMode = true;
+    panelSelectedItems.clear();
+    panelSelectedItems.add(idForLong);
+    renderPanelDesign();
+    return true;
+});
             }
             attachDragReorder(cardWrap, ids, "pack_panel_ids", this::renderPanelDesign);
             currentRow.addView(cardWrap);
@@ -6799,7 +6818,7 @@ private List<Object[]> buildSearchIndex() {
     index.add(new Object[]{T("VolKey (Phím âm lượng)", "VolKey - Phím âm lượng"), "volkey phim am luong volume", (Runnable) () -> {
         openSpace(1); currentGesTab = 3; renderRulesList();
     }});
-    index.add(new Object[]{T("Anima (Hiệu ứng)", "Anima - Hiệu ứng phản hồi"), "anima hieu ung animation record vien border", (Runnable) this::openDesignSpace});
+    index.add(new Object[]{T("Display › Anima","Hiển thị › Anima"), "anima hieu ung animation record vien border icon 13 cu chi", (Runnable) this::openDesignSpace});
     index.add(new Object[]{T("Lenap (Bảng nút nổi)", "Lenap - Bảng nút nổi"), "lenap panel bang nut noi", (Runnable) () -> {
         openDesignSpace(); if (btnEditPanel != null) btnEditPanel.performClick();
     }});
@@ -6849,24 +6868,40 @@ private int levenshtein(String a, String b) {
 private void liveSearchSettings(String query) {
     List<Object[]> all = buildSearchIndex();
     String q = query.trim().toLowerCase();
-    List<Object[]> matched = new ArrayList<>();
-    if (q.isEmpty()) {
-        if (searchPopup != null && searchPopup.isShowing()) searchPopup.dismiss();
-        return;
-    }
+    if (q.isEmpty()) { if (searchPopup != null && searchPopup.isShowing()) searchPopup.dismiss(); return; }
+
+    // Tách query thành nhiều token, yêu cầu MỌI token đều khớp (AND) — tránh
+    // match ngẫu nhiên như trước (chỉ cần 1 ký tự trùng là ra kết quả).
+    String[] tokens = q.split("\\s+");
+    List<Object[]> exact = new ArrayList<>();   // label bắt đầu bằng query
+    List<Object[]> contains = new ArrayList<>(); // mọi token đều xuất hiện trong label+keywords
     for (Object[] item : all) {
         String label = ((String) item[0]).toLowerCase();
         String keys = (String) item[1];
-        if (label.contains(q) || keys.contains(q)) matched.add(item);
+        String haystack = label + " " + keys;
+        boolean allTokensMatch = true;
+        for (String t : tokens) { if (!haystack.contains(t)) { allTokensMatch = false; break; } }
+        if (!allTokensMatch) continue;
+        if (label.startsWith(q)) exact.add(item); else contains.add(item);
     }
-    if (matched.isEmpty()) {
+    List<Object[]> matched = new ArrayList<>();
+    matched.addAll(exact);
+    matched.addAll(contains);
+
+    // Fuzzy chỉ dùng khi AND-match rỗng, và CHỈ nhận nếu độ lệch đủ nhỏ so với
+    // độ dài query (tránh trả bừa kết quả không liên quan như "hhvhjnb").
+    if (matched.isEmpty() && q.length() >= 3) {
         Object[] best = null; int bestDist = Integer.MAX_VALUE;
         for (Object[] item : all) {
             int d = levenshtein(q, ((String) item[0]).toLowerCase());
             if (d < bestDist) { bestDist = d; best = item; }
         }
-        if (best != null) matched.add(best);
+        int maxAllowedDist = Math.max(1, q.length() / 2); // lệch tối đa 50% độ dài query
+        if (best != null && bestDist <= maxAllowedDist) matched.add(best);
     }
+    if (matched.size() > 8) matched = matched.subList(0, 8); // giới hạn 8 kết quả, đỡ tốn layout/RAM
+
+    if (matched.isEmpty()) { if (searchPopup != null && searchPopup.isShowing()) searchPopup.dismiss(); return; }
 
     if (searchPopup == null) {
         searchPopup = new android.widget.ListPopupWindow(this);
@@ -6881,12 +6916,14 @@ private void liveSearchSettings(String query) {
         @Override public Object getItem(int p) { return finalMatched.get(p); }
         @Override public long getItemId(int p) { return p; }
         @Override public View getView(int p, View cv, ViewGroup parent) {
+            LinearLayout row = new LinearLayout(MainActivity.this);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.setPadding(30, 22, 30, 22);
             TextView tv = new TextView(MainActivity.this);
-            tv.setText((String) finalMatched.get(p)[0]);
-            tv.setTextColor(Color.WHITE); tv.setTextSize(15);
-            tv.setBackgroundColor(Color.TRANSPARENT);
-            tv.setPadding(30, 26, 30, 26);
-            return tv;
+            tv.setText((String) finalMatched.get(p)[0]); // đã là breadcrumb "A › B › C" — xem mục buildSearchIndex bên dưới
+            tv.setTextColor(Color.WHITE); tv.setTextSize(14.5f);
+            row.addView(tv);
+            return row;
         }
     };
     searchPopup.setAdapter(adapter);
@@ -6895,7 +6932,6 @@ private void liveSearchSettings(String query) {
         Runnable action = (Runnable) finalMatched.get(position)[2];
         searchPopup.dismiss();
         etNavSearch.setText("");
-        // Tăng delay lên 300ms để đảm bảo UI cũ nhường chỗ an toàn, fix triệt để Crash
         new Handler(android.os.Looper.getMainLooper()).postDelayed(action, 300);
     });
     searchPopup.show();
