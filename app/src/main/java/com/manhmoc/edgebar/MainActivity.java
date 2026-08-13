@@ -1524,6 +1524,7 @@ if (!isFrontier) {
         // [ĐỔI HÀNH VI] Frontier: nút này đổi thành "PATTERN" -> mở kho biến con
         // (openPackRuleSpace), vì giờ chạm 1 lần vào card đã mở thẳng Editor cha rồi.
         final boolean fIsBar = isBar; final String fId = id;
+final int fTabState = tabState;
         Button btnEdit = new Button(this);
         btnEdit.setBackground(getRounded("#00E5FF", 14f));
         btnEdit.setTextColor(Color.BLACK);
