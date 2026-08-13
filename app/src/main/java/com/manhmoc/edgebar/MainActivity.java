@@ -107,7 +107,7 @@ private Runnable currentLevelBackAction = null;
     // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "🎭V19.12.3.6.38";
+    private final String CURRENT_VERSION = "🎭V19.12.3.6.39";
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
     private Button btnWriteSettings; // MỚI

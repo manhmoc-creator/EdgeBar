@@ -1354,6 +1354,16 @@ for (String a : acts) {
                 case "VOLUME":
                     ((AudioManager) getSystemService(AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI);
                     break;
+                case "SCREEN_ON": {
+                    android.os.PowerManager pmOn = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+                    if (pmOn != null && !pmOn.isInteractive()) {
+                        android.os.PowerManager.WakeLock wlOn = pmOn.newWakeLock(
+                            android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                            "EdgeBar:ScreenOnHomeb");
+                        wlOn.acquire(2000);
+                    }
+                    break;
+                }
                case "TOGGLE_RECORD": {
                     Intent recIntent = new Intent(this, VoiceRecorderService.class);
                     recIntent.setAction(VoiceRecorderService.ACTION_TOGGLE);
