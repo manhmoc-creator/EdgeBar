@@ -437,7 +437,8 @@ int itemCount = csvToList(prefs.getString(px+"apps","")).size() +
     int pw = edge.equals("bottom") ? Math.min(mainAxis, ctx.getResources().getDisplayMetrics().widthPixels) : crossFixed;
     int ph = edge.equals("bottom") ? crossFixed : Math.min(mainAxis, ctx.getResources().getDisplayMetrics().heightPixels);
     WindowManager.LayoutParams pp = new WindowManager.LayoutParams(pw, ph, wmType,
-        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
         | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),

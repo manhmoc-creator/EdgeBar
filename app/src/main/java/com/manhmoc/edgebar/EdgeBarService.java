@@ -1604,13 +1604,13 @@ private void refreshFingerprintRegistration() {
 
         for (int i=0;i<5;i++) {
             bars[i] = new BarView(this);
-            WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,0,PixelFormat.TRANSLUCENT);
+            WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
             try { wm.addView(bars[i], p); } catch(Exception e){}
             bars[i].setOnTouchListener(new SidebarTouchListener("lock_"+BARS[i], bars[i]));
         }
         for (int i=0;i<4;i++) {
             corners[i] = new CornerView(this, i, "lock_");
-            WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,0,PixelFormat.TRANSLUCENT);
+            WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
             try { wm.addView(corners[i], p); } catch(Exception e){}
             corners[i].setOnTouchListener(new SidebarTouchListener("lock_corner_"+CORNERS[i], corners[i]));
         }
@@ -1658,7 +1658,7 @@ for (int i=0;i<5;i++) {
 int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", prefs.getInt("lock_bar_icon_alpha", 255));
 ((BarView)bars[i]).setIcons(resolveBarIcons(prefs.getString("lock_"+BARS[i]+"_icons",""), iconSize), iconAlpha);
                 int priMode = prefs.getInt("lock_"+BARS[i]+"_pri_mode",0);
-                int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+                int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                 if (priMode==1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
                 else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
         int pushY = (pushForKbd && (i==0 || i==1)) ? cachedKbdHeight : 0; // chỉ "r","l" (2 bar đáy)
@@ -1681,7 +1681,7 @@ int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", prefs.getInt("lock_b
                 boolean isAuto = (visMode==1), isInv = (visMode==2);
                 ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick",8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv);
                 int priMode = prefs.getInt(ck+"pri_mode",0);
-                int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+                int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                 if (priMode==1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
                 else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
                 WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams();
@@ -1854,7 +1854,7 @@ private void drawAccessibleHome() {
     for (int i = 0; i < 5; i++) {
         View bar = new BarView(this);
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT);
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
         try { wm.addView(bar, p); } catch (Exception e) { continue; }
         bar.setOnTouchListener(new SidebarTouchListener("homacc_" + BARS[i], bar));
         accHomeBars[i] = bar;
@@ -1862,7 +1862,7 @@ private void drawAccessibleHome() {
     for (int i = 0; i < 4; i++) {
         View corner = new CornerView(this, i, "homacc_");
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 0, PixelFormat.TRANSLUCENT);
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
         try { wm.addView(corner, p); } catch (Exception e) { continue; }
         corner.setOnTouchListener(new SidebarTouchListener("homacc_corner_" + CORNERS[i], corner));
         accHomeCorners[i] = corner;
@@ -1908,7 +1908,7 @@ private void updateHomaccLive() {
         int iconAlpha = prefs.getInt("homacc_" + BARS[i] + "_icon_alpha", prefs.getInt("homacc_bar_icon_alpha", 255));
         ((BarView) v).setIcons(resolveBarIcons(prefs.getString("homacc_" + BARS[i] + "_icons", ""), iconSize), iconAlpha);
         WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
-        int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+        int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
         int priMode = prefs.getInt("homacc_" + BARS[i] + "_pri_mode", 0);
         if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -1932,7 +1932,7 @@ private void updateHomaccLive() {
             visMode == 1, hideDelay, visMode == 2);
         int priMode = prefs.getInt(ck + "pri_mode", 0);
         WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
-        int baseFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+        int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
         if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
