@@ -80,15 +80,16 @@ private boolean isAccessibleHomeShortcutOn() {
     }
 private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap<>();
     private void applyAntiTapjacking(View v, int w, int h) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
-        String sig = w + "x" + h;
-        if (sig.equals(lastGestureSig.get(v))) return;
-        lastGestureSig.put(v, sig);
-        try {
-            v.setSystemGestureExclusionRects(
-                java.util.Collections.singletonList(new Rect(0, 0, w, h)));
-        } catch (Exception ignored) {}
-    }
+    // [FIX VUỐT CẠNH KHÔNG BACK ĐƯỢC] Không loại trừ cử chỉ hệ thống nữa — việc
+    // gọi setSystemGestureExclusionRects() ở đây vô tình chặn luôn cử chỉ vuốt
+    // cạnh Back của Android tại vị trí Bar/Corner, càng vào sâu càng dính nhiều
+    // Bar/Corner nên càng khó thoát ra. Trả rỗng để không loại trừ gì cả, nhường
+    // đúng nghĩa cử chỉ Back cho hệ điều hành.
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+    try {
+        v.setSystemGestureExclusionRects(java.util.Collections.emptyList());
+    } catch (Exception ignored) {}
+}
     private FlashView fV;
     private GestureRippleView rippleView;
     // [MỚI] Chỉ báo ghi âm (chấm đỏ + mm:ss)
@@ -1309,10 +1310,24 @@ for (String a : acts) {
     }
 
     private void removeYtdlOverlay() {
-        if (ytdlOverlay == null) return;
-        try { wm.removeView(ytdlOverlay); } catch (Exception ignored) {}
-        ytdlOverlay = null;
-    }
+    if (ytdlOverlay == null) return;
+    // [FIX GBOARD BỊ CHẶN] Bắt buộc giải phóng IME TRƯỚC khi gỡ cửa sổ, nếu không
+    // InputMethodManagerService sẽ "kẹt" nghĩ cửa sổ này vẫn giữ focus bàn phím,
+    // khiến Gboard không hiện được ở bất kỳ app nào khác trên toàn máy.
+    try {
+        android.view.inputmethod.InputMethodManager imm =
+            (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null) imm.hideSoftInputFromWindow(ytdlOverlay.getWindowToken(), 0);
+        ytdlOverlay.clearFocus();
+    } catch (Exception ignored) {}
+    try {
+        WindowManager.LayoutParams lp = (WindowManager.LayoutParams) ytdlOverlay.getLayoutParams();
+        lp.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+        wm.updateViewLayout(ytdlOverlay, lp);
+    } catch (Exception ignored) {}
+    try { wm.removeView(ytdlOverlay); } catch (Exception ignored) {}
+    ytdlOverlay = null;
+}
     private void exec(String a) {
         if (a == null || a.equals("NONE")) return;
         try {
