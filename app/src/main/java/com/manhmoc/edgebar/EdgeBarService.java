@@ -1961,4 +1961,122 @@ private void updateHomaccLive() {
         if (priMode == 0) applyAntiTapjacking(v, p.width, p.height);
     }
 }
+// [BẮT BUỘC] AccessibilityService yêu cầu override hàm này
+@Override
+public void onInterrupt() {}
+
+// ===== CHỈ BÁO GHI ÂM (chấm đỏ + mm:ss) — bản dành cho EdgeBarService =====
+private void ensureRecIndicator() {
+    if (recIndicatorView != null) return;
+    recIndicatorView = new LinearLayout(this);
+    recIndicatorView.setOrientation(LinearLayout.HORIZONTAL);
+    recIndicatorView.setGravity(Gravity.CENTER_VERTICAL);
+    GradientDrawable bg = new GradientDrawable();
+    bg.setColor(Color.argb(200, 20, 20, 20));
+    bg.setCornerRadius(100f);
+    recIndicatorView.setBackground(bg);
+    int pad = 16;
+    recIndicatorView.setPadding(pad*2, pad, pad*2, pad);
+    recIndicatorView.setMinimumWidth(prefs.getInt("anim_rec_width", 260));
+    recIndicatorView.setMinimumHeight(prefs.getInt("anim_rec_height", 90));
+
+    recIndicatorDot = new View(this);
+    GradientDrawable dot = new GradientDrawable();
+    dot.setShape(GradientDrawable.OVAL);
+    dot.setColor(Color.parseColor("#FF3B30"));
+    recIndicatorDot.setBackground(dot);
+    int dotSize = Math.round(24 * (prefs.getInt("anim_rec_size", 140) / 140f));
+    LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dotSize, dotSize);
+    dotLp.setMargins(0, 0, 16, 0);
+    recIndicatorDot.setLayoutParams(dotLp);
+
+    recIndicatorText = new TextView(this);
+    recIndicatorText.setTextColor(Color.WHITE);
+    recIndicatorText.setTextSize(13 * (prefs.getInt("anim_rec_size", 140) / 140f));
+    recIndicatorText.setText("00:00");
+
+    recIndicatorView.addView(recIndicatorDot);
+    recIndicatorView.addView(recIndicatorText);
+
+    recIndicatorView.setOnClickListener(v -> {
+        if (VoiceRecorderService.isRunning) {
+            Intent p2 = new Intent(this, VoiceRecorderService.class);
+            p2.setAction(VoiceRecorderService.ACTION_PAUSE_TOGGLE);
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(p2); else startService(p2);
+        } else if (ScreenRecorderService.isRunning) {
+            Intent p3 = new Intent(this, ScreenRecorderService.class);
+            p3.setAction(ScreenRecorderService.ACTION_PAUSE_TOGGLE);
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(p3); else startService(p3);
+        } else if (recIndicatorTestMode) {
+            recIndicatorTestPaused = !recIndicatorTestPaused;
+            updateRecIndicator(recIndicatorTestPaused ? "PAUSED" : "RECORDING", 0);
+        }
+    });
+    recIndicatorView.setOnLongClickListener(v -> {
+        doVibrate(35);
+        if (VoiceRecorderService.isRunning) {
+            Intent s2 = new Intent(this, VoiceRecorderService.class);
+            s2.setAction(VoiceRecorderService.ACTION_STOP);
+            startService(s2);
+        } else if (ScreenRecorderService.isRunning) {
+            Intent s3 = new Intent(this, ScreenRecorderService.class);
+            s3.setAction(ScreenRecorderService.ACTION_STOP);
+            startService(s3);
+        } else if (recIndicatorTestMode) {
+            recIndicatorTestMode = false;
+            recIndicatorTestPaused = false;
+            updateRecIndicator("STOPPED", 0);
+        }
+        return true;
+    });
+
+    WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+        WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+        PixelFormat.TRANSLUCENT);
+    lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+    lp.x = prefs.getInt("anim_rec_x", 1000) - 1000;
+    lp.y = Math.max(100, prefs.getInt("anim_rec_y", 1000) - 1000);
+    try { wm.addView(recIndicatorView, lp); } catch (Exception ignored) {}
+    recBlinkAnim = ValueAnimator.ofFloat(1f, 0.25f, 1f);
+    recBlinkAnim.setDuration(1000);
+    recBlinkAnim.setRepeatCount(ValueAnimator.INFINITE);
+    recBlinkAnim.addUpdateListener(a -> { if (recIndicatorDot != null) recIndicatorDot.setAlpha((float) a.getAnimatedValue()); });
+}
+
+private void liveUpdateRecIndicatorPosition() {
+    if (recIndicatorView == null) return;
+    WindowManager.LayoutParams lp = (WindowManager.LayoutParams) recIndicatorView.getLayoutParams();
+    lp.x = prefs.getInt("anim_rec_x", 1000) - 1000;
+    lp.y = Math.max(100, prefs.getInt("anim_rec_y", 1000) - 1000);
+    try { wm.updateViewLayout(recIndicatorView, lp); } catch (Exception ignored) {}
+    recIndicatorView.setMinimumWidth(prefs.getInt("anim_rec_width", 260));
+    recIndicatorView.setMinimumHeight(prefs.getInt("anim_rec_height", 90));
+    float scale = prefs.getInt("anim_rec_size", 140) / 140f;
+    int dotSize = Math.round(24 * scale);
+    if (recIndicatorDot != null) {
+        LinearLayout.LayoutParams dlp = (LinearLayout.LayoutParams) recIndicatorDot.getLayoutParams();
+        dlp.width = dotSize; dlp.height = dotSize;
+        recIndicatorDot.setLayoutParams(dlp);
+    }
+    if (recIndicatorText != null) recIndicatorText.setTextSize(scale * 13);
+}
+
+private void updateRecIndicator(String state, long sec) {
+    if (state == null || "STOPPED".equals(state)) {
+        if (recBlinkAnim != null) recBlinkAnim.cancel();
+        if (recIndicatorView != null) { try { wm.removeView(recIndicatorView); } catch (Exception ignored) {} recIndicatorView = null; }
+        return;
+    }
+    ensureRecIndicator();
+    recIndicatorText.setText(String.format("%02d:%02d", sec/60, sec%60));
+    if ("PAUSED".equals(state)) {
+        if (recBlinkAnim != null && recBlinkAnim.isRunning()) recBlinkAnim.cancel();
+        if (recIndicatorDot != null) recIndicatorDot.setAlpha(1f);
+    } else {
+        if (recBlinkAnim != null && !recBlinkAnim.isRunning()) recBlinkAnim.start();
+    }
+}
 } // <-- Dấu ngoặc nhọn kết thúc toàn bộ class EdgeBarService
