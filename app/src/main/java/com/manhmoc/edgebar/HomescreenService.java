@@ -1722,40 +1722,73 @@ private void ensureRecIndicator() {
         recIndicatorView.addView(recIndicatorDot);
         recIndicatorView.addView(recIndicatorText);
 
-        // [MỚI] Chạm để Tạm dừng/Tiếp tục — ghi âm thật thì điều khiển service thật,
-        // đang ở chế độ THỬ thì chỉ đổi trạng thái hiển thị, không đụng MediaRecorder.
-        recIndicatorView.setOnClickListener(v -> {
-    if (VoiceRecorderService.isRunning) {
-        Intent p2 = new Intent(this, VoiceRecorderService.class);
-        p2.setAction(VoiceRecorderService.ACTION_PAUSE_TOGGLE);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(p2); else startService(p2);
-    } else if (ScreenRecorderService.isRunning) {
-        Intent p3 = new Intent(this, ScreenRecorderService.class);
-        p3.setAction(ScreenRecorderService.ACTION_PAUSE_TOGGLE);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(p3); else startService(p3);
-    } else if (recIndicatorTestMode) {
-        recIndicatorTestPaused = !recIndicatorTestPaused;
-        updateRecIndicator(recIndicatorTestPaused ? "PAUSED" : "RECORDING", 0);
-    }
-});
-// [MỚI] Giữ chấm đỏ -> tắt ngay, không cần mở Notification kéo xuống
-recIndicatorView.setOnLongClickListener(v -> {
-    doVibrate(35);
-    if (VoiceRecorderService.isRunning) {
-        Intent s2 = new Intent(this, VoiceRecorderService.class);
-        s2.setAction(VoiceRecorderService.ACTION_STOP);
-        startService(s2);
-    } else if (ScreenRecorderService.isRunning) {
-        Intent s3 = new Intent(this, ScreenRecorderService.class);
-        s3.setAction(ScreenRecorderService.ACTION_STOP);
-        startService(s3);
-    } else if (recIndicatorTestMode) {
-        recIndicatorTestMode = false;
-        recIndicatorTestPaused = false;
-        updateRecIndicator("STOPPED", 0);
-    }
-    return true;
-});
+        // Handler phân biệt chạm 1 lần (Pause/Play) và chạm 2 lần (Stop & Mở file)
+    final android.os.Handler tapHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    final Runnable singleTapRunnable = () -> {
+        // [1 CHẠM]: Tạm dừng ↔ Tiếp tục
+        if (VoiceRecorderService.isRunning) {
+            Intent p2 = new Intent(this, VoiceRecorderService.class);
+            p2.setAction(VoiceRecorderService.ACTION_PAUSE_TOGGLE);
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(p2); else startService(p2);
+        } else if (ScreenRecorderService.isRunning) {
+            Intent p3 = new Intent(this, ScreenRecorderService.class);
+            p3.setAction(ScreenRecorderService.ACTION_PAUSE_TOGGLE);
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(p3); else startService(p3);
+        } else if (recIndicatorTestMode) {
+            recIndicatorTestPaused = !recIndicatorTestPaused;
+            updateRecIndicator(recIndicatorTestPaused ? "PAUSED" : "RECORDING", 0);
+        }
+    };
+
+    final long[] lastClickTime = {0};
+    recIndicatorView.setOnClickListener(v -> {
+        long now = System.currentTimeMillis();
+        if (now - lastClickTime[0] < 300) {
+            // [DOUBLE TAP]: Dừng hẳn + Rung + Xem/Phát File
+            tapHandler.removeCallbacks(singleTapRunnable);
+            lastClickTime[0] = 0;
+            doVibrate(50); // Rung 50ms báo hiệu
+            
+            if (VoiceRecorderService.isRunning) {
+                Intent s2 = new Intent(this, VoiceRecorderService.class);
+                s2.setAction("com.manhmoc.edgebar.VOICEREC_STOP_PLAY");
+                startService(s2);
+            } else if (ScreenRecorderService.isRunning) {
+                Intent s3 = new Intent(this, ScreenRecorderService.class);
+                s3.setAction("com.manhmoc.edgebar.SCREENREC_STOP_PLAY");
+                startService(s3);
+            } else if (recIndicatorTestMode) {
+                recIndicatorTestMode = false;
+                recIndicatorTestPaused = false;
+                updateRecIndicator("STOPPED", 0);
+            }
+        } else {
+            // Đợi xem có cú chạm thứ 2 không, nếu sau 300ms không có thì gọi 1 Chạm
+            lastClickTime[0] = now;
+            tapHandler.postDelayed(singleTapRunnable, 300);
+        }
+    });
+
+    // [NHẤN GIỮ]: Chỉ dừng hẳn (không phát file)
+    recIndicatorView.setOnLongClickListener(v -> {
+        tapHandler.removeCallbacks(singleTapRunnable); // Hủy nếu đang chờ 1 chạm
+        lastClickTime[0] = 0;
+        doVibrate(35);
+        if (VoiceRecorderService.isRunning) {
+            Intent s2 = new Intent(this, VoiceRecorderService.class);
+            s2.setAction(VoiceRecorderService.ACTION_STOP);
+            startService(s2);
+        } else if (ScreenRecorderService.isRunning) {
+            Intent s3 = new Intent(this, ScreenRecorderService.class);
+            s3.setAction(ScreenRecorderService.ACTION_STOP);
+            startService(s3);
+        } else if (recIndicatorTestMode) {
+            recIndicatorTestMode = false;
+            recIndicatorTestPaused = false;
+            updateRecIndicator("STOPPED", 0);
+        }
+        return true;
+    });
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,

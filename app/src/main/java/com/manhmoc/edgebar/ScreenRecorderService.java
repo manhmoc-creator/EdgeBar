@@ -241,17 +241,28 @@ private void pauseRecording() {
     getSystemService(NotificationManager.class).createNotificationChannel(c);
 
     if (dummySession == null) {
-            dummySession = new android.media.session.MediaSession(this, "DummyScreenRec");
+            dummySession = new android.media.session.MediaSession(this, "DummySession");
             dummySession.setActive(true);
             
+            // TẠO NỀN GRADIENT ĐỎ CAM NHẸ NHÀNG CHỨA ICON
+            android.graphics.Bitmap artBmp = android.graphics.Bitmap.createBitmap(256, 256, android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas canvas = new android.graphics.Canvas(artBmp);
+            android.graphics.Paint paint = new android.graphics.Paint();
+            paint.setShader(new android.graphics.LinearGradient(0, 0, 256, 256,
+                    android.graphics.Color.parseColor("#FF5252"), // Đỏ san hô nhẹ
+                    android.graphics.Color.parseColor("#FFAB40"), // Cam hổ phách nhẹ
+                    android.graphics.Shader.TileMode.CLAMP));
+            canvas.drawRoundRect(0, 0, 256, 256, 32, 32, paint);
+
+            // Vẽ icon app lên trên cái nền đó
             android.graphics.drawable.Drawable d = getDrawable(R.drawable.ic_launcher);
-            android.graphics.Bitmap artBmp = android.graphics.Bitmap.createBitmap(144, 144, android.graphics.Bitmap.Config.ARGB_8888);
-            d.setBounds(0, 0, 144, 144);
-            d.draw(new android.graphics.Canvas(artBmp));
+            d.setBounds(32, 32, 224, 224);
+            d.draw(canvas);
 
             dummySession.setMetadata(new android.media.MediaMetadata.Builder()
                 .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "EdgeBar Screen")
                 .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "Đang quay màn hình...")
+                .putLong(android.media.MediaMetadata.METADATA_KEY_DURATION, MAX_DURATION_MS)
                 .putBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART, artBmp)
                 .build());
         }
@@ -260,14 +271,14 @@ private void pauseRecording() {
         .setState(isPaused ? android.media.session.PlaybackState.STATE_PAUSED : android.media.session.PlaybackState.STATE_PLAYING, sec * 1000, isPaused ? 0f : 1f).build());
 
     String time = String.format("%02d:%02d", sec / 60, sec % 60);
-    Notification n = new Notification.Builder(this, cid)
+        Notification n = new Notification.Builder(this, cid)
             .setContentTitle((isPaused ? "⏸️ Đã tạm dừng — " : "🔴 Đang quay màn hình — ") + time)
             .setContentText("EdgeBar Screen")
             .setSmallIcon(android.R.drawable.presence_video_online)
-            .addAction(android.R.drawable.ic_lock_power_off, "Dừng", screenRecActionPI(ACTION_STOP))
+            .addAction(android.R.drawable.ic_media_next, "Dừng", screenRecActionPI(ACTION_STOP)) // Nút Trái
             .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
-                    isPaused ? "Tiếp Tục" : "Tạm Dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE))
-            .addAction(android.R.drawable.ic_media_next, "Dừng & Xem", screenRecActionPI(ACTION_STOP_AND_PLAY))
+                    isPaused ? "Tiếp Tục" : "Tạm Dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE)) // Nút Giữa
+            .addAction(android.R.drawable.ic_media_ff, "Dừng & Xem", screenRecActionPI(ACTION_STOP_AND_PLAY)) // Nút Phải
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setStyle(new Notification.MediaStyle()

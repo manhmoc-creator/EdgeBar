@@ -1995,6 +1995,7 @@ private void ensureRecIndicator() {
     // Handler phân biệt chạm 1 lần (Pause/Play) và chạm 2 lần (Stop & Mở file)
     final android.os.Handler tapHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     final Runnable singleTapRunnable = () -> {
+        // [1 CHẠM]: Tạm dừng ↔ Tiếp tục
         if (VoiceRecorderService.isRunning) {
             Intent p2 = new Intent(this, VoiceRecorderService.class);
             p2.setAction(VoiceRecorderService.ACTION_PAUSE_TOGGLE);
@@ -2012,13 +2013,12 @@ private void ensureRecIndicator() {
     final long[] lastClickTime = {0};
     recIndicatorView.setOnClickListener(v -> {
         long now = System.currentTimeMillis();
-        // Khoảng thời gian 300ms giữa 2 lần chạm được coi là Double Tap
         if (now - lastClickTime[0] < 300) {
+            // [DOUBLE TAP]: Dừng hẳn + Rung + Xem/Phát File
             tapHandler.removeCallbacks(singleTapRunnable);
             lastClickTime[0] = 0;
-            doVibrate(50); // Rung 50ms báo hiệu thành công
+            doVibrate(50); // Rung 50ms báo hiệu
             
-            // Gửi lệnh Dừng + Phát File
             if (VoiceRecorderService.isRunning) {
                 Intent s2 = new Intent(this, VoiceRecorderService.class);
                 s2.setAction("com.manhmoc.edgebar.VOICEREC_STOP_PLAY");
@@ -2033,11 +2033,16 @@ private void ensureRecIndicator() {
                 updateRecIndicator("STOPPED", 0);
             }
         } else {
+            // Đợi xem có cú chạm thứ 2 không, nếu sau 300ms không có thì gọi 1 Chạm
             lastClickTime[0] = now;
             tapHandler.postDelayed(singleTapRunnable, 300);
         }
     });
+
+    // [NHẤN GIỮ]: Chỉ dừng hẳn (không phát file)
     recIndicatorView.setOnLongClickListener(v -> {
+        tapHandler.removeCallbacks(singleTapRunnable); // Hủy nếu đang chờ 1 chạm
+        lastClickTime[0] = 0;
         doVibrate(35);
         if (VoiceRecorderService.isRunning) {
             Intent s2 = new Intent(this, VoiceRecorderService.class);
@@ -2054,7 +2059,6 @@ private void ensureRecIndicator() {
         }
         return true;
     });
-
     WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
