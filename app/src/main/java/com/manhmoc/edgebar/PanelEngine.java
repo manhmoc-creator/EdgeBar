@@ -82,50 +82,54 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
         android.R.drawable.star_on, android.R.drawable.ic_menu_mylocation,
 
         // ===== Nhóm 1: Nét thanh mảnh, chỉ viền (Outlined) =====
-        android.R.drawable.ic_menu_agenda, android.R.drawable.ic_menu_always_landscape_portrait,
-        android.R.drawable.ic_menu_day, android.R.drawable.ic_menu_directions,
-        android.R.drawable.ic_menu_gallery, android.R.drawable.ic_menu_help,
-        android.R.drawable.ic_menu_mapmode, android.R.drawable.ic_menu_month,
-        android.R.drawable.ic_menu_more, android.R.drawable.ic_menu_preferences,
-        android.R.drawable.ic_menu_recent_history, android.R.drawable.ic_menu_revert,
-        android.R.drawable.ic_menu_rotate, android.R.drawable.ic_menu_save,
-        android.R.drawable.ic_menu_sort_alphabetically, android.R.drawable.ic_menu_sort_by_size,
-        android.R.drawable.ic_menu_today, android.R.drawable.ic_menu_zoom,
-        android.R.drawable.ic_lock_idle_alarm, android.R.drawable.ic_lock_idle_charging,
-        android.R.drawable.ic_lock_idle_low_battery, android.R.drawable.ic_lock_silent_mode,
-        android.R.drawable.ic_lock_silent_mode_off, android.R.drawable.ic_lock_airplane_mode,
-        android.R.drawable.ic_lock_airplane_mode_off,
+    android.R.drawable.ic_menu_agenda, android.R.drawable.ic_menu_always_landscape_portrait,
+    android.R.drawable.ic_menu_day, android.R.drawable.ic_menu_directions,
+    android.R.drawable.ic_menu_gallery, android.R.drawable.ic_menu_help,
+    android.R.drawable.ic_menu_mapmode, android.R.drawable.ic_menu_month,
+    android.R.drawable.ic_menu_more, android.R.drawable.ic_menu_preferences,
+    android.R.drawable.ic_menu_recent_history, android.R.drawable.ic_menu_revert,
+    android.R.drawable.ic_menu_rotate, android.R.drawable.ic_menu_save,
+    android.R.drawable.ic_menu_sort_alphabetically, android.R.drawable.ic_menu_sort_by_size,
+    android.R.drawable.ic_menu_today, android.R.drawable.ic_menu_zoom,
+    android.R.drawable.ic_lock_idle_alarm, android.R.drawable.ic_lock_idle_charging,
+    android.R.drawable.ic_lock_idle_low_battery, android.R.drawable.ic_lock_silent_mode,
+    android.R.drawable.ic_lock_silent_mode_off,
+    android.R.drawable.ic_menu_myplaces,        // thay ic_lock_airplane_mode
+    android.R.drawable.ic_menu_report_image,     // thay ic_lock_airplane_mode_off
 
-        // ===== Nhóm 2: Đổ bóng / xám mờ (Shaded) =====
-        android.R.drawable.stat_sys_download, android.R.drawable.stat_sys_download_done,
-        android.R.drawable.stat_sys_upload, android.R.drawable.stat_sys_upload_done,
-        android.R.drawable.stat_notify_chat, android.R.drawable.stat_notify_error,
-        android.R.drawable.stat_notify_missed_call, android.R.drawable.stat_notify_sync,
-        android.R.drawable.stat_notify_sync_noanim, android.R.drawable.stat_notify_voicemail,
+    // ===== Nhóm 2: Đổ bóng / xám mờ (Shaded) =====
+    android.R.drawable.stat_sys_download, android.R.drawable.stat_sys_download_done,
+    android.R.drawable.stat_sys_upload, android.R.drawable.stat_sys_upload_done,
+    android.R.drawable.stat_notify_chat, android.R.drawable.stat_notify_error,
+    android.R.drawable.stat_notify_missed_call, android.R.drawable.stat_notify_sync,
+    android.R.drawable.stat_notify_sync_noanim, android.R.drawable.stat_notify_voicemail,
 
-        // ===== Nhóm 3: Rỗng / nửa (Hollow - Half) =====
-        android.R.drawable.star_off, android.R.drawable.btn_star_big_off,
-        android.R.drawable.rate_star_big_off, android.R.drawable.rate_star_big_half,
+    // ===== Nhóm 3: Rỗng / nửa (Hollow - Half) =====
+    android.R.drawable.star_off, android.R.drawable.btn_star_big_off,
+    android.R.drawable.ic_menu_set_as,           // thay rate_star_big_off
+    android.R.drawable.ic_menu_slideshow,        // thay rate_star_big_half
 
-        // ===== Nhóm 4: Điều hướng cơ bản =====
-        android.R.drawable.arrow_down_float, android.R.drawable.arrow_up_float,
-        android.R.drawable.ic_input_delete, android.R.drawable.ic_input_get,
+    // ===== Nhóm 4: Điều hướng cơ bản =====
+    android.R.drawable.arrow_down_float, android.R.drawable.arrow_up_float,
+    android.R.drawable.ic_input_delete, android.R.drawable.ic_input_get,
 
-        // ===== Nhóm 5: Đậm / khối đặc (Bold & Filled) =====
-        android.R.drawable.ic_media_ff, android.R.drawable.ic_media_rew,
-        android.R.drawable.ic_media_previous, android.R.drawable.ic_media_pause,
-        android.R.drawable.presence_online, android.R.drawable.presence_busy,
-        android.R.drawable.presence_audio_online, android.R.drawable.presence_video_online,
-        android.R.drawable.ic_btn_speak_now, android.R.drawable.ic_lock_lock,
-        android.R.drawable.ic_secure, android.R.drawable.ic_lock_power_off,
-        android.R.drawable.ic_delete, android.R.drawable.ic_input_add,
-        android.R.drawable.ic_dialog_alert, android.R.drawable.stat_sys_warning,
-        android.R.drawable.ic_dialog_email, android.R.drawable.ic_dialog_info,
-        android.R.drawable.ic_dialog_dialer, android.R.drawable.btn_star_big_on,
-        android.R.drawable.rate_star_big_on, android.R.drawable.sym_def_app_icon,
-        android.R.drawable.sym_action_call, android.R.drawable.sym_action_chat,
-        android.R.drawable.ic_dialog_map
-    };
+    // ===== Nhóm 5: Đậm / khối đặc (Bold & Filled) =====
+    android.R.drawable.ic_media_ff, android.R.drawable.ic_media_rew,
+    android.R.drawable.ic_media_previous, android.R.drawable.ic_media_pause,
+    android.R.drawable.presence_online, android.R.drawable.presence_busy,
+    android.R.drawable.presence_audio_online, android.R.drawable.presence_video_online,
+    android.R.drawable.ic_btn_speak_now, android.R.drawable.ic_lock_lock,
+    android.R.drawable.ic_secure, android.R.drawable.ic_lock_power_off,
+    android.R.drawable.ic_delete, android.R.drawable.ic_input_add,
+    android.R.drawable.ic_dialog_alert, android.R.drawable.stat_sys_warning,
+    android.R.drawable.ic_dialog_email, android.R.drawable.ic_dialog_info,
+    android.R.drawable.ic_dialog_dialer,
+    android.R.drawable.btn_star_big_on,
+    android.R.drawable.presence_offline, // thay rate_star_big_on
+    android.R.drawable.sym_def_app_icon,
+    android.R.drawable.sym_action_call, android.R.drawable.sym_action_chat,
+    android.R.drawable.ic_dialog_map
+};
         // [MỚI] 81 icon vector tự đóng gói siêu nhẹ, đã xóa thuộc tính tint
     // Danh sách TÊN file (string) thay vì hằng số R.drawable cứng —
     // tránh lỗi "cannot find symbol" khi thiếu icon trong res/drawable.
