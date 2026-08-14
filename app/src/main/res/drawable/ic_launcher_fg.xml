@@ -1,28 +1,42 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <!-- Khung ngoài: Midnight Gradient (Deep Blue -> Purple -> Neon Blue) -->
-    <path android:strokeWidth="3.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+    
+    <!-- Lớp Glow (Loang sáng Neon): Viền rất dày, màu tối hơn nhưng đồng rực để tạo bóng sáng -->
+    <path android:strokeWidth="7" android:strokeLineCap="round" android:strokeLineJoin="round"
         android:pathData="M 42,28 h 24 a 6,6 0 0 1 6,6 v 40 a 6,6 0 0 1 -6,6 h -24 a 6,6 0 0 1 -6,-6 v -40 a 6,6 0 0 1 6,-6 z">
         <aapt:attr name="android:strokeColor">
             <gradient android:startX="36" android:startY="28" android:endX="72" android:endY="80" android:type="linear">
-                <item android:offset="0.0" android:color="#1A237E"/>
-                <item android:offset="0.5" android:color="#7B1FA2"/>
-                <item android:offset="1.0" android:color="#03A9F4"/>
+                <item android:offset="0.0" android:color="#4A148C"/> <!-- Tím bóng -->
+                <item android:offset="1.0" android:color="#01579B"/> <!-- Xanh bóng thẫm -->
             </gradient>
         </aapt:attr>
     </path>
-    <!-- Khung trong: Midnight Gradient (Purple -> Neon Blue) -->
-    <path android:strokeWidth="2.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+
+    <!-- Khung ngoài: Tím nhạt sáng -> Xanh thẫm Neon -->
+    <path android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M 42,28 h 24 a 6,6 0 0 1 6,6 v 40 a 6,6 0 0 1 -6,6 h -24 a 6,6 0 0 1 -6,-6 v -40 a 6,6 0 0 1 6,-6 z">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:startX="36" android:startY="28" android:endX="72" android:endY="80" android:type="linear">
+                <item android:offset="0.0" android:color="#E040FB"/> <!-- Tím nhẹ hơn xíu xiu -->
+                <item android:offset="0.5" android:color="#2979FF"/> <!-- Xanh thẫm -->
+                <item android:offset="1.0" android:color="#00E5FF"/> <!-- Sáng chói -->
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Khung trong: Tương đồng nhưng thu gọn -->
+    <path android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"
         android:pathData="M 42,35 h 24 a 3,3 0 0 1 3,3 v 30 a 3,3 0 0 1 -3,3 h -24 a 3,3 0 0 1 -3,-3 v -30 a 3,3 0 0 1 3,-3 z">
         <aapt:attr name="android:strokeColor">
             <gradient android:startX="36" android:startY="35" android:endX="72" android:endY="71" android:type="linear">
-                <item android:offset="0.0" android:color="#7B1FA2"/>
-                <item android:offset="1.0" android:color="#03A9F4"/>
+                <item android:offset="0.0" android:color="#D500F9"/> <!-- Tím Neon -->
+                <item android:offset="1.0" android:color="#00B0FF"/> <!-- Xanh thẫm rực -->
             </gradient>
         </aapt:attr>
     </path>
+
     <!-- Chi tiết loa & camera -->
-    <path android:strokeColor="#03A9F4" android:strokeWidth="2.5" android:strokeLineCap="round"
+    <path android:strokeColor="#00E5FF" android:strokeWidth="2" android:strokeLineCap="round"
         android:pathData="M 49,31.5 h 10 M 49,76.5 h 10"/>
-    <path android:fillColor="#03A9F4" android:pathData="M 44,31.5 m -1.5,0 a 1.5,1.5 0 1,1 3,0 a 1.5,1.5 0 1,1 -3,0"/>
+    <path android:fillColor="#00E5FF" android:pathData="M 44,31.5 m -1.5,0 a 1.5,1.5 0 1,1 3,0 a 1.5,1.5 0 1,1 -3,0"/>
 </vector>

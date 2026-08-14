@@ -30,6 +30,7 @@ public class VoiceRecorderService extends Service {
     public static final String ACTION_TOGGLE = "com.manhmoc.edgebar.VOICEREC_TOGGLE";
     public static final String ACTION_PAUSE_TOGGLE = "com.manhmoc.edgebar.VOICEREC_PAUSE_TOGGLE";
     public static final String ACTION_STOP = "com.manhmoc.edgebar.VOICEREC_STOP";
+    public static final String ACTION_STOP_AND_PLAY = "com.manhmoc.edgebar.VOICEREC_STOP_PLAY"; // Thêm dòng này
     public static final String TICK_ACTION = "com.manhmoc.edgebar.VOICE_REC_TICK";
 
     private MediaRecorder recorder;
@@ -51,7 +52,8 @@ public class VoiceRecorderService extends Service {
         startForegroundNotif();
         String action = intent != null ? intent.getAction() : null;
 
-        if (ACTION_STOP.equals(action)) { stopRecording(); return START_NOT_STICKY; }
+        if (ACTION_STOP.equals(action)) { stopRecording(false); return START_NOT_STICKY; }
+        if (ACTION_STOP_AND_PLAY.equals(action)) { stopRecording(true); return START_NOT_STICKY; }
 
         if (ACTION_PAUSE_TOGGLE.equals(action)) {
             if (!isRunning) { stopForeground(true); stopSelf(); return START_NOT_STICKY; }
@@ -59,8 +61,8 @@ public class VoiceRecorderService extends Service {
             return START_NOT_STICKY;
         }
 
-        // ACTION_TOGGLE hoặc không có action -> hành vi bật/tắt như FAB Ecosystem cũ
-        if (isRunning) { stopRecording(); return START_NOT_STICKY; }
+        // ACTION_TOGGLE hoặc không có action
+        if (isRunning) { stopRecording(false); return START_NOT_STICKY; }
 
         if (android.content.pm.PackageManager.PERMISSION_GRANTED !=
                 checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)) {
@@ -105,7 +107,7 @@ public class VoiceRecorderService extends Service {
             wakeLock.acquire(MAX_DURATION_MS + 5000);
 
             startTicker();
-            maxDurationGuard = this::stopRecording;
+            maxDurationGuard = () -> stopRecording(false);
             timerHandler.postDelayed(maxDurationGuard, MAX_DURATION_MS);
             broadcastTick("RECORDING", 0);
         } catch (Exception e) {
@@ -157,7 +159,7 @@ public class VoiceRecorderService extends Service {
         timerHandler.post(timerRunnable);
     }
 
-    public void stopRecording() {
+    public void stopRecording(boolean playAfter) {
         if (!isRunning) { stopForeground(true); stopSelf(); return; }
         isRunning = false;
         isPaused = false;
@@ -170,6 +172,7 @@ public class VoiceRecorderService extends Service {
         try { if (pfd != null) pfd.close(); } catch (Exception ignored) {}
         pfd = null;
 
+        Uri finalUri = pendingUri; // Giữ lại Uri trước khi reset
         if (pendingUri != null && Build.VERSION.SDK_INT >= 29) {
             ContentValues cv = new ContentValues();
             cv.put(MediaStore.Audio.Media.IS_PENDING, 0);
@@ -181,11 +184,29 @@ public class VoiceRecorderService extends Service {
         wakeLock = null;
 
         broadcastTick("STOPPED", 0);
-    if (dummySession != null) { dummySession.setActive(false); dummySession.release(); dummySession = null; }
-    stopForeground(true);
+        if (dummySession != null) { dummySession.setActive(false); dummySession.release(); dummySession = null; }
+        
+        // Mở file nếu user bấm nút "Dừng & Nghe"
+        if (playAfter && finalUri != null) {
+            try {
+                Intent i = new Intent(Intent.ACTION_VIEW);
+                i.setDataAndType(finalUri, "audio/*");
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                i.setPackage("com.google.android.apps.nbu.files");
+                startActivity(i);
+            } catch (Exception e) {
+                try {
+                    Intent i2 = new Intent(Intent.ACTION_VIEW);
+                    i2.setDataAndType(finalUri, "audio/*");
+                    i2.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(Intent.createChooser(i2, "Mở bằng").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                } catch (Exception ignored) {}
+            }
+        }
+        
+        stopForeground(true);
         stopSelf();
     }
-
     private void cleanupFailedRecording() {
         try { if (recorder != null) { recorder.reset(); recorder.release(); } } catch (Exception ignored) {}
         recorder = null;
@@ -222,10 +243,14 @@ public class VoiceRecorderService extends Service {
             dummySession = new android.media.session.MediaSession(this, "DummyVoiceRec");
             dummySession.setActive(true);
             
-            // [BỔ SUNG] OS cần cái này để biết sẽ hiển thị chữ gì trên khung Media Player
+            // Tạo 1 bức ảnh màu Tím Neon siêu nhỏ (100x100) để làm Album Art
+            android.graphics.Bitmap artBmp = android.graphics.Bitmap.createBitmap(100, 100, android.graphics.Bitmap.Config.ARGB_8888);
+            new android.graphics.Canvas(artBmp).drawColor(android.graphics.Color.parseColor("#AA00FF"));
+
             dummySession.setMetadata(new android.media.MediaMetadata.Builder()
                 .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "EdgeBar Voice")
                 .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "Đang ghi âm...")
+                .putBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART, artBmp)
                 .build());
         }
     dummySession.setPlaybackState(new android.media.session.PlaybackState.Builder()
@@ -237,13 +262,17 @@ public class VoiceRecorderService extends Service {
             .setContentText("EdgeBar Voice")
             .setSmallIcon(android.R.drawable.presence_audio_online)
             .addAction(android.R.drawable.ic_media_pause, "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
-            .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setOngoing(true)
-            .setStyle(new Notification.MediaStyle()
-                .setMediaSession(dummySession.getSessionToken())
-                .setShowActionsInCompactView(0, 1))
-            .build();
+            // Sửa đoạn này trong CẢ 2 hàm startForegroundNotif và updateNotif
+                .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
+                .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
+                        paused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
+                .addAction(android.R.drawable.ic_media_next, "Dừng & Nghe", actionPI(ACTION_STOP_AND_PLAY))
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setOngoing(true)
+                .setStyle(new Notification.MediaStyle()
+                    .setMediaSession(dummySession.getSessionToken())
+                    .setShowActionsInCompactView(0, 1, 2)) // Hiển thị cả 3 nút khi thu gọn
+                .build();
     if (Build.VERSION.SDK_INT >= 29)
         startForeground(93, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
     else startForeground(93, n);
@@ -265,17 +294,21 @@ private void updateNotif(long sec, boolean paused) {
             .setSmallIcon(android.R.drawable.presence_audio_online)
             .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     paused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
-            .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setOngoing(true)
-            .setStyle(new Notification.MediaStyle()
-                .setMediaSession(dummySession.getSessionToken())
-                .setShowActionsInCompactView(0, 1))
-            .build();
+            // Sửa đoạn này trong CẢ 2 hàm startForegroundNotif và updateNotif
+                .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
+                .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
+                        paused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
+                .addAction(android.R.drawable.ic_media_next, "Dừng & Nghe", actionPI(ACTION_STOP_AND_PLAY))
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setOngoing(true)
+                .setStyle(new Notification.MediaStyle()
+                    .setMediaSession(dummySession.getSessionToken())
+                    .setShowActionsInCompactView(0, 1, 2)) // Hiển thị cả 3 nút khi thu gọn
+                .build();
     getSystemService(NotificationManager.class).notify(93, n);
 }
     @Override public void onDestroy() {
-        if (isRunning) stopRecording();
+        if (isRunning) stopRecording(false);
         super.onDestroy();
     }
 }

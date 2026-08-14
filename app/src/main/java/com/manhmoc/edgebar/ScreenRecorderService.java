@@ -41,17 +41,13 @@ public class ScreenRecorderService extends Service {
 
     public static final String ACTION_PAUSE_TOGGLE = "com.manhmoc.edgebar.SCREENREC_PAUSE_TOGGLE";
     public static final String ACTION_STOP = "com.manhmoc.edgebar.SCREENREC_STOP";
+    public static final String ACTION_STOP_AND_PLAY = "com.manhmoc.edgebar.SCREENREC_STOP_PLAY"; // Thêm dòng này
     @Override public IBinder onBind(Intent i) { return null; }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : null;
-        if (ACTION_STOP.equals(action) || "STOP".equals(action)) { stopRecording(); return START_NOT_STICKY; }
-        if (ACTION_PAUSE_TOGGLE.equals(action)) {
-            if (!isRunning) return START_NOT_STICKY;
-            if (isPaused) resumeRecording(); else pauseRecording();
-            return START_NOT_STICKY;
-        }
-
+        if (ACTION_STOP.equals(action) || "STOP".equals(action)) { stopRecording(false); return START_NOT_STICKY; }
+        if (ACTION_STOP_AND_PLAY.equals(action)) { stopRecording(true); return START_NOT_STICKY; }
         if (isRunning || intent == null) return START_NOT_STICKY;
         startForegroundNotif(0);
 
@@ -68,9 +64,7 @@ public class ScreenRecorderService extends Service {
         // onStop() cũng cần thiết vì Android 14 có thể tự dừng projection (VD: user tắt qua
         // notification hệ thống) — lúc đó phải dọn dẹp service theo, tránh giữ tài nguyên "ma".
         mediaProjection.registerCallback(new MediaProjection.Callback() {
-            @Override public void onStop() {
-                stopRecording();
-            }
+            @Override public void onStop() { stopRecording(false); }
         }, new Handler(Looper.getMainLooper()));
 
         if (!startRecorder()) {
@@ -80,7 +74,7 @@ public class ScreenRecorderService extends Service {
         isRunning = true;
         startTimeMs = System.currentTimeMillis();
         startTimerNotif();
-        maxGuard = this::stopRecording;
+        maxGuard = () -> stopRecording(false);
         h.postDelayed(maxGuard, MAX_DURATION_MS);
         return START_NOT_STICKY;
     }
@@ -182,7 +176,7 @@ private void pauseRecording() {
         h.post(timerRunnable);
         broadcastRecTick("RECORDING", 0);
     }
-    private void stopRecording() {
+    private void stopRecording(boolean playAfter) {
         if (!isRunning) { stopForeground(true); stopSelf(); return; }
         isRunning = false;
         isPaused = false;
@@ -204,6 +198,7 @@ private void pauseRecording() {
         try { if (pfd != null) pfd.close(); } catch (Exception ignored) {}
         pfd = null;
 
+        Uri finalUri = pendingUri; // Giữ Uri lại
         if (pendingUri != null && Build.VERSION.SDK_INT >= 29) {
             ContentValues cv = new ContentValues();
             cv.put(MediaStore.Video.Media.IS_PENDING, 0);
@@ -215,7 +210,17 @@ private void pauseRecording() {
         mediaProjection = null;
 
         if (dummySession != null) { dummySession.setActive(false); dummySession.release(); dummySession = null; }
-    Toast.makeText(this, "Đã lưu video quay màn hình", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Đã lưu video quay màn hình", Toast.LENGTH_SHORT).show();
+
+        // Mở file nếu user bấm "Dừng & Xem"
+        if (playAfter && finalUri != null) {
+            try {
+                Intent openIntent = new Intent(Intent.ACTION_VIEW);
+                openIntent.setDataAndType(finalUri, "video/*");
+                openIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(openIntent);
+            } catch (Exception ignored) {}
+        }
 
         stopForeground(true);
         stopSelf();
@@ -239,10 +244,14 @@ private void pauseRecording() {
             dummySession = new android.media.session.MediaSession(this, "DummyScreenRec");
             dummySession.setActive(true);
             
-            // [BỔ SUNG] Cung cấp thông tin hiển thị cho khung Media
+            // Tạo 1 bức ảnh màu Cam/Đỏ Neon siêu nhỏ (100x100) để làm Album Art
+            android.graphics.Bitmap artBmp = android.graphics.Bitmap.createBitmap(100, 100, android.graphics.Bitmap.Config.ARGB_8888);
+            new android.graphics.Canvas(artBmp).drawColor(android.graphics.Color.parseColor("#FF3D00"));
+
             dummySession.setMetadata(new android.media.MediaMetadata.Builder()
                 .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "EdgeBar Screen")
                 .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "Đang quay màn hình...")
+                .putBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART, artBmp)
                 .build());
         }
     dummySession.setPlaybackState(new android.media.session.PlaybackState.Builder()
@@ -256,20 +265,24 @@ private void pauseRecording() {
             .setSmallIcon(android.R.drawable.presence_video_online)
             .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     isPaused ? "Tiếp Tục" : "Tạm Dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE))
-            .addAction(android.R.drawable.ic_delete, "Dừng", screenRecActionPI(ACTION_STOP))
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setOngoing(true)
-            .setStyle(new Notification.MediaStyle()
-                .setMediaSession(dummySession.getSessionToken())
-                .setShowActionsInCompactView(0, 1))
-            .build();
+            // Sửa đoạn này trong hàm startForegroundNotif
+                .addAction(android.R.drawable.ic_delete, "Dừng", screenRecActionPI(ACTION_STOP))
+                .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
+                        isPaused ? "Tiếp Tục" : "Tạm Dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE))
+                .addAction(android.R.drawable.ic_media_next, "Dừng & Xem", screenRecActionPI(ACTION_STOP_AND_PLAY))
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setOngoing(true)
+                .setStyle(new Notification.MediaStyle()
+                    .setMediaSession(dummySession.getSessionToken())
+                    .setShowActionsInCompactView(0, 1, 2)) // Hiển thị cả 3 nút
+                .build();
     if (Build.VERSION.SDK_INT >= 29)
         startForeground(94, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
     else
         startForeground(94, n);
 }
     @Override public void onDestroy() {
-        if (isRunning) stopRecording();
+        if (isRunning) stopRecording(false);
         super.onDestroy();
     }
 }
