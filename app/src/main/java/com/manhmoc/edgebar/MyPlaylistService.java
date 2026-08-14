@@ -208,10 +208,9 @@ public class MyPlaylistService extends Service {
                 paused ? "Phát" : "Tạm dừng", actionPI(ACTION_TOGGLE))
             .addAction(android.R.drawable.ic_media_next, "Tiếp", actionPI(ACTION_NEXT))
             .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP));
-        if (session != null) b.style(new Notification.MediaStyle()
+        if (session != null) b.setStyle(new Notification.MediaStyle()
             .setMediaSession(session.getSessionToken())
             .setShowActionsInCompactView(0, 1, 2));
-
         Notification n = b.build();
         if (Build.VERSION.SDK_INT >= 29)
             startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
