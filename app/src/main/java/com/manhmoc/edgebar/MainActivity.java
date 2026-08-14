@@ -85,6 +85,10 @@ private java.util.Set<String> ecoSelectedItems = new java.util.LinkedHashSet<>()
 // [MỚI] Multi-select cho danh sách ghi âm (voice recordings)
 private boolean voiceSelectMode = false;
 private java.util.Set<String> voiceSelectedItems = new java.util.LinkedHashSet<>();
+
+// [THÊM MỚI] Multi-select cho danh sách ghi màn hình (screen recordings)
+private boolean videoSelectMode = false;
+private java.util.Set<String> videoSelectedItems = new java.util.LinkedHashSet<>();
 private ImageButton fab;
 private EditText etNavSearch;
 private List<Object[]> searchIndexCache;
@@ -444,6 +448,9 @@ private String[] getVolKeyActLabs() {
     if (panelSelectMode) { panelSelectMode = false; panelSelectedItems.clear(); renderPanelDesign(); return; }
     if (trashSelectMode) { trashSelectMode = false; trashSelectedItems.clear(); renderEcosystem(); return; }
     if (voiceSelectMode) { voiceSelectMode = false; voiceSelectedItems.clear(); renderEcosystem(); return; }
+    // [THÊM DÒNG NÀY]
+    if (videoSelectMode) { videoSelectMode = false; videoSelectedItems.clear(); renderEcosystem(); return; }
+    
     if (!navBackStack.isEmpty()) { navBackStack.pop().run(); return; }
     if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); return; }
     if ((pageConditions != null && pageConditions.getVisibility() == View.VISIBLE)
@@ -1668,7 +1675,7 @@ final int fTabState = tabState;
                 // ở giữa và bên phải của card.
                 TextView selDot = new TextView(this);
                 boolean sel = frontierSelectedItems.contains(fItemKey);
-                selDot.setText(sel ? "🟢" : "⚪");
+                selDot.setText(sel ? "🔵" : "⚪");
                 selDot.setTextSize(18);
                 FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
                 dotLp.gravity = Gravity.BOTTOM | Gravity.START;
@@ -2092,7 +2099,7 @@ ctrlCol.addView(btnCopy);
                 if (prulesSelectMode) {
                     TextView selDot = new TextView(this);
                     boolean sel = prulesSelectedItems.contains(fRId);
-                    selDot.setText(sel ? "🟢" : "⚪");
+                    selDot.setText(sel ? "🔵" : "⚪");
                     selDot.setTextSize(18);
                     FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
                     dotLp.gravity = Gravity.BOTTOM | Gravity.START;
@@ -2278,7 +2285,7 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
             cardWrap.addView(card);
 
             TextView selDot = new TextView(this);
-            selDot.setText(sel ? "🟢" : "⚪");
+            selDot.setText(sel ? "🔵" : "⚪");
             selDot.setTextSize(16);
             FrameLayout.LayoutParams dLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
             dLp.gravity = Gravity.BOTTOM | Gravity.END; dLp.setMargins(0,0,10,6);
@@ -3988,7 +3995,7 @@ btnCopy.setOnClickListener(v -> {
             // Chế độ chọn nhiều: chấm tròn góc dưới-trái, chạm để tick/bỏ tick
             boolean sel = ecoSelectedItems.contains(ecoItemKey);
             TextView selDot = new TextView(this);
-selDot.setText(sel ? "🟢" : "⚪");
+selDot.setText(sel ? "🔵" : "⚪");
 selDot.setTextSize(16);
 FrameLayout.LayoutParams dLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
 dLp.gravity = Gravity.BOTTOM | Gravity.END; dLp.setMargins(0,0,10,6);
@@ -4193,7 +4200,7 @@ cardWrap.addView(selDot);
         cardWrap.setTag(fKey);
         if (trashSelectMode) {
             TextView selDot = new TextView(this);
-            selDot.setText(trashSelectedItems.contains(fKey) ? "🟢" : "⚪");
+            selDot.setText(trashSelectedItems.contains(fKey) ? "🔵" : "⚪");
             selDot.setTextSize(18);
             FrameLayout.LayoutParams dLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
             dLp.gravity = Gravity.BOTTOM | Gravity.START; dLp.setMargins(10, 0, 0, 6);
@@ -4574,7 +4581,7 @@ private void renderVoiceRecordList() {
         if (voiceSelectMode) {
             TextView selDot = new TextView(this);
             boolean sel = voiceSelectedItems.contains(uriStr);
-            selDot.setText(sel ? "🟢" : "⚪");
+            selDot.setText(sel ? "🔵" : "⚪");
             selDot.setTextSize(18);
             FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
             dotLp.gravity = Gravity.BOTTOM | Gravity.START;
@@ -4853,6 +4860,9 @@ private void renderScreenRecordList() {
     btnRefresh.setOnClickListener(v -> { getVideoRecListCached(true); renderEcosystem(); });
     ecoContainer.addView(btnRefresh);
 
+    // [MỚI] Hiển thị Toolbar chọn nhiều nếu đang ở chế độ chọn
+    if (videoSelectMode) ecoContainer.addView(buildVideoSelectionToolbar());
+
     LinearLayout currentRow = null;
     for (int i = 0; i < list.size(); i++) {
         if (i % 2 == 0) {
@@ -4865,14 +4875,17 @@ private void renderScreenRecordList() {
         android.net.Uri uri = (android.net.Uri) item[0];
         String name = (String) item[1];
         long size = (long) item[2];
+        final String uriStr = uri.toString();
+
+        FrameLayout cardWrap = new FrameLayout(this);
+        LinearLayout.LayoutParams wrapLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        wrapLp.setMargins(6, 6, 6, 6);
+        cardWrap.setLayoutParams(wrapLp);
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(getRounded("#202124", 20f));
         card.setPadding(30, 24, 30, 24);
-        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, -2, 1f);
-        clp.setMargins(6, 6, 6, 6);
-        card.setLayoutParams(clp);
 
         TextView tName = new TextView(this);
         tName.setText("🎬 " + name);
@@ -4885,27 +4898,93 @@ private void renderScreenRecordList() {
         tSize.setPadding(0, 5, 0, 0);
 
         card.addView(tName); card.addView(tSize);
-        card.setOnClickListener(v -> {
-            try {
-                Intent openIntent = new Intent(Intent.ACTION_VIEW);
-                openIntent.setDataAndType(uri, "video/*");
-                openIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(openIntent);
-            } catch (Exception ignored) {
-                Toast.makeText(this, T("Cannot open file", "Không thể mở file"), Toast.LENGTH_SHORT).show();
-            }
-        });
-        card.setOnLongClickListener(v -> {
-            new AlertDialog.Builder(this).setTitle(T("Delete this video?", "Xoá video này?"))
-                .setPositiveButton(T("DELETE", "XOÁ"), (d, w) -> {
-                    try { getContentResolver().delete(uri, null, null); } catch (Exception ignored) {}
-                    getVideoRecListCached(true);
-                    renderEcosystem();
-                }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
-            return true;
-        });
-        currentRow.addView(card);
+        cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+
+        // [MỚI] Xử lý Multi-select tương tự Ghi âm
+        if (videoSelectMode) {
+            TextView selDot = new TextView(this);
+            boolean sel = videoSelectedItems.contains(uriStr);
+            selDot.setText(sel ? "🔵" : "⚪");
+            selDot.setTextSize(18);
+            FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+            dotLp.gravity = Gravity.BOTTOM | Gravity.START;
+            dotLp.setMargins(10, 0, 0, 6);
+            selDot.setLayoutParams(dotLp);
+            cardWrap.addView(selDot);
+            
+            card.setOnClickListener(v -> {
+                if (videoSelectedItems.contains(uriStr)) videoSelectedItems.remove(uriStr);
+                else videoSelectedItems.add(uriStr);
+                renderEcosystem();
+            });
+            card.setOnLongClickListener(v -> true);
+        } else {
+            card.setOnClickListener(v -> {
+                try {
+                    Intent openIntent = new Intent(Intent.ACTION_VIEW);
+                    openIntent.setDataAndType(uri, "video/*");
+                    openIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(openIntent);
+                } catch (Exception ignored) {
+                    Toast.makeText(this, T("Cannot open file", "Không thể mở file"), Toast.LENGTH_SHORT).show();
+                }
+            });
+            card.setOnLongClickListener(v -> {
+                videoSelectMode = true;
+                videoSelectedItems.clear();
+                videoSelectedItems.add(uriStr);
+                renderEcosystem();
+                return true;
+            });
+        }
+        currentRow.addView(cardWrap);
     }
+}
+
+// [MỚI] Toolbar quản lý Xóa / Chọn tất cả cho Screen Record
+private LinearLayout buildVideoSelectionToolbar() {
+    LinearLayout bar = new LinearLayout(this);
+    bar.setOrientation(LinearLayout.HORIZONTAL);
+    bar.setGravity(Gravity.CENTER_VERTICAL);
+    bar.setPadding(0, 0, 0, 20);
+
+    TextView tvCount = new TextView(this);
+    tvCount.setText(videoSelectedItems.size() + " " + T("selected", "đã chọn"));
+    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", "Xóa"));
+    btnDelete.setBackground(getRounded("#D32F2F", 20f)); btnDelete.setTextColor(Color.WHITE); btnDelete.setTextSize(12.5f);
+    btnDelete.setOnClickListener(v -> {
+        new AlertDialog.Builder(this).setTitle(T("Delete selected videos?", "Xoá các video đã chọn?"))
+            .setPositiveButton(T("DELETE", "XOÁ"), (d, w) -> {
+                for (String uriStr : new java.util.ArrayList<>(videoSelectedItems)) {
+                    try { getContentResolver().delete(android.net.Uri.parse(uriStr), null, null); } catch (Exception ignored) {}
+                }
+                videoSelectMode = false;
+                videoSelectedItems.clear();
+                getVideoRecListCached(true);
+                renderEcosystem();
+            }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
+    });
+    LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(-2, -2); delLp.setMargins(10, 0, 10, 0);
+    btnDelete.setLayoutParams(delLp);
+
+    Button btnAll = new Button(this); btnAll.setText(T("All", "Tất cả"));
+    btnAll.setBackground(getRounded("#333333", 20f)); btnAll.setTextColor(Color.WHITE); btnAll.setTextSize(12.5f);
+    LinearLayout.LayoutParams allLp = new LinearLayout.LayoutParams(-2, -2); allLp.setMargins(10, 0, 10, 0);
+    btnAll.setLayoutParams(allLp);
+    btnAll.setOnClickListener(v -> {
+        java.util.List<Object[]> list = getVideoRecListCached(false);
+        java.util.Set<String> allKeys = new java.util.LinkedHashSet<>();
+        for (Object[] item : list) allKeys.add(((android.net.Uri) item[0]).toString());
+        if (videoSelectedItems.equals(allKeys)) videoSelectedItems.clear();
+        else { videoSelectedItems.clear(); videoSelectedItems.addAll(allKeys); }
+        renderEcosystem();
+    });
+
+    bar.addView(tvCount); bar.addView(btnDelete); bar.addView(btnAll);
+    return bar;
 }
 // ==================== [KẾT THÚC PHẦN MỚI] ====================
 
