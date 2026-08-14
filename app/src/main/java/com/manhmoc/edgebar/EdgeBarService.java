@@ -377,9 +377,16 @@ private android.graphics.Bitmap resolveBarIconBitmap(String ref, int size) {
     float contentScale = prefs.getInt("lenap_global_icon_scale", 77) / 100f;
 android.graphics.Bitmap bmp = PanelEngine.normalizeIconBitmap(d, size, contentScale);
     if (bmp == null) {
+        // [FIX] Trước đây fallback vẽ icon tràn kín 100% khung (không nhân contentScale)
+        // trong khi icon normalize thành công lại bị co còn ~77% khung -> icon "to bất
+        // thường" so với các icon khác trên cùng 1 Bar. Giờ fallback cũng scale + căn giữa
+        // theo đúng contentScale để MỌI icon (dù normalize thành công hay rơi vào fallback)
+        // đều có cùng tỉ lệ hiển thị trong khung size x size.
+        int drawSize = Math.max(1, Math.round(size * contentScale));
+        int off = (size - drawSize) / 2;
         bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        d.setBounds(0, 0, size, size);
+        d.setBounds(off, off, off + drawSize, off + drawSize);
         d.draw(c);
     }
     synchronized (barIconCache) { barIconCache.put(key, bmp); }
