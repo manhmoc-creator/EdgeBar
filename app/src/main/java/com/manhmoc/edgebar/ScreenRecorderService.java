@@ -236,9 +236,15 @@ private void pauseRecording() {
     getSystemService(NotificationManager.class).createNotificationChannel(c);
 
     if (dummySession == null) {
-        dummySession = new android.media.session.MediaSession(this, "DummyScreenRec");
-        dummySession.setActive(true);
-    }
+            dummySession = new android.media.session.MediaSession(this, "DummyScreenRec");
+            dummySession.setActive(true);
+            
+            // [BỔ SUNG] Cung cấp thông tin hiển thị cho khung Media
+            dummySession.setMetadata(new android.media.MediaMetadata.Builder()
+                .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "EdgeBar Screen")
+                .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "Đang quay màn hình...")
+                .build());
+        }
     dummySession.setPlaybackState(new android.media.session.PlaybackState.Builder()
         .setActions(android.media.session.PlaybackState.ACTION_PLAY_PAUSE | android.media.session.PlaybackState.ACTION_STOP)
         .setState(isPaused ? android.media.session.PlaybackState.STATE_PAUSED : android.media.session.PlaybackState.STATE_PLAYING, sec * 1000, isPaused ? 0f : 1f).build());

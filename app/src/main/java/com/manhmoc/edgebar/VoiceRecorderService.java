@@ -219,9 +219,15 @@ public class VoiceRecorderService extends Service {
     getSystemService(NotificationManager.class).createNotificationChannel(c);
 
     if (dummySession == null) {
-        dummySession = new android.media.session.MediaSession(this, "DummyVoiceRec");
-        dummySession.setActive(true);
-    }
+            dummySession = new android.media.session.MediaSession(this, "DummyVoiceRec");
+            dummySession.setActive(true);
+            
+            // [BỔ SUNG] OS cần cái này để biết sẽ hiển thị chữ gì trên khung Media Player
+            dummySession.setMetadata(new android.media.MediaMetadata.Builder()
+                .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "EdgeBar Voice")
+                .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "Đang ghi âm...")
+                .build());
+        }
     dummySession.setPlaybackState(new android.media.session.PlaybackState.Builder()
         .setActions(android.media.session.PlaybackState.ACTION_PLAY_PAUSE | android.media.session.PlaybackState.ACTION_STOP)
         .setState(android.media.session.PlaybackState.STATE_PLAYING, 0, 1f).build());

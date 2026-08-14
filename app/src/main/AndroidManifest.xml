@@ -105,13 +105,13 @@
         <service android:name=".HomescreenService" android:exported="false"
     android:foregroundServiceType="mediaProjection" />
 <service android:name=".ScreenRecorderService" android:exported="false"
-    android:foregroundServiceType="mediaProjection" />
+    android:foregroundServiceType="mediaProjection|mediaPlayback" />
 <service android:name=".VolumeButtonService" android:exported="false"
     android:foregroundServiceType="mediaPlayback" />
 <service android:name=".MyPlaylistService" android:exported="false"
     android:foregroundServiceType="mediaPlayback" />
 <service android:name=".VoiceRecorderService" android:exported="false"
-    android:foregroundServiceType="microphone" />
+    android:foregroundServiceType="microphone|mediaPlayback" />
 <service android:name=".AccessibleHomeService" android:exported="false" android:foregroundServiceType="specialUse">
     <property
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
