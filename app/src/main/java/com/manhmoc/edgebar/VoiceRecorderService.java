@@ -210,15 +210,17 @@ public class VoiceRecorderService extends Service {
     }
 
     private void startForegroundNotif() {
-        String cid = "eb_voice_rec";
+        String cid = "eb_voice_rec_v2";
         NotificationChannel c = new NotificationChannel(cid, "Ghi âm EdgeBar", NotificationManager.IMPORTANCE_LOW);
         c.setSound(null, null);
+        c.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC); // [MỚI] cho phép channel hiện trên màn khoá/QS
         getSystemService(NotificationManager.class).createNotificationChannel(c);
         Notification n = new Notification.Builder(this, cid)
                 .setContentTitle("🔴 Đang ghi âm — 00:00")
                 .setSmallIcon(android.R.drawable.presence_audio_online)
-                .addAction(android.R.drawable.ic_media_pause, "Tạm dừng", actionPI(ACTION_PAUSE_TOGGLE))
+                .addAction(android.R.drawable.ic_media_pause, "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
                 .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
+                .setVisibility(Notification.VISIBILITY_PUBLIC) // [MỚI] hiện nội dung công khai trên màn khoá
                 .setOngoing(true)
                 .build();
         if (Build.VERSION.SDK_INT >= 29)
@@ -228,13 +230,14 @@ public class VoiceRecorderService extends Service {
 
     private void updateNotif(long sec, boolean paused) {
         String time = String.format("%02d:%02d", sec / 60, sec % 60);
-        String cid = "eb_voice_rec";
+        String cid = "eb_voice_rec_v2";
         Notification n = new Notification.Builder(this, cid)
                 .setContentTitle((paused ? "⏸️ Đã tạm dừng — " : "🔴 Đang ghi âm — ") + time)
                 .setSmallIcon(android.R.drawable.presence_audio_online)
                 .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
-                        paused ? "Tiếp tục" : "Tạm dừng", actionPI(ACTION_PAUSE_TOGGLE))
+                        paused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
                 .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
+                .setVisibility(Notification.VISIBILITY_PUBLIC) // [MỚI]
                 .setOngoing(true)
                 .build();
         getSystemService(NotificationManager.class).notify(93, n);

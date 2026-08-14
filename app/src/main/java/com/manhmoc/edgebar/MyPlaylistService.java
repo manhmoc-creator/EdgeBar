@@ -293,7 +293,7 @@ if (ACTION_SEEK_FWD.equals(action)) { seekBy(SEEK_STEP_MS); return START_NOT_STI
         .addAction(android.R.drawable.ic_media_rew, "Lùi 10s", actionPI(ACTION_SEEK_BACK))
         .addAction(android.R.drawable.ic_media_previous, "Trước", actionPI(ACTION_PREV))
         .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
-            paused ? "Phát" : "Tạm dừng", actionPI(ACTION_TOGGLE))
+            paused ? "Phát" : "Tạm Dừng", actionPI(ACTION_TOGGLE))
         .addAction(android.R.drawable.ic_media_next, "Tiếp", actionPI(ACTION_NEXT))
         .addAction(android.R.drawable.ic_media_ff, "Tới 10s", actionPI(ACTION_SEEK_FWD))
         .addAction(android.R.drawable.ic_lock_power_off, "Dừng", actionPI(ACTION_STOP));

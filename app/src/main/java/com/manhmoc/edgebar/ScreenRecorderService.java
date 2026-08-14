@@ -226,17 +226,19 @@ private void pauseRecording() {
         return android.app.PendingIntent.getService(this, action.hashCode(), i, flags);
     }
     private void startForegroundNotif(long sec) {
-        String cid = "eb_screen_rec";
+        String cid = "eb_screen_rec_v2";
         NotificationChannel c = new NotificationChannel(cid, "Quay màn hình", NotificationManager.IMPORTANCE_LOW);
         c.setSound(null, null);
+        c.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC); // [MỚI]
         getSystemService(NotificationManager.class).createNotificationChannel(c);
         String time = String.format("%02d:%02d", sec / 60, sec % 60);
         Notification n = new Notification.Builder(this, cid)
                 .setContentTitle((isPaused ? "⏸️ Đã tạm dừng — " : "🔴 Đang quay màn hình — ") + time)
                 .setSmallIcon(android.R.drawable.presence_video_online)
                 .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
-                        isPaused ? "Tiếp tục" : "Tạm dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE))
+                        isPaused ? "Tiếp Tục" : "Tạm Dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE))
                 .addAction(android.R.drawable.ic_delete, "Dừng", screenRecActionPI(ACTION_STOP))
+                .setVisibility(Notification.VISIBILITY_PUBLIC) // [MỚI]
                 .setOngoing(true).build();
         if (Build.VERSION.SDK_INT >= 29)
             startForeground(94, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
