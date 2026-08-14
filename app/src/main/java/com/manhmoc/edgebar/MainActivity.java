@@ -208,7 +208,51 @@ private List<String[]> getPanelAppListCached() {
     return combined;
 }
     private GradientDrawable getRounded(String hexColor, float radius) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(hexColor)); g.setCornerRadius(radius); return g; }
-    
+    // [MỚI] Chuẩn hoá kích thước hiển thị của Icon Hệ Thống — các icon android.R.drawable.*
+// có tỉ lệ glyph/canvas rất khác nhau, khiến xếp cạnh nhau "cái to cái nhỏ" dù cùng
+// 1 khung ImageView. Hàm này dò vùng pixel KHÔNG trong suốt, cắt sát viền, rồi phóng
+// lại đồng đều cho mọi icon — KHÔNG ép màu, giữ nguyên màu gốc để user thấy đúng.
+private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int targetSize, float contentScale) {
+    if (d == null) return null;
+    try {
+        int srcSize = targetSize * 3;
+        Bitmap raw = Bitmap.createBitmap(srcSize, srcSize, Bitmap.Config.ARGB_8888);
+        Canvas rawCanvas = new Canvas(raw);
+        android.graphics.drawable.Drawable dm = d.mutate();
+        dm.setBounds(0, 0, srcSize, srcSize);
+        dm.draw(rawCanvas);
+
+        int left = srcSize, top = srcSize, right = 0, bottom = 0;
+        int[] pixels = new int[srcSize * srcSize];
+        raw.getPixels(pixels, 0, srcSize, 0, 0, srcSize, srcSize);
+        for (int y = 0; y < srcSize; y++) {
+            int rowBase = y * srcSize;
+            for (int x = 0; x < srcSize; x++) {
+                if (((pixels[rowBase + x] >>> 24) & 0xFF) > 10) {
+                    if (x < left) left = x; if (x > right) right = x;
+                    if (y < top) top = y; if (y > bottom) bottom = y;
+                }
+            }
+        }
+        if (right <= left || bottom <= top) { raw.recycle(); return null; }
+
+        Bitmap cropped = Bitmap.createBitmap(raw, left, top, right - left + 1, bottom - top + 1);
+        raw.recycle();
+
+        Bitmap out = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888);
+        Canvas outCanvas = new Canvas(out);
+        int drawSize = Math.round(targetSize * contentScale);
+        float scale = Math.min((float) drawSize / cropped.getWidth(), (float) drawSize / cropped.getHeight());
+        int dw = Math.round(cropped.getWidth() * scale);
+        int dh = Math.round(cropped.getHeight() * scale);
+        android.graphics.Rect dst = new android.graphics.Rect((targetSize - dw) / 2, (targetSize - dh) / 2,
+                (targetSize - dw) / 2 + dw, (targetSize - dh) / 2 + dh);
+        Paint p = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+        outCanvas.drawBitmap(cropped, null, dst, p);
+        cropped.recycle();
+        return out;
+    } catch (Exception e) { return null; }
+}
     private void refreshPreview() { 
     boolean inFrontierLock = currentMainTab==1 && currentGesTab==5 && frontierSubTab==0;
     boolean inFrontierHome = currentMainTab==1 && currentGesTab==5 && frontierSubTab==1;
@@ -4319,9 +4363,9 @@ private void showQsIconPickerDialog(java.util.function.IntConsumer onPicked) {
     for (int i = 0; i < QS_ICON_POOL.length; i++) {
         if (i % 5 == 0) { row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); page.addView(row); }
         ImageView iv = new ImageView(this);
-iv.setImageResource(QS_ICON_POOL[i]);
-iv.setColorFilter(Color.WHITE);   // ← THÊM DÒNG NÀY
-iv.setPadding(24, 24, 24, 24);
+        Bitmap normBmp = normalizeIconBitmap(getDrawable(QS_ICON_POOL[i]), 140, 0.68f);
+        if (normBmp != null) iv.setImageBitmap(normBmp);
+        else { iv.setImageResource(QS_ICON_POOL[i]); iv.setPadding(24, 24, 24, 24); }
         LinearLayout.LayoutParams ivLp = new LinearLayout.LayoutParams(0, 140, 1f);
         ivLp.setMargins(6, 6, 6, 6);
         iv.setLayoutParams(ivLp);
@@ -6208,9 +6252,9 @@ private ScrollView buildIconGridPage(int[] pool, String prefixTag, String prefKe
             page.addView(row);
         }
         ImageView iv = new ImageView(this);
-iv.setImageResource(pool[i]);
-iv.setColorFilter(Color.WHITE);   // ← THÊM DÒNG NÀY
-iv.setPadding(24,24,24,24);
+        Bitmap normBmp = normalizeIconBitmap(getDrawable(pool[i]), 140, 0.68f);
+        if (normBmp != null) iv.setImageBitmap(normBmp);
+        else { iv.setImageResource(pool[i]); iv.setPadding(24, 24, 24, 24); }
         LinearLayout.LayoutParams ivLp = new LinearLayout.LayoutParams(0, 140, 1f);
         ivLp.setMargins(6,6,6,6);
         iv.setLayoutParams(ivLp);
@@ -6312,8 +6356,12 @@ iv.setPadding(24,24,24,24);
         String ref = "pool:" + i;
         if (i % 5 == 0) { prow = new LinearLayout(this); prow.setOrientation(LinearLayout.HORIZONTAL); poolGrid.addView(prow); }
         int resId = sysPool[i];
-        prow.addView(buildIconGridCell(ref, () -> { ImageView iv = new ImageView(this); iv.setImageResource(resId); iv.setColorFilter(Color.WHITE); return iv; },
-            selectedOrder, () -> refreshCount[0].run()));
+        prow.addView(buildIconGridCell(ref, () -> {
+            ImageView iv = new ImageView(this);
+            Bitmap nb = normalizeIconBitmap(getDrawable(resId), 100, 0.68f);
+            if (nb != null) iv.setImageBitmap(nb); else iv.setImageResource(resId);
+            return iv;
+        }, selectedOrder, () -> refreshCount[0].run()));
     }
 
     ScrollView customScroll = new ScrollView(this);
@@ -6325,8 +6373,12 @@ iv.setPadding(24,24,24,24);
         String ref = "poolc:" + i;
         if (i % 5 == 0) { crow = new LinearLayout(this); crow.setOrientation(LinearLayout.HORIZONTAL); customGrid.addView(crow); }
         int resId = customPool[i];
-        crow.addView(buildIconGridCell(ref, () -> { ImageView iv = new ImageView(this); iv.setImageResource(resId); iv.setColorFilter(Color.WHITE); return iv; },
-            selectedOrder, () -> refreshCount[0].run()));
+        crow.addView(buildIconGridCell(ref, () -> {
+            ImageView iv = new ImageView(this);
+            Bitmap nb = normalizeIconBitmap(getDrawable(resId), 100, 0.68f);
+            if (nb != null) iv.setImageBitmap(nb); else iv.setImageResource(resId);
+            return iv;
+        }, selectedOrder, () -> refreshCount[0].run()));
     }
 
     body.addView(appsPage); body.addView(poolScroll); body.addView(customScroll);
