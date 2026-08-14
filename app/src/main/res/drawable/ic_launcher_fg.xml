@@ -4,9 +4,11 @@
         android:pathData="M 42,28 h 24 a 6,6 0 0 1 6,6 v 40 a 6,6 0 0 1 -6,6 h -24 a 6,6 0 0 1 -6,-6 v -40 a 6,6 0 0 1 6,-6 z">
         <aapt:attr name="android:strokeColor">
             <gradient android:startX="36" android:startY="28" android:endX="72" android:endY="80" android:type="linear">
-                <item android:offset="0" android:color="#00E5FF"/>
-                <item android:offset="1" android:color="#2979FF"/>
-            </gradient>
+    <item android:offset="0.0" android:color="#4285F4"/>
+    <item android:offset="0.33" android:color="#EA4335"/>
+    <item android:offset="0.66" android:color="#FBBC05"/>
+    <item android:offset="1.0" android:color="#34A853"/>
+</gradient>
         </aapt:attr>
     </path>
     <path android:strokeWidth="2.5" android:strokeLineCap="round" android:strokeLineJoin="round"

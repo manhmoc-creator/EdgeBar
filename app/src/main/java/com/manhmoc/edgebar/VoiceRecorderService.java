@@ -42,6 +42,7 @@ public class VoiceRecorderService extends Service {
     private long lastPauseStartMs = 0;
     private Uri pendingUri = null;
     private android.os.ParcelFileDescriptor pfd = null;
+    private android.media.session.MediaSession dummySession;
 
     @Override public IBinder onBind(Intent i) { return null; }
 
@@ -180,7 +181,8 @@ public class VoiceRecorderService extends Service {
         wakeLock = null;
 
         broadcastTick("STOPPED", 0);
-        stopForeground(true);
+    if (dummySession != null) { dummySession.setActive(false); dummySession.release(); dummySession = null; }
+    stopForeground(true);
         stopSelf();
     }
 
@@ -210,39 +212,62 @@ public class VoiceRecorderService extends Service {
     }
 
     private void startForegroundNotif() {
-        String cid = "eb_voice_rec_v2";
-        NotificationChannel c = new NotificationChannel(cid, "Ghi âm EdgeBar", NotificationManager.IMPORTANCE_LOW);
-        c.setSound(null, null);
-        c.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC); // [MỚI] cho phép channel hiện trên màn khoá/QS
-        getSystemService(NotificationManager.class).createNotificationChannel(c);
-        Notification n = new Notification.Builder(this, cid)
-                .setContentTitle("🔴 Đang ghi âm — 00:00")
-                .setSmallIcon(android.R.drawable.presence_audio_online)
-                .addAction(android.R.drawable.ic_media_pause, "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
-                .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
-                .setVisibility(Notification.VISIBILITY_PUBLIC) // [MỚI] hiện nội dung công khai trên màn khoá
-                .setOngoing(true)
-                .build();
-        if (Build.VERSION.SDK_INT >= 29)
-            startForeground(93, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
-        else startForeground(93, n);
+    String cid = "eb_voice_rec_v2";
+    NotificationChannel c = new NotificationChannel(cid, "Ghi âm EdgeBar", NotificationManager.IMPORTANCE_LOW);
+    c.setSound(null, null);
+    c.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+    getSystemService(NotificationManager.class).createNotificationChannel(c);
+
+    if (dummySession == null) {
+        dummySession = new android.media.session.MediaSession(this, "DummyVoiceRec");
+        dummySession.setActive(true);
+    }
+    dummySession.setPlaybackState(new android.media.session.PlaybackState.Builder()
+        .setActions(android.media.session.PlaybackState.ACTION_PLAY_PAUSE | android.media.session.PlaybackState.ACTION_STOP)
+        .setState(android.media.session.PlaybackState.STATE_PLAYING, 0, 1f).build());
+
+    Notification n = new Notification.Builder(this, cid)
+            .setContentTitle("🔴 Đang ghi âm — 00:00")
+            .setContentText("EdgeBar Voice")
+            .setSmallIcon(android.R.drawable.presence_audio_online)
+            .addAction(android.R.drawable.ic_media_pause, "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
+            .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setOngoing(true)
+            .setStyle(new Notification.MediaStyle()
+                .setMediaSession(dummySession.getSessionToken())
+                .setShowActionsInCompactView(0, 1))
+            .build();
+    if (Build.VERSION.SDK_INT >= 29)
+        startForeground(93, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+    else startForeground(93, n);
+}
+
+private void updateNotif(long sec, boolean paused) {
+    String time = String.format("%02d:%02d", sec / 60, sec % 60);
+    String cid = "eb_voice_rec_v2";
+
+    if (dummySession != null) {
+        dummySession.setPlaybackState(new android.media.session.PlaybackState.Builder()
+            .setActions(android.media.session.PlaybackState.ACTION_PLAY_PAUSE | android.media.session.PlaybackState.ACTION_STOP)
+            .setState(paused ? android.media.session.PlaybackState.STATE_PAUSED : android.media.session.PlaybackState.STATE_PLAYING, sec * 1000, paused ? 0f : 1f).build());
     }
 
-    private void updateNotif(long sec, boolean paused) {
-        String time = String.format("%02d:%02d", sec / 60, sec % 60);
-        String cid = "eb_voice_rec_v2";
-        Notification n = new Notification.Builder(this, cid)
-                .setContentTitle((paused ? "⏸️ Đã tạm dừng — " : "🔴 Đang ghi âm — ") + time)
-                .setSmallIcon(android.R.drawable.presence_audio_online)
-                .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
-                        paused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
-                .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
-                .setVisibility(Notification.VISIBILITY_PUBLIC) // [MỚI]
-                .setOngoing(true)
-                .build();
-        getSystemService(NotificationManager.class).notify(93, n);
-    }
-
+    Notification n = new Notification.Builder(this, cid)
+            .setContentTitle((paused ? "⏸️ Đã tạm dừng — " : "🔴 Đang ghi âm — ") + time)
+            .setContentText("EdgeBar Voice")
+            .setSmallIcon(android.R.drawable.presence_audio_online)
+            .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
+                    paused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
+            .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setOngoing(true)
+            .setStyle(new Notification.MediaStyle()
+                .setMediaSession(dummySession.getSessionToken())
+                .setShowActionsInCompactView(0, 1))
+            .build();
+    getSystemService(NotificationManager.class).notify(93, n);
+}
     @Override public void onDestroy() {
         if (isRunning) stopRecording();
         super.onDestroy();
