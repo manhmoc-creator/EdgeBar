@@ -243,9 +243,11 @@ public class VoiceRecorderService extends Service {
             dummySession = new android.media.session.MediaSession(this, "DummyVoiceRec");
             dummySession.setActive(true);
             
-            // Tạo 1 bức ảnh màu Tím Neon siêu nhỏ (100x100) để làm Album Art
-            android.graphics.Bitmap artBmp = android.graphics.Bitmap.createBitmap(100, 100, android.graphics.Bitmap.Config.ARGB_8888);
-            new android.graphics.Canvas(artBmp).drawColor(android.graphics.Color.parseColor("#AA00FF"));
+            // Ép Icon App thành Album Art
+            android.graphics.drawable.Drawable d = getDrawable(R.drawable.ic_launcher);
+            android.graphics.Bitmap artBmp = android.graphics.Bitmap.createBitmap(144, 144, android.graphics.Bitmap.Config.ARGB_8888);
+            d.setBounds(0, 0, 144, 144);
+            d.draw(new android.graphics.Canvas(artBmp));
 
             dummySession.setMetadata(new android.media.MediaMetadata.Builder()
                 .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "EdgeBar Voice")
@@ -261,7 +263,7 @@ public class VoiceRecorderService extends Service {
             .setContentTitle("🔴 Đang ghi âm — 00:00")
             .setContentText("EdgeBar Voice")
             .setSmallIcon(android.R.drawable.presence_audio_online)
-            .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
+            .addAction(android.R.drawable.ic_lock_power_off, "Dừng", actionPI(ACTION_STOP))
             .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     isPaused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
             .addAction(android.R.drawable.ic_media_next, "Dừng & Nghe", actionPI(ACTION_STOP_AND_PLAY))

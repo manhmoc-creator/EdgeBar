@@ -1992,7 +1992,9 @@ private void ensureRecIndicator() {
     recIndicatorView.addView(recIndicatorDot);
     recIndicatorView.addView(recIndicatorText);
 
-    recIndicatorView.setOnClickListener(v -> {
+    // Handler phân biệt chạm 1 lần (Pause/Play) và chạm 2 lần (Stop & Mở file)
+    final android.os.Handler tapHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    final Runnable singleTapRunnable = () -> {
         if (VoiceRecorderService.isRunning) {
             Intent p2 = new Intent(this, VoiceRecorderService.class);
             p2.setAction(VoiceRecorderService.ACTION_PAUSE_TOGGLE);
@@ -2004,6 +2006,35 @@ private void ensureRecIndicator() {
         } else if (recIndicatorTestMode) {
             recIndicatorTestPaused = !recIndicatorTestPaused;
             updateRecIndicator(recIndicatorTestPaused ? "PAUSED" : "RECORDING", 0);
+        }
+    };
+
+    final long[] lastClickTime = {0};
+    recIndicatorView.setOnClickListener(v -> {
+        long now = System.currentTimeMillis();
+        // Khoảng thời gian 300ms giữa 2 lần chạm được coi là Double Tap
+        if (now - lastClickTime[0] < 300) {
+            tapHandler.removeCallbacks(singleTapRunnable);
+            lastClickTime[0] = 0;
+            doVibrate(50); // Rung 50ms báo hiệu thành công
+            
+            // Gửi lệnh Dừng + Phát File
+            if (VoiceRecorderService.isRunning) {
+                Intent s2 = new Intent(this, VoiceRecorderService.class);
+                s2.setAction("com.manhmoc.edgebar.VOICEREC_STOP_PLAY");
+                startService(s2);
+            } else if (ScreenRecorderService.isRunning) {
+                Intent s3 = new Intent(this, ScreenRecorderService.class);
+                s3.setAction("com.manhmoc.edgebar.SCREENREC_STOP_PLAY");
+                startService(s3);
+            } else if (recIndicatorTestMode) {
+                recIndicatorTestMode = false;
+                recIndicatorTestPaused = false;
+                updateRecIndicator("STOPPED", 0);
+            }
+        } else {
+            lastClickTime[0] = now;
+            tapHandler.postDelayed(singleTapRunnable, 300);
         }
     });
     recIndicatorView.setOnLongClickListener(v -> {

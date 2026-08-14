@@ -244,9 +244,10 @@ private void pauseRecording() {
             dummySession = new android.media.session.MediaSession(this, "DummyScreenRec");
             dummySession.setActive(true);
             
-            // Tạo 1 bức ảnh màu Cam/Đỏ Neon siêu nhỏ (100x100) để làm Album Art
-            android.graphics.Bitmap artBmp = android.graphics.Bitmap.createBitmap(100, 100, android.graphics.Bitmap.Config.ARGB_8888);
-            new android.graphics.Canvas(artBmp).drawColor(android.graphics.Color.parseColor("#FF3D00"));
+            android.graphics.drawable.Drawable d = getDrawable(R.drawable.ic_launcher);
+            android.graphics.Bitmap artBmp = android.graphics.Bitmap.createBitmap(144, 144, android.graphics.Bitmap.Config.ARGB_8888);
+            d.setBounds(0, 0, 144, 144);
+            d.draw(new android.graphics.Canvas(artBmp));
 
             dummySession.setMetadata(new android.media.MediaMetadata.Builder()
                 .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "EdgeBar Screen")
@@ -263,7 +264,7 @@ private void pauseRecording() {
             .setContentTitle((isPaused ? "⏸️ Đã tạm dừng — " : "🔴 Đang quay màn hình — ") + time)
             .setContentText("EdgeBar Screen")
             .setSmallIcon(android.R.drawable.presence_video_online)
-            .addAction(android.R.drawable.ic_delete, "Dừng", screenRecActionPI(ACTION_STOP))
+            .addAction(android.R.drawable.ic_lock_power_off, "Dừng", screenRecActionPI(ACTION_STOP))
             .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     isPaused ? "Tiếp Tục" : "Tạm Dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE))
             .addAction(android.R.drawable.ic_media_next, "Dừng & Xem", screenRecActionPI(ACTION_STOP_AND_PLAY))
