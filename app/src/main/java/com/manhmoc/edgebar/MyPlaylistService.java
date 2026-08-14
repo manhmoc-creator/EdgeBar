@@ -26,6 +26,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import android.media.MediaMetadataRetriever;
+import android.media.MediaMetadata;
 
 /**
  * V19.12.3.6.39 — Phát nhạc từ "Download/My Playlist" (Bộ nhớ trong).
@@ -60,6 +62,7 @@ public class MyPlaylistService extends Service {
     private final List<Uri> tracks = new ArrayList<>();
     private final List<String> trackNames = new ArrayList<>();
     private int currentIndex = 0;
+    private android.graphics.Bitmap currentArt; // [MỚI] ảnh bìa bài đang phát
 
     // [MỚI] Audio Focus — xin quyền phát với hệ thống để app khác (Files by Google,
     // Spotify...) tự dừng khi EdgeBar phát, và ngược lại EdgeBar tự dừng khi app khác giành lại.
@@ -174,9 +177,18 @@ public class MyPlaylistService extends Service {
         } else {
             try { player.reset(); } catch (Exception ignored) {}
         }
+        final int idxForArt = idx;
         player.setOnPreparedListener(mp -> {
             mp.start();
             isRunning = true; isPaused = false;
+            currentArt = extractAlbumArt(tracks.get(idxForArt));
+            if (session != null) {
+                MediaMetadata.Builder meta = new MediaMetadata.Builder()
+                    .putString(MediaMetadata.METADATA_KEY_TITLE, trackNames.get(idxForArt))
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "My Playlist");
+                if (currentArt != null) meta.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, currentArt);
+                session.setMetadata(meta.build());
+            }
             updateSessionState(true);
             startForegroundNotif(trackNames.get(currentIndex), false);
         });
@@ -209,6 +221,7 @@ public class MyPlaylistService extends Service {
 
     private void stopPlayback() {
         isRunning = false; isPaused = false;
+        currentArt = null; // [MỚI] giải phóng RAM ảnh bìa
         abandonAudioFocusNow(); // [MỚI]
         if (player != null) { try { player.stop(); player.release(); } catch (Exception ignored) {} player = null; }
         if (session != null) { session.setActive(false); session.release(); session = null; }
@@ -237,6 +250,7 @@ public class MyPlaylistService extends Service {
             .setContentTitle(paused ? "⏸️ " + title : "🎵 " + title)
             .setContentText("My Playlist")
             .setSmallIcon(android.R.drawable.ic_media_play)
+            .setLargeIcon(currentArt)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(isRunning)
             .addAction(android.R.drawable.ic_media_previous, "Trước", actionPI(ACTION_PREV))
@@ -270,6 +284,16 @@ public class MyPlaylistService extends Service {
         nm.notify(NOTIF_ID, n);
         stopForeground(true);
         stopSelf();
+    }
+private android.graphics.Bitmap extractAlbumArt(Uri uri) {
+        try {
+            MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+            mmr.setDataSource(this, uri);
+            byte[] art = mmr.getEmbeddedPicture();
+            mmr.release();
+            if (art != null) return android.graphics.BitmapFactory.decodeByteArray(art, 0, art.length);
+        } catch (Exception ignored) {}
+        return null;
     }
     // ==================== SO SÁNH TÊN FILE "TỰ NHIÊN" (01,02,...,10) ====================
     private static final Pattern NUM_CHUNK = Pattern.compile("\\d+|\\D+");

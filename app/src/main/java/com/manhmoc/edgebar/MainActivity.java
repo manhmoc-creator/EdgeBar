@@ -1418,7 +1418,14 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
 private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState, boolean isFrontier) {
     String listKey = prefix + "applied_packs";
     java.util.List<String> appliedPacks = getDynamicIds(listKey);
-
+appliedPacks.sort((keyA, keyB) -> {
+    boolean isBarA = keyA.startsWith("bar_"), isBarB = keyB.startsWith("bar_");
+    String idA = keyA.replace(isBarA ? "bar_" : "corner_", "");
+    String idB = keyB.replace(isBarB ? "bar_" : "corner_", "");
+    String nameA = prefs.getString((isBarA ? "pack_bar_" : "pack_corner_") + idA + "_name", "");
+    String nameB = prefs.getString((isBarB ? "pack_bar_" : "pack_corner_") + idB + "_name", "");
+    return naturalCompareName(nameA, nameB);
+});
     // [MULTI-SELECT] Thanh công cụ chỉ dựng khi ĐANG ở chế độ chọn nhiều —
     // Zero-RAM lúc bình thường, giống mọi khu vực lazy-inflate khác trong app.
     if (isFrontier && frontierSelectMode) {
@@ -1906,6 +1913,8 @@ private void ensureHomeServiceForPreview() {
             listContainer.removeAllViews();
             String listKey = appliedItemKey + "_pack_rules";
             java.util.List<String> rules = getDynamicIds(listKey);
+            rules.sort((rA, rB) -> naturalCompareName(
+                formatPruleGestureLabel(rA), formatPruleGestureLabel(rB)));
             if (prulesSelectMode) {
                 listContainer.addView(buildPruleSelectionToolbar(appliedItemKey, rules, renderRules));
             }
@@ -3451,6 +3460,21 @@ private List<String> getDynamicIds(String listKey) {
     if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
     return out;
 }
+private static final java.util.regex.Pattern NUM_CHUNK_PACK =
+    java.util.regex.Pattern.compile("\\d+|\\D+");
+
+private int naturalCompareName(String a, String b) {
+    java.util.regex.Matcher ma = NUM_CHUNK_PACK.matcher(a);
+    java.util.regex.Matcher mb = NUM_CHUNK_PACK.matcher(b);
+    while (ma.find() && mb.find()) {
+        String ca = ma.group(), cb = mb.group();
+        int cmp = (Character.isDigit(ca.charAt(0)) && Character.isDigit(cb.charAt(0)))
+            ? Long.compare(Long.parseLong(ca), Long.parseLong(cb))
+            : ca.compareToIgnoreCase(cb);
+        if (cmp != 0) return cmp;
+    }
+    return a.length() - b.length();
+}
 /** Trả về {label, actionKey} cho 1 loại Data Pack động (Panel/Intent/Macro).
  *  actionKey = "PANEL_"+uuid / "INTENT_"+uuid / "MACRO_"+uuid — id là UUID thật của
  *  Data Pack, KHÔNG phải số thứ tự cố định. Vì list này không giới hạn số lượng,
@@ -3523,6 +3547,17 @@ private String trashType(String itemKey) {
 }
 private String trashId(String itemKey) {
     return itemKey.substring(itemKey.indexOf('_') + 1);
+}
+private String trashDisplayName(String type, String id) {
+    switch (type) {
+        case "panel": return prefs.getString("pack_panel_" + id + "_name", "Data Pack");
+        case "bar": return prefs.getString("pack_bar_" + id + "_name", "Data Pack");
+        case "corner": return prefs.getString("pack_corner_" + id + "_name", "Data Pack");
+        case "intent": return prefs.getString("intent_" + id + "_name", "Intent");
+        case "tilev2": return prefs.getString("tilev2_" + id + "_label", "Tile");
+        case "macro": return prefs.getString("macro_" + id + "_name", "Macro");
+        default: return "Data Pack";
+    }
 }
  private static final long TRASH_EXPIRY_MS = 15L * 24 * 60 * 60 * 1000; // 15 ngày
 
@@ -4001,6 +4036,13 @@ cardWrap.addView(selDot);
     secTrash.addView(createSectionTitle("🗑️ KHO CŨ (THÙNG RÁC)"));
 
     List<String> trashIds = getDynamicIds("trash_pack_ids");
+    trashIds.sort((keyA, keyB) -> {
+        String typeA = trashType(keyA), idA = trashId(keyA);
+        String typeB = trashType(keyB), idB = trashId(keyB);
+        String nameA = trashDisplayName(typeA, idA);
+        String nameB = trashDisplayName(typeB, idB);
+        return naturalCompareName(nameA, nameB);
+    });
     if (trashIds.isEmpty()) {
         TextView tvEmpty = new TextView(this);
         tvEmpty.setText(T("Trash is empty.", "Thùng rác trống."));
@@ -4217,67 +4259,54 @@ private static final String[] TILE_ICON_NAMES = {
  // [MỚI] PHẢI khớp CHÍNH XÁC thứ tự với ICON_POOL trong Tile1..30.java —
 // vì autoIconForAct() trả về index dựa trên đúng thứ tự này.
 private static final int[] QS_ICON_POOL = {
-    // ===== 20 icon gốc (GIỮ NGUYÊN index để không vỡ dữ liệu icon_idx đã lưu) =====
-    android.R.drawable.ic_menu_compass, android.R.drawable.ic_menu_search,
-    android.R.drawable.ic_lock_idle_lock, android.R.drawable.ic_menu_camera,
-    android.R.drawable.ic_menu_crop, android.R.drawable.ic_media_play,
-    android.R.drawable.ic_menu_send, android.R.drawable.ic_media_next,
-    android.R.drawable.ic_menu_share, android.R.drawable.ic_menu_info_details,
-    android.R.drawable.ic_menu_manage, android.R.drawable.ic_menu_call, // [FIX] thay icon trùng ic_menu_send
-    android.R.drawable.ic_menu_edit, android.R.drawable.ic_menu_delete,
-    android.R.drawable.ic_menu_add, android.R.drawable.ic_menu_close_clear_cancel,
-    android.R.drawable.ic_menu_upload, android.R.drawable.ic_menu_view,
-    android.R.drawable.star_on, android.R.drawable.ic_menu_mylocation,
+        // ===== NHẠT (viền mảnh, đơn giản) =====
+        android.R.drawable.ic_menu_search, android.R.drawable.ic_menu_compass,
+        android.R.drawable.ic_menu_mylocation, android.R.drawable.ic_menu_agenda,
+        android.R.drawable.ic_menu_always_landscape_portrait, android.R.drawable.ic_menu_day,
+        android.R.drawable.ic_menu_today, android.R.drawable.ic_menu_month,
+        android.R.drawable.ic_menu_directions, android.R.drawable.ic_menu_mapmode,
+        android.R.drawable.ic_menu_gallery, android.R.drawable.ic_menu_help,
+        android.R.drawable.ic_menu_more, android.R.drawable.ic_menu_recent_history,
+        android.R.drawable.ic_menu_revert, android.R.drawable.ic_menu_rotate,
+        android.R.drawable.ic_menu_save, android.R.drawable.ic_menu_sort_alphabetically,
+        android.R.drawable.ic_menu_sort_by_size, android.R.drawable.ic_menu_zoom,
+        android.R.drawable.ic_menu_myplaces, android.R.drawable.ic_menu_report_image,
+        android.R.drawable.ic_menu_crop, android.R.drawable.ic_menu_send,
+        android.R.drawable.ic_menu_share, android.R.drawable.ic_menu_info_details,
+        android.R.drawable.ic_menu_edit, android.R.drawable.ic_menu_add,
+        android.R.drawable.ic_menu_close_clear_cancel, android.R.drawable.ic_menu_view,
+        android.R.drawable.arrow_down_float, android.R.drawable.arrow_up_float,
+        android.R.drawable.ic_input_delete, android.R.drawable.ic_input_get,
+        android.R.drawable.ic_dialog_email, android.R.drawable.ic_dialog_info,
+        android.R.drawable.ic_dialog_dialer, android.R.drawable.ic_dialog_map,
+        android.R.drawable.ic_lock_idle_alarm, android.R.drawable.ic_lock_idle_charging,
+        android.R.drawable.ic_lock_idle_low_battery, android.R.drawable.ic_lock_silent_mode,
+        android.R.drawable.ic_lock_silent_mode_off,
 
-    // ===== [MỚI] Nhóm 1: Nét thanh mảnh, chỉ viền (Outlined) =====
-    android.R.drawable.ic_menu_agenda, android.R.drawable.ic_menu_always_landscape_portrait,
-    android.R.drawable.ic_menu_day, android.R.drawable.ic_menu_directions,
-    android.R.drawable.ic_menu_gallery, android.R.drawable.ic_menu_help,
-    android.R.drawable.ic_menu_mapmode, android.R.drawable.ic_menu_month,
-    android.R.drawable.ic_menu_more, android.R.drawable.ic_menu_preferences,
-    android.R.drawable.ic_menu_recent_history, android.R.drawable.ic_menu_revert,
-    android.R.drawable.ic_menu_rotate, android.R.drawable.ic_menu_save,
-    android.R.drawable.ic_menu_sort_alphabetically, android.R.drawable.ic_menu_sort_by_size,
-    android.R.drawable.ic_menu_today, android.R.drawable.ic_menu_zoom,
-    android.R.drawable.ic_lock_idle_alarm, android.R.drawable.ic_lock_idle_charging,
-    android.R.drawable.ic_lock_idle_low_battery, android.R.drawable.ic_lock_silent_mode,
-    android.R.drawable.ic_lock_silent_mode_off,
-    android.R.drawable.ic_menu_myplaces,        // thay ic_lock_airplane_mode
-    android.R.drawable.ic_menu_report_image,     // thay ic_lock_airplane_mode_off
-    // ===== [MỚI] Nhóm 2: Đổ bóng / xám mờ (Shaded) =====
-    android.R.drawable.stat_sys_download, android.R.drawable.stat_sys_download_done,
-    android.R.drawable.stat_sys_upload, android.R.drawable.stat_sys_upload_done,
-    android.R.drawable.stat_notify_chat, android.R.drawable.stat_notify_error,
-    android.R.drawable.stat_notify_missed_call, android.R.drawable.stat_notify_sync,
-    android.R.drawable.stat_notify_sync_noanim, android.R.drawable.stat_notify_voicemail,
+        // ===== TRUNG (đổ bóng, xám mờ) =====
+        android.R.drawable.ic_menu_camera, android.R.drawable.ic_menu_call,
+        android.R.drawable.ic_menu_upload, android.R.drawable.star_on,
+        android.R.drawable.star_off, android.R.drawable.btn_star_big_off,
+        android.R.drawable.ic_menu_set_as, android.R.drawable.ic_menu_slideshow,
+        android.R.drawable.stat_sys_download, android.R.drawable.stat_sys_upload,
+        android.R.drawable.stat_notify_chat, android.R.drawable.stat_notify_error,
+        android.R.drawable.stat_notify_missed_call, android.R.drawable.stat_notify_sync,
+        android.R.drawable.stat_notify_voicemail, android.R.drawable.ic_media_ff,
+        android.R.drawable.ic_media_rew, android.R.drawable.ic_media_previous,
+        android.R.drawable.ic_media_pause, android.R.drawable.ic_btn_speak_now,
+        android.R.drawable.ic_secure, android.R.drawable.ic_lock_power_off,
+        android.R.drawable.presence_offline, android.R.drawable.ic_dialog_alert,
 
-    // ===== [MỚI] Nhóm 3: Rỗng / nửa (Hollow - Half) =====
-    android.R.drawable.star_off, android.R.drawable.btn_star_big_off,
-    android.R.drawable.ic_menu_set_as,           // thay rate_star_big_off
-    android.R.drawable.ic_menu_slideshow,        // thay rate_star_big_half
-    // ===== [MỚI] Nhóm 4: Điều hướng cơ bản =====
-    android.R.drawable.arrow_down_float, android.R.drawable.arrow_up_float,
-    android.R.drawable.ic_input_delete, android.R.drawable.ic_input_get,
-
-    // ===== [MỚI] Nhóm 5: Đậm / khối đặc (Bold & Filled) =====
-    android.R.drawable.ic_media_ff, android.R.drawable.ic_media_rew,
-    android.R.drawable.ic_media_previous, android.R.drawable.ic_media_pause,
-    android.R.drawable.presence_online, android.R.drawable.presence_busy,
-    android.R.drawable.presence_audio_online, android.R.drawable.presence_video_online,
-    android.R.drawable.ic_btn_speak_now, android.R.drawable.ic_lock_lock,
-    android.R.drawable.ic_secure, android.R.drawable.ic_lock_power_off,
-    android.R.drawable.ic_delete, android.R.drawable.ic_input_add,
-    android.R.drawable.ic_dialog_alert, android.R.drawable.stat_sys_warning,
-    android.R.drawable.ic_dialog_email, android.R.drawable.ic_dialog_info,
-    android.R.drawable.ic_dialog_dialer,
-
-    android.R.drawable.btn_star_big_on,
-    android.R.drawable.presence_offline, // thay rate_star_big_on
-    android.R.drawable.sym_def_app_icon,
-
-    android.R.drawable.sym_action_call, android.R.drawable.sym_action_chat,
-    android.R.drawable.ic_dialog_map
-};
+        // ===== ĐẬM (khối đặc, nổi bật nhất) =====
+        android.R.drawable.ic_lock_idle_lock, android.R.drawable.ic_media_play,
+        android.R.drawable.ic_menu_manage, android.R.drawable.ic_menu_delete,
+        android.R.drawable.ic_lock_lock, android.R.drawable.ic_delete,
+        android.R.drawable.ic_input_add, android.R.drawable.stat_sys_warning,
+        android.R.drawable.btn_star_big_on, android.R.drawable.presence_online,
+        android.R.drawable.presence_busy, android.R.drawable.presence_audio_online,
+        android.R.drawable.presence_video_online, android.R.drawable.sym_def_app_icon,
+        android.R.drawable.sym_action_call, android.R.drawable.sym_action_chat
+    };
 private void showQsIconPickerDialog(java.util.function.IntConsumer onPicked) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     ScrollView scroll = new ScrollView(this);
@@ -4290,8 +4319,9 @@ private void showQsIconPickerDialog(java.util.function.IntConsumer onPicked) {
     for (int i = 0; i < QS_ICON_POOL.length; i++) {
         if (i % 5 == 0) { row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); page.addView(row); }
         ImageView iv = new ImageView(this);
-        iv.setImageResource(QS_ICON_POOL[i]);
-        iv.setPadding(24, 24, 24, 24);
+iv.setImageResource(QS_ICON_POOL[i]);
+iv.setColorFilter(Color.WHITE);   // ← THÊM DÒNG NÀY
+iv.setPadding(24, 24, 24, 24);
         LinearLayout.LayoutParams ivLp = new LinearLayout.LayoutParams(0, 140, 1f);
         ivLp.setMargins(6, 6, 6, 6);
         iv.setLayoutParams(ivLp);
@@ -5189,6 +5219,9 @@ private void renderPanelDesign() {
         designSliderContainer.addView(createDrawer("⚙️ TÙY CHỈNH CHUNG LENAP", globalCfgBody));
         // [TỐI ƯU PIXEL 2XL] Đã gỡ bỏ UI nút Reset Lenap theo yêu cầu.
         List<String> ids = getDynamicIds("pack_panel_ids");
+ids.sort((idA, idB) -> naturalCompareName(
+    prefs.getString("pack_panel_" + idA + "_name", ""),
+    prefs.getString("pack_panel_" + idB + "_name", "")));
         if (ids.isEmpty()) {
             TextView tvEmpty = new TextView(this);
             tvEmpty.setText("Kho biến Panel đang rỗng.\nChạm nút viên thuốc '+ PANEL' góc dưới để tạo mới.");
@@ -6175,8 +6208,9 @@ private ScrollView buildIconGridPage(int[] pool, String prefixTag, String prefKe
             page.addView(row);
         }
         ImageView iv = new ImageView(this);
-        iv.setImageResource(pool[i]);
-        iv.setPadding(24,24,24,24);
+iv.setImageResource(pool[i]);
+iv.setColorFilter(Color.WHITE);   // ← THÊM DÒNG NÀY
+iv.setPadding(24,24,24,24);
         LinearLayout.LayoutParams ivLp = new LinearLayout.LayoutParams(0, 140, 1f);
         ivLp.setMargins(6,6,6,6);
         iv.setLayoutParams(ivLp);
