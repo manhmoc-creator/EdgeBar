@@ -158,6 +158,51 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
 };
     // Cache resolve ID runtime — chỉ tính 1 lần, không tốn thêm CPU về sau.
     private static int[] customIconPoolCache = null;
+// [MỚI] Dùng CHUNG cho mọi nơi vẽ icon THẬT lên Bar/Panel/QS Tile — dò vùng pixel
+    // không trong suốt (glyph thật), cắt sát viền rồi phóng lại theo đúng contentScale,
+    // đảm bảo mọi icon có cùng "sải cánh" thị giác dù file gốc rỗng nhiều/ít khác nhau.
+    // KHÔNG tự set màu — nơi gọi tự tint trước khi truyền Drawable vào đây.
+    static Bitmap normalizeIconBitmap(Drawable d, int targetSize, float contentScale) {
+        if (d == null) return null;
+        try {
+            int srcSize = targetSize * 3;
+            Bitmap raw = Bitmap.createBitmap(srcSize, srcSize, Bitmap.Config.ARGB_8888);
+            Canvas rawCanvas = new Canvas(raw);
+            Drawable dm = d.mutate();
+            dm.setBounds(0, 0, srcSize, srcSize);
+            dm.draw(rawCanvas);
+
+            int left = srcSize, top = srcSize, right = 0, bottom = 0;
+            int[] pixels = new int[srcSize * srcSize];
+            raw.getPixels(pixels, 0, srcSize, 0, 0, srcSize, srcSize);
+            for (int y = 0; y < srcSize; y++) {
+                int rowBase = y * srcSize;
+                for (int x = 0; x < srcSize; x++) {
+                    if (((pixels[rowBase + x] >>> 24) & 0xFF) > 10) {
+                        if (x < left) left = x; if (x > right) right = x;
+                        if (y < top) top = y; if (y > bottom) bottom = y;
+                    }
+                }
+            }
+            if (right <= left || bottom <= top) { raw.recycle(); return null; }
+
+            Bitmap cropped = Bitmap.createBitmap(raw, left, top, right - left + 1, bottom - top + 1);
+            raw.recycle();
+
+            Bitmap out = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888);
+            Canvas outCanvas = new Canvas(out);
+            int drawSize = Math.round(targetSize * contentScale);
+            float scale = Math.min((float) drawSize / cropped.getWidth(), (float) drawSize / cropped.getHeight());
+            int dw = Math.round(cropped.getWidth() * scale);
+            int dh = Math.round(cropped.getHeight() * scale);
+            android.graphics.Rect dst = new android.graphics.Rect((targetSize - dw) / 2, (targetSize - dh) / 2,
+                    (targetSize - dw) / 2 + dw, (targetSize - dh) / 2 + dh);
+            Paint p = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+            outCanvas.drawBitmap(cropped, null, dst, p);
+            cropped.recycle();
+            return out;
+        } catch (Exception e) { return null; }
+    }
     static int[] getCustomIconPool(Context ctx) {
         if (customIconPoolCache != null) return customIconPoolCache;
         List<Integer> ids = new ArrayList<>();
@@ -708,9 +753,17 @@ private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji,
         float scale = useGlobalScale ? getIconCoreScale() : ICON_CONTENT_SCALE;
         int targetSize = Math.round(size * scale);
         int off = (size - targetSize) / 2;
-        if (useGlobalScale) icon.setAlpha(getPoolIconAlpha());
-        icon.setBounds(off, off, off + targetSize, off + targetSize);
-        icon.draw(cc);
+        Bitmap normIcon = normalizeIconBitmap(icon, targetSize, 1f);
+        if (normIcon != null) {
+            Paint iconPaintDraw = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+            if (useGlobalScale) iconPaintDraw.setAlpha(getPoolIconAlpha());
+            cc.drawBitmap(normIcon, off, off, iconPaintDraw);
+            normIcon.recycle();
+        } else {
+            if (useGlobalScale) icon.setAlpha(getPoolIconAlpha());
+            icon.setBounds(off, off, off + targetSize, off + targetSize);
+            icon.draw(cc);
+        }
     } else if (emoji != null) {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setTextSize(size * 0.5f); p.setTextAlign(Paint.Align.CENTER); p.setColor(Color.WHITE);

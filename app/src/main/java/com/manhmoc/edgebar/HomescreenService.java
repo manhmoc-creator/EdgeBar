@@ -192,12 +192,15 @@ private android.graphics.Bitmap resolveBarIconBitmap(String ref, int size) {
         }
     } catch (Exception ignored) {}
     if (d == null) return null;
-    android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
-    Canvas c = new Canvas(bmp);
     d = d.mutate();
     d.setTint(Color.WHITE);
-    d.setBounds(0, 0, size, size);
-    d.draw(c);
+    android.graphics.Bitmap bmp = PanelEngine.normalizeIconBitmap(d, size, 0.86f);
+    if (bmp == null) {
+        bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        d.setBounds(0, 0, size, size);
+        d.draw(c);
+    }
     synchronized (barIconCache) { barIconCache.put(key, bmp); }
     return bmp;
 }

@@ -147,7 +147,14 @@ private void updateTileUI() {
     t.setLabel(label);
     int manualIconIdx = prefs.getInt("tilev2_" + boundId + "_icon_idx", -1);
     int iconIdx = (manualIconIdx >= 0 && manualIconIdx < ICON_POOL.length) ? manualIconIdx : autoIconForAct(action);
-    t.setIcon(Icon.createWithResource(this, ICON_POOL[iconIdx]));
+    android.graphics.Bitmap tileIconBmp = null;
+    try {
+        android.graphics.drawable.Drawable dTile = getDrawable(ICON_POOL[iconIdx]);
+        if (dTile != null) { dTile = dTile.mutate(); dTile.setTint(android.graphics.Color.WHITE); }
+        tileIconBmp = PanelEngine.normalizeIconBitmap(dTile, 96, 0.82f);
+    } catch (Exception ignored) {}
+    if (tileIconBmp != null) t.setIcon(Icon.createWithBitmap(tileIconBmp));
+    else t.setIcon(Icon.createWithResource(this, ICON_POOL[iconIdx]));
     t.setState(action.equals("NONE") ? Tile.STATE_INACTIVE : Tile.STATE_ACTIVE);
     t.updateTile();
 }

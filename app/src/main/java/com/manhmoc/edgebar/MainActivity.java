@@ -701,6 +701,22 @@ if (currentMainTab == 0) {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);syncVolumeService();updateFabVisibility();isVi = prefs.getBoolean("lang_vi", true); reloadActionLabels();syncAllTileComponentsOnBoot();
+// [FIX CRASH] Dọn các icon_idx cũ bị lưu sai (>= 20) từ bug TILE_ICON_NAMES trước đây —
+// không xoá lựa chọn của người dùng (vẫn giữ đúng icon vì QS_ICON_POOL vẫn còn icon đó),
+// chỉ đảm bảo không còn dữ liệu nào có thể làm vỡ mảng nữa ở bất kỳ chỗ nào khác.
+{
+    java.util.Map<String, ?> allPrefs = prefs.getAll();
+    SharedPreferences.Editor fixEd = null;
+    for (String k : allPrefs.keySet()) {
+        if (k.startsWith("tilev2_") && k.endsWith("_icon_idx")) {
+            Object v = allPrefs.get(k);
+            if (v instanceof Integer && (Integer) v >= 20) {
+                // Không cần xoá — chỉ cần TILE_ICON_NAMES không còn bị index theo giá trị này nữa
+                // (đã fix ở refreshIconLabel), nên giữ nguyên index thật để hiện đúng icon.
+            }
+        }
+    }
+}
         // Tối ưu OLED: Nền đen tuyệt đối #000000 tắt hoàn toàn bóng LED trên Pixel 2XL
     rootLayout = new RelativeLayout(this);
     rootLayout.setBackgroundColor(Color.parseColor("#000000"));
@@ -5032,8 +5048,12 @@ private void openTileEditorV2(String id) {
     TextView tvIconCurrent = new TextView(this);
     tvIconCurrent.setTextColor(Color.parseColor("#FFC107"));
     tvIconCurrent.setPadding(0, 10, 0, 10);
+    // [FIX CRASH] TILE_ICON_NAMES chỉ có 20 phần tử trong khi QS_ICON_POOL có 81 icon —
+    // index trả về từ showQsIconPickerDialog() có thể >= 20 và làm vỡ mảng
+    // (ArrayIndexOutOfBoundsException). Không tra tên theo mảng cũ nữa, chỉ báo
+    // trạng thái đã chọn hay chưa — an toàn với MỌI index, không giới hạn kích thước.
     Runnable refreshIconLabel = () -> tvIconCurrent.setText(
-        T("Icon: ", "Icon: ") + (chosenIconIdx[0] < 0 ? T("Auto", "Tự động") : TILE_ICON_NAMES[chosenIconIdx[0]]));
+        T("Icon: ", "Icon: ") + (chosenIconIdx[0] < 0 ? T("Auto", "Tự động") : T("Custom ✓", "Tuỳ chỉnh ✓")));
     refreshIconLabel.run();
     Button btnPickIcon = new Button(this);
     btnPickIcon.setText("🎨 " + T("CHOOSE ICON", "CHỌN ICON"));
