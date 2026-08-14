@@ -68,7 +68,7 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
     // [MỚI] Bộ icon nội bộ cho user tự gán vào từng Action.
     // TODO: thay các android.R.drawable.* dưới đây bằng @drawable/ic_custom_XX
     // của 70+ icon riêng khi đã bỏ file VectorDrawable vào res/drawable.
-    private static final int[] SYSTEM_ICON_POOL = {
+    static final int[] SYSTEM_ICON_POOL = {
         // ===== NHẠT (viền mảnh, đơn giản) =====
         android.R.drawable.ic_menu_search, android.R.drawable.ic_menu_compass,
         android.R.drawable.ic_menu_mylocation, android.R.drawable.ic_menu_agenda,
