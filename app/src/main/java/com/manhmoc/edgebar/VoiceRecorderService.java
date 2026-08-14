@@ -261,18 +261,16 @@ public class VoiceRecorderService extends Service {
             .setContentTitle("🔴 Đang ghi âm — 00:00")
             .setContentText("EdgeBar Voice")
             .setSmallIcon(android.R.drawable.presence_audio_online)
-            .addAction(android.R.drawable.ic_media_pause, "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
-            // Sửa đoạn này trong CẢ 2 hàm startForegroundNotif và updateNotif
-                .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
-                .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
-                        paused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
-                .addAction(android.R.drawable.ic_media_next, "Dừng & Nghe", actionPI(ACTION_STOP_AND_PLAY))
-                .setVisibility(Notification.VISIBILITY_PUBLIC)
-                .setOngoing(true)
-                .setStyle(new Notification.MediaStyle()
-                    .setMediaSession(dummySession.getSessionToken())
-                    .setShowActionsInCompactView(0, 1, 2)) // Hiển thị cả 3 nút khi thu gọn
-                .build();
+            .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
+            .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
+                    isPaused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
+            .addAction(android.R.drawable.ic_media_next, "Dừng & Nghe", actionPI(ACTION_STOP_AND_PLAY))
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setOngoing(true)
+            .setStyle(new Notification.MediaStyle()
+                .setMediaSession(dummySession.getSessionToken())
+                .setShowActionsInCompactView(0, 1, 2))
+            .build();
     if (Build.VERSION.SDK_INT >= 29)
         startForeground(93, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
     else startForeground(93, n);
@@ -292,19 +290,16 @@ private void updateNotif(long sec, boolean paused) {
             .setContentTitle((paused ? "⏸️ Đã tạm dừng — " : "🔴 Đang ghi âm — ") + time)
             .setContentText("EdgeBar Voice")
             .setSmallIcon(android.R.drawable.presence_audio_online)
+            .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
             .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     paused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
-            // Sửa đoạn này trong CẢ 2 hàm startForegroundNotif và updateNotif
-                .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP))
-                .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
-                        paused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE))
-                .addAction(android.R.drawable.ic_media_next, "Dừng & Nghe", actionPI(ACTION_STOP_AND_PLAY))
-                .setVisibility(Notification.VISIBILITY_PUBLIC)
-                .setOngoing(true)
-                .setStyle(new Notification.MediaStyle()
-                    .setMediaSession(dummySession.getSessionToken())
-                    .setShowActionsInCompactView(0, 1, 2)) // Hiển thị cả 3 nút khi thu gọn
-                .build();
+            .addAction(android.R.drawable.ic_media_next, "Dừng & Nghe", actionPI(ACTION_STOP_AND_PLAY))
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setOngoing(true)
+            .setStyle(new Notification.MediaStyle()
+                .setMediaSession(dummySession.getSessionToken())
+                .setShowActionsInCompactView(0, 1, 2))
+            .build();
     getSystemService(NotificationManager.class).notify(93, n);
 }
     @Override public void onDestroy() {

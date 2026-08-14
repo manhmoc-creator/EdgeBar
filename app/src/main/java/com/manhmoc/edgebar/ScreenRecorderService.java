@@ -263,19 +263,16 @@ private void pauseRecording() {
             .setContentTitle((isPaused ? "⏸️ Đã tạm dừng — " : "🔴 Đang quay màn hình — ") + time)
             .setContentText("EdgeBar Screen")
             .setSmallIcon(android.R.drawable.presence_video_online)
+            .addAction(android.R.drawable.ic_delete, "Dừng", screenRecActionPI(ACTION_STOP))
             .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     isPaused ? "Tiếp Tục" : "Tạm Dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE))
-            // Sửa đoạn này trong hàm startForegroundNotif
-                .addAction(android.R.drawable.ic_delete, "Dừng", screenRecActionPI(ACTION_STOP))
-                .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
-                        isPaused ? "Tiếp Tục" : "Tạm Dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE))
-                .addAction(android.R.drawable.ic_media_next, "Dừng & Xem", screenRecActionPI(ACTION_STOP_AND_PLAY))
-                .setVisibility(Notification.VISIBILITY_PUBLIC)
-                .setOngoing(true)
-                .setStyle(new Notification.MediaStyle()
-                    .setMediaSession(dummySession.getSessionToken())
-                    .setShowActionsInCompactView(0, 1, 2)) // Hiển thị cả 3 nút
-                .build();
+            .addAction(android.R.drawable.ic_media_next, "Dừng & Xem", screenRecActionPI(ACTION_STOP_AND_PLAY))
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setOngoing(true)
+            .setStyle(new Notification.MediaStyle()
+                .setMediaSession(dummySession.getSessionToken())
+                .setShowActionsInCompactView(0, 1, 2))
+            .build();
     if (Build.VERSION.SDK_INT >= 29)
         startForeground(94, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
     else
