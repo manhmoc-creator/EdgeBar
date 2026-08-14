@@ -111,6 +111,7 @@ private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
     private Button btnWriteSettings; // MỚI
+    private Button btnNotifListener; // MỚI — quyền Notification Access cho PLAY_LAST_MUSIC
     private static final int REQ_UNINSTALL_CONFIRM = 9930;
     private int ecoType = 0;
     private int soundMediaSubTab = -1; // -1 = menu chọn Ghi âm/Ghi màn hình, 0 = Ghi âm, 1 = Ghi màn hình
@@ -220,6 +221,10 @@ prefs.edit().putBoolean("preview_lock", pLock)
     .putBoolean("preview_home", inFrontierHome).apply();
     Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); 
 }
+    private boolean isNotifListenerEnabled() {
+        String flat = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
+        return flat != null && flat.contains(getPackageName());
+    }
     @Override protected void onResume() {
         super.onResume();
         refreshPreview();
@@ -234,6 +239,9 @@ prefs.edit().putBoolean("preview_lock", pLock)
                 new android.content.ComponentName(this, HomebDeviceAdminReceiver.class);
             btnDeviceAdmin.setVisibility(dpmR.isAdminActive(adminR) ? View.GONE : View.VISIBLE);
         }
+        if (btnNotifListener != null) {
+            btnNotifListener.setVisibility(isNotifListenerEnabled() ? View.GONE : View.VISIBLE);
+        }
     }
     @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
     private void reloadActionLabels() {
@@ -242,13 +250,13 @@ String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
         "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA",
         "NOTIFICATIONS", "QUICK_SETTINGS", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "TOGGLE_RECORD",
         "LAUNCH_APP", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE",
-        "LOCATION_SETTINGS_OPEN", "QUICK_SHARE_SETTINGS_OPEN", "PAUSE_RECORD", "OPEN_STORAGE_SCAN", "SCAN_QR", "TOGGLE_WORK_PROFILE"};
+        "LOCATION_SETTINGS_OPEN", "QUICK_SHARE_SETTINGS_OPEN", "PAUSE_RECORD", "OPEN_STORAGE_SCAN", "SCAN_QR", "TOGGLE_WORK_PROFILE", "PLAY_LAST_MUSIC"};
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Toggle Voice Record", "Bật/Tắt Ghi Âm"),
         T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình"), T("Screen Record", "Quay màn hình"), T("Auto-Rotate Toggle", "Bật/Tắt Tự Động Xoay"),
         T("Open Location Settings", "Mở Cài Đặt Vị Trí"), T("Open Quick Share Settings", "Mở Cài Đặt Chia Sẻ Nhanh"), T("Pause/Resume Recording", "Tạm Dừng/Tiếp Tục Ghi Âm"), T("Storage Scan", "Quét Dung Lượng"), T("Scan QR", "Quét QR"),
-         T("Toggle Island (Work Profile)", "Bật/Tắt Đảo (Island)")}; 
+         T("Toggle Island (Work Profile)", "Bật/Tắt Đảo (Island)"), T("Play Last Music (Files by Google)", "Phát Nhạc Gần Nhất (Files by Google)")};
 for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
 // LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
@@ -823,6 +831,19 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
             startActivity(intent);
         });
         main.addView(btnDeviceAdmin);
+
+        // --- NOTIFICATION LISTENER ACCESS (để dùng PLAY_LAST_MUSIC) ---
+        btnNotifListener = new Button(this);
+        btnNotifListener.setText("⚠️ CẤP QUYỀN TRUY CẬP THÔNG BÁO\nĐể phát nhạc gần nhất từ Files by Google");
+        btnNotifListener.setBackground(getRounded("#009688", 25f));
+        btnNotifListener.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams notifLp = new LinearLayout.LayoutParams(-1, -2);
+        notifLp.setMargins(0, 10, 0, 0);
+        btnNotifListener.setLayoutParams(notifLp);
+        btnNotifListener.setVisibility(isNotifListenerEnabled() ? View.GONE : View.VISIBLE);
+        btnNotifListener.setOnClickListener(v ->
+            startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+        main.addView(btnNotifListener);
     // [XÓA] Ô tìm kiếm cố định đầu màn — cổng vào tìm kiếm giờ CHỈ còn nút 🔍 ở
     // bottomBar (btnSearch), tránh 2 cổng vào trùng chức năng cùng lúc chiếm RAM layout.
     navMain = new LinearLayout(this); navMain.setVisibility(View.GONE); // giữ field cũ, không dùng nữa

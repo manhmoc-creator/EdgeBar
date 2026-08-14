@@ -1243,7 +1243,7 @@ case "SCREEN_ON":
                     } catch (SecurityException ignored) {}
                     break;
                 }
-                // THÊM case mới trong switch(a) của cả 2 file:
+                case "PLAY_LAST_MUSIC": playLastFilesMusic(); break;
 default:
                         if (a.startsWith("PANEL_")) {
                             // [THAY] Panel định danh bằng UUID Data Pack, không còn 1/2/3 cố định
@@ -1409,6 +1409,29 @@ private void fireIntentById(String id) {
         }
     }
     private void doVibrate(int dur) { if (dur<=0) return; try { if (Build.VERSION.SDK_INT>=26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
+
+    // [MỚI] Phát nhạc gần nhất trong Files by Google — dùng MediaSessionManager,
+    // cần quyền Notification Access (EdgeBarNotificationListener). Không đọc nội
+    // dung thông báo, chỉ dùng quyền này để liệt kê session media đang tồn tại.
+    private void playLastFilesMusic() {
+        try {
+            android.media.session.MediaSessionManager msm =
+                (android.media.session.MediaSessionManager) getSystemService(Context.MEDIA_SESSION_SERVICE);
+            android.content.ComponentName listenerComp =
+                new android.content.ComponentName(this, EdgeBarNotificationListener.class);
+            java.util.List<android.media.session.MediaController> controllers =
+                msm.getActiveSessions(listenerComp);
+            for (android.media.session.MediaController mc : controllers) {
+                if ("com.google.android.apps.nbu.files".equals(mc.getPackageName())) {
+                    mc.getTransportControls().play();
+                    return;
+                }
+            }
+            Toast.makeText(this, "Files by Google chưa có bài nhạc nào để phát", Toast.LENGTH_SHORT).show();
+        } catch (SecurityException se) {
+            Toast.makeText(this, "Cần cấp quyền Truy cập Thông báo!", Toast.LENGTH_SHORT).show();
+        } catch (Exception ignored) {}
+    }
 // ===== YTDL QUICK INPUT OVERLAY — chỉ tồn tại đúng lúc dùng, Zero-RAM lúc đóng =====
     private View ytdlOverlay;
 

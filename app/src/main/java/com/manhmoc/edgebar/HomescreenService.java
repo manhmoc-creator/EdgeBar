@@ -1205,6 +1205,28 @@ for (String a : acts) {
             else vibrator.vibrate(dur);
         } catch (Exception e) {}
     }
+
+    // [MỚI] Giống hệt bản trong EdgeBarService — cần đồng bộ ở cả 2 nơi vì Homeb
+    // không có Accessibility nên phải tự có bản exec() riêng.
+    private void playLastFilesMusic() {
+        try {
+            android.media.session.MediaSessionManager msm =
+                (android.media.session.MediaSessionManager) getSystemService(Context.MEDIA_SESSION_SERVICE);
+            android.content.ComponentName listenerComp =
+                new android.content.ComponentName(this, EdgeBarNotificationListener.class);
+            java.util.List<android.media.session.MediaController> controllers =
+                msm.getActiveSessions(listenerComp);
+            for (android.media.session.MediaController mc : controllers) {
+                if ("com.google.android.apps.nbu.files".equals(mc.getPackageName())) {
+                    mc.getTransportControls().play();
+                    return;
+                }
+            }
+            Toast.makeText(this, "Files by Google chưa có bài nhạc nào để phát", Toast.LENGTH_SHORT).show();
+        } catch (SecurityException se) {
+            Toast.makeText(this, "Cần cấp quyền Truy cập Thông báo!", Toast.LENGTH_SHORT).show();
+        } catch (Exception ignored) {}
+    }
  // ===== YTDL QUICK INPUT OVERLAY — chỉ tồn tại đúng lúc dùng, Zero-RAM lúc đóng =====
     private View ytdlOverlay;
 
