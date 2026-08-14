@@ -194,12 +194,9 @@ private android.graphics.Bitmap resolveBarIconBitmap(String ref, int size) {
     if (d == null) return null;
     d = d.mutate();
     d.setTint(Color.WHITE);
-    float contentScale = prefs.getInt("lenap_global_icon_scale", 77) / 100f;
     android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
     Canvas c = new Canvas(bmp);
-    int drawSize = Math.max(1, Math.round(size * contentScale));
-    int off = (size - drawSize) / 2;
-    d.setBounds(off, off, off + drawSize, off + drawSize);
+    d.setBounds(0, 0, size, size);
     d.draw(c);
     synchronized (barIconCache) { barIconCache.put(key, bmp); }
     return bmp;
