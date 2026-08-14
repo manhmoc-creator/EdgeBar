@@ -15,6 +15,8 @@
     <uses-permission android:name="android.permission.MODIFY_QUIET_MODE" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -105,6 +107,8 @@
 <service android:name=".ScreenRecorderService" android:exported="false"
     android:foregroundServiceType="mediaProjection" />
 <service android:name=".VolumeButtonService" android:exported="false"
+    android:foregroundServiceType="mediaPlayback" />
+<service android:name=".MyPlaylistService" android:exported="false"
     android:foregroundServiceType="mediaPlayback" />
 <service android:name=".VoiceRecorderService" android:exported="false"
     android:foregroundServiceType="microphone" />

@@ -250,13 +250,13 @@ String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
         "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA",
         "NOTIFICATIONS", "QUICK_SETTINGS", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "TOGGLE_RECORD",
         "LAUNCH_APP", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE",
-        "PAUSE_RECORD", "OPEN_STORAGE_SCAN", "SCAN_QR", "TOGGLE_WORK_PROFILE", "PLAY_LAST_MUSIC"};
+        "PAUSE_RECORD", "OPEN_STORAGE_SCAN", "SCAN_QR", "TOGGLE_WORK_PROFILE", "PLAY_MY_PLAYLIST"};
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Toggle Voice Record", "Bật/Tắt Ghi Âm"),
         T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình"), T("Screen Record", "Quay màn hình"), T("Auto-Rotate Toggle", "Bật/Tắt Tự Động Xoay"),
         T("Pause/Resume Recording", "Tạm Dừng/Tiếp Tục Ghi Âm"), T("Storage Scan", "Quét Dung Lượng"), T("Scan QR", "Quét QR"),
-         T("Toggle Island (Work Profile)", "Bật/Tắt Đảo (Island)"), T("Play Last Music (Files by Google)", "Phát Nhạc Gần Nhất (Files by Google)")};
+         T("Toggle Island (Work Profile)", "Bật/Tắt Đảo (Island)"), T("Play My Playlist", "Phát My Playlist")};
 for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
 // LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
@@ -386,7 +386,12 @@ private String[] getVolKeyActLabs() {
         } else {
             Toast.makeText(this, T("Camera permission needed for QR scanning!", "Cần quyền Camera để quét QR!"), Toast.LENGTH_SHORT).show();
         }
-        recreate(); // ẩn nút nếu đã cấp quyền, giống cách các nút quyền khác refresh trạng thái
+        recreate();
+    } else if (requestCode == 203) {
+        if (grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, "Đã cấp quyền! Có thể phát My Playlist.", Toast.LENGTH_SHORT).show();
+        }
+        recreate();
     }
 }
     private void performBack() {
@@ -782,6 +787,22 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
             btnCamera.setOnClickListener(v ->
                 requestPermissions(new String[]{android.Manifest.permission.CAMERA}, 202));
             main.addView(btnCamera);
+        }
+// --- READ_MEDIA_AUDIO (để dùng Phát My Playlist) ---
+        String audioPerm = Build.VERSION.SDK_INT >= 33
+            ? android.Manifest.permission.READ_MEDIA_AUDIO
+            : android.Manifest.permission.READ_EXTERNAL_STORAGE;
+        if (checkSelfPermission(audioPerm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Button btnAudio = new Button(this);
+            btnAudio.setText("⚠️ CẤP QUYỀN NHẠC (Phát My Playlist)");
+            btnAudio.setBackground(getRounded("#8BC34A", 25f));
+            btnAudio.setTextColor(Color.WHITE);
+            LinearLayout.LayoutParams audLp = new LinearLayout.LayoutParams(-1, -2);
+            audLp.setMargins(0, 10, 0, 0);
+            btnAudio.setLayoutParams(audLp);
+            btnAudio.setOnClickListener(v ->
+                requestPermissions(new String[]{audioPerm}, 203));
+            main.addView(btnAudio);
         }
 // --- WRITE_SETTINGS (để dùng Auto-Rotate Toggle) ---
         btnWriteSettings = new Button(this);
@@ -2867,11 +2888,11 @@ for (String sa : savedArray) {
             // mở UI/dialog) — TOGGLE_WORK_PROFILE bị loại vì key này chưa từng được
             // khai báo trong mảng ACT_KEYS/ACT_LABS nên chọn cũng không hiện ra được.
            List<String[]> VOLKEY_UTIL_ITEMS = buildItemsForKeys(
-                new String[]{"TOGGLE_RECORD", "PAUSE_RECORD", "TOGGLE_OVERLAY", "PLAY_LAST_MUSIC"},
+                new String[]{"TOGGLE_RECORD", "PAUSE_RECORD", "TOGGLE_OVERLAY", "PLAY_MY_PLAYLIST"},
                 actKeysUsed, actLabsUsed);
             vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", VOLKEY_UTIL_ITEMS, selectedActs, "#FF9800"));
         } else {
-            List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR", "PLAY_LAST_MUSIC"}, actKeysUsed, actLabsUsed);
+            List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR", "PLAY_MY_PLAYLIST"}, actKeysUsed, actLabsUsed);
             List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
             List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
             vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));

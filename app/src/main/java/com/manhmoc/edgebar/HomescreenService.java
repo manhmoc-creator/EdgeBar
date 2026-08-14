@@ -1206,26 +1206,11 @@ for (String a : acts) {
         } catch (Exception e) {}
     }
 
-    // [MỚI] Giống hệt bản trong EdgeBarService — cần đồng bộ ở cả 2 nơi vì Homeb
-    // không có Accessibility nên phải tự có bản exec() riêng.
-    private void playLastFilesMusic() {
-        try {
-            android.media.session.MediaSessionManager msm =
-                (android.media.session.MediaSessionManager) getSystemService(Context.MEDIA_SESSION_SERVICE);
-            android.content.ComponentName listenerComp =
-                new android.content.ComponentName(this, EdgeBarNotificationListener.class);
-            java.util.List<android.media.session.MediaController> controllers =
-                msm.getActiveSessions(listenerComp);
-            for (android.media.session.MediaController mc : controllers) {
-                if ("com.google.android.apps.nbu.files".equals(mc.getPackageName())) {
-                    mc.getTransportControls().play();
-                    return;
-                }
-            }
-            Toast.makeText(this, "Files by Google chưa có bài nhạc nào để phát", Toast.LENGTH_SHORT).show();
-        } catch (SecurityException se) {
-            Toast.makeText(this, "Cần cấp quyền Truy cập Thông báo!", Toast.LENGTH_SHORT).show();
-        } catch (Exception ignored) {}
+    // [MỚI] Phát nhạc từ Download/My Playlist — xem MyPlaylistService.java
+    private void startMyPlaylist() {
+        Intent i = new Intent(this, MyPlaylistService.class);
+        i.setAction(MyPlaylistService.ACTION_TOGGLE);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
     }
  // ===== YTDL QUICK INPUT OVERLAY — chỉ tồn tại đúng lúc dùng, Zero-RAM lúc đóng =====
     private View ytdlOverlay;
@@ -1442,6 +1427,7 @@ for (String a : acts) {
                 }
                 case "SCREEN_OFF": doScreenOff(); break;
                 case "SCREENSHOT": doScreenshot(); break;
+                case "PLAY_MY_PLAYLIST": startMyPlaylist(); break;
                 case "SCREEN_RECORD": {
                     if (ScreenRecorderService.isRunning) {
                         Intent stopIntent = new Intent(this, ScreenRecorderService.class);
