@@ -5,10 +5,13 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.database.Cursor;
 import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
+import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
@@ -58,8 +61,36 @@ public class MyPlaylistService extends Service {
     private final List<String> trackNames = new ArrayList<>();
     private int currentIndex = 0;
 
-    @Override public IBinder onBind(Intent intent) { return null; }
+    // [MỚI] Audio Focus — xin quyền phát với hệ thống để app khác (Files by Google,
+    // Spotify...) tự dừng khi EdgeBar phát, và ngược lại EdgeBar tự dừng khi app khác giành lại.
+    private AudioManager audioManager;
+    private AudioFocusRequest focusRequest;
+    private final AudioManager.OnAudioFocusChangeListener focusListener = fc -> {
+        if (fc == AudioManager.AUDIOFOCUS_LOSS || fc == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+            if (isRunning && !isPaused) togglePause();
+        }
+    };
 
+    private boolean requestAudioFocusNow() {
+        if (audioManager == null) audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        AudioAttributes attrs = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build();
+        focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(attrs)
+            .setOnAudioFocusChangeListener(focusListener)
+            .build();
+        int result = audioManager.requestAudioFocus(focusRequest);
+        return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+    }
+
+    private void abandonAudioFocusNow() {
+        if (audioManager != null && focusRequest != null) {
+            audioManager.abandonAudioFocusRequest(focusRequest);
+        }
+    }
+
+    @Override public IBinder onBind(Intent intent) { return null; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : null;
 
@@ -76,6 +107,10 @@ public class MyPlaylistService extends Service {
 
     // ==================== NẠP PLAYLIST & PHÁT BÀI ĐẦU TIÊN ====================
     private void loadPlaylistAndStart() {
+        if (!requestAudioFocusNow()) {
+            showErrorNotif("⚠️ App khác đang giữ quyền phát âm thanh, thử lại sau");
+            return;
+        }
         startForegroundNotif("Đang tải playlist…", false);
         tracks.clear(); trackNames.clear();
 
@@ -174,6 +209,7 @@ public class MyPlaylistService extends Service {
 
     private void stopPlayback() {
         isRunning = false; isPaused = false;
+        abandonAudioFocusNow(); // [MỚI]
         if (player != null) { try { player.stop(); player.release(); } catch (Exception ignored) {} player = null; }
         if (session != null) { session.setActive(false); session.release(); session = null; }
         stopForeground(true);
@@ -219,6 +255,7 @@ public class MyPlaylistService extends Service {
 /** Hiện được cả khi màn khoá/tắt — thay Toast vô hình trong các tình huống đó.
      *  Không ongoing -> tự cho phép vuốt tắt, tự dừng Service ngay sau khi hiện. */
     private void showErrorNotif(String message) {
+        abandonAudioFocusNow(); // [MỚI] không phát được thì nhả quyền ngay, tránh giữ vô ích
         NotificationManager nm = getSystemService(NotificationManager.class);
         NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "My Playlist", NotificationManager.IMPORTANCE_LOW);
         ch.setSound(null, null);
