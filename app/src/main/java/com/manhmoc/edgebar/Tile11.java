@@ -149,10 +149,11 @@ private void updateTileUI() {
     int iconIdx = (manualIconIdx >= 0 && manualIconIdx < ICON_POOL.length) ? manualIconIdx : autoIconForAct(action);
     android.graphics.Bitmap tileIconBmp = null;
     try {
-        android.graphics.drawable.Drawable dTile = getDrawable(ICON_POOL[iconIdx]);
-        if (dTile != null) { dTile = dTile.mutate(); dTile.setTint(android.graphics.Color.WHITE); }
-        tileIconBmp = PanelEngine.normalizeIconBitmap(dTile, 96, 0.82f);
-    } catch (Exception ignored) {}
+    android.graphics.drawable.Drawable dTile = getDrawable(ICON_POOL[iconIdx]);
+    if (dTile != null) { dTile = dTile.mutate(); dTile.setTint(android.graphics.Color.WHITE); }
+    float contentScale = prefs.getInt("lenap_global_icon_scale", 77) / 100f;
+    tileIconBmp = PanelEngine.normalizeIconBitmap(dTile, 96, contentScale);
+} catch (Exception ignored) {}
     if (tileIconBmp != null) t.setIcon(Icon.createWithBitmap(tileIconBmp));
     else t.setIcon(Icon.createWithResource(this, ICON_POOL[iconIdx]));
     t.setState(action.equals("NONE") ? Tile.STATE_INACTIVE : Tile.STATE_ACTIVE);

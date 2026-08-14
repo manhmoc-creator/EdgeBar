@@ -1086,11 +1086,17 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
         }, label);
     } else {
         String label = getActionLabelForPanel(ref);
-        Drawable overrideIcon = getIconOverride(panelId, ref);
+        String overrideKey = "pack_panel_" + panelId + "_icon_override_" + ref;
+        String overrideVal = prefs.getString(overrideKey, "");
+        Drawable overrideIcon = overrideVal.isEmpty() ? null : getIconOverride(panelId, ref);
         Integer resId = ACT_ICON_RES.get(ref);
         Drawable sysIcon = overrideIcon != null ? overrideIcon
             : (resId != null ? ctx.getDrawable(resId) : null);
-        if (overrideIcon == null && sysIcon != null) {
+        // [FIX] Chỉ giữ màu gốc khi override là icon APP thật (đã có màu riêng).
+        // Icon hệ thống — dù mặc định hay do người dùng tự chọn — luôn tint trắng
+        // để đồng nhất, tránh "cùng 1 icon lúc đen lúc trắng".
+        boolean isAppOverride = overrideVal.startsWith("app:");
+        if (sysIcon != null && !isAppOverride) {
             sysIcon = sysIcon.mutate();
             sysIcon.setTint(Color.WHITE);
         }

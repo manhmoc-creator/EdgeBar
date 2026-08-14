@@ -52,7 +52,13 @@ public class MyPlaylistService extends Service {
     public static final String ACTION_NEXT = "com.manhmoc.edgebar.MYPLAYLIST_NEXT";
     public static final String ACTION_PREV = "com.manhmoc.edgebar.MYPLAYLIST_PREV";
     public static final String ACTION_STOP = "com.manhmoc.edgebar.MYPLAYLIST_STOP";
+public static final String ACTION_SEEK_BACK = "com.manhmoc.edgebar.MYPLAYLIST_SEEK_BACK";
+public static final String ACTION_SEEK_FWD  = "com.manhmoc.edgebar.MYPLAYLIST_SEEK_FWD";
+private static final long SEEK_STEP_MS = 10000;
 
+private final android.os.Handler posHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+private Runnable posTicker;
+private boolean pausedByFocusLoss = false;
     private static final String RELATIVE_PATH_PREFIX = "Download/My Playlist";
     private static final String CHANNEL_ID = "eb_my_playlist";
     private static final int NOTIF_ID = 95;
@@ -69,11 +75,27 @@ public class MyPlaylistService extends Service {
     private AudioManager audioManager;
     private AudioFocusRequest focusRequest;
     private final AudioManager.OnAudioFocusChangeListener focusListener = fc -> {
-        if (fc == AudioManager.AUDIOFOCUS_LOSS || fc == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-            if (isRunning && !isPaused) togglePause();
-        }
-    };
-
+    switch (fc) {
+        case AudioManager.AUDIOFOCUS_LOSS:
+            // App khác giành quyền lâu dài (mở nhạc/video khác) -> dừng hẳn,
+            // tránh giữ MediaPlayer/WakeLock vô ích trong lúc không phát.
+            if (isRunning) stopPlayback();
+            break;
+        case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
+            // Mất tạm thời (cuộc gọi đến...) -> tạm dừng, nhớ để tự phát lại
+            if (isRunning && !isPaused) { pausedByFocusLoss = true; togglePause(); }
+            break;
+        case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
+            if (player != null && isRunning && !isPaused) {
+                try { player.setVolume(0.25f, 0.25f); } catch (Exception ignored) {}
+            }
+            break;
+        case AudioManager.AUDIOFOCUS_GAIN:
+            if (player != null) { try { player.setVolume(1f, 1f); } catch (Exception ignored) {} }
+            if (pausedByFocusLoss && isRunning && isPaused) { pausedByFocusLoss = false; togglePause(); }
+            break;
+    }
+};
     private boolean requestAudioFocusNow() {
         if (audioManager == null) audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         AudioAttributes attrs = new AudioAttributes.Builder()
@@ -98,8 +120,10 @@ public class MyPlaylistService extends Service {
         String action = intent != null ? intent.getAction() : null;
 
         if (ACTION_STOP.equals(action)) { stopPlayback(); return START_NOT_STICKY; }
-        if (ACTION_NEXT.equals(action)) { playIndex(currentIndex + 1); return START_NOT_STICKY; }
-        if (ACTION_PREV.equals(action)) { playIndex(currentIndex - 1); return START_NOT_STICKY; }
+if (ACTION_NEXT.equals(action)) { playIndex(currentIndex + 1); return START_NOT_STICKY; }
+if (ACTION_PREV.equals(action)) { playIndex(currentIndex - 1); return START_NOT_STICKY; }
+if (ACTION_SEEK_BACK.equals(action)) { seekBy(-SEEK_STEP_MS); return START_NOT_STICKY; }
+if (ACTION_SEEK_FWD.equals(action)) { seekBy(SEEK_STEP_MS); return START_NOT_STICKY; }
 
         if (ACTION_TOGGLE.equals(action) || action == null) {
             if (isRunning) togglePause();
@@ -150,12 +174,18 @@ public class MyPlaylistService extends Service {
         if (session != null) return;
         session = new MediaSession(this, "EdgeBarMyPlaylist");
         session.setCallback(new MediaSession.Callback() {
-            @Override public void onPlay() { togglePause(); }
-            @Override public void onPause() { togglePause(); }
-            @Override public void onSkipToNext() { playIndex(currentIndex + 1); }
-            @Override public void onSkipToPrevious() { playIndex(currentIndex - 1); }
-            @Override public void onStop() { stopPlayback(); }
-        });
+    @Override public void onPlay() { togglePause(); }
+    @Override public void onPause() { togglePause(); }
+    @Override public void onSkipToNext() { playIndex(currentIndex + 1); }
+    @Override public void onSkipToPrevious() { playIndex(currentIndex - 1); }
+    @Override public void onStop() { stopPlayback(); }
+    @Override public void onRewind() { seekBy(-SEEK_STEP_MS); }
+    @Override public void onFastForward() { seekBy(SEEK_STEP_MS); }
+    @Override public void onSeekTo(long pos) {
+        if (player == null) return;
+        try { player.seekTo((int) pos); updateSessionState(!isPaused); } catch (Exception ignored) {}
+    }
+});
         session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
         session.setActive(true);
     }
@@ -187,11 +217,13 @@ public class MyPlaylistService extends Service {
                     .putString(MediaMetadata.METADATA_KEY_TITLE, trackNames.get(idxForArt))
                     .putString(MediaMetadata.METADATA_KEY_ARTIST, "My Playlist");
                 if (currentArt != null) meta.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, currentArt);
-                session.setMetadata(meta.build());
-            }
-            updateSessionState(true);
-            startForegroundNotif(trackNames.get(currentIndex), false);
-        });
+        meta.putLong(MediaMetadata.METADATA_KEY_DURATION, mp.getDuration());
+        session.setMetadata(meta.build());
+    }
+    updateSessionState(true);
+    startPosTicker();
+    startForegroundNotif(trackNames.get(currentIndex), false);
+});
         try {
             player.setDataSource(this, tracks.get(currentIndex));
             player.prepareAsync(); // không block main thread
@@ -201,27 +233,31 @@ public class MyPlaylistService extends Service {
     }
 
     private void togglePause() {
-        if (player == null || !isRunning) return;
-        try {
-            if (isPaused) { player.start(); isPaused = false; }
-            else { player.pause(); isPaused = true; }
-            updateSessionState(!isPaused);
-            startForegroundNotif(trackNames.get(currentIndex), isPaused);
-        } catch (Exception ignored) {}
-    }
-
+    if (player == null || !isRunning) return;
+    try {
+        if (isPaused) { player.start(); isPaused = false; startPosTicker(); }
+        else { player.pause(); isPaused = true; stopPosTicker(); }
+        updateSessionState(!isPaused);
+        startForegroundNotif(trackNames.get(currentIndex), isPaused);
+    } catch (Exception ignored) {}
+}
     private void updateSessionState(boolean playing) {
-        if (session == null) return;
-        session.setPlaybackState(new PlaybackState.Builder()
-            .setActions(PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_SKIP_TO_NEXT
-                | PlaybackState.ACTION_SKIP_TO_PREVIOUS | PlaybackState.ACTION_STOP)
-            .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED, 0, 1f)
-            .build());
-    }
-
+    if (session == null) return;
+    long pos = 0;
+    try { if (player != null) pos = player.getCurrentPosition(); } catch (Exception ignored) {}
+    session.setPlaybackState(new PlaybackState.Builder()
+        .setActions(PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_SKIP_TO_NEXT
+            | PlaybackState.ACTION_SKIP_TO_PREVIOUS | PlaybackState.ACTION_STOP
+            | PlaybackState.ACTION_REWIND | PlaybackState.ACTION_FAST_FORWARD
+            | PlaybackState.ACTION_SEEK_TO)
+        .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED, pos, playing ? 1f : 0f)
+        .build());
+}
     private void stopPlayback() {
-        isRunning = false; isPaused = false;
-        currentArt = null; // [MỚI] giải phóng RAM ảnh bìa
+    isRunning = false; isPaused = false;
+    stopPosTicker();
+    pausedByFocusLoss = false;
+    currentArt = null; // [MỚI] giải phóng RAM ảnh bìa
         abandonAudioFocusNow(); // [MỚI]
         if (player != null) { try { player.stop(); player.release(); } catch (Exception ignored) {} player = null; }
         if (session != null) { session.setActive(false); session.release(); session = null; }
@@ -238,34 +274,37 @@ public class MyPlaylistService extends Service {
     }
 
     private void startForegroundNotif(String title, boolean paused) {
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "My Playlist", NotificationManager.IMPORTANCE_LOW);
-        ch.setSound(null, null);
-        // [QUAN TRỌNG] PUBLIC = luôn hiện trên màn khoá — ngoại lệ DUY NHẤT cho nhạc,
-        // dù Lock/Homacc đang ẩn mọi thông báo khác theo cấu hình chung của bạn.
-        ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-        nm.createNotificationChannel(ch);
+    NotificationManager nm = getSystemService(NotificationManager.class);
+    NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "My Playlist", NotificationManager.IMPORTANCE_LOW);
+    ch.setSound(null, null);
+    ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+    nm.createNotificationChannel(ch);
 
-        Notification.Builder b = new Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle(paused ? "⏸️ " + title : "🎵 " + title)
-            .setContentText("My Playlist")
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setLargeIcon(currentArt)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setOngoing(isRunning)
-            .addAction(android.R.drawable.ic_media_previous, "Trước", actionPI(ACTION_PREV))
-            .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
-                paused ? "Phát" : "Tạm dừng", actionPI(ACTION_TOGGLE))
-            .addAction(android.R.drawable.ic_media_next, "Tiếp", actionPI(ACTION_NEXT))
-            .addAction(android.R.drawable.ic_delete, "Dừng", actionPI(ACTION_STOP));
-        if (session != null) b.setStyle(new Notification.MediaStyle()
-            .setMediaSession(session.getSessionToken())
-            .setShowActionsInCompactView(0, 1, 2));
-        Notification n = b.build();
-        if (Build.VERSION.SDK_INT >= 29)
-            startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-        else startForeground(NOTIF_ID, n);
-    }
+    // Bộ nút giống media notification chuẩn của hệ thống: Lùi 10s - Trước - Play/Pause - Tiếp - Tới 10s,
+    // nút Dừng đổi icon nguồn (power) để không còn giống dấu X gây hiểu nhầm.
+    Notification.Builder b = new Notification.Builder(this, CHANNEL_ID)
+        .setContentTitle(paused ? "⏸️ " + title : "🎵 " + title)
+        .setContentText("My Playlist")
+        .setSmallIcon(android.R.drawable.ic_media_play)
+        .setLargeIcon(currentArt)
+        .setVisibility(Notification.VISIBILITY_PUBLIC)
+        .setOngoing(isRunning)
+        .setDeleteIntent(actionPI(ACTION_STOP))
+        .addAction(android.R.drawable.ic_media_rew, "Lùi 10s", actionPI(ACTION_SEEK_BACK))
+        .addAction(android.R.drawable.ic_media_previous, "Trước", actionPI(ACTION_PREV))
+        .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
+            paused ? "Phát" : "Tạm dừng", actionPI(ACTION_TOGGLE))
+        .addAction(android.R.drawable.ic_media_next, "Tiếp", actionPI(ACTION_NEXT))
+        .addAction(android.R.drawable.ic_media_ff, "Tới 10s", actionPI(ACTION_SEEK_FWD))
+        .addAction(android.R.drawable.ic_lock_power_off, "Dừng", actionPI(ACTION_STOP));
+    if (session != null) b.setStyle(new Notification.MediaStyle()
+        .setMediaSession(session.getSessionToken())
+        .setShowActionsInCompactView(1, 2, 3)); // Trước - Play/Pause - Tiếp trong khung thu gọn
+    Notification n = b.build();
+    if (Build.VERSION.SDK_INT >= 29)
+        startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+    else startForeground(NOTIF_ID, n);
+}
 /** Hiện được cả khi màn khoá/tắt — thay Toast vô hình trong các tình huống đó.
      *  Không ongoing -> tự cho phép vuốt tắt, tự dừng Service ngay sau khi hiện. */
     private void showErrorNotif(String message) {
@@ -308,7 +347,31 @@ private android.graphics.Bitmap extractAlbumArt(Uri uri) {
         }
         return a.length() - b.length();
     }
+private void seekBy(long deltaMs) {
+    if (player == null || !isRunning) return;
+    try {
+        int dur = player.getDuration();
+        int pos = player.getCurrentPosition();
+        int target = (int) Math.max(0, Math.min(dur, pos + deltaMs));
+        player.seekTo(target);
+        updateSessionState(!isPaused);
+    } catch (Exception ignored) {}
+}
 
+private void startPosTicker() {
+    stopPosTicker();
+    posTicker = () -> {
+        if (!isRunning || isPaused) return;
+        updateSessionState(true);
+        posHandler.postDelayed(posTicker, 1000);
+    };
+    posHandler.postDelayed(posTicker, 1000);
+}
+
+private void stopPosTicker() {
+    if (posTicker != null) posHandler.removeCallbacks(posTicker);
+    posTicker = null;
+}
     @Override public void onDestroy() {
         if (isRunning) stopPlayback();
         super.onDestroy();
