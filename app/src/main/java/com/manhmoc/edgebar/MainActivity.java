@@ -250,12 +250,12 @@ String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
         "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA",
         "NOTIFICATIONS", "QUICK_SETTINGS", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "TOGGLE_RECORD",
         "LAUNCH_APP", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE",
-        "LOCATION_SETTINGS_OPEN", "QUICK_SHARE_SETTINGS_OPEN", "PAUSE_RECORD", "OPEN_STORAGE_SCAN", "SCAN_QR", "TOGGLE_WORK_PROFILE", "PLAY_LAST_MUSIC"};
+        "PAUSE_RECORD", "OPEN_STORAGE_SCAN", "SCAN_QR", "TOGGLE_WORK_PROFILE", "PLAY_LAST_MUSIC"};
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Toggle Voice Record", "Bật/Tắt Ghi Âm"),
         T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình"), T("Screen Record", "Quay màn hình"), T("Auto-Rotate Toggle", "Bật/Tắt Tự Động Xoay"),
-        T("Open Location Settings", "Mở Cài Đặt Vị Trí"), T("Open Quick Share Settings", "Mở Cài Đặt Chia Sẻ Nhanh"), T("Pause/Resume Recording", "Tạm Dừng/Tiếp Tục Ghi Âm"), T("Storage Scan", "Quét Dung Lượng"), T("Scan QR", "Quét QR"),
+        T("Pause/Resume Recording", "Tạm Dừng/Tiếp Tục Ghi Âm"), T("Storage Scan", "Quét Dung Lượng"), T("Scan QR", "Quét QR"),
          T("Toggle Island (Work Profile)", "Bật/Tắt Đảo (Island)"), T("Play Last Music (Files by Google)", "Phát Nhạc Gần Nhất (Files by Google)")};
 for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
@@ -453,19 +453,6 @@ private void fireTestActions(java.util.Collection<String> acts, String launchPkg
         new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> fireTestAction(fa, launchPkg, shortcutId), delay);
         delay += 120;
     }
-}
-
-private Button buildTestButton() {
-    Button b = new Button(this);
-    b.setText("▶ " + T("TEST", "THỬ NGAY"));
-    b.setBackground(getRounded("#FFC107", 20f));
-    b.setTextColor(Color.BLACK);
-    b.setTextSize(13.5f);
-    b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-    lp.setMargins(0, 10, 0, 0);
-    b.setLayoutParams(lp);
-    return b;
 }
 // ==================== DRAG-TO-REORDER DÙNG CHUNG ====================
 // Nhấn giữ 1 card đã build sẵn -> kéo đổi vị trí với card khác trong cùng
@@ -1817,9 +1804,9 @@ private String cloneDataPackDeep(String itemKey) {
     frontierBodyContainer = body;
 
     Object[][] spaces = {
-        {"routine_24px", "HOMEB", T("No Accessibility needed","Không cần Trợ năng"), 1},
-        {"accessible_menu_24px", "HOMACC", T("Accessibility ON","Có Trợ năng"), 2},
-        {"mobile_lock_portrait_24px", "LOCK", T("Lock screen","Màn hình khoá"), 0},
+        {"routine_24px", "HOMEB", T("No Accessibility Needed","Không cần Trợ năng"), 1},
+        {"accessible_menu_24px", "HOMACC", T("Accessibility On","Có Trợ năng"), 2},
+        {"mobile_lock_portrait_24px", "LOCK", T("Lock Screen","Màn hình khoá"), 0},
     };
     for (Object[] space : spaces) {
         final int spaceIdx = (int) space[3];
@@ -2489,16 +2476,6 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick);
     bTrig.performClick();
 
-    // [MỚI] Nút TEST cho Pattern
-    Button bTest = buildTestButton();
-    bTest.setOnClickListener(v -> {
-        java.util.LinkedHashSet<String> testActs = new java.util.LinkedHashSet<>(selectedActs);
-        if (launchAppSelected[0]) testActs.add("LAUNCH_APP");
-        if (shortcutSelected[0]) testActs.add("RUN_SHORTCUT");
-        fireTestActions(testActs, launchAppPkg[0], shortcutId[0]);
-    });
-    root.addView(bTest);
-
     LinearLayout footer = new LinearLayout(this);
     footer.setOrientation(LinearLayout.HORIZONTAL);
     footer.setPadding(0, 20, 0, 0);
@@ -2889,12 +2866,12 @@ for (String sa : savedArray) {
             // [MỚI] VolKey: chỉ hiện Action nào hoạt động tốt lúc màn tắt (không cần
             // mở UI/dialog) — TOGGLE_WORK_PROFILE bị loại vì key này chưa từng được
             // khai báo trong mảng ACT_KEYS/ACT_LABS nên chọn cũng không hiện ra được.
-            List<String[]> VOLKEY_UTIL_ITEMS = buildItemsForKeys(
-                new String[]{"TOGGLE_RECORD", "PAUSE_RECORD", "TOGGLE_OVERLAY"},
+           List<String[]> VOLKEY_UTIL_ITEMS = buildItemsForKeys(
+                new String[]{"TOGGLE_RECORD", "PAUSE_RECORD", "TOGGLE_OVERLAY", "PLAY_LAST_MUSIC"},
                 actKeysUsed, actLabsUsed);
             vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", VOLKEY_UTIL_ITEMS, selectedActs, "#FF9800"));
         } else {
-            List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR"}, actKeysUsed, actLabsUsed);
+            List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR", "PLAY_LAST_MUSIC"}, actKeysUsed, actLabsUsed);
             List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
             List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
             vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
@@ -3341,7 +3318,7 @@ private LinearLayout buildShowcaseItem(String icon, String title, String sub, Ru
 private void buildEcoShowcaseSpace() {
     pageEcoShowcase.addView(createBackRow(T("Ecosystem","Hệ sinh thái")));
     pageEcoShowcase.addView(wrapCard(buildShowcaseItem("🎵", "YTDLnis",
-        T("Quick music/video download","Tải nhạc/video nhanh"), this::showYTDLDialog)));
+        T("Quick Music/Video Download","Tải nhạc/video nhanh"), this::showYTDLDialog)));
     pageEcoShowcase.addView(wrapCard(buildShowcaseItem("🏝️", "Island",
         T("Toggle Island (Work Profile)","Bật/Tắt Đảo (Island)"), () -> {
             Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
@@ -3354,14 +3331,14 @@ private void buildEcoShowcaseSpace() {
 private void buildSystemSpace() {
     pageSystemSpace.addView(createBackRow(T("System","Hệ thống")));
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("💾", T("Backup","Sao lưu"),
-        T("Export config to JSON","Xuất cấu hình ra JSON"), () -> {
+        T("Export Config To Json","Xuất cấu hình ra Json"), () -> {
             Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("application/json");
             i.putExtra(Intent.EXTRA_TITLE, "EdgeBar_Backup_" + System.currentTimeMillis() + ".json");
             startActivityForResult(i, 101);
         })));
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("📁", T("Restore","Khôi phục"),
-        T("Import config from JSON","Nạp cấu hình từ JSON"), () -> {
+        T("Import Config From Json","Nạp cấu hình từ Json"), () -> {
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*");
             startActivityForResult(i, 102);
@@ -3374,14 +3351,14 @@ private void buildSystemSpace() {
         })));
     // [FIX] showSubNav = false — Kho cũ cũng không cần thanh tab Custom Actions
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("🗑️", T("Trash","Kho cũ"),
-        T("Restore or permanently delete","Khôi phục hoặc xóa vĩnh viễn"), () -> openEco(6, false))));
+        T("Restore Or Permanently Delete","Khôi phục hoặc xóa vĩnh viễn"), () -> openEco(6, false))));
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("🔳", T("Scan QR","Quét QR"), "",
         () -> startActivity(new Intent(this, QrScanActivity.class)))));
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("🏦", T("QR Banks","QR Ngân hàng"),
-        T("Choose bank apps for VietQR","Chọn app ngân hàng cho VietQR"),
+        T("Choose Bank Apps For VietQR","Chọn app ngân hàng cho VietQR"),
         () -> showPanelMultiPicker("qr_bank_apps", true))));
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("🔑", T("Permissions","Quyền cần cấp"),
-        T("Grant remaining permissions","Cấp các quyền còn thiếu"),
+        T("Grant Remaining Permissions","Cấp các quyền còn thiếu"),
         () -> Toast.makeText(this, T("Scroll to top of this screen","Cuộn lên đầu màn hình chính"), Toast.LENGTH_LONG).show())));
 }
     // ==================== KHÔNG GIAN HÀNH ĐỘNG TUỲ CHỈNH (CHỈ INTENTS/QS TILES/MACROS) ====================
@@ -3406,9 +3383,9 @@ private void buildEcosystemSpace() {
     ecoMenuContainer.setOrientation(LinearLayout.VERTICAL);
     pageEcosystem.addView(ecoMenuContainer);
 
-    ecoMenuContainer.addView(createSettingsRow("flash_on_24px", "Intents", T("Custom scripts","Các kịch bản tùy chỉnh"), () -> openEcoSubTab(0, "Intents")));
-    ecoMenuContainer.addView(createSettingsRow("routine_24px", "QS Tiles", T("Quick Settings tiles","Các phím cài đặt nhanh"), () -> openEcoSubTab(1, "QS Tiles")));
-    ecoMenuContainer.addView(createSettingsRow("memory_24px", "Macros", T("Multi-action chains","Chuỗi hành động đa nhiệm"), () -> openEcoSubTab(2, "Macros")));
+    ecoMenuContainer.addView(createSettingsRow("flash_on_24px", "Intents", T("Custom Scripts","Các kịch bản tùy chỉnh"), () -> openEcoSubTab(0, "Intents")));
+    ecoMenuContainer.addView(createSettingsRow("routine_24px", "QS Tiles", T("Quick Settings Tiles","Các phím cài đặt nhanh"), () -> openEcoSubTab(1, "QS Tiles")));
+    ecoMenuContainer.addView(createSettingsRow("memory_24px", "Macros", T("Multi-action Chains","Chuỗi hành động đa nhiệm"), () -> openEcoSubTab(2, "Macros")));
 
     ecoSubHeader = new LinearLayout(this);
     ecoSubHeader.setOrientation(LinearLayout.HORIZONTAL);
@@ -4125,7 +4102,7 @@ cardWrap.addView(selDot);
 }
     private String getActionLabel(String actionKey) {
         for (int i=0; i<ACT_KEYS.length; i++) {
-            if (ACT_KEYS[i].equals(actionKey)) return ACT_LABS[i];
+            if (ACT_KEYS[i] != null && ACT_KEYS[i].equals(actionKey)) return ACT_LABS[i];
         }
         return actionKey;
     }
@@ -4533,7 +4510,7 @@ private void renderSoundMediaMenu() {
     boolean recOn = VoiceRecorderService.isRunning;
     boolean vidOn = ScreenRecorderService.isRunning;
     ecoContainer.addView(createSettingsRow("music_note_2_24px", T("Voice Recording", "Ghi âm"),
-        recOn ? T("Recording...", "Đang ghi âm...") : T("Tap to open", "Chạm để mở"),
+        recOn ? T("Recording...", "Đang ghi âm...") : T("Tap to Open", "Chạm để mở"),
         () -> {
             soundMediaSubTab = 0;
             navBackStack.push(() -> {
@@ -4545,7 +4522,7 @@ private void renderSoundMediaMenu() {
             renderEcosystem();
         }));
     ecoContainer.addView(createSettingsRow("movie_24px", T("Screen Recording", "Ghi màn hình"),
-        vidOn ? T("Recording...", "Đang ghi màn hình...") : T("Tap to open", "Chạm để mở"),
+        vidOn ? T("Recording...", "Đang ghi màn hình...") : T("Tap to Open", "Chạm để mở"),
         () -> {
             soundMediaSubTab = 1;
             navBackStack.push(() -> {
@@ -4814,24 +4791,7 @@ private void renderScreenRecordList() {
     EditText etFlags = createEcoInput("Flags", prefs.getString("intent_"+id+"_flags",""));
     CheckBox cbBr = new CheckBox(this); cbBr.setText("Send as Broadcast"); cbBr.setTextColor(Color.WHITE); cbBr.setChecked(prefs.getBoolean("intent_"+id+"_br", false));
     content.addView(etName); content.addView(etAct); content.addView(etPkg); content.addView(etCls); content.addView(etData); content.addView(etCat); content.addView(etFlags); content.addView(cbBr);
-    // [MỚI] Test Intent — tự lưu tạm field hiện tại (không đóng dialog) rồi bắn thử ngay
-    Button bTest = buildTestButton();
-    bTest.setOnClickListener(v -> {
-        prefs.edit()
-            .putString("intent_"+id+"_name", etName.getText().toString())
-            .putString("intent_"+id+"_act", etAct.getText().toString())
-            .putString("intent_"+id+"_pkg", etPkg.getText().toString())
-            .putString("intent_"+id+"_cls", etCls.getText().toString())
-            .putString("intent_"+id+"_data", etData.getText().toString())
-            .putString("intent_"+id+"_cat", etCat.getText().toString())
-            .putString("intent_"+id+"_flags", etFlags.getText().toString())
-            .putBoolean("intent_"+id+"_br", cbBr.isChecked())
-            .apply();
-        fireTestAction("INTENT_" + id, "", "");
-    });
-    content.addView(bTest);
-
-    LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
+        LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
     Button bCancel = new Button(this); bCancel.setText("HỦY"); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     Button bSave = new Button(this); bSave.setText("LƯU"); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); bSave.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
@@ -4860,19 +4820,7 @@ private void openMacroEditorV2(String id) {
     EditText etName = createEcoInput("Tên gợi nhớ", prefs.getString("macro_"+id+"_name",""));
     EditText etSvcs = createEcoInput("Services (com.pkg/.Class)", prefs.getString("macro_"+id+"_svcs",""));
     content.addView(etName); content.addView(etSvcs);
-    // [MỚI] Test Macro — bắn TOGGLE_MACRO với đúng nội dung Services đang gõ, không cần Lưu
-    Button bTest = buildTestButton();
-    bTest.setOnClickListener(v -> {
-        String svcs = etSvcs.getText().toString().trim();
-        if (svcs.isEmpty()) { Toast.makeText(this, T("Enter services first!","Nhập Services trước!"), Toast.LENGTH_SHORT).show(); return; }
-        Intent iM = new Intent("com.manhmoc.edgebar.TOGGLE_MACRO");
-        iM.putExtra("services", svcs);
-        sendBroadcast(iM);
-        Toast.makeText(this, "▶ " + T("Testing macro...", "Đang thử Macro..."), Toast.LENGTH_SHORT).show();
-    });
-    content.addView(bTest);
-
-    LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
+        LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
     Button bCancel = new Button(this); bCancel.setText("HỦY"); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     Button bSave = new Button(this); bSave.setText("LƯU"); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); bSave.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
@@ -4968,12 +4916,7 @@ private void openTileEditorV2(String id) {
     if (curSlotPos >= 0) spSlot.setSelection(curSlotPos);
     content.addView(spSlot);
 
-    // [MỚI] Test QS Tile — dùng đúng action đang chọn trong bộ nhớ tạm (chưa cần Lưu)
-    Button bTest = buildTestButton();
-    bTest.setOnClickListener(v -> fireTestAction(chosenAct[0], chosenPkg[0], chosenScId[0]));
-    content.addView(bTest);
-
-    LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
+        LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,40,0,0);
     Button bCancel = new Button(this); bCancel.setText("HỦY"); bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE); bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     Button bSave = new Button(this); bSave.setText("LƯU"); bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE); bSave.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
@@ -7176,7 +7119,7 @@ private String formatPruleActionLabel(String rId) {
             continue;
         }
         for (int i = 0; i < ACT_KEYS.length; i++) {
-            if (ACT_KEYS[i].equals(at)) {
+            if (ACT_KEYS[i] != null && ACT_KEYS[i].equals(at)) {
                 if (sb.length() > 0) sb.append(" + ");
                 sb.append(ACT_LABS[i]);
                 break;
