@@ -381,7 +381,6 @@ private android.graphics.Bitmap resolveBarIconBitmap(String ref, int size) {
     int off = (size - drawSize) / 2;
     d.setBounds(off, off, off + drawSize, off + drawSize);
     d.draw(c);
-}
     synchronized (barIconCache) { barIconCache.put(key, bmp); }
     return bmp;
 }
