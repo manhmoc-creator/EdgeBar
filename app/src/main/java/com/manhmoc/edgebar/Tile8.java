@@ -64,8 +64,8 @@ public class Tile8 extends TileService {
         android.R.drawable.ic_lock_idle_low_battery,
         android.R.drawable.ic_lock_silent_mode,
         android.R.drawable.ic_lock_silent_mode_off,
-        android.R.drawable.ic_lock_airplane_mode,
-        android.R.drawable.ic_lock_airplane_mode_off,
+        android.R.drawable.ic_menu_myplaces,
+        android.R.drawable.ic_menu_report_image,
         // ===== [MỚI] Nhóm 2: Đổ bóng / xám mờ =====
         android.R.drawable.stat_sys_download,
         android.R.drawable.stat_sys_download_done,
@@ -80,8 +80,8 @@ public class Tile8 extends TileService {
         // ===== [MỚI] Nhóm 3: Rỗng / nửa =====
         android.R.drawable.star_off,
         android.R.drawable.btn_star_big_off,
-        android.R.drawable.rate_star_big_off,
-        android.R.drawable.rate_star_big_half,
+        android.R.drawable.ic_menu_set_as,
+        android.R.drawable.ic_menu_slideshow,
         // ===== [MỚI] Nhóm 4: Điều hướng cơ bản =====
         android.R.drawable.arrow_down_float,
         android.R.drawable.arrow_up_float,
@@ -108,7 +108,7 @@ public class Tile8 extends TileService {
         android.R.drawable.ic_dialog_info,
         android.R.drawable.ic_dialog_dialer,
         android.R.drawable.btn_star_big_on,
-        android.R.drawable.rate_star_big_on,
+        android.R.drawable.presence_offline,
         android.R.drawable.sym_def_app_icon,
         android.R.drawable.sym_action_call,
         android.R.drawable.sym_action_chat,
