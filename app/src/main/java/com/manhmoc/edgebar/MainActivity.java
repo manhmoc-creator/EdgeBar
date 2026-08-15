@@ -3901,6 +3901,18 @@ private LinearLayout buildEcoSelectionToolbar() {
     return bar;
 }
     private void renderEcosystem() {
+    // [FIX CRASH] Chủ động bỏ focus + ẩn bàn phím TRƯỚC khi xoá View — chặn
+    // đứng mọi trường hợp EditText (như ô số thứ tự My Playlist) đang giữ
+    // focus bị removeAllViews() xoá giữa chừng, gây NPE trong hệ Focus/IME.
+    try {
+        View cur = getCurrentFocus();
+        if (cur != null) {
+            android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm != null) imm.hideSoftInputFromWindow(cur.getWindowToken(), 0);
+            cur.clearFocus();
+        }
+    } catch (Exception ignored) {}
     ecoContainer.removeAllViews();
    if (ecoType == 0 || ecoType == 1 || ecoType == 2) {
     String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
@@ -4485,7 +4497,7 @@ private void renderMyPlaylistList(LinearLayout listContainer, String query) {
         }
 
         TextView tv = new TextView(this);
-        tv.setText("🎵 " + name);
+        tv.setText(" " + name);
         tv.setTextColor(Color.WHITE); tv.setTextSize(14.5f);
         tv.setMaxLines(2); tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
         // [YÊU CẦU: chữ lấp đầy Data Pack] weight=1 chiếm hết chiều ngang còn lại
@@ -4535,8 +4547,9 @@ private void renderMyPlaylistList(LinearLayout listContainer, String query) {
         listContainer.addView(card);
     }
 }
-// [MỚI] Đổi vị trí bài hát bằng cách gõ số — dịch chuyển đúng 1 phần tử trong CSV,
-// KHÔNG rebuild toàn bộ danh sách, KHÔNG Thread nào — rẻ CPU/pin cho Pixel 2XL.
+// [MỚI] Đổi vị trí bằng cách HOÁN ĐỔI (swap) — bài ở vị trí đích nhảy về đúng
+// vị trí cũ của bài đang sửa, các bài khác giữ nguyên chỗ. Ví dụ: đổi bài #1
+// thành số 8 -> bài đang ở #8 tự động đổi thành #1 (lên đầu), bài #1 cũ xuống #8.
 private void applyMyPlaylistReorder(String id, String typedNum) {
     List<String> ids = getDynamicIds("myplaylist_ids");
     int oldPos = ids.indexOf(id);
@@ -4544,15 +4557,25 @@ private void applyMyPlaylistReorder(String id, String typedNum) {
 
     int newPos;
     try { newPos = Integer.parseInt(typedNum.trim()) - 1; }
-    catch (Exception e) { renderEcosystem(); return; } // số không hợp lệ -> vẽ lại về trạng thái đúng
+    catch (Exception e) { deferRenderEcosystem(); return; } // số không hợp lệ -> vẽ lại về trạng thái đúng
 
     newPos = Math.max(0, Math.min(ids.size() - 1, newPos)); // kẹp trong khoảng hợp lệ
-    if (newPos == oldPos) { renderEcosystem(); return; }
+    if (newPos == oldPos) { deferRenderEcosystem(); return; }
 
-    ids.remove(oldPos);
-    ids.add(newPos, id);
+    Collections.swap(ids, oldPos, newPos); // HOÁN ĐỔI thay vì remove+insert
     prefs.edit().putString("myplaylist_ids", TextUtils.join(",", ids)).apply();
-    renderEcosystem();
+    deferRenderEcosystem();
+}
+
+// [FIX CRASH] KHÔNG được rebuild View (removeAllViews) ngay trong callback
+// onEditorAction/onFocusChange của EditText — lúc đó hệ Focus/IME đang thao
+// tác dở trên chính EditText sắp bị xoá, gây NullPointerException khi hệ
+// thống truy cập mViewFlags của 1 View đã null. Post vào hàng đợi UI thread
+// để chạy SAU khi dispatch sự kiện hiện tại kết thúc hẳn — Zero cost thêm
+// (chỉ 1 Handler.post rẻ tiền), không Thread/Timer nào giữ lại.
+private final Handler ecoDeferHandler = new Handler(android.os.Looper.getMainLooper());
+private void deferRenderEcosystem() {
+    ecoDeferHandler.post(this::renderEcosystem);
 }
 private LinearLayout buildMyPlaylistSelectionToolbar(List<String> ids) {
     LinearLayout bar = new LinearLayout(this);
