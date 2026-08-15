@@ -4794,11 +4794,11 @@ private void renderVoiceRecordList() {
             card.setOnLongClickListener(v -> true);
         } else {
             card.setOnClickListener(v -> {
-                Intent i = new Intent(this, PlayerActivity.class);
-                i.putExtra(PlayerActivity.EXTRA_MODE, PlayerActivity.MODE_SINGLE_URI);
-                i.putExtra(PlayerActivity.EXTRA_URI, uri.toString());
-                i.putExtra(PlayerActivity.EXTRA_TITLE, name);
-                startActivity(i);
+                Intent playerIntent = new Intent(this, PlayerActivity.class);
+                playerIntent.putExtra(PlayerActivity.EXTRA_MODE, PlayerActivity.MODE_SINGLE_URI);
+                playerIntent.putExtra(PlayerActivity.EXTRA_URI, uri.toString());
+                playerIntent.putExtra(PlayerActivity.EXTRA_TITLE, name);
+                startActivity(playerIntent);
             });
             card.setOnLongClickListener(v -> {
                 voiceSelectMode = true;
