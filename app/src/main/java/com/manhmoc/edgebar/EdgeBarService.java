@@ -1718,7 +1718,8 @@ if (panelEngine != null) panelEngine.rebuildAll();
     private final Runnable longPressRunnable = () -> {
         longFired = true;
         handleAction(prefKeyBase + "_long");
-        if (rippleView != null) { float[] dir = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
+        GestureRippleView rv = rippleView;
+        if (rv != null) { float[] dir = computeJumpDirForTap(); rv.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
     };
     private long lastTapUpTime = 0;
     private static final long DTAP_WINDOW_MS = 300;
@@ -1765,13 +1766,13 @@ private float[] computeJumpDirForTap() {
         else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
         switch (e.getAction()) {
             case MotionEvent.ACTION_MOVE: {
-    if (rippleView != null) rippleView.moveTo(getFixedX(e), getFixedY(e));
-    float mdx = getFixedX(e) - sx, mdy = getFixedY(e) - sy;
-    if (!longFired && (Math.abs(mdx) > SWIPE_CANCEL_SLOP_PX || Math.abs(mdy) > SWIPE_CANCEL_SLOP_PX)) {
-        lpHandler.removeCallbacks(longPressRunnable);
-    }
-    return true;
-}
+                if (rippleView != null) rippleView.moveTo(getFixedX(e), getFixedY(e));
+                float mdx = getFixedX(e) - sx, mdy = getFixedY(e) - sy;
+                if (!longFired && (Math.abs(mdx) > SWIPE_CANCEL_SLOP_PX || Math.abs(mdy) > SWIPE_CANCEL_SLOP_PX)) {
+                    lpHandler.removeCallbacks(longPressRunnable);
+                }
+                return true;
+            }
             case MotionEvent.ACTION_DOWN:
                 sx = getFixedX(e); sy = getFixedY(e); st = System.currentTimeMillis();
                 longFired = false;
@@ -1796,12 +1797,13 @@ private float[] computeJumpDirForTap() {
                         if (isHold) actionName += "_hold";
                     }
                     handleAction(prefKeyBase + "_" + actionName);
-                    if (rippleView != null) {
-                        rippleView.popRipple();
+                    GestureRippleView rvSwipe = rippleView;
+                    if (rvSwipe != null) {
+                        rvSwipe.popRipple();
                         float swipeMag = (float) Math.sqrt(dx * dx + dy * dy);
                         float dirX = swipeMag > 0.001f ? dx / swipeMag : 0f;
                         float dirY = swipeMag > 0.001f ? dy / swipeMag : 0f;
-                        rippleView.jumpIcon(getFixedX(e), getFixedY(e), actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
+                        rvSwipe.jumpIcon(getFixedX(e), getFixedY(e), actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
                     }
                     return true;
                 }
@@ -1815,14 +1817,15 @@ private float[] computeJumpDirForTap() {
                 final float upX = getFixedX(e), upY = getFixedY(e);
                 boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
                 float[] dirTap = computeJumpDirForTap();
+                GestureRippleView rvTap = rippleView;
                 if (!hasDtap) {
                     lastTapUpTime = 0;
                     handleAction(prefKeyBase + "_tap");
-                    if (rippleView != null) rippleView.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                    if (rvTap != null) rvTap.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                 } else if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
                     lastTapUpTime = 0;
                     handleAction(prefKeyBase + "_dtap");
-                    if (rippleView != null) rippleView.jumpIcon(upX, upY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                    if (rvTap != null) rvTap.jumpIcon(upX, upY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                 } else {
                     lastTapUpTime = now;
                     final long myUpTs = now;
@@ -1830,13 +1833,14 @@ private float[] computeJumpDirForTap() {
                         if (lastTapUpTime == myUpTs) {
                             lastTapUpTime = 0;
                             handleAction(prefKeyBase + "_tap");
-                            if (rippleView != null) rippleView.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                            GestureRippleView rvDelay = rippleView;
+                            if (rvDelay != null) rvDelay.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                         }
                     }, DTAP_WINDOW_MS + 20);
                 }
-                if (rippleView != null) rippleView.popRipple();
+                if (rvTap != null) rvTap.popRipple();
                 return true;
-       }
+            }
             case MotionEvent.ACTION_CANCEL: {
                 lpHandler.removeCallbacks(longPressRunnable);
                 if (!longFired) {
@@ -1846,10 +1850,12 @@ private float[] computeJumpDirForTap() {
                             && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
                         longFired = true;
                         handleAction(prefKeyBase + "_long");
-                        if (rippleView != null) { float[] dir = computeJumpDirForTap(); rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
+                        GestureRippleView rvCancel = rippleView;
+                        if (rvCancel != null) { float[] dir = computeJumpDirForTap(); rvCancel.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
                     }
                 }
-                if (rippleView != null) rippleView.popRipple();
+                GestureRippleView rvCancelPop = rippleView;
+                if (rvCancelPop != null) rvCancelPop.popRipple();
                 return true;
             }
         }
