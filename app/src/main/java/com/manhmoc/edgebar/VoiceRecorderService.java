@@ -231,7 +231,15 @@ public class VoiceRecorderService extends Service {
         int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
         return PendingIntent.getService(this, action.hashCode(), i, flags);
     }
-
+private PendingIntent contentTapPI() {
+    Intent i = new Intent(this, EdgeBarPlayerActivity.class);
+    if (pendingUri != null) i.setData(pendingUri);
+    i.putExtra("title", "Voice Recording");
+    i.putExtra("fav_key", "voicerec_current");
+    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+    int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
+    return PendingIntent.getActivity(this, 9101, i, flags);
+}
     private void startForegroundNotif() {
     String cid = "eb_voice_rec_v2";
     NotificationChannel c = new NotificationChannel(cid, "Ghi âm EdgeBar", NotificationManager.IMPORTANCE_LOW);
@@ -275,6 +283,7 @@ public class VoiceRecorderService extends Service {
             .setContentTitle("🔴 Đang ghi âm — 00:00")
             .setContentText("EdgeBar Voice")
             .setSmallIcon(android.R.drawable.presence_audio_online)
+            .setContentIntent(contentTapPI())
             .addAction(android.R.drawable.ic_media_next, "Dừng", actionPI(ACTION_STOP)) // Nút Trái
             .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     isPaused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE)) // Nút Giữa
@@ -303,6 +312,7 @@ private void updateNotif(long sec, boolean paused) {
             .setContentTitle((paused ? "⏸️ Đã tạm dừng — " : "🔴 Đang ghi âm — ") + time)
             .setContentText("EdgeBar Voice")
             .setSmallIcon(android.R.drawable.presence_audio_online)
+            .setContentIntent(contentTapPI())
             .addAction(android.R.drawable.ic_media_next, "Dừng", actionPI(ACTION_STOP)) // Nút Trái
             .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     paused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE)) // Nút Giữa

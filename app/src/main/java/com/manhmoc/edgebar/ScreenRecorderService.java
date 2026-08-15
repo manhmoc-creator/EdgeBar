@@ -225,7 +225,13 @@ private void pauseRecording() {
         stopForeground(true);
         stopSelf();
     }
-
+private PendingIntent contentTapPI() {
+    Intent i = new Intent(Intent.ACTION_VIEW);
+    if (pendingUri != null) i.setDataAndType(pendingUri, "video/*");
+    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+    int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
+    return PendingIntent.getActivity(this, 9102, i, flags);
+}
     private android.app.PendingIntent screenRecActionPI(String action) {
         Intent i = new Intent(this, ScreenRecorderService.class);
         i.setAction(action);
@@ -275,6 +281,7 @@ private void pauseRecording() {
             .setContentTitle((isPaused ? "⏸️ Đã tạm dừng — " : "🔴 Đang quay màn hình — ") + time)
             .setContentText("EdgeBar Screen")
             .setSmallIcon(android.R.drawable.presence_video_online)
+            .setContentIntent(contentTapPI())
             .addAction(android.R.drawable.ic_media_next, "Dừng", screenRecActionPI(ACTION_STOP)) // Nút Trái
             .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     isPaused ? "Tiếp Tục" : "Tạm Dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE)) // Nút Giữa
