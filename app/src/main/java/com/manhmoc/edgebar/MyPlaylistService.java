@@ -54,6 +54,7 @@ public class MyPlaylistService extends Service {
     public static final String ACTION_STOP = "com.manhmoc.edgebar.MYPLAYLIST_STOP";
 public static final String ACTION_SEEK_BACK = "com.manhmoc.edgebar.MYPLAYLIST_SEEK_BACK";
 public static final String ACTION_SEEK_FWD  = "com.manhmoc.edgebar.MYPLAYLIST_SEEK_FWD";
+public static final String ACTION_OPEN_CURRENT = "com.manhmoc.edgebar.MYPLAYLIST_OPEN_CURRENT";
 private static final long SEEK_STEP_MS = 10000;
 
 private final android.os.Handler posHandler = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -120,11 +121,11 @@ private boolean pausedByFocusLoss = false;
         String action = intent != null ? intent.getAction() : null;
 
         if (ACTION_STOP.equals(action)) { stopPlayback(); return START_NOT_STICKY; }
-if (ACTION_NEXT.equals(action)) { playIndex(currentIndex + 1); return START_NOT_STICKY; }
-if (ACTION_PREV.equals(action)) { playIndex(currentIndex - 1); return START_NOT_STICKY; }
+if (ACTION_NEXT.equals(action)) { nextTrack(); return START_NOT_STICKY; }
+if (ACTION_PREV.equals(action)) { prevTrack(); return START_NOT_STICKY; }
 if (ACTION_SEEK_BACK.equals(action)) { seekBy(-SEEK_STEP_MS); return START_NOT_STICKY; }
 if (ACTION_SEEK_FWD.equals(action)) { seekBy(SEEK_STEP_MS); return START_NOT_STICKY; }
-
+if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_NOT_STICKY; }
         if (ACTION_TOGGLE.equals(action) || action == null) {
             if (isRunning) togglePause();
             else loadPlaylistAndStart();
@@ -139,36 +140,39 @@ if (ACTION_SEEK_FWD.equals(action)) { seekBy(SEEK_STEP_MS); return START_NOT_STI
             return;
         }
         startForegroundNotif("Đang tải playlist…", false);
-        tracks.clear(); trackNames.clear();
-
-        Uri collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
-        String[] proj = {MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME};
-        String sel = MediaStore.Audio.Media.RELATIVE_PATH + " LIKE ?";
-        String[] args = {RELATIVE_PATH_PREFIX + "%"};
-        List<Object[]> found = new ArrayList<>(); // {name, uri}
-        try (Cursor c = getContentResolver().query(collection, proj, sel, args, null)) {
-            if (c != null) {
-                while (c.moveToNext()) {
-                    long id = c.getLong(0);
-                    String name = c.getString(1);
-                    found.add(new Object[]{name, android.content.ContentUris.withAppendedId(collection, id)});
-                }
-            }
-        } catch (SecurityException se) {
-            showErrorNotif("⚠️ Chưa cấp quyền Truy cập Nhạc — mở app EdgeBar để cấp quyền.");
-            return;
-        } catch (Exception ignored) {}
-
-        // Sắp xếp tự nhiên theo tên file: 01,02,...,10 (không phải 1,10,2 kiểu ASCII)
-        Collections.sort(found, (a, b) -> naturalCompare((String) a[0], (String) b[0]));
-        for (Object[] item : found) { trackNames.add((String) item[0]); tracks.add((Uri) item[1]); }
+        refreshTrackList();
 
         if (tracks.isEmpty()) {
-            showErrorNotif("⚠️ Không tìm thấy bài hát nào trong Download/My Playlist");
+            showErrorNotif("⚠️ My Playlist trống — mở EdgeBar > Sound & Media > My Playlist để thêm bài");
             return;
         }
         ensureSession();
-        playIndex(0); // LUÔN bắt đầu từ bài đầu tiên của playlist
+        playIndex(0); // LUÔN bắt đầu từ bài đầu tiên theo đúng thứ tự user đã sắp xếp
+    }
+
+    // Đọc danh sách bài hát THEO ĐÚNG THỨ TỰ user đã kéo-thả trong MainActivity
+    // (key "myplaylist_ids"), bỏ qua bài nào bị xoá file gốc trong Files by Google.
+    private void refreshTrackList() {
+        SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+        String csv = prefs.getString("myplaylist_ids", "");
+        String currentUri = (currentIndex >= 0 && currentIndex < tracks.size()) ? tracks.get(currentIndex).toString() : null;
+        tracks.clear(); trackNames.clear();
+        if (csv.isEmpty()) return;
+        for (String id : csv.split(",")) {
+            String t = id.trim(); if (t.isEmpty()) continue;
+            String uriStr = prefs.getString("myplaylist_" + t + "_uri", "");
+            if (uriStr.isEmpty()) continue;
+            Uri u = Uri.parse(uriStr);
+            try { getContentResolver().takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION); }
+            catch (Exception ignored) {} // đã cấp trước đó, hoặc file không còn -> vẫn thử phát, lỗi sẽ tự next
+            tracks.add(u);
+            trackNames.add(prefs.getString("myplaylist_" + t + "_name", "Song"));
+        }
+        if (currentUri != null) {
+            int newPos = -1;
+            for (int i = 0; i < tracks.size(); i++) if (tracks.get(i).toString().equals(currentUri)) { newPos = i; break; }
+            if (newPos >= 0) currentIndex = newPos;
+        }
     }
     private void ensureSession() {
         if (session != null) return;
@@ -202,8 +206,8 @@ if (ACTION_SEEK_FWD.equals(action)) { seekBy(SEEK_STEP_MS); return START_NOT_STI
                 .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build());
             player.setWakeMode(getApplicationContext(), PowerManager.PARTIAL_WAKE_LOCK);
-            player.setOnCompletionListener(mp -> playIndex(currentIndex + 1));
-            player.setOnErrorListener((mp, what, extra) -> { playIndex(currentIndex + 1); return true; });
+            player.setOnCompletionListener(mp -> nextTrack());
+            player.setOnErrorListener((mp, what, extra) -> { nextTrack(); return true; });
         } else {
             try { player.reset(); } catch (Exception ignored) {}
         }
@@ -231,7 +235,61 @@ if (ACTION_SEEK_FWD.equals(action)) { seekBy(SEEK_STEP_MS); return START_NOT_STI
             if (tracks.size() > 1) playIndex(currentIndex + 1); else stopPlayback();
         }
     }
+// Quét lại thư mục Download/My Playlist ngay trước khi chuyển bài — đảm bảo
+    // Next/Prev/Auto-next luôn bám đúng danh sách hiện tại của thư mục (thêm/xoá/đổi
+    // tên file được cập nhật ngay). So khớp theo tên file để giữ đúng vị trí bài
+    // đang phát trong danh sách mới, tránh nhảy lung tung khi danh sách thay đổi.
+    private void refreshTrackList() {
+        Uri collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+        String[] proj = {MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME};
+        String sel = MediaStore.Audio.Media.RELATIVE_PATH + " LIKE ?";
+        String[] args = {RELATIVE_PATH_PREFIX + "%"};
+        List<Object[]> found = new ArrayList<>();
+        try (Cursor c = getContentResolver().query(collection, proj, sel, args, null)) {
+            if (c != null) {
+                while (c.moveToNext()) {
+                    long id = c.getLong(0);
+                    String name = c.getString(1);
+                    found.add(new Object[]{name, android.content.ContentUris.withAppendedId(collection, id)});
+                }
+            }
+        } catch (Exception ignored) { return; } // lỗi quét -> giữ nguyên list cũ
+        if (found.isEmpty()) return;
+        Collections.sort(found, (a, b) -> naturalCompare((String) a[0], (String) b[0]));
 
+        String currentName = (currentIndex >= 0 && currentIndex < trackNames.size()) ? trackNames.get(currentIndex) : null;
+        tracks.clear(); trackNames.clear();
+        for (Object[] item : found) { trackNames.add((String) item[0]); tracks.add((Uri) item[1]); }
+
+        if (currentName != null) {
+            int newPos = trackNames.indexOf(currentName);
+            if (newPos >= 0) currentIndex = newPos;
+        }
+    }
+
+    private void nextTrack() { refreshTrackList(); playIndex(currentIndex + 1); }
+    private void prevTrack() { refreshTrackList(); playIndex(currentIndex - 1); }
+
+    // 1 chạm vào thông báo -> mở đúng file bài hát ĐANG PHÁT bằng Files by Google
+    // (fallback chooser), tái dùng cùng cơ chế đã có ở VoiceRecorderService.
+    private void openCurrentTrackFile() {
+        if (tracks.isEmpty() || currentIndex < 0 || currentIndex >= tracks.size()) return;
+        Uri uri = tracks.get(currentIndex);
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, "audio/*");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            i.setPackage("com.google.android.apps.nbu.files");
+            startActivity(i);
+        } catch (Exception e) {
+            try {
+                Intent i2 = new Intent(Intent.ACTION_VIEW);
+                i2.setDataAndType(uri, "audio/*");
+                i2.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(Intent.createChooser(i2, "Mở bằng").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (Exception ignored) {}
+        }
+    }
     private void togglePause() {
     if (player == null || !isRunning) return;
     try {
@@ -272,7 +330,12 @@ if (ACTION_SEEK_FWD.equals(action)) { seekBy(SEEK_STEP_MS); return START_NOT_STI
         int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
         return PendingIntent.getService(this, action.hashCode(), i, flags);
     }
-
+private PendingIntent contentTapPI() {
+        Intent i = new Intent(this, MyPlaylistService.class);
+        i.setAction(ACTION_OPEN_CURRENT);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
+        return PendingIntent.getService(this, ACTION_OPEN_CURRENT.hashCode(), i, flags);
+    }
     private void startForegroundNotif(String title, boolean paused) {
     NotificationManager nm = getSystemService(NotificationManager.class);
     NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "My Playlist", NotificationManager.IMPORTANCE_LOW);
@@ -289,6 +352,7 @@ if (ACTION_SEEK_FWD.equals(action)) { seekBy(SEEK_STEP_MS); return START_NOT_STI
         .setLargeIcon(currentArt)
         .setVisibility(Notification.VISIBILITY_PUBLIC)
         .setOngoing(isRunning)
+        .setContentIntent(contentTapPI())
         .setDeleteIntent(actionPI(ACTION_STOP))
         .addAction(android.R.drawable.ic_media_rew, "Lùi 10s", actionPI(ACTION_SEEK_BACK))
         .addAction(android.R.drawable.ic_media_previous, "Trước", actionPI(ACTION_PREV))

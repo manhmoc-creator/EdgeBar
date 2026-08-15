@@ -12,6 +12,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
+import android.database.Cursor;
 import android.graphics.Paint;
 import android.graphics.Canvas;
 import android.graphics.Path;
@@ -375,6 +376,32 @@ private String[] getVolKeyActLabs() {
                         else if (v instanceof String) ed.putString(key, (String)v);
                     }
                     ed.commit(); Toast.makeText(this, T("Restored Successfully!", "Đã Khôi Phục Cấu Hình!"), Toast.LENGTH_LONG).show(); recreate();
+} else if (req == REQ_PICK_SONGS) {
+    List<Uri> picked = new ArrayList<>();
+    if (data.getClipData() != null) {
+        for (int k = 0; k < data.getClipData().getItemCount(); k++)
+            picked.add(data.getClipData().getItemAt(k).getUri());
+    } else if (data.getData() != null) {
+        picked.add(data.getData());
+    }
+    List<String> ids = getDynamicIds("myplaylist_ids");
+    SharedPreferences.Editor ed = prefs.edit();
+    int added = 0;
+    for (Uri u : picked) {
+        try {
+            getContentResolver().takePersistableUriPermission(u,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (Exception ignored) {}
+        String id = java.util.UUID.randomUUID().toString().substring(0, 8);
+        String name = queryDisplayName(u);
+        ed.putString("myplaylist_" + id + "_uri", u.toString());
+        ed.putString("myplaylist_" + id + "_name", name);
+        ids.add(id);
+        added++;
+    }
+    ed.putString("myplaylist_ids", TextUtils.join(",", ids)).apply();
+    if (added > 0) { Toast.makeText(this, T("Added "+added+" songs","Đã thêm "+added+" bài"), Toast.LENGTH_SHORT).show(); renderEcosystem(); }
+}
                 } else if (req == 104) {
                     try {
                         Intent shortcutIntent = data.getParcelableExtra(Intent.EXTRA_SHORTCUT_INTENT);
@@ -640,13 +667,15 @@ if (currentMainTab == 0) {
             fab.setOnClickListener(v -> runDeepStorageScan());
         } else if (ecoType == 4) {
     if (soundMediaSubTab == -1) {
-        // Ở màn menu chọn Ghi âm/Ghi màn hình -> FAB dùng để quay lại danh mục cha
         fab.setVisibility(View.VISIBLE);
         fab.setOnClickListener(v -> onBackPressed());
     } else if (soundMediaSubTab == 1) {
-        // Ghi màn hình đã có nút riêng trong buildScreenRecordControlCard() -> FAB dùng để back
         fab.setVisibility(View.VISIBLE);
         fab.setOnClickListener(v -> onBackPressed());
+    } else if (soundMediaSubTab == 2) {
+        // Không gian My Playlist: FAB dùng để mở Files by Google chọn bài hát
+        fab.setVisibility(View.VISIBLE);
+        fab.setOnClickListener(v -> pickSongsForMyPlaylist());
     } else {
                 boolean recOn = VoiceRecorderService.isRunning;
                 boolean recPaused = VoiceRecorderService.isPaused;
@@ -2536,12 +2565,12 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
         : new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
     List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeysForPack, ACT_KEYS, ACT_LABS);
     List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
-    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR"}, ACT_KEYS, ACT_LABS);
+    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR", "PLAY_MY_PLAYLIST"}, ACT_KEYS, ACT_LABS);
     List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
     List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
     vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
     vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
-    vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0"));
+    vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0", true));
     vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
     vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
 
@@ -2972,7 +3001,7 @@ for (String sa : savedArray) {
             List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
             List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
             vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
-            vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0"));
+            vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0", true));
             vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
             vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
         }
@@ -3026,16 +3055,19 @@ if (launchAppSelected[0]) {
                 return;
             }
 
-            // V19.12.3.6.30: App / Shortcut / Panel đều là "mở 1 giao diện" —
-            // không cho mở đồng thời quá 1 giao diện trong cùng 1 rule.
+            // V19.12.3.6.40: App / Shortcut vẫn giới hạn 1 trong 2, nhưng NHIỀU Panel
+            // được phép chọn cùng lúc (chúng có thể hiển thị song song) — chỉ tính là
+            // "1 giao diện" nếu CÓ Panel được chọn, không nhân theo số lượng Panel.
             int interfaceCount = 0;
             if (launchAppSelected[0]) interfaceCount++;
             if (shortcutSelected[0]) interfaceCount++;
-            for (String a : acts) if (a.startsWith("PANEL_")) interfaceCount++;
+            boolean hasPanelSelected = false;
+            for (String a : acts) if (a.startsWith("PANEL_")) { hasPanelSelected = true; break; }
+            if (hasPanelSelected) interfaceCount++;
             if (interfaceCount > 1) {
                 Toast.makeText(this, T(
-                    "Only one of App / Shortcut / Panel can be selected at a time.",
-                    "Chỉ được chọn 1 trong 3: App / Shortcut / Panel tại một thời điểm."
+                    "Only one of App / Shortcut can combine with Panel(s) at a time.",
+                    "Chỉ được chọn 1 trong 2: App / Shortcut cùng lúc với (các) Panel."
                 ), Toast.LENGTH_LONG).show();
                 return;
             }
@@ -3144,6 +3176,11 @@ private List<String[]> buildItemsForPrefix(String prefix, String[] actKeysUsed, 
 }
 
 private Button buildActionCategoryButton(String title, String emoji, List<String[]> items, java.util.LinkedHashSet<String> selectedSet, String colorHex) {
+    return buildActionCategoryButton(title, emoji, items, selectedSet, colorHex, false);
+}
+// [MỚI] allowMulti=true -> cho phép chọn NHIỀU item trong 1 nút (dùng cho PANEL, vì
+// nhiều Panel có thể cùng hiển thị song song). false = giữ nguyên hành vi cũ (1 item).
+private Button buildActionCategoryButton(String title, String emoji, List<String[]> items, java.util.LinkedHashSet<String> selectedSet, String colorHex, boolean allowMulti) {
         Button btnPick = new Button(this);
         btnPick.setBackground(getRounded(colorHex, 20f));
         btnPick.setTextColor(Color.WHITE);
@@ -3160,7 +3197,7 @@ private Button buildActionCategoryButton(String title, String emoji, List<String
         };
         updateCount.run();
 
-        btnPick.setOnClickListener(v -> showActionCategoryPicker(title, items, selectedSet, updateCount));
+        btnPick.setOnClickListener(v -> showActionCategoryPicker(title, items, selectedSet, updateCount, allowMulti));
         return btnPick;
     }
 // Picker CHỈ CHỌN 1 ACTION cho QS Tile — khác buildActionCategoryButton (multi-select cho Rule)
@@ -3210,15 +3247,18 @@ private String resolveTileActionLabel(String act, String pkg, String scId) {
 // y hệt pattern showPanelMultiPicker() đã có sẵn, để đồng bộ trải nghiệm.
 private void showActionCategoryPicker(String title, List<String[]> items,
         java.util.LinkedHashSet<String> selectedSet, Runnable onChange) {
-    // [GIỚI HẠN 1 ACTION/NÚT] Trước đây "working" là bản sao TOÀN BỘ selectedSet (đa chọn
-    // trong cùng 1 category). Giờ chỉ giữ lại tối đa 1 item thuộc CHÍNH category này —
-    // các item của category khác (đã có sẵn trong selectedSet nhưng không nằm trong "items"
-    // của lần gọi này) không hề bị đụng tới, nên vẫn kết hợp được giữa các nút
-    // (VD: SYSTEM + PANEL + INTENTS) như trước, chỉ riêng BÊN TRONG 1 nút là giới hạn 1.
+    showActionCategoryPicker(title, items, selectedSet, onChange, false);
+}
+// [MỚI] allowMulti=true: checkbox chọn nhiều Panel cùng lúc — không giới hạn 1 như trước,
+// vì nhiều Panel có thể được gọi ra cùng bởi 1 cử chỉ (chúng tự xếp chồng khi mở, xem
+// PanelEngine.bringPanelToFront()). Zero-RAM khi đóng dialog: mọi object bị GC thu hồi
+// ngay, không giữ Thread/Timer nào — đúng tinh thần tối ưu Pixel 2XL của toàn bộ codebase.
+private void showActionCategoryPicker(String title, List<String[]> items,
+        java.util.LinkedHashSet<String> selectedSet, Runnable onChange, boolean allowMulti) {
     java.util.Set<String> categoryKeys = new java.util.HashSet<>();
     for (String[] it : items) categoryKeys.add(it[1]);
-    final String[] workingSingle = new String[1];
-    for (String s : selectedSet) if (categoryKeys.contains(s)) { workingSingle[0] = s; break; }
+    final java.util.LinkedHashSet<String> working = new java.util.LinkedHashSet<>();
+    for (String s : selectedSet) if (categoryKeys.contains(s)) working.add(s);
 
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
@@ -3229,7 +3269,9 @@ private void showActionCategoryPicker(String title, List<String[]> items,
     root.addView(tvTitle);
 
     TextView tvHint = new TextView(this);
-    tvHint.setText(T("Only 1 action allowed in this button", "Chỉ được chọn 1 hành động trong nút này"));
+    tvHint.setText(allowMulti
+        ? T("You can select multiple Panels", "Có thể chọn nhiều Panel cùng lúc")
+        : T("Only 1 action allowed in this button", "Chỉ được chọn 1 hành động trong nút này"));
     tvHint.setTextColor(Color.parseColor("#9AA0A6")); tvHint.setTextSize(11f); tvHint.setPadding(0, 0, 0, 10);
     root.addView(tvHint);
 
@@ -3254,16 +3296,20 @@ private void showActionCategoryPicker(String title, List<String[]> items,
             row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(20, 22, 20, 22);
             String[] item = shown.get(p);
-            // [ĐỔI] RadioButton thay CheckBox — đúng ngữ nghĩa "chỉ chọn 1 trong nhóm"
-            RadioButton cb = new RadioButton(MainActivity.this);
-            cb.setChecked(item[1].equals(workingSingle[0])); cb.setClickable(false);
+            boolean checked = working.contains(item[1]);
+            android.widget.CompoundButton cb = allowMulti ? new CheckBox(MainActivity.this) : new RadioButton(MainActivity.this);
+            cb.setChecked(checked); cb.setClickable(false);
             TextView tv = new TextView(MainActivity.this);
             tv.setText(item[0]); tv.setTextColor(Color.WHITE);
             tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
             row.addView(cb); row.addView(tv);
             row.setOnClickListener(v -> {
-                // Bấm lại đúng item đang chọn -> bỏ chọn; bấm item khác -> THAY THẾ (single-select)
-                workingSingle[0] = item[1].equals(workingSingle[0]) ? null : item[1];
+                if (allowMulti) {
+                    if (working.contains(item[1])) working.remove(item[1]); else working.add(item[1]);
+                } else {
+                    working.clear();
+                    if (!checked) working.add(item[1]); // bấm lại item đang chọn -> bỏ chọn
+                }
                 refreshHolder[0].run();
             });
             return row;
@@ -3278,7 +3324,7 @@ private void showActionCategoryPicker(String title, List<String[]> items,
         List<String[]> rest = new ArrayList<>();
         for (String[] it : items) {
             if (!q.isEmpty() && !it[0].toLowerCase().contains(q)) continue;
-            if (it[1].equals(workingSingle[0])) selSorted.add(it); else rest.add(it);
+            if (working.contains(it[1])) selSorted.add(it); else rest.add(it);
         }
         shown.addAll(selSorted); shown.addAll(rest);
         adapter.notifyDataSetChanged();
@@ -3298,10 +3344,8 @@ private void showActionCategoryPicker(String title, List<String[]> items,
 
     bCancel.setOnClickListener(v -> d.dismiss());
     bSave.setOnClickListener(v -> {
-        // Xoá hết item CỦA CATEGORY NÀY khỏi selectedSet (không đụng category khác),
-        // rồi thêm đúng 1 item vừa chọn (nếu có) — đảm bảo mỗi nút tối đa 1 action.
         selectedSet.removeAll(categoryKeys);
-        if (workingSingle[0] != null) selectedSet.add(workingSingle[0]);
+        selectedSet.addAll(working);
         onChange.run();
         d.dismiss();
     });
@@ -3610,6 +3654,7 @@ private String trashType(String itemKey) {
     if (itemKey.startsWith("intent_")) return "intent";
     if (itemKey.startsWith("tilev2_")) return "tilev2";
     if (itemKey.startsWith("macro_")) return "macro";
+    if (itemKey.startsWith("myplaylist_")) return "myplaylist";
     return "";
 }
 private String trashId(String itemKey) {
@@ -3623,6 +3668,7 @@ private String trashDisplayName(String type, String id) {
         case "intent": return prefs.getString("intent_" + id + "_name", "Intent");
         case "tilev2": return prefs.getString("tilev2_" + id + "_label", "Tile");
         case "macro": return prefs.getString("macro_" + id + "_name", "Macro");
+        case "myplaylist": return prefs.getString("myplaylist_" + id + "_name", "Song");
         default: return "Data Pack";
     }
 }
@@ -3685,6 +3731,9 @@ private void moveDataPackToTrash(String itemKey) {
         case "macro":
             removeDynamicId("macro_ids", id);
             break;
+        case "myplaylist":
+            removeDynamicId("myplaylist_ids", id);
+            break;
         default: return;
     }
     java.util.List<String> trash = getDynamicIds("trash_pack_ids");
@@ -3712,6 +3761,7 @@ private void restoreDataPackFromTrash(String itemKey) {
         case "intent": listKey = "intent_ids"; break;
         case "tilev2": listKey = "tile_ids_v2"; break;
         case "macro": listKey = "macro_ids"; break;
+        case "myplaylist": listKey = "myplaylist_ids"; break;
         default: return;
     }
     java.util.List<String> ids = getDynamicIds(listKey);
@@ -3739,6 +3789,7 @@ private void permanentlyDeleteDataPack(String itemKey) {
         case "intent": prefix = "intent_"; break;
         case "tilev2": prefix = "tilev2_"; break;
         case "macro": prefix = "macro_"; break;
+        case "myplaylist": prefix = "myplaylist_"; break;
         default: return;
     }
     java.util.Map<String, ?> all = prefs.getAll();
@@ -4055,8 +4106,10 @@ cardWrap.addView(selDot);
         renderSoundMediaMenu();
     } else if (soundMediaSubTab == 0) {
         renderVoiceRecordSpace();
-    } else {
+    } else if (soundMediaSubTab == 1) {
         renderScreenRecordSpace();
+    } else {
+        renderMyPlaylistSpace();
     }
 } else if (ecoType == 5) {
     // Thẻ 1: BlackList
@@ -4168,9 +4221,9 @@ cardWrap.addView(selDot);
             case "intent": typeLabel = "[Intent] "; name = prefs.getString("intent_" + id + "_name", "Intent"); break;
             case "tilev2": typeLabel = "[QS Tile] "; name = prefs.getString("tilev2_" + id + "_label", "Tile"); break;
             case "macro": typeLabel = "[Macro] "; name = prefs.getString("macro_" + id + "_name", "Macro"); break;
+            case "myplaylist": typeLabel = "[Song] "; name = prefs.getString("myplaylist_" + id + "_name", "Song"); break;
             default: typeLabel = ""; name = "Data Pack";
         }
-
         // 2 pack / hàng — dựng row mới mỗi khi đếm chẵn (giống mọi grid khác trong app)
         if (trashCount % 2 == 0) {
             currentTrashRow = new LinearLayout(this);
@@ -4323,6 +4376,112 @@ private static final String[] TILE_ICON_NAMES = {
     "Cài Đặt ⚙️", "Gửi 📨", "Chỉnh Sửa ✏️", "Xóa 🗑️", "Thêm ➕",
     "Đóng ✖️", "Upload ⬆️", "Xem 👁️", "Yêu Thích ⭐", "Vị Trí 📍"
 };
+private static final String[] MP_COLOR_HEX = {"#607D8B","#78909C","#90A4AE","#455A64","#5C6BC0","#4DB6AC","#B0BEC5","#37474F","#8D6E63","#26A69A","#EC407A","#7E57C2"};
+private int mpColorForId(String id) { return Color.parseColor(MP_COLOR_HEX[Math.abs(id.hashCode()) % MP_COLOR_HEX.length]); }
+
+private void renderMyPlaylistSpace() {
+    List<String> ids = getDynamicIds("myplaylist_ids");
+    if (ids.isEmpty()) {
+        TextView empty = new TextView(this);
+        empty.setText(T("No songs yet.\nTap the round button to add from Files by Google.",
+            "Chưa có bài hát nào.\nBấm nút tròn để thêm từ Files by Google."));
+        empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0);
+        ecoContainer.addView(empty);
+        return;
+    }
+    LinearLayout currentRow = null; int count = 0;
+    for (String id : ids) {
+        if (count % 2 == 0) {
+            currentRow = new LinearLayout(this);
+            currentRow.setOrientation(LinearLayout.HORIZONTAL);
+            currentRow.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+            ecoContainer.addView(currentRow);
+        }
+        String name = prefs.getString("myplaylist_" + id + "_name", "Song");
+        String uriStr = prefs.getString("myplaylist_" + id + "_uri", "");
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(getRounded(String.format("#%06X", (0xFFFFFF & mpColorForId(id))), 20f));
+        card.setPadding(24, 22, 24, 22);
+        TextView tv = new TextView(this);
+        tv.setText("🎵 " + name);
+        tv.setTextColor(Color.WHITE); tv.setTextSize(13f);
+        tv.setMaxLines(2); tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        card.addView(tv);
+
+        FrameLayout cardWrap = new FrameLayout(this);
+        LinearLayout.LayoutParams wLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        wLp.setMargins(6, 6, 6, 6);
+        cardWrap.setLayoutParams(wLp);
+        cardWrap.addView(card);
+        cardWrap.setTag(id);
+
+        card.setOnClickListener(v -> {
+            if (uriStr.isEmpty()) { Toast.makeText(this, T("File missing","File không còn tồn tại"), Toast.LENGTH_SHORT).show(); return; }
+            try {
+                Intent open = new Intent(Intent.ACTION_VIEW);
+                open.setDataAndType(Uri.parse(uriStr), "audio/*");
+                open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                open.setPackage("com.google.android.apps.nbu.files");
+                startActivity(open);
+            } catch (Exception e) {
+                try {
+                    Intent open2 = new Intent(Intent.ACTION_VIEW);
+                    open2.setDataAndType(Uri.parse(uriStr), "audio/*");
+                    open2.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(Intent.createChooser(open2, T("Open with","Mở bằng")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                } catch (Exception ignored) { Toast.makeText(this, T("Cannot open","Không thể mở"), Toast.LENGTH_SHORT).show(); }
+            }
+        });
+        card.setOnLongClickListener(v -> {
+            new AlertDialog.Builder(this).setTitle(T("Remove from playlist?","Xoá khỏi danh sách?"))
+                .setPositiveButton(T("REMOVE","XOÁ"), (d, w) -> {
+                    prefs.edit().remove("myplaylist_"+id+"_uri").remove("myplaylist_"+id+"_name").apply();
+                    removeDynamicId("myplaylist_ids", id);
+                    renderEcosystem();
+                }).setNegativeButton(T("CANCEL","HỦY"), null).show();
+            return true;
+        });
+
+        attachDragReorder(cardWrap, ids, "myplaylist_ids", this::renderEcosystem);
+        currentRow.addView(cardWrap); count++;
+    }
+    if (count % 2 != 0 && currentRow != null) {
+        View dummy = new View(this);
+        dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+        currentRow.addView(dummy);
+    }
+}
+// Kiểm tra Uri có còn truy cập được không — nếu app quản lý file kia đã xoá file
+// gốc, ContentResolver.query() sẽ ném lỗi hoặc trả về con trỏ rỗng. Chỉ chạy khi
+// user THỰC SỰ mở màn My Playlist (event-driven), không polling nền.
+private boolean isPlaylistUriAlive(String uriStr) {
+    if (uriStr.isEmpty()) return false;
+    try (Cursor c = getContentResolver().query(Uri.parse(uriStr), null, null, null, null)) {
+        return c != null && c.moveToFirst();
+    } catch (Exception e) { return false; }
+}
+
+// Quét toàn bộ myplaylist_ids, bài nào file gốc đã bị xoá thì tự động chuyển
+// vào Kho Cũ (dùng chung cơ chế moveDataPackToTrash đã có sẵn). Các bài còn lại
+// tự dồn lên đúng thứ tự cũ vì removeDynamicId() chỉ xoá đúng 1 phần tử khỏi CSV.
+private void pruneDeadMyPlaylistEntries() {
+    List<String> ids = getDynamicIds("myplaylist_ids");
+    if (ids.isEmpty()) return;
+    boolean anyRemoved = false;
+    for (String id : new ArrayList<>(ids)) {
+        String uriStr = prefs.getString("myplaylist_" + id + "_uri", "");
+        if (!isPlaylistUriAlive(uriStr)) {
+            moveDataPackToTrash("myplaylist_" + id);
+            anyRemoved = true;
+        }
+    }
+    if (anyRemoved) {
+        Toast.makeText(this, T("Some songs were removed — moved to Trash",
+            "Một số bài hát đã bị xoá — đã chuyển vào Kho Cũ"), Toast.LENGTH_SHORT).show();
+    }
+}
  // [MỚI] PHẢI khớp CHÍNH XÁC thứ tự với ICON_POOL trong Tile1..30.java —
 // vì autoIconForAct() trả về index dựa trên đúng thứ tự này.
 private static final int[] QS_ICON_POOL = {
@@ -4681,28 +4840,25 @@ private void renderSoundMediaMenu() {
         recOn ? T("Recording...", "Đang ghi âm...") : T("Tap to Open", "Chạm để mở"),
         () -> {
             soundMediaSubTab = 0;
-            navBackStack.push(() -> {
-    soundMediaSubTab = -1;
-    updateFabVisibility();
-    renderEcosystem();
-});
-            updateFabVisibility();
-            renderEcosystem();
+            navBackStack.push(() -> { soundMediaSubTab = -1; updateFabVisibility(); renderEcosystem(); });
+            updateFabVisibility(); renderEcosystem();
         }));
     ecoContainer.addView(createSettingsRow("movie_24px", T("Screen Recording", "Ghi màn hình"),
         vidOn ? T("Recording...", "Đang ghi màn hình...") : T("Tap to Open", "Chạm để mở"),
         () -> {
             soundMediaSubTab = 1;
-            navBackStack.push(() -> {
-    soundMediaSubTab = -1;
-    updateFabVisibility();
-    renderEcosystem();
-});
-            updateFabVisibility();
-            renderEcosystem();
+            navBackStack.push(() -> { soundMediaSubTab = -1; updateFabVisibility(); renderEcosystem(); });
+            updateFabVisibility(); renderEcosystem();
+        }));
+    ecoContainer.addView(createSettingsRow("music_note_24px", "My Playlist",
+        T("Custom song order", "Danh sách nhạc tuỳ chỉnh"),
+        () -> {
+            pruneDeadMyPlaylistEntries(); // kiểm tra file gốc còn sống trước khi vẽ danh sách
+            soundMediaSubTab = 2;
+            navBackStack.push(() -> { soundMediaSubTab = -1; updateFabVisibility(); renderEcosystem(); });
+            updateFabVisibility(); renderEcosystem();
         }));
 }
-
 // Không gian Ghi âm — giữ nguyên hành vi cũ (điều khiển qua FAB), chỉ tách khỏi Ghi màn hình.
 private void renderVoiceRecordSpace() {
     TextView tvNote = new TextView(this);
@@ -5109,8 +5265,8 @@ private void openTileEditorV2(String id) {
         refreshCurrent.run();
     }));
 
-    List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME","SCREENSHOT","CAMERA","NOTIFICATIONS","QUICK_SETTINGS","SPLIT_SCREEN"}, ACT_KEYS, ACT_LABS);
-    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY","TOGGLE_RECORD","PAUSE_RECORD","YTDL_DOWNLOAD","OPEN_STORAGE_SCAN","SCAN_QR"}, ACT_KEYS, ACT_LABS);
+    List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME","SCREENSHOT","CAMERA","NOTIFICATIONS","QUICK_SETTINGS","SPLIT_SCREEN","SCREEN_RECORD","AUTO_ROTATE_TOGGLE"}, ACT_KEYS, ACT_LABS);
+    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY","TOGGLE_RECORD","PAUSE_RECORD","YTDL_DOWNLOAD","TOGGLE_WORK_PROFILE","OPEN_STORAGE_SCAN","SCAN_QR","PLAY_MY_PLAYLIST"}, ACT_KEYS, ACT_LABS);
     List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids","intent_","INTENT_","Intent");
     List<String[]> MACRO_ITEMS  = buildDynamicPackItems("macro_ids","macro_","MACRO_","Macro");
 
@@ -6986,6 +7142,25 @@ private void deleteShortcutGlobally(String id) {
     root.addView(bClose);
 
     d.setContentView(root); d.show();
+}
+private static final int REQ_PICK_SONGS = 105;
+
+private void pickSongsForMyPlaylist() {
+    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+    i.addCategory(Intent.CATEGORY_OPENABLE);
+    i.setType("audio/*");
+    i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+    try { startActivityForResult(Intent.createChooser(i, T("Choose songs","Chọn bài hát")), REQ_PICK_SONGS); }
+    catch (Exception e) { Toast.makeText(this, T("No file picker found","Không tìm thấy app chọn file"), Toast.LENGTH_SHORT).show(); }
+}
+private String queryDisplayName(Uri uri) {
+    try (Cursor c = getContentResolver().query(uri, null, null, null, null)) {
+        if (c != null && c.moveToFirst()) {
+            int idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+            if (idx >= 0) return c.getString(idx);
+        }
+    } catch (Exception ignored) {}
+    return "Song";
 }
     private void addPanelDesign(LinearLayout parent) {
     LinearLayout panelDrawer = new LinearLayout(this); panelDrawer.setOrientation(LinearLayout.VERTICAL);

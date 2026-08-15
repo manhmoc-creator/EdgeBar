@@ -1152,6 +1152,7 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
     private void openPanel(String id) {
         LinearLayout panel = panels.get(id);
         if (panel == null) return;
+        bringPanelToFront(id); // [MỚI] Panel luôn nổi lên TRÊN CÙNG, che Bar/Corner
         panelOpen.put(id, true);
         panel.setVisibility(View.VISIBLE);
         View handle = handles.get(id);
@@ -1163,6 +1164,36 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
             : new TranslateAnimation(edge.equals("left") ? -prefs.getInt(px+"size",500) : prefs.getInt(px+"size",500), 0, 0, 0);
         anim.setDuration(200);
         panel.startAnimation(anim);
+    }
+
+    /** [MỚI] Đưa Handle + Panel Body của Data Pack này lên TRÊN CÙNG mọi Bar/Corner —
+     *  dùng chung 1 class PanelEngine cho cả Lock/Homacc (EdgeBarService) lẫn Homeb
+     *  (HomescreenService) nên áp dụng đồng thời cho cả 3 không gian.
+     *  Nguyên lý: cửa sổ overlay thêm vào WindowManager SAU luôn nổi trên cửa sổ cùng
+     *  loại type thêm TRƯỚC. Bar/Corner của Homacc (accHomeBars/accHomeCorners) được vẽ
+     *  LAZY (chỉ khi Trợ năng bật), có thể xảy ra SAU khi Panel đã được add — remove rồi
+     *  add lại đúng 2 cửa sổ của Panel là cách chắc chắn nhất kéo nó lên đỉnh mà KHÔNG
+     *  cần biết Bar/Corner khác được vẽ trước hay sau.
+     *  Chi phí: đúng 2 lệnh WindowManager, CHỈ chạy khi người dùng thật sự bấm mở Panel
+     *  (event-driven) — Zero cost lúc Panel đóng hoặc không ai đụng tới, tối ưu pin/RAM
+     *  cho Pixel 2XL. */
+    private void bringPanelToFront(String id) {
+        View handle = handles.get(id);
+        if (handle != null && handle.getParent() != null) {
+            try {
+                WindowManager.LayoutParams hp = (WindowManager.LayoutParams) handle.getLayoutParams();
+                wm.removeViewImmediate(handle);
+                wm.addView(handle, hp);
+            } catch (Exception ignored) {}
+        }
+        LinearLayout panel = panels.get(id);
+        if (panel != null && panel.getParent() != null) {
+            try {
+                WindowManager.LayoutParams pp = (WindowManager.LayoutParams) panel.getLayoutParams();
+                wm.removeViewImmediate(panel);
+                wm.addView(panel, pp);
+            } catch (Exception ignored) {}
+        }
     }
     private void closePanel(String id) {
         LinearLayout panel = panels.get(id);
