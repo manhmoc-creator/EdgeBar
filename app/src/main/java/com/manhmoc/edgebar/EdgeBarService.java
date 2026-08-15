@@ -797,6 +797,24 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+
+        // =========================================================
+        // [MỚI] ĐẨY ICON EB LACCK LÊN STATUS BAR
+        // =========================================================
+        try {
+            String cidAcc = "eb_lacck_status";
+            NotificationChannel cAcc = new NotificationChannel(cidAcc, "EB Lacck Status", NotificationManager.IMPORTANCE_LOW);
+            cAcc.setShowBadge(false);
+            getSystemService(NotificationManager.class).createNotificationChannel(cAcc);
+            Notification nAcc = new Notification.Builder(this, cidAcc)
+                    .setContentTitle("EB Lacck")
+                    .setContentText("Trợ năng đang hoạt động")
+                    .setSmallIcon(android.R.drawable.stat_sys_warning) // Đúng icon của QS Tile
+                    .setOngoing(true)
+                    .build();
+            // Nếu SDK >= 29, hệ thống có thể yêu cầu Type, nhưng với AccessibilityService thì gọi trơn vẫn an toàn
+            startForeground(99, nAcc);
+        } catch (Exception ignored) {}
         cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
         try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
