@@ -31,6 +31,7 @@ public class VoiceRecorderService extends Service {
     public static final String ACTION_PAUSE_TOGGLE = "com.manhmoc.edgebar.VOICEREC_PAUSE_TOGGLE";
     public static final String ACTION_STOP = "com.manhmoc.edgebar.VOICEREC_STOP";
     public static final String ACTION_STOP_AND_PLAY = "com.manhmoc.edgebar.VOICEREC_STOP_PLAY"; // Thêm dòng này
+    public static final String ACTION_OPEN_CURRENT = "com.manhmoc.edgebar.VOICEREC_OPEN_CURRENT"; // [MỚI] chạm vào notif để mở bản ghi
     public static final String TICK_ACTION = "com.manhmoc.edgebar.VOICE_REC_TICK";
 
     private MediaRecorder recorder;
@@ -54,6 +55,7 @@ public class VoiceRecorderService extends Service {
 
         if (ACTION_STOP.equals(action)) { stopRecording(false); return START_NOT_STICKY; }
         if (ACTION_STOP_AND_PLAY.equals(action)) { stopRecording(true); return START_NOT_STICKY; }
+        if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentFile(); return START_NOT_STICKY; } // [MỚI]
 
         if (ACTION_PAUSE_TOGGLE.equals(action)) {
             if (!isRunning) { stopForeground(true); stopSelf(); return START_NOT_STICKY; }
@@ -231,15 +233,25 @@ public class VoiceRecorderService extends Service {
         int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
         return PendingIntent.getService(this, action.hashCode(), i, flags);
     }
-private PendingIntent contentTapPI() {
-    Intent i = new Intent(this, EdgeBarPlayerActivity.class);
-    if (pendingUri != null) i.setData(pendingUri);
-    i.putExtra("title", "Voice Recording");
-    i.putExtra("fav_key", "voicerec_current");
-    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-    int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
-    return PendingIntent.getActivity(this, 9101, i, flags);
-}
+
+    // [MỚI] Zero-RAM: chạy đúng lúc user chạm notif, không giữ Thread/Handler nào chờ sẵn.
+    private void openCurrentFile() {
+        if (pendingUri == null) return;
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(pendingUri, "audio/*");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            i.setPackage("com.google.android.apps.nbu.files");
+            startActivity(i);
+        } catch (Exception e) {
+            try {
+                Intent i2 = new Intent(Intent.ACTION_VIEW);
+                i2.setDataAndType(pendingUri, "audio/*");
+                i2.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(Intent.createChooser(i2, "Mở bằng").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (Exception ignored) {}
+        }
+    }
     private void startForegroundNotif() {
     String cid = "eb_voice_rec_v2";
     NotificationChannel c = new NotificationChannel(cid, "Ghi âm EdgeBar", NotificationManager.IMPORTANCE_LOW);
@@ -283,11 +295,11 @@ private PendingIntent contentTapPI() {
             .setContentTitle("🔴 Đang ghi âm — 00:00")
             .setContentText("EdgeBar Voice")
             .setSmallIcon(android.R.drawable.presence_audio_online)
-            .setContentIntent(contentTapPI())
             .addAction(android.R.drawable.ic_media_next, "Dừng", actionPI(ACTION_STOP)) // Nút Trái
             .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     isPaused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE)) // Nút Giữa
             .addAction(android.R.drawable.ic_media_ff, "Dừng & Nghe", actionPI(ACTION_STOP_AND_PLAY)) // Nút Phải
+            .setContentIntent(actionPI(ACTION_OPEN_CURRENT)) 
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setStyle(new Notification.MediaStyle()
@@ -312,11 +324,11 @@ private void updateNotif(long sec, boolean paused) {
             .setContentTitle((paused ? "⏸️ Đã tạm dừng — " : "🔴 Đang ghi âm — ") + time)
             .setContentText("EdgeBar Voice")
             .setSmallIcon(android.R.drawable.presence_audio_online)
-            .setContentIntent(contentTapPI())
             .addAction(android.R.drawable.ic_media_next, "Dừng", actionPI(ACTION_STOP)) // Nút Trái
             .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     paused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE)) // Nút Giữa
             .addAction(android.R.drawable.ic_media_ff, "Dừng & Nghe", actionPI(ACTION_STOP_AND_PLAY)) // Nút Phải
+            .setContentIntent(actionPI(ACTION_OPEN_CURRENT)) 
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setStyle(new Notification.MediaStyle()

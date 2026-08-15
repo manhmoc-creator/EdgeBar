@@ -2,7 +2,6 @@ package com.manhmoc.edgebar;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.app.Service;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -43,12 +42,14 @@ public class ScreenRecorderService extends Service {
     public static final String ACTION_PAUSE_TOGGLE = "com.manhmoc.edgebar.SCREENREC_PAUSE_TOGGLE";
     public static final String ACTION_STOP = "com.manhmoc.edgebar.SCREENREC_STOP";
     public static final String ACTION_STOP_AND_PLAY = "com.manhmoc.edgebar.SCREENREC_STOP_PLAY"; // Thêm dòng này
+    public static final String ACTION_OPEN_CURRENT = "com.manhmoc.edgebar.SCREENREC_OPEN_CURRENT"; // [MỚI]
     @Override public IBinder onBind(Intent i) { return null; }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : null;
         if (ACTION_STOP.equals(action) || "STOP".equals(action)) { stopRecording(false); return START_NOT_STICKY; }
         if (ACTION_STOP_AND_PLAY.equals(action)) { stopRecording(true); return START_NOT_STICKY; }
+        if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentFile(); return START_NOT_STICKY; } // [MỚI]
         if (isRunning || intent == null) return START_NOT_STICKY;
         startForegroundNotif(0);
 
@@ -226,19 +227,24 @@ private void pauseRecording() {
         stopForeground(true);
         stopSelf();
     }
-private PendingIntent contentTapPI() {
-    Intent i = new Intent(Intent.ACTION_VIEW);
-    if (pendingUri != null) i.setDataAndType(pendingUri, "video/*");
-    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-    int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
-    return PendingIntent.getActivity(this, 9102, i, flags);
-}
+
     private android.app.PendingIntent screenRecActionPI(String action) {
         Intent i = new Intent(this, ScreenRecorderService.class);
         i.setAction(action);
         int flags = android.app.PendingIntent.FLAG_UPDATE_CURRENT
             | (Build.VERSION.SDK_INT >= 23 ? android.app.PendingIntent.FLAG_IMMUTABLE : 0);
         return android.app.PendingIntent.getService(this, action.hashCode(), i, flags);
+    }
+
+    // [MỚI] Zero-RAM: chỉ chạy đúng lúc chạm notif.
+    private void openCurrentFile() {
+        if (pendingUri == null) return;
+        try {
+            Intent openIntent = new Intent(Intent.ACTION_VIEW);
+            openIntent.setDataAndType(pendingUri, "video/*");
+            openIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(openIntent);
+        } catch (Exception ignored) {}
     }
     private void startForegroundNotif(long sec) {
     String cid = "eb_screen_rec_v2";
@@ -282,11 +288,11 @@ private PendingIntent contentTapPI() {
             .setContentTitle((isPaused ? "⏸️ Đã tạm dừng — " : "🔴 Đang quay màn hình — ") + time)
             .setContentText("EdgeBar Screen")
             .setSmallIcon(android.R.drawable.presence_video_online)
-            .setContentIntent(contentTapPI())
             .addAction(android.R.drawable.ic_media_next, "Dừng", screenRecActionPI(ACTION_STOP)) // Nút Trái
             .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     isPaused ? "Tiếp Tục" : "Tạm Dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE)) // Nút Giữa
             .addAction(android.R.drawable.ic_media_ff, "Dừng & Xem", screenRecActionPI(ACTION_STOP_AND_PLAY)) // Nút Phải
+            .setContentIntent(screenRecActionPI(ACTION_OPEN_CURRENT)) // [MỚI] chạm vào thân notif -> mở video
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setStyle(new Notification.MediaStyle()

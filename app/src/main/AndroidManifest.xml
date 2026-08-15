@@ -39,9 +39,7 @@
         </activity>
 
         <activity android:name=".QrScanActivity" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:exported="false" />
-<activity android:name=".EdgeBarPlayerActivity"
-    android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
-    android:exported="false" />
+
          <activity
             android:name=".LockOverlayActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"

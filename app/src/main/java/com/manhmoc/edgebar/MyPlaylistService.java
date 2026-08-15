@@ -243,13 +243,21 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
     // (fallback chooser), tái dùng cùng cơ chế đã có ở VoiceRecorderService.
     private void openCurrentTrackFile() {
         if (tracks.isEmpty() || currentIndex < 0 || currentIndex >= tracks.size()) return;
-        SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        String ids = prefs.getString("myplaylist_ids", "");
-        Intent i = new Intent(this, EdgeBarPlayerActivity.class);
-        i.putExtra("playlist_ids", ids);
-        i.putExtra("playlist_index", currentIndex);
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(i);
+        Uri uri = tracks.get(currentIndex);
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, "audio/*");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            i.setPackage("com.google.android.apps.nbu.files");
+            startActivity(i);
+        } catch (Exception e) {
+            try {
+                Intent i2 = new Intent(Intent.ACTION_VIEW);
+                i2.setDataAndType(uri, "audio/*");
+                i2.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(Intent.createChooser(i2, "Mở bằng").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (Exception ignored) {}
+        }
     }
     private void togglePause() {
     if (player == null || !isRunning) return;

@@ -91,9 +91,9 @@ private java.util.Set<String> voiceSelectedItems = new java.util.LinkedHashSet<>
 private boolean videoSelectMode = false;
 private java.util.Set<String> videoSelectedItems = new java.util.LinkedHashSet<>();
 
-// [MỚI] Multi-select cho My Playlist
-private boolean myplaylistSelectMode = false;
-private java.util.Set<String> myplaylistSelectedItems = new java.util.LinkedHashSet<>();
+// [MỚI] Multi-select cho danh sách My Playlist
+private boolean myPlSelectMode = false;
+private java.util.Set<String> myPlSelectedItems = new java.util.LinkedHashSet<>();
 private ImageButton fab;
 private EditText etNavSearch;
 private List<Object[]> searchIndexCache;
@@ -478,9 +478,10 @@ private String[] getVolKeyActLabs() {
     if (panelSelectMode) { panelSelectMode = false; panelSelectedItems.clear(); renderPanelDesign(); return; }
     if (trashSelectMode) { trashSelectMode = false; trashSelectedItems.clear(); renderEcosystem(); return; }
     if (voiceSelectMode) { voiceSelectMode = false; voiceSelectedItems.clear(); renderEcosystem(); return; }
+    // [THÊM DÒNG NÀY]
     if (videoSelectMode) { videoSelectMode = false; videoSelectedItems.clear(); renderEcosystem(); return; }
-    if (myplaylistSelectMode) { myplaylistSelectMode = false; myplaylistSelectedItems.clear(); renderEcosystem(); return; }
-    
+    if (myPlSelectMode) { myPlSelectMode = false; myPlSelectedItems.clear(); renderEcosystem(); return; }
+
     if (!navBackStack.isEmpty()) { navBackStack.pop().run(); return; }
     if (pageDesign != null && pageDesign.getVisibility() == View.VISIBLE) { closeDesignSpace(); return; }
     if ((pageConditions != null && pageConditions.getVisibility() == View.VISIBLE)
@@ -4383,111 +4384,176 @@ private static final String[] MP_COLOR_HEX = {"#607D8B","#78909C","#90A4AE","#45
 private int mpColorForId(String id) { return Color.parseColor(MP_COLOR_HEX[Math.abs(id.hashCode()) % MP_COLOR_HEX.length]); }
 
 private void renderMyPlaylistSpace() {
+    // [YÊU CẦU 1] Dòng ghi chú đầu không gian - đồng bộ với Voice Recording / Screen Recording
     TextView tvNote = new TextView(this);
-    tvNote.setText(T("Songs picked from Files by Google. Long-press a song to select multiple.",
-        "Bài hát được chọn từ Files by Google. Nhấn giữ 1 bài để chọn nhiều."));
+    tvNote.setText(T("Songs added from Files by Google.", "Bài hát được thêm từ Files by Google. Nhấn vào mục để mở bằng ứng dụng tương ứng."));
     tvNote.setTextColor(Color.parseColor("#9AA0A6")); tvNote.setTextSize(12);
     tvNote.setPadding(0, 0, 0, 20);
     ecoContainer.addView(tvNote);
 
+    // [YÊU CẦU 2] Ô tìm kiếm - lọc theo tên bài hát. KHÔNG gọi renderEcosystem() mỗi lần
+    // gõ phím (tốn công dựng lại Note+Search) — chỉ vẽ lại listContainer bên dưới,
+    // tiết kiệm CPU/pin trên Pixel 2XL.
+    EditText etSearch = new EditText(this);
+    etSearch.setHint(T("Search songs...", "Tìm bài hát..."));
+    etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
+    etSearch.setSingleLine(true);
+    etSearch.setBackground(getRounded("#2C2C2C", 100f));
+    etSearch.setPadding(30, 20, 30, 20);
+    LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, -2);
+    searchLp.setMargins(0, 0, 0, 20);
+    etSearch.setLayoutParams(searchLp);
+    ecoContainer.addView(etSearch);
+
+    LinearLayout listContainer = new LinearLayout(this);
+    listContainer.setOrientation(LinearLayout.VERTICAL);
+    ecoContainer.addView(listContainer);
+
+    renderMyPlaylistList(listContainer, "");
+    etSearch.addTextChangedListener(new android.text.TextWatcher() {
+        public void afterTextChanged(android.text.Editable s) { renderMyPlaylistList(listContainer, s.toString()); }
+        public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+        public void onTextChanged(CharSequence s,int a,int b,int c){}
+    });
+}
+
+private void renderMyPlaylistList(LinearLayout listContainer, String query) {
+    listContainer.removeAllViews();
     List<String> ids = getDynamicIds("myplaylist_ids");
     if (ids.isEmpty()) {
         TextView empty = new TextView(this);
         empty.setText(T("No songs yet.\nTap the round button to add from Files by Google.",
             "Chưa có bài hát nào.\nBấm nút tròn để thêm từ Files by Google."));
         empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0);
-        ecoContainer.addView(empty);
+        listContainer.addView(empty);
         return;
     }
 
-    if (myplaylistSelectMode) ecoContainer.addView(buildMyPlaylistSelectionToolbar(ids));
+    // [TỐI ƯU PIN/RAM] Lọc tại chỗ bằng string đã cache sẵn trong prefs - KHÔNG I/O,
+    // KHÔNG Thread, KHÔNG re-query MediaStore mỗi lần gõ phím.
+    String q = query == null ? "" : query.trim().toLowerCase();
+    List<String> shownIds = new ArrayList<>();
+    for (String id : ids) {
+        if (q.isEmpty()) { shownIds.add(id); continue; }
+        String name = prefs.getString("myplaylist_" + id + "_name", "").toLowerCase();
+        if (name.contains(q)) shownIds.add(id);
+    }
 
-    // [TỐI ƯU PIN/RAM] 1 card/hàng, chiều cao cố định (110px) -> mọi card kích thước
-    // giống hệt nhau bất kể tên bài dài/ngắn. Không GridLayout/RecyclerView, không
-    // Adapter/ViewHolder — dựng thẳng bằng LinearLayout như phần còn lại của app,
-    // rẻ CPU khi vẽ và không giữ object thừa lúc không hiển thị (view bị GC khi
-    // rời màn hình, giống mọi danh sách khác trong app).
-    final int cardHeightPx = 110;
-    for (int i = 0; i < ids.size(); i++) {
-        final int idx = i;
-        final String id = ids.get(i);
+    // [YÊU CẦU 3] Thanh công cụ "Chọn nhiều > Tất cả/Xoá" - chỉ dựng khi đang ở chế độ chọn
+    if (myPlSelectMode) listContainer.addView(buildMyPlaylistSelectionToolbar(ids));
+
+    for (int pos = 0; pos < shownIds.size(); pos++) {
+        String id = shownIds.get(pos);
         String name = prefs.getString("myplaylist_" + id + "_name", "Song");
         String uriStr = prefs.getString("myplaylist_" + id + "_uri", "");
 
-        FrameLayout cardWrap = new FrameLayout(this);
-        LinearLayout.LayoutParams wLp = new LinearLayout.LayoutParams(-1, cardHeightPx);
-        wLp.setMargins(6, 6, 6, 6);
-        cardWrap.setLayoutParams(wLp);
-
+        // [YÊU CẦU: 1 dòng = 1 Data Pack, kích thước đồng nhất]
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
         card.setBackground(getRounded(String.format("#%06X", (0xFFFFFF & mpColorForId(id))), 20f));
         card.setPadding(28, 0, 28, 0);
+        card.setMinimumHeight(120); // mọi card cao bằng nhau, bất kể tên dài/ngắn
+        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
+        cardLp.setMargins(0, 6, 0, 6);
+        card.setLayoutParams(cardLp);
 
-        TextView tvIdx = new TextView(this);
-        tvIdx.setText(String.valueOf(idx + 1));
-        tvIdx.setTextColor(Color.parseColor("#AAFFFFFF"));
-        tvIdx.setTextSize(15f);
-        tvIdx.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        tvIdx.setLayoutParams(new LinearLayout.LayoutParams(56, -2));
-        card.addView(tvIdx);
+        final String fId = id;
+        final boolean canReorder = q.isEmpty() && !myPlSelectMode; // chỉ cho đổi số khi xem full list, không lọc
 
-        // Dòng chữ lấp đầy phần còn lại của card (weight=1)
+        if (canReorder) {
+            EditText etOrder = new EditText(this);
+            etOrder.setText(String.valueOf(pos + 1));
+            etOrder.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+            etOrder.setTextColor(Color.WHITE);
+            etOrder.setTextSize(14f);
+            etOrder.setGravity(Gravity.CENTER);
+            etOrder.setBackground(getRounded("#00000055", 12f));
+            etOrder.setPadding(10, 8, 10, 8);
+            etOrder.setSingleLine(true);
+            LinearLayout.LayoutParams ordLp = new LinearLayout.LayoutParams(90, LinearLayout.LayoutParams.WRAP_CONTENT);
+            ordLp.setMargins(0, 0, 20, 0);
+            etOrder.setLayoutParams(ordLp);
+            etOrder.setOnEditorActionListener((v, actionId, event) -> {
+                applyMyPlaylistReorder(fId, etOrder.getText().toString());
+                return true;
+            });
+            etOrder.setOnFocusChangeListener((v, hasFocus) -> {
+                if (!hasFocus) applyMyPlaylistReorder(fId, etOrder.getText().toString());
+            });
+            card.addView(etOrder);
+        }
+
         TextView tv = new TextView(this);
         tv.setText("🎵 " + name);
         tv.setTextColor(Color.WHITE); tv.setTextSize(14.5f);
-        tv.setMaxLines(1); tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        tv.setMaxLines(2); tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        // [YÊU CẦU: chữ lấp đầy Data Pack] weight=1 chiếm hết chiều ngang còn lại
+        tv.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         card.addView(tv);
-
-        // Icon kéo-thả để đổi thứ tự — dùng chung cơ chế attachDragReorder() đã có sẵn
-        TextView dragHandle = new TextView(this);
-        dragHandle.setText("☰");
-        dragHandle.setTextColor(Color.parseColor("#88FFFFFF"));
-        dragHandle.setTextSize(18);
-        dragHandle.setPadding(24, 0, 0, 0);
-        card.addView(dragHandle);
-
-        cardWrap.addView(card, new FrameLayout.LayoutParams(-1, -1));
-        cardWrap.setTag(id);
-
-        if (myplaylistSelectMode) {
-            boolean sel = myplaylistSelectedItems.contains(id);
+        if (myPlSelectMode) {
             TextView selDot = new TextView(this);
+            boolean sel = myPlSelectedItems.contains(fId);
             selDot.setText(sel ? "🔵" : "⚪");
             selDot.setTextSize(16);
-            FrameLayout.LayoutParams dLp = new FrameLayout.LayoutParams(-2, -2);
-            dLp.gravity = Gravity.END | Gravity.CENTER_VERTICAL; dLp.setMargins(0, 0, 20, 0);
-            selDot.setLayoutParams(dLp);
-            cardWrap.addView(selDot);
+            LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(-2, -2);
+            dotLp.setMargins(10, 0, 0, 0);
+            selDot.setLayoutParams(dotLp);
+            card.addView(selDot);
             card.setOnClickListener(v -> {
-                if (myplaylistSelectedItems.contains(id)) myplaylistSelectedItems.remove(id);
-                else myplaylistSelectedItems.add(id);
-                renderEcosystem();
+                if (myPlSelectedItems.contains(fId)) myPlSelectedItems.remove(fId);
+                else myPlSelectedItems.add(fId);
+                renderMyPlaylistList(listContainer, query);
             });
             card.setOnLongClickListener(v -> true);
         } else {
             card.setOnClickListener(v -> {
-                if (uriStr.isEmpty()) { Toast.makeText(this, T("File missing", "File không còn tồn tại"), Toast.LENGTH_SHORT).show(); return; }
-                openMyPlaylistTrack(idx);
+                if (uriStr.isEmpty()) { Toast.makeText(this, T("File missing","File không còn tồn tại"), Toast.LENGTH_SHORT).show(); return; }
+                try {
+                    Intent open = new Intent(Intent.ACTION_VIEW);
+                    open.setDataAndType(Uri.parse(uriStr), "audio/*");
+                    open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    open.setPackage("com.google.android.apps.nbu.files");
+                    startActivity(open);
+                } catch (Exception e) {
+                    try {
+                        Intent open2 = new Intent(Intent.ACTION_VIEW);
+                        open2.setDataAndType(Uri.parse(uriStr), "audio/*");
+                        open2.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(Intent.createChooser(open2, T("Open with","Mở bằng")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    } catch (Exception ignored) { Toast.makeText(this, T("Cannot open","Không thể mở"), Toast.LENGTH_SHORT).show(); }
+                }
             });
             card.setOnLongClickListener(v -> {
-                myplaylistSelectMode = true;
-                myplaylistSelectedItems.clear();
-                myplaylistSelectedItems.add(id);
-                renderEcosystem();
+                myPlSelectMode = true;
+                myPlSelectedItems.clear();
+                myPlSelectedItems.add(fId);
+                renderMyPlaylistList(listContainer, query);
                 return true;
             });
         }
-
-        attachDragReorder(cardWrap, ids, "myplaylist_ids", this::renderEcosystem);
-        ecoContainer.addView(cardWrap);
+        listContainer.addView(card);
     }
 }
+// [MỚI] Đổi vị trí bài hát bằng cách gõ số — dịch chuyển đúng 1 phần tử trong CSV,
+// KHÔNG rebuild toàn bộ danh sách, KHÔNG Thread nào — rẻ CPU/pin cho Pixel 2XL.
+private void applyMyPlaylistReorder(String id, String typedNum) {
+    List<String> ids = getDynamicIds("myplaylist_ids");
+    int oldPos = ids.indexOf(id);
+    if (oldPos < 0) return;
 
-// [MỚI] Toolbar "đã chọn N / Tất cả / Xoá" — chỉ dựng View khi thực sự đang ở chế độ
-// chọn nhiều, Zero-RAM lúc bình thường (giống mọi toolbar chọn-nhiều khác trong app).
+    int newPos;
+    try { newPos = Integer.parseInt(typedNum.trim()) - 1; }
+    catch (Exception e) { renderEcosystem(); return; } // số không hợp lệ -> vẽ lại về trạng thái đúng
+
+    newPos = Math.max(0, Math.min(ids.size() - 1, newPos)); // kẹp trong khoảng hợp lệ
+    if (newPos == oldPos) { renderEcosystem(); return; }
+
+    ids.remove(oldPos);
+    ids.add(newPos, id);
+    prefs.edit().putString("myplaylist_ids", TextUtils.join(",", ids)).apply();
+    renderEcosystem();
+}
 private LinearLayout buildMyPlaylistSelectionToolbar(List<String> ids) {
     LinearLayout bar = new LinearLayout(this);
     bar.setOrientation(LinearLayout.HORIZONTAL);
@@ -4495,48 +4561,37 @@ private LinearLayout buildMyPlaylistSelectionToolbar(List<String> ids) {
     bar.setPadding(0, 0, 0, 20);
 
     TextView tvCount = new TextView(this);
-    tvCount.setText(myplaylistSelectedItems.size() + " " + T("selected", "đã chọn"));
+    tvCount.setText(myPlSelectedItems.size() + " " + T("selected", "đã chọn"));
     tvCount.setTextColor(Color.parseColor("#00E5FF"));
     tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-    Button btnAll = new Button(this); btnAll.setText(T("All", "Tất cả"));
-    btnAll.setBackground(getRounded("#333333", 20f)); btnAll.setTextColor(Color.WHITE); btnAll.setTextSize(12.5f);
-    LinearLayout.LayoutParams allLp = new LinearLayout.LayoutParams(-2, -2); allLp.setMargins(10, 0, 10, 0);
-    btnAll.setLayoutParams(allLp);
-    btnAll.setOnClickListener(v -> {
-        java.util.Set<String> allKeys = new java.util.LinkedHashSet<>(ids);
-        if (myplaylistSelectedItems.equals(allKeys)) myplaylistSelectedItems.clear();
-        else { myplaylistSelectedItems.clear(); myplaylistSelectedItems.addAll(allKeys); }
-        renderEcosystem();
-    });
 
     Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", "Xóa"));
     btnDelete.setBackground(getRounded("#D32F2F", 20f)); btnDelete.setTextColor(Color.WHITE); btnDelete.setTextSize(12.5f);
     btnDelete.setOnClickListener(v -> {
         new AlertDialog.Builder(this).setTitle(T("Remove selected songs?", "Xoá các bài đã chọn?"))
             .setPositiveButton(T("REMOVE", "XOÁ"), (d, w) -> {
-                for (String id : new java.util.ArrayList<>(myplaylistSelectedItems)) {
-                    prefs.edit().remove("myplaylist_" + id + "_uri").remove("myplaylist_" + id + "_name").apply();
+                for (String id : new java.util.ArrayList<>(myPlSelectedItems)) {
+                    prefs.edit().remove("myplaylist_"+id+"_uri").remove("myplaylist_"+id+"_name").apply();
                     removeDynamicId("myplaylist_ids", id);
                 }
-                myplaylistSelectMode = false; myplaylistSelectedItems.clear();
+                myPlSelectMode = false; myPlSelectedItems.clear();
                 renderEcosystem();
             }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
     });
+    LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(-2, -2); delLp.setMargins(10, 0, 10, 0);
+    btnDelete.setLayoutParams(delLp);
 
-    bar.addView(tvCount); bar.addView(btnAll); bar.addView(btnDelete);
+    Button btnAll = new Button(this); btnAll.setText(T("All", "Tất cả"));
+    btnAll.setBackground(getRounded("#333333", 20f)); btnAll.setTextColor(Color.WHITE); btnAll.setTextSize(12.5f);
+    btnAll.setOnClickListener(v -> {
+        java.util.Set<String> allKeys = new java.util.LinkedHashSet<>(ids);
+        if (myPlSelectedItems.equals(allKeys)) myPlSelectedItems.clear();
+        else { myPlSelectedItems.clear(); myPlSelectedItems.addAll(allKeys); }
+        renderEcosystem();
+    });
+
+    bar.addView(tvCount); bar.addView(btnDelete); bar.addView(btnAll);
     return bar;
-}
-
-// [MỚI] Mở bài hát trong player nội bộ EdgeBar (thay Files by Google) — truyền
-// nguyên danh sách playlist để player có next/prev/shuffle qua cả playlist.
-private void openMyPlaylistTrack(int index) {
-    List<String> ids = getDynamicIds("myplaylist_ids");
-    Intent i = new Intent(this, EdgeBarPlayerActivity.class);
-    i.putExtra("playlist_ids", TextUtils.join(",", ids));
-    i.putExtra("playlist_index", index);
-    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-    startActivity(i);
 }
 // Kiểm tra Uri có còn truy cập được không — nếu app quản lý file kia đã xoá file
 // gốc, ContentResolver.query() sẽ ném lỗi hoặc trả về con trỏ rỗng. Chỉ chạy khi
@@ -4839,7 +4894,7 @@ private void renderVoiceRecordList() {
             });
             card.setOnLongClickListener(v -> true);
         } else {
-            card.setOnClickListener(v -> openVoiceRecordingInPlayer(uri, name));
+            card.setOnClickListener(v -> openInFilesByGoogle(uri));
             card.setOnLongClickListener(v -> {
                 voiceSelectMode = true;
                 voiceSelectedItems.clear();
@@ -4896,15 +4951,24 @@ private LinearLayout buildVoiceSelectionToolbar() {
     bar.addView(tvCount); bar.addView(btnDelete); bar.addView(btnAll);
     return bar;
 }
-/** [MỚI] Mở file ghi âm trong player nội bộ EdgeBar (có đủ nút: play/pause,
- *  yêu thích, xoá, share, menu Mở bằng/Sao chép/Di chuyển/Thông tin/Nhạc chuông/Tốc độ). */
-private void openVoiceRecordingInPlayer(android.net.Uri uri, String name) {
-    Intent i = new Intent(this, EdgeBarPlayerActivity.class);
-    i.setData(uri);
-    i.putExtra("title", name);
-    i.putExtra("fav_key", "voicerec_" + uri.toString().hashCode());
-    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-    startActivity(i);
+/** Mở đúng file ghi âm trong Files by Google; nếu chưa cài thì fallback sang chooser. */
+private void openInFilesByGoogle(android.net.Uri uri) {
+    try {
+        Intent i = new Intent(Intent.ACTION_VIEW);
+        i.setDataAndType(uri, "audio/*");
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        i.setPackage("com.google.android.apps.nbu.files");
+        startActivity(i);
+    } catch (Exception e) {
+        try {
+            Intent i2 = new Intent(Intent.ACTION_VIEW);
+            i2.setDataAndType(uri, "audio/*");
+            i2.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(Intent.createChooser(i2, T("Open with", "Mở bằng")));
+        } catch (Exception ignored) {
+            Toast.makeText(this, T("Cannot open file", "Không thể mở file"), Toast.LENGTH_SHORT).show();
+        }
+    }
 }
 // ==================== [MỚI] MÀN LỰA CHỌN GHI ÂM / GHI MÀN HÌNH ====================
 // Cấu trúc giống Gestures & Touch: chạm "Sound & Media" chỉ hiện 1 menu 2 mục,
