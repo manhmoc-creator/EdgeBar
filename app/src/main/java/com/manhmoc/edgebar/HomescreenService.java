@@ -942,7 +942,7 @@ filter.addAction("com.manhmoc.edgebar.TEST_REC_INDICATOR");
         getSystemService(NotificationManager.class).createNotificationChannel(c);
         Notification n = new Notification.Builder(this, cid)
                 .setContentTitle("Homeb")
-                .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
                 .setOngoing(true).build();
         startForeground(2, n);
 

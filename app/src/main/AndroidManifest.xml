@@ -121,7 +121,7 @@
         <service
 android:name=".QsLockTile"
 android:label="EB Lacck"
-android:icon="@android:drawable/ic_media_play"
+android:icon="@android:drawable/sym_def_app_icon"
 android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
 android:exported="true">
 <intent-filter>
