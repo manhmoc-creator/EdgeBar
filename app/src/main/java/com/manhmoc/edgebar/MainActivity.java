@@ -4562,7 +4562,7 @@ private void applyMyPlaylistReorder(String id, String typedNum) {
     newPos = Math.max(0, Math.min(ids.size() - 1, newPos)); // kẹp trong khoảng hợp lệ
     if (newPos == oldPos) { deferRenderEcosystem(); return; }
 
-    Collections.swap(ids, oldPos, newPos); // HOÁN ĐỔI thay vì remove+insert
+    java.util.Collections.swap(ids, oldPos, newPos); // HOÁN ĐỔI thay vì remove+insert
     prefs.edit().putString("myplaylist_ids", TextUtils.join(",", ids)).apply();
     deferRenderEcosystem();
 }
