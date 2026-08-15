@@ -809,7 +809,7 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
             Notification nAcc = new Notification.Builder(this, cidAcc)
                     .setContentTitle("EB Lacck")
                     .setContentText("Trợ năng đang hoạt động")
-                    .setSmallIcon(android.R.drawable.stat_sys_warning) // Đúng icon của QS Tile
+                    .setSmallIcon(android.R.drawable.stat_notify_voicemail) // Đúng icon của QS Tile
                     .setOngoing(true)
                     .build();
             // Nếu SDK >= 29, hệ thống có thể yêu cầu Type, nhưng với AccessibilityService thì gọi trơn vẫn an toàn
