@@ -70,6 +70,8 @@ private boolean pausedByFocusLoss = false;
     private final List<Uri> tracks = new ArrayList<>();
     private final List<String> trackNames = new ArrayList<>();
     private int currentIndex = 0;
+    private boolean shuffleOn = false;
+    private int repeatMode = 0; // 0=off, 1=repeat all, 2=repeat one
     private android.graphics.Bitmap currentArt; // [MỚI] ảnh bìa bài đang phát
 
     // [MỚI] Audio Focus — xin quyền phát với hệ thống để app khác (Files by Google,
@@ -122,6 +124,8 @@ private boolean pausedByFocusLoss = false;
         String action = intent != null ? intent.getAction() : null;
 
         if (ACTION_STOP.equals(action)) { stopPlayback(); return START_NOT_STICKY; }
+if (ACTION_TOGGLE_SHUFFLE.equals(action)) { shuffleOn = !shuffleOn; startForegroundNotif(trackNames.get(currentIndex), isPaused); return START_NOT_STICKY; }
+if (ACTION_TOGGLE_REPEAT.equals(action)) { repeatMode = (repeatMode+1)%3; startForegroundNotif(trackNames.get(currentIndex), isPaused); return START_NOT_STICKY; }
 if (ACTION_NEXT.equals(action)) { nextTrack(); return START_NOT_STICKY; }
 if (ACTION_PREV.equals(action)) { prevTrack(); return START_NOT_STICKY; }
 if (ACTION_SEEK_BACK.equals(action)) { seekBy(-SEEK_STEP_MS); return START_NOT_STICKY; }
@@ -236,7 +240,15 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
             if (tracks.size() > 1) playIndex(currentIndex + 1); else stopPlayback();
         }
     }
-    private void nextTrack() { refreshTrackList(); playIndex(currentIndex + 1); }
+    public static final String ACTION_TOGGLE_SHUFFLE = "com.manhmoc.edgebar.MYPLAYLIST_SHUFFLE";
+    public static final String ACTION_TOGGLE_REPEAT = "com.manhmoc.edgebar.MYPLAYLIST_REPEAT";
+    private void nextTrack() {
+        refreshTrackList();
+        if (repeatMode == 2) { playIndex(currentIndex); return; } // repeat one
+        int next = shuffleOn ? (int)(Math.random()*tracks.size()) : currentIndex + 1;
+        if (repeatMode == 0 && next >= tracks.size()) { stopPlayback(); return; }
+        playIndex(next);
+    }
     private void prevTrack() { refreshTrackList(); playIndex(currentIndex - 1); }
 
     // 1 chạm vào thông báo -> mở đúng file bài hát ĐANG PHÁT bằng Files by Google
@@ -300,10 +312,12 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
         return PendingIntent.getService(this, action.hashCode(), i, flags);
     }
 private PendingIntent contentTapPI() {
-        Intent i = new Intent(this, MyPlaylistService.class);
-        i.setAction(ACTION_OPEN_CURRENT);
+        Intent i = new Intent(this, PlayerActivity.class);
+        i.setAction("com.manhmoc.edgebar.OPEN_LIVE_PLAYLIST");
+        i.putExtra(PlayerActivity.EXTRA_MODE, PlayerActivity.MODE_PLAYLIST_LIVE);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
-        return PendingIntent.getService(this, ACTION_OPEN_CURRENT.hashCode(), i, flags);
+        return PendingIntent.getActivity(this, 771, i, flags);
     }
     private void startForegroundNotif(String title, boolean paused) {
     NotificationManager nm = getSystemService(NotificationManager.class);
@@ -323,12 +337,14 @@ private PendingIntent contentTapPI() {
         .setOngoing(isRunning)
         .setContentIntent(contentTapPI())
         .setDeleteIntent(actionPI(ACTION_STOP))
-        .addAction(android.R.drawable.ic_media_rew, "Lùi 10s", actionPI(ACTION_SEEK_BACK))
+        .addAction(shuffleOn ? android.R.drawable.presence_online : android.R.drawable.ic_menu_sort_alphabetically,
+            "Ngẫu nhiên", actionPI(ACTION_TOGGLE_SHUFFLE))
         .addAction(android.R.drawable.ic_media_previous, "Trước", actionPI(ACTION_PREV))
         .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
             paused ? "Phát" : "Tạm Dừng", actionPI(ACTION_TOGGLE))
         .addAction(android.R.drawable.ic_media_next, "Tiếp", actionPI(ACTION_NEXT))
-        .addAction(android.R.drawable.ic_media_ff, "Tới 10s", actionPI(ACTION_SEEK_FWD))
+        .addAction(repeatMode == 2 ? android.R.drawable.ic_menu_revert : android.R.drawable.ic_menu_rotate,
+            repeatMode == 0 ? "Lặp: Tắt" : (repeatMode == 1 ? "Lặp: Tất cả" : "Lặp: 1 bài"), actionPI(ACTION_TOGGLE_REPEAT))
         .addAction(android.R.drawable.ic_lock_power_off, "Dừng", actionPI(ACTION_STOP));
     if (session != null) b.setStyle(new Notification.MediaStyle()
         .setMediaSession(session.getSessionToken())
