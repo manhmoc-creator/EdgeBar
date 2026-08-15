@@ -235,38 +235,6 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
             if (tracks.size() > 1) playIndex(currentIndex + 1); else stopPlayback();
         }
     }
-// Quét lại thư mục Download/My Playlist ngay trước khi chuyển bài — đảm bảo
-    // Next/Prev/Auto-next luôn bám đúng danh sách hiện tại của thư mục (thêm/xoá/đổi
-    // tên file được cập nhật ngay). So khớp theo tên file để giữ đúng vị trí bài
-    // đang phát trong danh sách mới, tránh nhảy lung tung khi danh sách thay đổi.
-    private void refreshTrackList() {
-        Uri collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
-        String[] proj = {MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME};
-        String sel = MediaStore.Audio.Media.RELATIVE_PATH + " LIKE ?";
-        String[] args = {RELATIVE_PATH_PREFIX + "%"};
-        List<Object[]> found = new ArrayList<>();
-        try (Cursor c = getContentResolver().query(collection, proj, sel, args, null)) {
-            if (c != null) {
-                while (c.moveToNext()) {
-                    long id = c.getLong(0);
-                    String name = c.getString(1);
-                    found.add(new Object[]{name, android.content.ContentUris.withAppendedId(collection, id)});
-                }
-            }
-        } catch (Exception ignored) { return; } // lỗi quét -> giữ nguyên list cũ
-        if (found.isEmpty()) return;
-        Collections.sort(found, (a, b) -> naturalCompare((String) a[0], (String) b[0]));
-
-        String currentName = (currentIndex >= 0 && currentIndex < trackNames.size()) ? trackNames.get(currentIndex) : null;
-        tracks.clear(); trackNames.clear();
-        for (Object[] item : found) { trackNames.add((String) item[0]); tracks.add((Uri) item[1]); }
-
-        if (currentName != null) {
-            int newPos = trackNames.indexOf(currentName);
-            if (newPos >= 0) currentIndex = newPos;
-        }
-    }
-
     private void nextTrack() { refreshTrackList(); playIndex(currentIndex + 1); }
     private void prevTrack() { refreshTrackList(); playIndex(currentIndex - 1); }
 

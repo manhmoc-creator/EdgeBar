@@ -401,7 +401,6 @@ private String[] getVolKeyActLabs() {
     }
     ed.putString("myplaylist_ids", TextUtils.join(",", ids)).apply();
     if (added > 0) { Toast.makeText(this, T("Added "+added+" songs","Đã thêm "+added+" bài"), Toast.LENGTH_SHORT).show(); renderEcosystem(); }
-}
                 } else if (req == 104) {
                     try {
                         Intent shortcutIntent = data.getParcelableExtra(Intent.EXTRA_SHORTCUT_INTENT);
