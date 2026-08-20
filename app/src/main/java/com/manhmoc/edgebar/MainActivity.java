@@ -6176,7 +6176,7 @@ content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 
                              (scsStr.isEmpty() ? 0 : scsStr.split(",").length);
 
             Button btnAddItems = new Button(this);
-            btnAddItems.setText("✨ CHỌN APP / ACTION / SHORTCUT (" + totalCount + ")");
+            btnAddItems.setText("✨ COLLECT (" + totalCount + ")");
             btnAddItems.setBackground(getRounded("#00E5FF", 20f));
             btnAddItems.setTextColor(Color.BLACK);
             btnAddItems.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -6763,7 +6763,6 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
     etSearch.setLayoutParams(lpSearch);
     root.addView(etSearch);
 
-    // MỚI: Nút thêm Shortcut nội bộ
     Button btnNewShortcut = new Button(this);
     btnNewShortcut.setText("➕ Tạo Shortcut mới");
     btnNewShortcut.setBackground(getRounded("#7C4DFF", 20f));
@@ -6779,32 +6778,34 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
     lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
     root.addView(lv);
 
-    List<String[]> allApps = getPanelAppListCached();
+    // Chuẩn bị Data cho 3 thẻ (Thêm index phân loại category)
+    List<String[]> allApps = new ArrayList<>();
+    for (String[] a : getPanelAppListCached()) allApps.add(new String[]{a[0], a[1], "APP"});
+
     List<String[]> allActs = new ArrayList<>();
     reloadActionLabels();
-    
-    // MỚI: Note lại System và Utilities cho Action
     List<String> sysList = Arrays.asList("BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME","SCREENSHOT","CAMERA","NOTIFICATIONS","QUICK_SETTINGS","SPLIT_SCREEN","SCREEN_RECORD","AUTO_ROTATE_TOGGLE");
     List<String> utlList = Arrays.asList("TOGGLE_OVERLAY","TOGGLE_RECORD","PAUSE_RECORD","YTDL_DOWNLOAD","TOGGLE_WORK_PROFILE","OPEN_STORAGE_SCAN","SCAN_QR","PLAY_MY_PLAYLIST");
-
+    
     for (int i = 1; i < ACT_KEYS.length; i++) {
         if (ACT_KEYS[i] == null || ACT_KEYS[i].equals("LAUNCH_APP")) continue;
-        String tag = sysList.contains(ACT_KEYS[i]) ? " [System]" : (utlList.contains(ACT_KEYS[i]) ? " [Utility]" : "");
-        allActs.add(new String[]{ACT_LABS[i] + tag, ACT_KEYS[i]});
+        String cat = sysList.contains(ACT_KEYS[i]) ? "SYS" : (utlList.contains(ACT_KEYS[i]) ? "UTL" : "SYS");
+        allActs.add(new String[]{ACT_LABS[i], ACT_KEYS[i], cat});
     }
-    allActs.addAll(buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent"));
-    allActs.addAll(buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro"));
+    for (String[] item : buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent")) allActs.add(new String[]{item[0], item[1], "INT"});
+    for (String[] item : buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro")) allActs.add(new String[]{item[0], item[1], "INT"});
     
     List<String[]> allScs = new ArrayList<>();
     String scIds = prefs.getString("panel_shortcut_ids", "");
     if (!scIds.isEmpty()) {
         for (String id : scIds.split(",")) {
             String nm = prefs.getString("shortcut_" + id + "_name", "Shortcut");
-            allScs.add(new String[]{"🔗 " + nm, id});
+            allScs.add(new String[]{"🔗 " + nm, id, "SC"});
         }
     }
 
     final int[] currentTab = {0}; // 0=App, 1=Act, 2=Sc
+    final boolean[] actDrawers = {false, false, false}; // Trạng thái mở của 3 ngăn kéo Action (Mặc định đóng)
     final List<String[]> shownList = new ArrayList<>();
     
     final String[] LETTERS = {"-", "A", "B", "C", "D", "E", "F", "G", "H", "I"};
@@ -6813,16 +6814,41 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
     Runnable refreshList = () -> {
         shownList.clear();
         String q = etSearch.getText().toString().trim().toLowerCase();
-        List<String[]> source = currentTab[0] == 0 ? allApps : (currentTab[0] == 1 ? allActs : allScs);
-        List<String> selectedFilter = currentTab[0] == 0 ? selApps : (currentTab[0] == 1 ? selActs : selScs);
         
-        for (String[] item : source) {
-            if (selectedFilter.contains(item[1]) && (q.isEmpty() || item[0].toLowerCase().contains(q)))
-                shownList.add(item);
-        }
-        for (String[] item : source) {
-            if (!selectedFilter.contains(item[1]) && (q.isEmpty() || item[0].toLowerCase().contains(q)))
-                shownList.add(item);
+        if (currentTab[0] == 0 || currentTab[0] == 2) {
+            // APP và SHORTCUT: Phẳng (Flat List)
+            List<String[]> source = currentTab[0] == 0 ? allApps : allScs;
+            List<String> selectedFilter = currentTab[0] == 0 ? selApps : selScs;
+            for (String[] item : source) {
+                if (selectedFilter.contains(item[1]) && (q.isEmpty() || item[0].toLowerCase().contains(q)))
+                    shownList.add(item);
+            }
+            for (String[] item : source) {
+                if (!selectedFilter.contains(item[1]) && (q.isEmpty() || item[0].toLowerCase().contains(q)))
+                    shownList.add(item);
+            }
+        } else {
+            // ACTION: Chế độ Ngăn kéo
+            // 1. Đưa tất cả mục đã chọn lên đầu (Luôn mở)
+            for (String[] item : allActs) {
+                if (selActs.contains(item[1]) && (q.isEmpty() || item[0].toLowerCase().contains(q))) {
+                    shownList.add(item);
+                }
+            }
+            // 2. Hiển thị 3 Ngăn Kéo cho các mục CHƯA chọn
+            String[] catCodes = {"SYS", "UTL", "INT"};
+            String[] catNames = {"⚙️ SYSTEM", "🛠️ UTILITIES", "⚡ INTENTS & MACROS"};
+            for (int c = 0; c < 3; c++) {
+                boolean isOpen = actDrawers[c] || !q.isEmpty(); // Tìm kiếm tự động mở drawer
+                shownList.add(new String[]{catNames[c] + (isOpen ? " (▲)" : " (▼)"), "HEADER_" + c, "HEADER"});
+                if (isOpen) {
+                    for (String[] item : allActs) {
+                        if (!selActs.contains(item[1]) && item[2].equals(catCodes[c]) && (q.isEmpty() || item[0].toLowerCase().contains(q))) {
+                            shownList.add(item);
+                        }
+                    }
+                }
+            }
         }
         ((BaseAdapter) lv.getAdapter()).notifyDataSetChanged();
     };
@@ -6835,45 +6861,67 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
         @Override public Object getItem(int p) { return shownList.get(p); }
         @Override public long getItemId(int p) { return p; }
         @Override public View getView(int p, View cv, ViewGroup parent) {
+            String[] item = shownList.get(p);
+            
+            // Xử lý Render Header của Ngăn Kéo Action
+            if (item[2].equals("HEADER")) {
+                LinearLayout header = new LinearLayout(MainActivity.this);
+                header.setPadding(20, 35, 20, 35);
+                header.setBackground(getRounded("#161616", 16f));
+                LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams(-1, -2);
+                hLp.setMargins(0, 10, 0, 10);
+                header.setLayoutParams(hLp);
+                
+                TextView tvH = new TextView(MainActivity.this);
+                tvH.setText(item[0]);
+                tvH.setTextColor(Color.parseColor("#00E5FF"));
+                tvH.setTextSize(15f);
+                tvH.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+                header.addView(tvH);
+                
+                header.setOnClickListener(v -> {
+                    int c = Integer.parseInt(item[1].split("_")[1]);
+                    actDrawers[c] = !actDrawers[c];
+                    etSearch.clearFocus();
+                    refreshList.run();
+                });
+                return header;
+            }
+
+            // Render Item thông thường
             LinearLayout row = new LinearLayout(MainActivity.this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(20, 22, 20, 22);
 
-            String[] item = shownList.get(p);
             String ref = item[1];
             List<String> currentSelList = currentTab[0] == 0 ? selApps : (currentTab[0] == 1 ? selActs : selScs);
             boolean isSelected = currentSelList.contains(ref);
 
             row.setBackground(getRounded(isSelected ? "#1A3B3F" : "#1A1A1A", 16f));
 
-            // Nút Kéo Thả (Drag Handle) đưa lên đầu tiên
+            // Nút Kéo Thả (Drag Handle) đưa lên ĐẦU TIÊN
             if (isSelected) {
                 TextView dragHandle = new TextView(MainActivity.this);
-                dragHandle.setText("＝"); 
+                dragHandle.setText("☰"); 
                 dragHandle.setTextColor(Color.parseColor("#8AB4F8"));
                 dragHandle.setTextSize(26);
-                dragHandle.setPadding(0, 0, 30, 0);
+                dragHandle.setPadding(0, 0, 35, 0);
                 dragHandle.setOnTouchListener((vh, ev) -> {
                     if (ev.getAction() == MotionEvent.ACTION_DOWN) {
-                        dragFromPos[0] = p;
+                        dragFromPos[0] = p; // Vị trí hiện tại trong List
                         isDragging[0] = true;
+                        lv.requestDisallowInterceptTouchEvent(true); // Ngăn cuộn ListView khi đang kéo
                     }
                     return false;
                 });
                 row.addView(dragHandle);
             }
 
-            // CheckBox chọn mục, thế chỗ Thùng rác
-            CheckBox cb = new CheckBox(MainActivity.this);
-            cb.setChecked(isSelected);
-            cb.setClickable(false);
-            row.addView(cb);
-
             if (currentTab[0] == 0) {
                 ImageView ivApp = new ImageView(MainActivity.this);
                 LinearLayout.LayoutParams ivLp = new LinearLayout.LayoutParams(70, 70);
-                ivLp.setMargins(0, 0, 20, 0);
+                ivLp.setMargins(0, 0, 25, 0);
                 ivApp.setLayoutParams(ivLp);
                 loadAppIconInto(ref, ivApp);
                 row.addView(ivApp);
@@ -6896,54 +6944,43 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                 String curLetter = savedPos[0];
                 String curRoman = savedPos.length > 1 ? savedPos[1] : "-";
 
-                // Hàm tạo nút to 110x110
+                // Hàm tạo nút to 130x130
                 java.util.function.Function<String, Button> makeMiniBtn = (text) -> {
                     Button b = new Button(MainActivity.this);
-                    b.setText(text); b.setTextColor(Color.WHITE); b.setTextSize(14f);
-                    b.setPadding(0, 0, 0, 0); b.setBackground(getRounded("#303134", 18f));
-                    LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(110, 110);
-                    blp.setMargins(12, 0, 12, 0); b.setLayoutParams(blp);
+                    b.setText(text); b.setTextColor(Color.WHITE); b.setTextSize(16f); // Font chữ to
+                    b.setPadding(0, 0, 0, 0); b.setBackground(getRounded("#303134", 20f)); // Bo góc mạnh hơn
+                    LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(130, 130); // Kích thước nút to
+                    blp.setMargins(10, 0, 10, 0); b.setLayoutParams(blp);
                     return b;
                 };
 
-                if (currentTab[0] == 0 || currentTab[0] == 1) { // APP & ACTION
-                    Button btnLetter = makeMiniBtn.apply(curLetter);
-                    btnLetter.setTextColor(Color.parseColor("#FFC107"));
-                    btnLetter.setOnClickListener(v -> {
-                        new android.app.AlertDialog.Builder(MainActivity.this).setItems(LETTERS, (dlg, which) -> {
-                            String updatedPos = LETTERS[which] + "," + curRoman;
-                            prefs.edit().putString(posKey, updatedPos).apply();
-                            refreshList.run();
-                        }).show();
-                    });
-                    controls.addView(btnLetter);
+                // Phím chọn vị trí (Luôn hiện cho cả 3 Tab: App, Act, SC)
+                Button btnLetter = makeMiniBtn.apply(curLetter);
+                btnLetter.setTextColor(Color.parseColor("#FFC107"));
+                btnLetter.setOnClickListener(v -> {
+                    new android.app.AlertDialog.Builder(MainActivity.this).setItems(LETTERS, (dlg, which) -> {
+                        String updatedPos = LETTERS[which] + "," + curRoman;
+                        prefs.edit().putString(posKey, updatedPos).apply();
+                        refreshList.run();
+                    }).show();
+                });
+                controls.addView(btnLetter);
 
-                    Button btnRoman = makeMiniBtn.apply(curRoman);
-                    btnRoman.setTextColor(Color.parseColor("#4CAF50"));
-                    btnRoman.setOnClickListener(v -> {
-                        new android.app.AlertDialog.Builder(MainActivity.this).setItems(ROMANS, (dlg, which) -> {
-                            String updatedPos = curLetter + "," + ROMANS[which];
-                            prefs.edit().putString(posKey, updatedPos).apply();
-                            refreshList.run();
-                        }).show();
-                    });
-                    controls.addView(btnRoman);
+                Button btnRoman = makeMiniBtn.apply(curRoman);
+                btnRoman.setTextColor(Color.parseColor("#4CAF50"));
+                btnRoman.setOnClickListener(v -> {
+                    new android.app.AlertDialog.Builder(MainActivity.this).setItems(ROMANS, (dlg, which) -> {
+                        String updatedPos = curLetter + "," + ROMANS[which];
+                        prefs.edit().putString(posKey, updatedPos).apply();
+                        refreshList.run();
+                    }).show();
+                });
+                controls.addView(btnRoman);
 
-                    Button btnIcon = makeMiniBtn.apply("🖌");
-                    btnIcon.setOnClickListener(v -> {
-                        showIconPickerForPanelAction(panelId, ref, refreshList);
-                    });
-                    controls.addView(btnIcon);
-                } else if (currentTab[0] == 2) { // SHORTCUT
-                    Button btnIcon = makeMiniBtn.apply("🖌");
-                    btnIcon.setOnClickListener(v -> {
-                        showIconPickerDialog("shortcut_" + ref + "_icon_override", refreshList);
-                    });
-                    controls.addView(btnIcon);
-
-                    // Thùng rác đổi công năng: Xoá hẳn vào Kho Cũ
+                // Nút Thùng Rác (Chỉ có ở Shortcut, đặt BÊN TRÁI nút Brush)
+                if (currentTab[0] == 2) { 
                     Button btnTrashSc = makeMiniBtn.apply("🗑");
-                    btnTrashSc.setBackground(getRounded("#D32F2F", 18f));
+                    btnTrashSc.setBackground(getRounded("#D32F2F", 20f));
                     btnTrashSc.setOnClickListener(v -> {
                         new android.app.AlertDialog.Builder(MainActivity.this)
                             .setTitle("Xóa shortcut này?")
@@ -6959,8 +6996,33 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                     });
                     controls.addView(btnTrashSc);
                 }
+
+                // Nút Chổi Cọ (Brush Override Icon)
+                if (currentTab[0] == 0 || currentTab[0] == 1) { // APP & ACTION
+                    Button btnIcon = makeMiniBtn.apply("🖌");
+                    btnIcon.setOnClickListener(v -> {
+                        showIconPickerForPanelAction(panelId, ref, refreshList);
+                    });
+                    controls.addView(btnIcon);
+                } else if (currentTab[0] == 2) { // SHORTCUT
+                    Button btnIcon = makeMiniBtn.apply("🖌");
+                    btnIcon.setOnClickListener(v -> {
+                        showIconPickerDialog("shortcut_" + ref + "_icon_override", refreshList);
+                    });
+                    controls.addView(btnIcon);
+                }
+                
                 row.addView(controls);
             }
+
+            // CheckBox chọn mục, thế chỗ Thùng rác (ĐƯA XUỐNG CUỐI CÙNG BÊN PHẢI)
+            CheckBox cb = new CheckBox(MainActivity.this);
+            cb.setChecked(isSelected);
+            cb.setClickable(false);
+            LinearLayout.LayoutParams cbLp = new LinearLayout.LayoutParams(-2, -2);
+            cbLp.setMargins(20, 0, 0, 0);
+            cb.setLayoutParams(cbLp);
+            row.addView(cb);
 
             row.setOnClickListener(v -> {
                 if (currentSelList.contains(ref)) {
@@ -6982,7 +7044,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
         showShortcutPickerDialog((newId, newName) -> {
             boolean already = false;
             for (String[] it : allScs) if (it[1].equals(newId)) { already = true; break; }
-            if (!already) allScs.add(new String[]{"🔗 " + newName, newId});
+            if (!already) allScs.add(new String[]{"🔗 " + newName, newId, "SC"});
             selScs.add(newId);
             refreshList.run();
         });
@@ -6994,6 +7056,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
         if (action == MotionEvent.ACTION_MOVE) {
             int targetPos = lv.pointToPosition((int) e.getX(), (int) e.getY());
             List<String> currentSelList = currentTab[0] == 0 ? selApps : (currentTab[0] == 1 ? selActs : selScs);
+            // Valid logic: Đảm bảo vị trí kéo chỉ đổi chỗ các thành phần đã được chọn (nằm trên cùng danh sách shownList)
             if (targetPos != android.widget.AdapterView.INVALID_POSITION
                     && targetPos != dragFromPos[0] && targetPos < currentSelList.size()
                     && dragFromPos[0] < currentSelList.size()) {
