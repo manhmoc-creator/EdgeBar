@@ -7120,23 +7120,6 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
             refreshList.run();
         });
     });
-            // Valid logic: Đảm bảo vị trí kéo chỉ đổi chỗ các thành phần đã được chọn
-            if (targetPos != android.widget.AdapterView.INVALID_POSITION
-                    && targetPos != dragFromPos[0] && targetPos < currentSelList.size()
-                    && dragFromPos[0] < currentSelList.size()) {
-                String moved = currentSelList.remove(dragFromPos[0]);
-                currentSelList.add(targetPos, moved);
-                dragFromPos[0] = targetPos;
-                refreshList.run();
-            }
-            return true;
-        } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-            isDragging[0] = false;
-            dragFromPos[0] = -1;
-            return true;
-        }
-        return true;
-    });
 
     View.OnClickListener tabClick = v -> {
         bApps.setBackground(getRounded(v == bApps ? "#00E5FF" : "#222222", 15f));
