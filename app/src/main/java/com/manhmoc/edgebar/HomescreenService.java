@@ -1007,19 +1007,21 @@ filter.addAction("com.manhmoc.edgebar.TEST_REC_INDICATOR");
         // máy Android 11+ (API >= 30). Bổ sung đúng phần dựng cửa sổ, dùng TYPE_APPLICATION_OVERLAY
         // (không NO_LIMITS) để nhận đúng WindowInsets.Type.ime() — cùng cấu hình đã sửa bên
         // EdgeBarService. Vẫn chỉ 1 View trong suốt, không thêm chi phí pin/RAM nào.
-        for (int i = 0; i < 12; i++) {
-            bars[i] = new BarView(this);
-            WindowManager.LayoutParams p = new WindowManager.LayoutParams(
-    1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
-            try { wm.addView(bars[i], p); } catch (Exception e) {}
-            bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], bars[i]));
-        }
-        for (int i = 0; i < 4; i++) {
-            corners[i] = new CornerView(this, i, "home_");
-            WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
-            try { wm.addView(corners[i], p); } catch (Exception e) {}
-            corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i]));
-        }
+        int barCount = Math.min(bars.length, Math.min(BARS.length, GRAV.length));
+for (int i = 0; i < barCount; i++) {
+    bars[i] = new BarView(this);
+    WindowManager.LayoutParams p = new WindowManager.LayoutParams(
+1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
+    try { wm.addView(bars[i], p); } catch (Exception e) {}
+    bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], bars[i]));
+}
+        int cornerCount = Math.min(corners.length, Math.min(CORNERS.length, C_GRAV.length));
+for (int i = 0; i < cornerCount; i++) {
+    corners[i] = new CornerView(this, i, "home_");
+    WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
+    try { wm.addView(corners[i], p); } catch (Exception e) {}
+    corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i]));
+}
 
         // HYBRID HOME V2: Lắng nghe thay đổi Accessibility bằng ContentObserver
         // Tiết kiệm pin tối đa: KHÔNG polling, KHÔNG query mỗi frame

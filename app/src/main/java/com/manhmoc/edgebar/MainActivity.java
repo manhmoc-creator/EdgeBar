@@ -2609,12 +2609,14 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     vTrig.addView(tvG);
 
     ArrayList<CheckBox> gestureBoxes = new ArrayList<>();
-    String savedGestures = sourceId != null ? prefs.getString("prule_" + sourceId + "_gestures", "") : "";
-    for (int i = 0; i < C_GESTURES.length; i++) {
-        CheckBox cb = new CheckBox(this);
-        cb.setText(C_GESTURE_NAMES[i]);
-        cb.setTextColor(Color.WHITE);
-        cb.setPadding(0, 20, 0, 20); // khớp buildRuleEditor
+        String savedGestures = sourceId != null ? prefs.getString("prule_" + sourceId + "_gestures", "") : "";
+        // FIX: Chọn độ dài mảng ngắn nhất để đảm bảo không index nào bị lọt ra ngoài (Out of Bounds)
+        int safeLimit = Math.min(C_GESTURES.length, C_GESTURE_NAMES.length);
+        for (int i = 0; i < safeLimit; i++) {
+            CheckBox cb = new CheckBox(this);
+            cb.setText(C_GESTURE_NAMES[i]);
+            cb.setTextColor(Color.WHITE);
+            cb.setPadding(0, 20, 0, 20); // khớp buildRuleEditor
         cb.setChecked(("," + savedGestures + ",").contains("," + C_GESTURES[i] + ","));
         gestureBoxes.add(cb);
         vTrig.addView(cb);
@@ -8352,6 +8354,9 @@ btnPlus.setOnClickListener(v -> {
                 Gravity.TOP|Gravity.CENTER_HORIZONTAL, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT,
                 Gravity.TOP|Gravity.LEFT, Gravity.CENTER_VERTICAL|Gravity.LEFT, Gravity.BOTTOM|Gravity.LEFT
             };
+        // FIX: Kẹp barIdx trong giới hạn mảng để chống crash OutOfBounds
+        int safeIdx = Math.max(0, Math.min(barIdx, gravArr.length - 1));
+        
         GradientDrawable gd = new GradientDrawable();
         gd.setColor(Color.argb(alpha, 96, 125, 139));
         gd.setCornerRadius(24f);
@@ -8362,7 +8367,7 @@ btnPlus.setOnClickListener(v -> {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 android.graphics.PixelFormat.TRANSLUCENT);
-            livePreviewLp.gravity = gravArr[barIdx];
+            livePreviewLp.gravity = gravArr[safeIdx];
             livePreviewLp.x = x; livePreviewLp.y = y;
             livePreviewOverlay.setBackground(gd);
             try { wm.addView(livePreviewOverlay, livePreviewLp); } catch (Exception ignored) {}
@@ -8370,7 +8375,7 @@ btnPlus.setOnClickListener(v -> {
             livePreviewOverlay.setBackground(gd);
             livePreviewLp.width = w; livePreviewLp.height = h;
             livePreviewLp.x = x; livePreviewLp.y = y;
-            livePreviewLp.gravity = gravArr[barIdx];
+            livePreviewLp.gravity = gravArr[safeIdx];
             try { wm.updateViewLayout(livePreviewOverlay, livePreviewLp); } catch (Exception ignored) {}
         }
     }
