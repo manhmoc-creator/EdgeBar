@@ -1670,9 +1670,9 @@ private void syncHomaccPreviewState() {
         boolean hide = isBl; // isKbd không ẩn nữa — đẩy lên thay vì ẩn
 boolean pushForKbd = avoidKbd && cachedKbdHeight > 0;
 if (hide && fV != null) fV.setVisibility(View.GONE);
-for (int i=0;i<5;i++) {
-    if (bars[i]==null) continue;
-    boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", false);
+for (int i=0;i<12;i++) {
+            if (bars[i]==null) continue;
+            boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", false);
     bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE);
     if (en && isLocked) {
                 int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha",50);

@@ -116,7 +116,7 @@ private Runnable currentLevelBackAction = null;
     // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "🎃 V19.12.3.6.40";
+    private final String CURRENT_VERSION = "🎃 19.12.3.6.40";
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
     private Button btnWriteSettings; // MỚI
@@ -1572,7 +1572,7 @@ appliedPacks.sort((keyA, keyB) -> {
 
     LinearLayout currentRow = null;
     int count = 0;
-    String[] bPos = {"RB", "LB", "RT", "LT", "TC"};
+    String[] bPos = {"BC", "R", "L", "RU", "RC", "RD", "TC", "TR", "TL", "LU", "LC", "LD"};
     String[] cPos = {"BR", "BL", "TR", "TL"};
 
     for (String itemKey : appliedPacks) {
@@ -8071,10 +8071,11 @@ btnPlus.setOnClickListener(v -> {
         if (!Settings.canDrawOverlays(this)) return;
         WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         int[] gravArr = {
-            Gravity.BOTTOM | Gravity.RIGHT, Gravity.BOTTOM | Gravity.LEFT,
-            Gravity.TOP | Gravity.RIGHT, Gravity.TOP | Gravity.LEFT,
-            Gravity.TOP | Gravity.CENTER_HORIZONTAL
-        };
+                Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT,
+                Gravity.TOP|Gravity.RIGHT, Gravity.CENTER_VERTICAL|Gravity.RIGHT, Gravity.BOTTOM|Gravity.RIGHT,
+                Gravity.TOP|Gravity.CENTER_HORIZONTAL, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT,
+                Gravity.TOP|Gravity.LEFT, Gravity.CENTER_VERTICAL|Gravity.LEFT, Gravity.BOTTOM|Gravity.LEFT
+            };
         GradientDrawable gd = new GradientDrawable();
         gd.setColor(Color.argb(alpha, 96, 125, 139));
         gd.setCornerRadius(24f);
