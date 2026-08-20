@@ -1441,29 +1441,43 @@ private void fireIntentById(String id) {
     }
 }
     private void playAnim() {
+        // [FIX CRASH] Tránh NullPointerException và IllegalArgumentException nếu View chưa được add vào WindowManager
+        if (fV == null || fV.getLayoutParams() == null) return;
+        
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams();
-        fp.width = WindowManager.LayoutParams.MATCH_PARENT; fp.height = WindowManager.LayoutParams.MATCH_PARENT;
-        wm.updateViewLayout(fV, fp);
+        fp.width = WindowManager.LayoutParams.MATCH_PARENT;
+        fp.height = WindowManager.LayoutParams.MATCH_PARENT;
+        
+        try { 
+            wm.updateViewLayout(fV, fp); 
+        } catch (Exception e) { 
+            return; 
+        }
+        
         fV.setVisibility(View.VISIBLE);
         fV.post(() -> {
             int style = prefs.getInt("anim_style", 0);
             int dur = prefs.getInt("anim_dur", 1500);
             ValueAnimator anim;
             if (style == 0) {
-                anim = ValueAnimator.ofFloat(0f,1f,0f);
-                anim.addUpdateListener(a -> fV.setAlpha((float)a.getAnimatedValue()));
+                anim = ValueAnimator.ofFloat(0f, 1f, 0f);
+                anim.addUpdateListener(a -> fV.setAlpha((float) a.getAnimatedValue()));
             } else {
                 fV.setAlpha(1f);
-                anim = ValueAnimator.ofFloat(0f,1f);
-                anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue()));
+                anim = ValueAnimator.ofFloat(0f, 1f);
+                anim.addUpdateListener(a -> fV.setPhase((float) a.getAnimatedValue()));
             }
             anim.setDuration(dur);
             anim.addListener(new AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(Animator a) {
+                @Override 
+                public void onAnimationEnd(Animator a) {
                     fV.setAlpha(0f);
                     fV.setVisibility(View.GONE);
-                    fp.width = 0; fp.height = 0;
-                    wm.updateViewLayout(fV, fp);
+                    fp.width = 0; 
+                    fp.height = 0;
+                    try { 
+                        wm.updateViewLayout(fV, fp); 
+                    } catch (Exception e) {}
                 }
             });
             anim.start();

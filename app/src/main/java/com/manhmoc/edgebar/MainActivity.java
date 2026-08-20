@@ -276,24 +276,25 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     } catch (Exception e) { return null; }
 }
     private void refreshPreview() { 
-        boolean inFrontierLock = currentMainTab==1 && currentGesTab==5 && frontierSubTab==0;
-        boolean inFrontierHome = currentMainTab==1 && currentGesTab==5 && frontierSubTab==1;
-        boolean inFrontierHomacc = currentMainTab==1 && currentGesTab==5 && frontierSubTab==2;
+        // [FIX] Bỏ điều kiện inFrontierLock/Home/Homacc để không hồi sinh full overlay
+        // khi người dùng chỉ mới lướt xem danh sách ở menu Frontier. 
+        // Overlays sẽ chỉ hiển thị độc lập khi người dùng thực sự ấn vào chỉnh sửa từng Data Pack.
         boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0)
-            || (currentMainTab==1 && currentGesTab==0) || inFrontierLock; 
-        boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4) || inFrontierHomacc;
+            || (currentMainTab==1 && currentGesTab==0); 
+        boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4);
+        boolean pHome = false; 
         
         SharedPreferences.Editor ed = prefs.edit();
         ed.putBoolean("preview_lock", pLock)
           .putBoolean("preview_homacc", pHomacc)
-          .putBoolean("preview_home", inFrontierHome);
+          .putBoolean("preview_home", pHome);
 
         // Hồi sinh toàn bộ bar/corner của không gian đang được xem trước (Xoá cờ manual_hide)
         if (pLock) {
             for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
             for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
         }
-        if (inFrontierHome) {
+        if (pHome) {
             for (String b : BARS) ed.putBoolean("home_" + b + "_manual_hide", false);
             for (String cn : CORNERS) ed.putBoolean("home_corner_" + cn + "_manual_hide", false);
         }
@@ -305,6 +306,8 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
         
         Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); 
     }
+
+
     private boolean isNotifListenerEnabled() {
         String flat = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
         return flat != null && flat.contains(getPackageName());

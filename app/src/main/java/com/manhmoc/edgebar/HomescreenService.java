@@ -1110,8 +1110,9 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
             for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
         }
 
-        boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
-        for (int i = 0; i < 12; i++) {
+                boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
+        int barLoopCount = Math.min(bars.length, BARS.length);
+        for (int i = 0; i < barLoopCount; i++) {
             if (bars[i] == null) continue;
             boolean en = prefs.getBoolean("home_" + BARS[i] + "_en", false);
             bars[i].setVisibility((en && shouldRenderOldHome && !prefs.getBoolean("home_"+BARS[i]+"_manual_hide", false)) ? View.VISIBLE : View.GONE);
@@ -1143,7 +1144,8 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
                 if (priMode == 0) applyAntiTapjacking(bars[i], w, h);
             }
         }
-        for (int i = 0; i < 4; i++) {
+                int cornerLoopCount = Math.min(corners.length, CORNERS.length);
+        for (int i = 0; i < cornerLoopCount; i++) {
             if (corners[i] == null) continue;
             boolean cornEn = prefs.getBoolean("home_corner_" + CORNERS[i] + "_en", false);
             corners[i].setVisibility((cornEn && shouldRenderOldHome && !prefs.getBoolean("home_corner_"+CORNERS[i]+"_manual_hide", false)) ? View.VISIBLE : View.GONE);
@@ -1180,10 +1182,19 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         }
     }
     private void playAnim() {
+        // [FIX CRASH] Tránh NullPointerException và IllegalArgumentException nếu View chưa được add vào WindowManager
+        if (fV == null || fV.getLayoutParams() == null) return;
+        
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams();
         fp.width = WindowManager.LayoutParams.MATCH_PARENT;
         fp.height = WindowManager.LayoutParams.MATCH_PARENT;
-        wm.updateViewLayout(fV, fp);
+        
+        try { 
+            wm.updateViewLayout(fV, fp); 
+        } catch (Exception e) { 
+            return; 
+        }
+        
         fV.setVisibility(View.VISIBLE);
         fV.post(() -> {
             int style = prefs.getInt("anim_style", 0);
@@ -1199,19 +1210,20 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
             }
             anim.setDuration(dur);
             anim.addListener(new AnimatorListenerAdapter() {
-                @Override
+                @Override 
                 public void onAnimationEnd(Animator a) {
                     fV.setAlpha(0f);
                     fV.setVisibility(View.GONE);
-                    fp.width = 0;
+                    fp.width = 0; 
                     fp.height = 0;
-                    wm.updateViewLayout(fV, fp);
+                    try { 
+                        wm.updateViewLayout(fV, fp); 
+                    } catch (Exception e) {}
                 }
             });
             anim.start();
         });
     }
-
         private static final int MAX_TRIGGER_DEPTH = 3;
     private static final String[] GESTURE_SUFFIXES = {
         "_up_hold","_down_hold","_left_hold","_right_hold","_diag_hold",
