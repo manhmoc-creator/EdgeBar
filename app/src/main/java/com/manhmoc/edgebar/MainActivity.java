@@ -1384,9 +1384,9 @@ ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
     }
 // [MỚI] Ngăn kéo tích chọn Bar/Corner sẽ bị ẩn khi action HIDE_SOME_OVERLAY chạy —
 // lưu TOÀN CỤC theo prefix (lock_/home_/homacc_), không còn theo từng Rule nữa.
-private void addHideTargetCheckboxes(LinearLayout container, String prefix, String[] keys, String[] names) {
+private void addHideTargetCheckboxes(LinearLayout container, String fullPrefKey, String[] keys, String[] names) {
     java.util.Set<String> selected = new java.util.LinkedHashSet<>();
-    for (String s : prefs.getString(prefix+"hide_targets", "").split(",")) if (!s.trim().isEmpty()) selected.add(s.trim());
+    for (String s : prefs.getString(fullPrefKey, "").split(",")) if (!s.trim().isEmpty()) selected.add(s.trim());
     for (int i = 0; i < keys.length; i++) {
         CheckBox cb = new CheckBox(this);
         cb.setText(names[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0,10,0,10);
@@ -1394,9 +1394,9 @@ private void addHideTargetCheckboxes(LinearLayout container, String prefix, Stri
         final String fk = keys[i];
         cb.setOnCheckedChangeListener((v, checked) -> {
             java.util.Set<String> cur = new java.util.LinkedHashSet<>();
-            for (String s : prefs.getString(prefix+"hide_targets", "").split(",")) if (!s.trim().isEmpty()) cur.add(s.trim());
+            for (String s : prefs.getString(fullPrefKey, "").split(",")) if (!s.trim().isEmpty()) cur.add(s.trim());
             if (checked) cur.add(fk); else cur.remove(fk);
-            prefs.edit().putString(prefix+"hide_targets", TextUtils.join(",", cur)).apply();
+            prefs.edit().putString(fullPrefKey, TextUtils.join(",", cur)).apply();
         });
         container.addView(cb);
     }
@@ -1417,7 +1417,7 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
     gdHide.setOrientation(LinearLayout.VERTICAL); gdHide.setPadding(20,10,20,20);
     String[] cornerHideKeys = new String[CORNERS.length];
     for (int i=0;i<CORNERS.length;i++) cornerHideKeys[i] = "corner_"+CORNERS[i];
-    addHideTargetCheckboxes(gdHide, prefix, cornerHideKeys, CORNER_NAMES);
+    addHideTargetCheckboxes(gdHide, prefix + "corner_hide_targets", cornerHideKeys, CORNER_NAMES);
     gd.addView(createDrawer("📁 " + T("Corners to hide","Góc viền cần ẩn") + " (▼)", gdHide));
     container.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", gd));
     // [MỚI] Drawer tàng hình thông minh riêng cho Bar — cùng thuật toán triggerFlash()
@@ -1431,7 +1431,7 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
 bd.addView(createSlider(T("Icon Size on Bar","Kích thước Icon trên Bar"), prefix+"bar_icon_size", 120, 40));
     LinearLayout bdHide = new LinearLayout(this);
     bdHide.setOrientation(LinearLayout.VERTICAL); bdHide.setPadding(20,10,20,20);
-    addHideTargetCheckboxes(bdHide, prefix, BARS, BAR_NAMES);
+    addHideTargetCheckboxes(bdHide, prefix + "bar_hide_targets", BARS, BAR_NAMES);
     bd.addView(createDrawer(T("Bars to hide","Thanh cạnh cần ẩn (Ẩn Một Số Bar/Corner)"), bdHide));
     container.addView(createDrawer("TÙY CHỈNH CHUNG THANH CẠNH", bd));
 

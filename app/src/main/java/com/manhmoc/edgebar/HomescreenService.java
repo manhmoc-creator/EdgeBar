@@ -1223,14 +1223,18 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     }
     // [MỚI] Homeb chỉ có đúng 1 không gian "home_" nên không cần suy luận prefix.
             private void hideSomeOverlay(String key) {
-        String targets = prefs.getString("home_hide_targets", "");
+        String targetsBar = prefs.getString("home_bar_hide_targets", "");
+        String targetsCorner = prefs.getString("home_corner_hide_targets", "");
+        String targets = targetsBar + (targetsBar.isEmpty() || targetsCorner.isEmpty() ? "" : ",") + targetsCorner;
+        
         if (targets.isEmpty()) return;
         boolean changed = false;
         SharedPreferences.Editor ed = prefs.edit();
         for (String t : targets.split(",")) {
             String tt = t.trim();
             if (tt.isEmpty()) continue;
-            String k = "home_" + tt + "_manual_hide";
+            String mid = (tt.equals("br") || tt.equals("bl") || tt.equals("tr") || tt.equals("tl")) ? "corner_" + tt : tt;
+            String k = "home_" + mid + "_manual_hide";
             if (!prefs.getBoolean(k, false)) { ed.putBoolean(k, true); changed = true; }
         }
         if (changed) { ed.apply(); updateVisibility(); }

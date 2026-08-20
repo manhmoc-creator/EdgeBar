@@ -1423,13 +1423,9 @@ private void fireIntentById(String id) {
         for (String a : acts) {
             String at = a.trim();
             if (at.startsWith("TRIGGER_")) {
-                // [MỚI] Giả lập cử chỉ khác NGAY TẠI component đang phát cử chỉ —
-                // chỉ gọi lại handleAction() nội bộ, không dispatchGesture() ra ngoài.
-                if (depth >= MAX_TRIGGER_DEPTH) continue;
-                String targetGesture = at.substring(8).toLowerCase(java.util.Locale.ROOT);
-                String base = stripGestureSuffix(key);
-                handleAction(base + "_" + targetGesture, depth + 1, false);
-                        } else if (at.equals("HIDE_SOME_OVERLAY")) {
+                // Đã nâng cấp: Dùng AccessibilityService bắn cử chỉ vuốt/chạm thẳng xuống màn hình thật!
+                dispatchRealScreenGesture(at);
+            } else if (at.equals("HIDE_SOME_OVERLAY")) {
                 hideSomeOverlay(key);
             } else if (at.equals("SHOW_ALL_OVERLAY")) {
                 showAllOverlay(key);
@@ -1456,19 +1452,79 @@ private void fireIntentById(String id) {
             } else exec(at);
         }
     }
+private void dispatchRealScreenGesture(String trigger) {
+        if (Build.VERSION.SDK_INT < 24) return;
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        float cx = dm.widthPixels / 2f;
+        float cy = dm.heightPixels / 2f;
+        // Chiều dài nét vuốt (60% nửa màn hình)
+        float swipeDist = Math.min(cx, cy) * 0.6f;
+
+        android.graphics.Path path = new android.graphics.Path();
+        int duration = 250; // Tốc độ vuốt chuẩn (250ms)
+
+        switch (trigger) {
+            case "TRIGGER_UP": 
+                path.moveTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist); 
+                break;
+            case "TRIGGER_DOWN": 
+                path.moveTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist); 
+                break;
+            case "TRIGGER_LEFT": 
+                path.moveTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist, cy); 
+                break;
+            case "TRIGGER_RIGHT": 
+                path.moveTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist, cy); 
+                break;
+            case "TRIGGER_DIAG": 
+                path.moveTo(cx + swipeDist, cy + swipeDist); path.lineTo(cx - swipeDist, cy - swipeDist); 
+                break;
+            case "TRIGGER_TAP": 
+                path.moveTo(cx, cy); duration = 50; 
+                break;
+            case "TRIGGER_LONG": 
+                path.moveTo(cx, cy); duration = 600; 
+                break;
+            case "TRIGGER_DTAP":
+                path.moveTo(cx, cy); duration = 50;
+                break;
+        }
+
+        android.accessibilityservice.GestureDescription.StrokeDescription stroke = 
+            new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration);
+        android.accessibilityservice.GestureDescription.Builder builder = 
+            new android.accessibilityservice.GestureDescription.Builder();
+        builder.addStroke(stroke);
+        dispatchGesture(builder.build(), null, null);
+        
+        // Bắn nhịp chạm thứ 2 nếu là Double Tap
+        if (trigger.equals("TRIGGER_DTAP")) {
+            new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                android.accessibilityservice.GestureDescription.Builder b2 = 
+                    new android.accessibilityservice.GestureDescription.Builder();
+                b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 50));
+                dispatchGesture(b2.build(), null, null);
+            }, 150);
+        }
+    }
     // [MỚI] Ẩn thủ công đúng danh sách bar/corner user đã chọn cho rule này — tái dùng
     // NGUYÊN VẸN cờ "_manual_hide" đã có sẵn (đọc trong updateVisibility()/updateHomaccLive()),
     // Zero-cost khi rule không gán HIDE_SOME_OVERLAY: chỉ 1 lệnh đọc prefs, return ngay nếu rỗng.
         private void hideSomeOverlay(String key) {
         String prefix = key.startsWith("homacc_") ? "homacc_" : "lock_";
-        String targets = prefs.getString(prefix + "hide_targets", "");
+        String targetsBar = prefs.getString(prefix + "bar_hide_targets", "");
+        String targetsCorner = prefs.getString(prefix + "corner_hide_targets", "");
+        String targets = targetsBar + (targetsBar.isEmpty() || targetsCorner.isEmpty() ? "" : ",") + targetsCorner;
+        
         if (targets.isEmpty()) return;
         boolean changed = false;
         SharedPreferences.Editor ed = prefs.edit();
         for (String t : targets.split(",")) {
             String tt = t.trim();
             if (tt.isEmpty()) continue;
-            String k = prefix + tt + "_manual_hide";
+            // Chèn "corner_" vào giữa nếu mục được ẩn là góc viền (để khớp tên biến)
+            String mid = (tt.equals("br") || tt.equals("bl") || tt.equals("tr") || tt.equals("tl")) ? "corner_" + tt : tt;
+            String k = prefix + mid + "_manual_hide";
             if (!prefs.getBoolean(k, false)) { ed.putBoolean(k, true); changed = true; }
         }
         if (changed) { ed.apply(); updateVisibility(); }
