@@ -1965,7 +1965,8 @@ if (panelEngine != null) panelEngine.rebuildAll();
                 doVibrate(30);
             }
         };
-
+private boolean isHolding = false;
+private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
         @Override public boolean onTouch(View v, MotionEvent e) {
             if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
