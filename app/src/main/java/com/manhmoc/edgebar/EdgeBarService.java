@@ -1568,26 +1568,6 @@ private void dispatchRealScreenGesture(String trigger) {
             else updateVisibility(); 
         }
     }
-    // [MỚI] Hồi sinh toàn bộ bar/corner đang bị ẩn thủ công (cờ "_manual_hide") của
-    // ĐÚNG không gian chứa key vừa kích hoạt — Lock/Homacc tách biệt qua prefix, không
-    // lẫn nhau. Chỉ ghi prefs + gọi updateVisibility() 1 lần nếu thật sự có gì đổi;
-    // không bar/corner nào đang ẩn thủ công thì đây là no-op (Zero-cost), và vì
-    // bars[]/corners[] là mảng View cố định add đúng 1 lần lúc khởi động nên tuyệt
-    // đối không có chuyện "nhân bản" bar khi gọi hàm này nhiều lần.
-    private void showAllOverlay(String key) {
-        String prefix = key.startsWith("homacc_") ? "homacc_" : "lock_";
-        boolean changed = false;
-        SharedPreferences.Editor ed = prefs.edit();
-        for (String barKey : BARS) {
-            String k = prefix + barKey + "_manual_hide";
-            if (prefs.getBoolean(k, false)) { ed.putBoolean(k, false); changed = true; }
-        }
-        for (String cornerKey : CORNERS) {
-            String k = prefix + "corner_" + cornerKey + "_manual_hide";
-            if (prefs.getBoolean(k, false)) { ed.putBoolean(k, false); changed = true; }
-        }
-        if (changed) { ed.apply(); updateVisibility(); }
-    }
     private void doVibrate(int dur) { if (dur<=0) return; try { if (Build.VERSION.SDK_INT>=26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
 
     // [MỚI] Phát nhạc từ Download/My Playlist — xem MyPlaylistService.java
