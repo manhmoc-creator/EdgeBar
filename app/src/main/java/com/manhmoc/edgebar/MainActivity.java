@@ -6821,8 +6821,8 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                     return b;
                 };
 
-                // 1. Nút Thùng Rác
-                Button btnTrash = makeMiniBtn("🗑");
+                                // 1. Nút Thùng Rác
+                Button btnTrash = makeMiniBtn.apply("🗑");
                 btnTrash.setBackground(getRounded("#D32F2F", 12f));
                 btnTrash.setOnClickListener(v -> {
                     currentSelList.remove(ref);
@@ -6830,8 +6830,8 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                     refreshList.run();
                 });
 
-                // 2. Nút Chữ Cái
-                Button btnLetter = makeMiniBtn(curLetter);
+                                // 2. Nút Chữ Cái
+                Button btnLetter = makeMiniBtn.apply(curLetter);
                 btnLetter.setTextColor(Color.parseColor("#FFC107"));
                 btnLetter.setOnClickListener(v -> {
                     new android.app.AlertDialog.Builder(MainActivity.this).setItems(LETTERS, (dlg, which) -> {
