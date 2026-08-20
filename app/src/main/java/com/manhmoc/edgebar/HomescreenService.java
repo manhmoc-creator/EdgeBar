@@ -1767,45 +1767,6 @@ default:
                         }
                     }
                     return true;
-                    }
-                    float dx = lastX - sx, dy = lastY - sy;
-                    if (Math.abs(dx) > SWIPE_CANCEL_SLOP_PX || Math.abs(dy) > SWIPE_CANCEL_SLOP_PX) {
-                        String actionName;
-                        if (myView instanceof CornerView && Math.abs(dx) > 40 && Math.abs(dy) > 40) actionName = "diag";
-                        else {
-                            if (Math.abs(dx) > Math.abs(dy)) actionName = dx > 0 ? "right" : "left";
-                            else actionName = dy > 0 ? "down" : "up";
-                        }
-                        handleAction(prefKeyBase + "_" + actionName);
-                        if (rippleView != null) {
-                            rippleView.popRipple();
-                            float swipeMag = (float) Math.sqrt(dx * dx + dy * dy);
-                            float dirX = swipeMag > 0.001f ? dx / swipeMag : 0f;
-                            float dirY = swipeMag > 0.001f ? dy / swipeMag : 0f;
-                            rippleView.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
-                        }
-                        return true;
-                    }
-                    long now = System.currentTimeMillis();
-                    boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
-                    float[] dirTap = computeJumpDirForTap();
-                    if (!hasDtap) {
-                        lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
-                        if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
-                    } else if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
-                        lastTapUpTime = 0; handleAction(prefKeyBase + "_dtap");
-                        if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
-                    } else {
-                        lastTapUpTime = now; final long myUpTs = now;
-                        lpHandler.postDelayed(() -> {
-                            if (lastTapUpTime == myUpTs) {
-                                lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
-                                if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
-                            }
-                        }, DTAP_WINDOW_MS + 20);
-                    }
-                    if (rippleView != null) rippleView.popRipple();
-                    return true;
             }
             return true;
         }
