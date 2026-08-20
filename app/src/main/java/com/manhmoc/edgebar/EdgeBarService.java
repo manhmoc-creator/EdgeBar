@@ -2004,66 +2004,6 @@ if (panelEngine != null) panelEngine.rebuildAll();
                         if (rippleView != null) rippleView.popRipple();
                         return true;
                     }
-                    float dx = lastX - sx, dy = lastY - sy;
-                    if (Math.abs(dx) > SWIPE_CANCEL_SLOP_PX || Math.abs(dy) > SWIPE_CANCEL_SLOP_PX) {
-                        String actionName;
-                        if (myView instanceof CornerView && Math.abs(dx) > 40 && Math.abs(dy) > 40) actionName = "diag";
-                        else {
-                            if (Math.abs(dx) > Math.abs(dy)) actionName = dx > 0 ? "right" : "left";
-                            else actionName = dy > 0 ? "down" : "up";
-                        }
-                        handleAction(prefKeyBase + "_" + actionName);
-                        if (rippleView != null) {
-                            rippleView.popRipple();
-                            float swipeMag = (float) Math.sqrt(dx * dx + dy * dy);
-                            float dirX = swipeMag > 0.001f ? dx / swipeMag : 0f;
-                            float dirY = swipeMag > 0.001f ? dy / swipeMag : 0f;
-                            rippleView.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
-                        }
-                        return true;
-                    }
-                    
-                    long now = System.currentTimeMillis();
-                    boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
-                    float[] dirTap = computeJumpDirForTap();
-                    
-                    if (!hasDtap) {
-                        lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
-                        if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
-                    } else {
-                        long gap = now - lastTapUpTime;
-                        if (lastTapUpTime > 0 && gap <= DTAP_WINDOW_MS) {
-                            if (gap > 40) { // Hợp lệ là Double Tap (lọc nhiễu cảm ứng < 40ms)
-                                lastTapUpTime = 0; handleAction(prefKeyBase + "_dtap");
-                                if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
-                            } else {
-                                // Màn hình bị nhiễu tạo ra 2 lần thả tay quá nhanh -> Phục hồi lại chờ Tap
-                                lastTapUpTime = now;
-                                final long myUpTs = now;
-                                pendingTapRunnable = () -> {
-                                    if (lastTapUpTime == myUpTs) {
-                                        lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
-                                        if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
-                                    }
-                                };
-                                lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
-                            }
-                        } else {
-                            // Chạm lần 1 -> Bắt đầu đếm giờ chờ chạm lần 2
-                            lastTapUpTime = now;
-                            final long myUpTs = now;
-                            pendingTapRunnable = () -> {
-                                if (lastTapUpTime == myUpTs) {
-                                    lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
-                                    if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
-                                }
-                            };
-                            lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
-                        }
-                    }
-                    if (rippleView != null) rippleView.popRipple();
-                    return true;
-                    }
                     float finalDx = lastX - sx, finalDy = lastY - sy;
                     float absDx = Math.abs(finalDx), absDy = Math.abs(finalDy);
                     String actionName = "";
