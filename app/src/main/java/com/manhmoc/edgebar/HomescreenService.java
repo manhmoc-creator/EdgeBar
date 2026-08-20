@@ -799,7 +799,7 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
             } else if ("com.manhmoc.edgebar.PAUSE_WM_OPS".equals(action)) {
                 // Fix Bug 6: Ẩn tất cả bars — KHÔNG removeView, giữ token WM hợp lệ
                 // Pixel 2XL opt: setVisibility GONE = zero GPU cost trên Adreno 540
-                for (int j = 0; j < 5; j++) if (bars[j] != null) bars[j].setVisibility(View.GONE);
+                for (int j = 0; j < 12; j++) if (bars[j] != null) bars[j].setVisibility(View.GONE);
                 for (int j = 0; j < 4; j++) if (corners[j] != null) corners[j].setVisibility(View.GONE);
             } else if ("com.manhmoc.edgebar.RESUME_WM_OPS".equals(action)) {
                 if (i.getBooleanExtra("acc_cache_reset", false)) {
@@ -961,7 +961,7 @@ filter.addAction("com.manhmoc.edgebar.TEST_REC_INDICATOR");
         // máy Android 11+ (API >= 30). Bổ sung đúng phần dựng cửa sổ, dùng TYPE_APPLICATION_OVERLAY
         // (không NO_LIMITS) để nhận đúng WindowInsets.Type.ime() — cùng cấu hình đã sửa bên
         // EdgeBarService. Vẫn chỉ 1 View trong suốt, không thêm chi phí pin/RAM nào.
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 12; i++) {
             bars[i] = new BarView(this);
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(
     1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
@@ -1058,12 +1058,12 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         boolean shouldRenderOldHome = isUnlocked && !hideNormal && !accHomeRunning && (oldHomeEnabled || previewHomeOn);
 
         if (accHomeRunning) {
-            for (int i = 0; i < 5; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
+            for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
             for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
         }
 
         boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 12; i++) {
             if (bars[i] == null) continue;
             boolean en = prefs.getBoolean("home_" + BARS[i] + "_en", false);
             bars[i].setVisibility((en && shouldRenderOldHome) ? View.VISIBLE : View.GONE);
@@ -1858,7 +1858,7 @@ PixelFormat.TRANSLUCENT);
     // sót khỏi onDestroy(), nếu Service chết đúng lúc ô nhập YTDL đang mở, cửa sổ này
     // "mồ côi" vĩnh viễn trên WindowManager (không còn ai gọi removeView được nữa) ->
     // Android bật cơ chế lọc chạm chống tapjacking -> chặn thao tác toàn hệ thống.
-    for (int i = 0; i < 5; i++) if (bars[i] != null) wm.removeView(bars[i]);
+    for (int i = 0; i < 12; i++) if (bars[i] != null) wm.removeView(bars[i]);
     for (int i = 0; i < 4; i++) if (corners[i] != null) wm.removeView(corners[i]);
     if (rippleView != null) wm.removeView(rippleView);
     if (recIndicatorView != null) { try { wm.removeView(recIndicatorView); } catch (Exception ignored) {} }

@@ -295,7 +295,7 @@ public class VoiceRecorderService extends Service {
             .setContentTitle("🔴 Đang ghi âm — 00:00")
             .setContentText("EdgeBar Voice")
             .setSmallIcon(android.R.drawable.presence_audio_online)
-            .addAction(android.R.drawable.ic_media_next, "Dừng", actionPI(ACTION_STOP)) // Nút Trái
+            .addAction(android.R.drawable.ic_media_previous, "Dừng", actionPI(ACTION_STOP)) // Nút Trái
             .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     isPaused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE)) // Nút Giữa
             .addAction(android.R.drawable.ic_media_ff, "Dừng & Nghe", actionPI(ACTION_STOP_AND_PLAY)) // Nút Phải

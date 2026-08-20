@@ -565,21 +565,47 @@ private void renderPanelGrid(String id) {
 List<String> acts = csvToList(prefs.getString(px+"acts", ""));
 List<String> shortcuts = csvToList(prefs.getString(px+"shortcuts", ""));
 new Thread(() -> {
-    List<Object[]> loaded = new ArrayList<>();
-    for (String pkg : apps) {
+        class PanelItemObj { String type; String ref; int sortScore; int originalIndex; }
+        List<PanelItemObj> allItems = new ArrayList<>();
+        int seq = 0;
+        for (String pkg : apps) { PanelItemObj o = new PanelItemObj(); o.type = "APP"; o.ref = pkg; o.originalIndex = seq++; allItems.add(o); }
+        for (String act : acts) { PanelItemObj o = new PanelItemObj(); o.type = "ACT"; o.ref = act; o.originalIndex = seq++; allItems.add(o); }
+        for (String sc : shortcuts) { PanelItemObj o = new PanelItemObj(); o.type = "SC"; o.ref = sc; o.originalIndex = seq++; allItems.add(o); }
+
+        List<String> letterList = Arrays.asList("-", "A", "B", "C", "D", "E", "F", "G", "H", "I");
+        List<String> romanList = Arrays.asList("-", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX");
+
+        for (PanelItemObj obj : allItems) {
+            String pos = prefs.getString(px + "posmap_" + obj.ref, "-,-");
+            String[] parts = pos.split(",");
+            if (parts.length == 2 && !parts[0].equals("-") && !parts[1].equals("-")) {
+                int lVal = letterList.indexOf(parts[0]);
+                int rVal = romanList.indexOf(parts[1]);
+                obj.sortScore = (lVal * 10) + rVal; // Tính điểm tọa độ bàn cờ
+            } else {
+                obj.sortScore = 9999; // Mục không set tọa độ sẽ rớt xuống cuối
+            }
+        }
+
+        Collections.sort(allItems, (a, b) -> {
+            if (a.sortScore != b.sortScore) return Integer.compare(a.sortScore, b.sortScore);
+            return Integer.compare(a.originalIndex, b.originalIndex); // Fallback thuật toán tuần tự hiện tại
+        });
+
+        List<Object[]> loaded = new ArrayList<>();
+        for (PanelItemObj obj : allItems) {
+            if (renderGen.get(id).get() != myGen) return;
+            if (obj.type.equals("APP")) {
+                Drawable d = getCachedIcon(obj.ref);
+                if (d != null) loaded.add(new Object[]{d, "APP", obj.ref});
+            } else if (obj.type.equals("ACT")) {
+                loaded.add(new Object[]{null, "ACT", obj.ref});
+            } else if (obj.type.equals("SC")) {
+                loaded.add(new Object[]{null, "ACT", "RUN_SHORTCUT_" + obj.ref});
+            }
+        }
+
         if (renderGen.get(id).get() != myGen) return;
-        Drawable d = getCachedIcon(pkg);
-        if (d != null) loaded.add(new Object[]{d, "APP", pkg});
-    }
-    if (renderGen.get(id).get() != myGen) return;
-    for (String act : acts) loaded.add(new Object[]{null, "ACT", act});
-    if (renderGen.get(id).get() != myGen) return;
-    // [FIX] scKey là UUID THUẦN (showPanelMultiPicker lưu vậy) — bắt buộc thêm tiền tố
-    // "RUN_SHORTCUT_" ở đây thì buildCell() mới rơi đúng nhánh RUN_SHORTCUT_ (lấy icon
-    // thật qua getCachedShortcutIcon + gửi đúng IPC), thay vì rơi vào nhánh Action mặc
-    // định và luôn hiện icon ⚡.
-    for (String scKey : shortcuts) loaded.add(new Object[]{null, "ACT", "RUN_SHORTCUT_" + scKey});
-    if (renderGen.get(id).get() != myGen) return;
         new Handler(Looper.getMainLooper()).post(() -> {
             if (renderGen.get(id).get() != myGen || panels.get(id) != panel) return;
             LinearLayout row = null;
@@ -599,7 +625,6 @@ new Thread(() -> {
             }
         });
     }).start();
-}
 private static final String ISLAND_SEP = "#ISL#";
     private boolean isIslandRef(String ref) { return ref != null && ref.contains(ISLAND_SEP); }
     private String islandRefPkg(String ref) { int i = ref.indexOf(ISLAND_SEP); return i < 0 ? ref : ref.substring(0, i); }

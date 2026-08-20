@@ -50,7 +50,7 @@ public class EdgeBarService extends AccessibilityService {
 
     // === CHÈN CODE BIẾN TOÀN CỤC CỦA BẠN VÀO ĐÂY ===
     // Động cơ Twin-Engine Trợ năng
-private android.view.View[] accHomeBars = new android.view.View[5];
+private android.view.View[] accHomeBars = new android.view.View[12];
 private android.view.View[] accHomeCorners = new android.view.View[4];
 private android.content.BroadcastReceiver accHomeReceiver;
 private boolean isHomaccDrawn = false; // Guard chặn vẽ lại khi đã có view
@@ -67,7 +67,7 @@ private boolean fpRegistered = false;
     private void checkAppLock(String pkg) { AppLockHelper.check(this, prefs, pkg); }
     // ĐẰNG SAU (Các biến cũ của EdgeBarService)
     private WindowManager wm;
-    private View[] bars = new View[5];
+    private View[] bars = new View[12];
     private View[] corners = new View[4];
     private FlashView fV;
     private GestureRippleView rippleView;
@@ -101,8 +101,14 @@ private boolean recIndicatorTestPaused = false;
     private SharedPreferences prefs;
     private Vibrator vibrator;
     private PanelEngine panelEngine;
-    private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
-    private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
+    private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c", "b_c", "l_c", "r_c", "r_u", "r_d", "l_u", "l_d"};
+    private final int[] GRAV = {
+        Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, 
+        Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL,
+        Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.CENTER_VERTICAL|Gravity.LEFT,
+        Gravity.CENTER_VERTICAL|Gravity.RIGHT, Gravity.TOP|Gravity.RIGHT,
+        Gravity.BOTTOM|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.BOTTOM|Gravity.LEFT
+    };
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
 // [FIX LONG-PRESS] Cache chữ ký layout — chỉ gọi updateViewLayout() khi THẬT SỰ đổi.
@@ -275,9 +281,9 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     String panelId = i.getStringExtra("panel_id");
     if (panelEngine != null && panelId != null) panelEngine.setForceTest(panelId, i.getBooleanExtra("on", false));
 } else if ("com.manhmoc.edgebar.PAUSE_WM_OPS".equals(act)) {
-    for (int j=0;j<5;j++) if (bars[j]!=null) bars[j].setVisibility(View.GONE);
+    for (int j=0;j<12;j++) if (bars[j]!=null) bars[j].setVisibility(View.GONE);
     for (int j=0;j<4;j++) if (corners[j]!=null) corners[j].setVisibility(View.GONE);
-    for (int j=0;j<5;j++) if (accHomeBars[j]!=null) accHomeBars[j].setVisibility(View.GONE);
+    for (int j=0;j<12;j++) if (accHomeBars[j]!=null) accHomeBars[j].setVisibility(View.GONE);
     for (int j=0;j<4;j++) if (accHomeCorners[j]!=null) accHomeCorners[j].setVisibility(View.GONE);
 } else if ("com.manhmoc.edgebar.RESUME_WM_OPS".equals(act)) {
     updateVisibility();
@@ -808,7 +814,6 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
             getSystemService(NotificationManager.class).createNotificationChannel(cAcc);
             Notification nAcc = new Notification.Builder(this, cidAcc)
                     .setContentTitle("EB Lacck")
-                    .setContentText("Trợ năng đang hoạt động")
                     .setSmallIcon(android.R.drawable.stat_notify_voicemail) // Đúng icon của QS Tile
                     .setOngoing(true)
                     .build();
@@ -852,14 +857,14 @@ filter.addAction("com.manhmoc.edgebar.PAUSE_WM_OPS");
                     removeAccessibleHome();
                 } else if ("com.manhmoc.edgebar.ACC_HOME_SLEEP".equals(act)) {
                     // [MỤC 5] Deep sleep: chỉ ẩn view, GIỮ service sống — đỡ tốn pin re-init
-                    for (int i=0;i<5;i++) if (accHomeBars[i]!=null) accHomeBars[i].setVisibility(View.GONE);
+                    for (int i=0;i<12;i++) if (accHomeBars[i]!=null) accHomeBars[i].setVisibility(View.GONE);
                     for (int i=0;i<4;i++) if (accHomeCorners[i]!=null) accHomeCorners[i].setVisibility(View.GONE);
                 } else if ("com.manhmoc.edgebar.ACC_HOME_WAKE".equals(act)) {
                     // [MỤC 5] Thức dậy: vẽ lại nếu view chưa tồn tại, hoặc hiện lại view cũ
                     if (accHomeBars[0] == null && accHomeCorners[0] == null) drawAccessibleHome();
                     else {
                         SharedPreferences p = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-                        for (int i=0;i<5;i++) if (accHomeBars[i]!=null && p.getBoolean("homacc_"+BARS[i]+"_en", false)) accHomeBars[i].setVisibility(View.VISIBLE);
+                        for (int i=0;i<12;i++) if (accHomeBars[i]!=null && p.getBoolean("homacc_"+BARS[i]+"_en", false)) accHomeBars[i].setVisibility(View.VISIBLE);
                         for (int i=0;i<4;i++) if (accHomeCorners[i]!=null && p.getBoolean("homacc_corner_"+CORNERS[i]+"_en", false)) accHomeCorners[i].setVisibility(View.VISIBLE);
                         updateHomaccLive();
                     }
@@ -1627,7 +1632,7 @@ private void refreshFingerprintRegistration() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
         try { wm.addView(fV, fp); } catch(Exception e){}
 
-        for (int i=0;i<5;i++) {
+        for (int i=0;i<12;i++) {
             bars[i] = new BarView(this);
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
             try { wm.addView(bars[i], p); } catch(Exception e){}
@@ -1686,7 +1691,8 @@ int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", prefs.getInt("lock_b
                 int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                 if (priMode==1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
                 else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-        int pushY = (pushForKbd && (i==0 || i==1)) ? cachedKbdHeight : 0; // chỉ "r","l" (2 bar đáy)
+        int pushY = (pushForKbd && (i==0 || i==1 || i==5 || i==9 || i==11)) ? cachedKbdHeight : 0;
+// Ở HomescreenService thì thay thành: int pushY = (pushForKbd && (i==0 || i==1 || i==5 || i==9 || i==11)) ? lastKbdHeight : 0;
         WindowManager.LayoutParams p = (WindowManager.LayoutParams) bars[i].getLayoutParams();
         p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y + pushY; p.gravity = GRAV[i];
         updateLayoutIfChanged(bars[i], p);
@@ -1882,7 +1888,7 @@ private float[] computeJumpDirForTap() {
 }
 private void drawAccessibleHome() {
     if (isHomaccDrawn) return; // đã vẽ rồi, tránh addView() 2 lần gây crash
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 12; i++) {
         View bar = new BarView(this);
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
@@ -1904,7 +1910,7 @@ private void drawAccessibleHome() {
 
 private void removeAccessibleHome() {
     if (!isHomaccDrawn) return;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 12; i++) {
         if (accHomeBars[i] != null) {
             try { wm.removeView(accHomeBars[i]); } catch (Exception ignored) {}
             accHomeBars[i] = null;
@@ -1921,7 +1927,7 @@ private void removeAccessibleHome() {
 
 private void updateHomaccLive() {
     if (!isHomaccDrawn) return;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 12; i++) {
         View v = accHomeBars[i];
         if (v == null || !(v instanceof BarView)) continue;
         boolean en = prefs.getBoolean("homacc_" + BARS[i] + "_en", false);

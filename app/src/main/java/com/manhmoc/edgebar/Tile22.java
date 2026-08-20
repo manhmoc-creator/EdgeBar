@@ -151,7 +151,7 @@ private void updateTileUI() {
     try {
     android.graphics.drawable.Drawable dTile = getDrawable(ICON_POOL[iconIdx]);
     if (dTile != null) { dTile = dTile.mutate(); dTile.setTint(android.graphics.Color.WHITE); }
-    float contentScale = prefs.getInt("lenap_global_icon_scale", 77) / 100f;
+    float contentScale = prefs.getInt("qs_global_icon_scale", 77) / 100f;
     tileIconBmp = PanelEngine.normalizeIconBitmap(dTile, 96, contentScale);
 } catch (Exception ignored) {}
     if (tileIconBmp != null) t.setIcon(Icon.createWithBitmap(tileIconBmp));
