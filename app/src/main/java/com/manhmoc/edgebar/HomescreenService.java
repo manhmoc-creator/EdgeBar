@@ -772,8 +772,15 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
         public void onReceive(Context c, Intent i) {
             String action = i.getAction();
             if (Intent.ACTION_SCREEN_OFF.equals(action)) {
-    removeYtdlOverlay(); // [FIX TAPJACKING] dọn overlay YTDL nếu đang mở dở khi tắt màn hình
-    removeRippleViewIfIdle(); // [FIX TAPJACKING] dọn overlay ripple nếu không còn dùng
+    removeYtdlOverlay(); 
+    removeRippleViewIfIdle(); 
+} else if (Intent.ACTION_USER_PRESENT.equals(action)) {
+    // [THAY BẰNG CODE HỒI SINH HOMEB Ở ĐÂY]
+    SharedPreferences.Editor ed = prefs.edit();
+    for (String b : BARS) ed.putBoolean("home_" + b + "_manual_hide", false);
+    for (String cn : CORNERS) ed.putBoolean("home_corner_" + cn + "_manual_hide", false);
+    ed.apply();
+    updateVisibility();
 } else if (action.equals("com.manhmoc.edgebar.SYNC_STATE")) {
                 // V19.12.3.6.6: Throttle — tối đa 1 lần xử lý SYNC_STATE mỗi 150ms
                 long nowSync = System.currentTimeMillis();
@@ -1574,10 +1581,10 @@ default:
     private class SidebarTouchListener implements View.OnTouchListener {
         private String prefKeyBase;
         private View myView;
-        private float sx, sy;
+        private float sx, sy, lastX, lastY;
         private long st;
-        private Handler longPressHandler = new Handler();
-        private boolean longPressTriggered = false;
+        private boolean longFired = false;
+        private final Handler lpHandler = new Handler(android.os.Looper.getMainLooper());
         private long lastTapUpTime = 0;
         private static final long DTAP_WINDOW_MS = 300;
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
@@ -1590,138 +1597,119 @@ default:
         private final int[] locBuf = new int[2];
         private float getFixedX(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[0] + e.getX(); }
         private float getFixedY(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[1] + e.getY(); }
- private float[] computeJumpDir() {
-        float dxDir = 0f, dyDir = 0f;
-        if (myView instanceof CornerView) {
-            int idx = ((CornerView) myView).getCornerType();
-            dxDir = (idx == 0 || idx == 2) ? -1f : 1f;
-            dyDir = (idx == 0 || idx == 1) ? -1f : 1f;
-        } else {
-            if (prefKeyBase.contains("_r_") || prefKeyBase.endsWith("_r")) dxDir = -1f;
-            else if (prefKeyBase.contains("_l_") || prefKeyBase.endsWith("_l")) dxDir = 1f;
+
+        private float[] computeJumpDirForTap() {
+            float dxDir = 0f, dyDir = 0f;
+            if (myView instanceof CornerView) {
+                int idx = ((CornerView) myView).getCornerType();
+                dxDir = (idx == 0 || idx == 2) ? -1f : 1f;
+                dyDir = (idx == 0 || idx == 1) ? -1f : 1f;
+            } else {
+                if (prefKeyBase.contains("_r_") || prefKeyBase.endsWith("_r")) dxDir = -1f;
+                else if (prefKeyBase.contains("_l_") || prefKeyBase.endsWith("_l")) dxDir = 1f;
+            }
+            int mode = prefs.getInt(prefKeyBase + "_jumpdir", 0);
+            switch (mode) {
+                case 1: return new float[]{dxDir, -1f}; case 2: return new float[]{dxDir, 1f};
+                case 3: return new float[]{0f, -1f}; case 4: return new float[]{0f, 1f};
+                case 5: return new float[]{-1f, 0f}; case 6: return new float[]{1f, 0f};
+                default: return new float[]{dxDir, dyDir};
+            }
         }
-        return new float[]{dxDir, dyDir};
-    }
-    private float[] computeJumpDirForTap() {
-        float[] auto = computeJumpDir();
-        int mode = prefs.getInt(prefKeyBase + "_jumpdir", 0);
-        switch (mode) {
-            case 1: return new float[]{auto[0], -1f};
-            case 2: return new float[]{auto[0], 1f};
-            case 3: return new float[]{0f, -1f};
-            case 4: return new float[]{0f, 1f};
-            case 5: return new float[]{-1f, 0f};
-            case 6: return new float[]{1f, 0f};
-            default: return auto;
-        }
-    }
-        @Override
-        public boolean onTouch(View v, MotionEvent e) {
-            if (myView instanceof CornerView) ((CornerView) myView).triggerFlash();
-            else if (myView instanceof BarView) ((BarView) myView).triggerFlash();
-            switch (e.getAction()) {
-                case MotionEvent.ACTION_MOVE: {
-                    if (rippleView != null) rippleView.moveTo(getFixedX(e), getFixedY(e));
-                    float mdx = getFixedX(e) - sx, mdy = getFixedY(e) - sy;
-                    if (!longPressTriggered && (Math.abs(mdx) > SWIPE_CANCEL_SLOP_PX || Math.abs(mdy) > SWIPE_CANCEL_SLOP_PX)) {
-                        longPressHandler.removeCallbacksAndMessages(null);
-                    }
-                    return true;
+
+        private final Runnable holdCheckRunnable = () -> {
+            longFired = true;
+            float cdx = lastX - sx, cdy = lastY - sy;
+            if (Math.abs(cdx) > SWIPE_CANCEL_SLOP_PX || Math.abs(cdy) > SWIPE_CANCEL_SLOP_PX) {
+                String actionName;
+                if (myView instanceof CornerView && Math.abs(cdx) > 40 && Math.abs(cdy) > 40) actionName = "diag_hold";
+                else {
+                    if (Math.abs(cdx) > Math.abs(cdy)) actionName = cdx > 0 ? "right_hold" : "left_hold";
+                    else actionName = cdy > 0 ? "down_hold" : "up_hold";
                 }
+                handleAction(prefKeyBase + "_" + actionName);
+                if (rippleView != null) {
+                    float swipeMag = (float) Math.sqrt(cdx * cdx + cdy * cdy);
+                    float dirX = swipeMag > 0.001f ? cdx / swipeMag : 0f;
+                    float dirY = swipeMag > 0.001f ? cdy / swipeMag : 0f;
+                    rippleView.jumpIcon(sx, sy, actionName, Color.argb(180, 96, 125, 139), dirX, dirY);
+                }
+            } else {
+                handleAction(prefKeyBase + "_long");
+                if (rippleView != null) {
+                    float[] dir = computeJumpDirForTap();
+                    rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]);
+                }
+            }
+        };
+
+        @Override public boolean onTouch(View v, MotionEvent e) {
+            if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
+            else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
+            switch (e.getAction()) {
                 case MotionEvent.ACTION_DOWN:
-                    sx = getFixedX(e); sy = getFixedY(e); st = System.currentTimeMillis();
-                    longPressTriggered = false;
-                    longPressHandler.removeCallbacksAndMessages(null);
+                    sx = getFixedX(e); sy = getFixedY(e);
+                    lastX = sx; lastY = sy;
+                    st = System.currentTimeMillis();
+                    longFired = false;
+                    lpHandler.removeCallbacks(holdCheckRunnable);
                     ensureRippleView();
                     rippleView.showAt(sx, sy);
-                    longPressHandler.postDelayed(() -> {
-                        longPressTriggered = true;
-                        handleAction(prefKeyBase + "_long");
-                        GestureRippleView rv = rippleView;
-                        if (rv != null) { float[] dirL = computeJumpDirForTap(); rv.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dirL[0], dirL[1]); }
-                    }, prefs.getInt("hold_dur", 600));
+                    lpHandler.postDelayed(holdCheckRunnable, prefs.getInt("hold_dur", 600));
                     return true;
-                case MotionEvent.ACTION_UP: {
-                    longPressHandler.removeCallbacksAndMessages(null);
-                    float dx = getFixedX(e) - sx, dy = getFixedY(e) - sy;
-                    long duration = System.currentTimeMillis() - st;
+                case MotionEvent.ACTION_MOVE:
+                    lastX = getFixedX(e); lastY = getFixedY(e);
+                    if (rippleView != null) rippleView.moveTo(lastX, lastY);
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    lpHandler.removeCallbacks(holdCheckRunnable);
+                    if (longFired) {
+                        if (rippleView != null) rippleView.popRipple();
+                        return true;
+                    }
+                    float dx = lastX - sx, dy = lastY - sy;
                     if (Math.abs(dx) > SWIPE_CANCEL_SLOP_PX || Math.abs(dy) > SWIPE_CANCEL_SLOP_PX) {
-                        if (longPressTriggered) return true;
-                        boolean isHold = duration > prefs.getInt("hold_dur", 600);
                         String actionName;
-                        if (myView instanceof CornerView && Math.abs(dx) > 40 && Math.abs(dy) > 40) {
-                            actionName = "diag" + (isHold ? "_hold" : "");
-                        } else {
+                        if (myView instanceof CornerView && Math.abs(dx) > 40 && Math.abs(dy) > 40) actionName = "diag";
+                        else {
                             if (Math.abs(dx) > Math.abs(dy)) actionName = dx > 0 ? "right" : "left";
                             else actionName = dy > 0 ? "down" : "up";
-                            if (isHold) actionName += "_hold";
                         }
                         handleAction(prefKeyBase + "_" + actionName);
-                        GestureRippleView rvSwipe = rippleView;
-                        if (rvSwipe != null) {
-                            rvSwipe.popRipple();
+                        if (rippleView != null) {
+                            rippleView.popRipple();
                             float swipeMag = (float) Math.sqrt(dx * dx + dy * dy);
                             float dirX = swipeMag > 0.001f ? dx / swipeMag : 0f;
                             float dirY = swipeMag > 0.001f ? dy / swipeMag : 0f;
-                            rvSwipe.jumpIcon(getFixedX(e), getFixedY(e), actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
+                            rippleView.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
                         }
-                        return true;
-                    }
-                    if (longPressTriggered) return true;
-                    if (duration >= prefs.getInt("hold_dur", 600)) {
-                        longPressTriggered = true;
-                        handleAction(prefKeyBase + "_long");
                         return true;
                     }
                     long now = System.currentTimeMillis();
-                    final float upX = getFixedX(e), upY = getFixedY(e);
                     boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
                     float[] dirTap = computeJumpDirForTap();
-                    GestureRippleView rvTap = rippleView;
                     if (!hasDtap) {
-                        lastTapUpTime = 0;
-                        handleAction(prefKeyBase + "_tap");
-                        if (rvTap != null) rvTap.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                        lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
+                        if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                     } else if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
-                        lastTapUpTime = 0;
-                        handleAction(prefKeyBase + "_dtap");
-                        if (rvTap != null) rvTap.jumpIcon(upX, upY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                        lastTapUpTime = 0; handleAction(prefKeyBase + "_dtap");
+                        if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                     } else {
-                        lastTapUpTime = now;
-                        final long myUpTs = now;
-                        longPressHandler.postDelayed(() -> {
+                        lastTapUpTime = now; final long myUpTs = now;
+                        lpHandler.postDelayed(() -> {
                             if (lastTapUpTime == myUpTs) {
-                                lastTapUpTime = 0;
-                                handleAction(prefKeyBase + "_tap");
-                                GestureRippleView rvDelay = rippleView;
-                                if (rvDelay != null) rvDelay.jumpIcon(upX, upY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                                lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
+                                if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                             }
                         }, DTAP_WINDOW_MS + 20);
                     }
-                    if (rvTap != null) rvTap.popRipple();
+                    if (rippleView != null) rippleView.popRipple();
                     return true;
-                }
-                case MotionEvent.ACTION_CANCEL: {
-                    longPressHandler.removeCallbacksAndMessages(null);
-                    if (!longPressTriggered) {
-                        long duration = System.currentTimeMillis() - st;
-                        float cdx = getFixedX(e) - sx, cdy = getFixedY(e) - sy;
-                        if (duration >= prefs.getInt("hold_dur", 600)
-                                && Math.abs(cdx) < SWIPE_CANCEL_SLOP_PX && Math.abs(cdy) < SWIPE_CANCEL_SLOP_PX) {
-                            longPressTriggered = true;
-                            handleAction(prefKeyBase + "_long");
-                            GestureRippleView rvCancel = rippleView;
-                            if (rvCancel != null) { float[] dir = computeJumpDirForTap(); rvCancel.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]); }
-                        }
-                    }
-                    GestureRippleView rvCancelPop = rippleView;
-                    if (rvCancelPop != null) rvCancelPop.popRipple();
-                    return true;
-                }
             }
             return true;
         }
-}
+    }
     /** Bản thay thế fireIntent() cho hệ Intent động (UUID) — đọc đúng field mà
  *  openIntentEditorV2() đã lưu ("intent_<uuid>_act/_pkg/_cls/_data/_cat/_flags/_br"). */
 private void fireIntentById(String id) {

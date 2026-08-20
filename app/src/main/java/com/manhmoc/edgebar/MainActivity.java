@@ -1413,28 +1413,41 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
     gd.addView(createSlider("Độ mờ vùng TRĂNG NON", prefix+"corner_moon_alpha", 255, 100));
     gd.addView(createSlider("Độ mờ VIỀN GÓC", prefix+"corner_stroke_alpha", 255, 200));
     gd.addView(createSlider("Độ đậm viền", prefix+"corner_thick", 50, 8));
+    
+    // [FIX] Bọc Inner Drawer vào một Card sáng màu hơn (#2C2C2C) để nổi bật
     LinearLayout gdHide = new LinearLayout(this);
     gdHide.setOrientation(LinearLayout.VERTICAL); gdHide.setPadding(20,10,20,20);
     String[] cornerHideKeys = new String[CORNERS.length];
     for (int i=0;i<CORNERS.length;i++) cornerHideKeys[i] = "corner_"+CORNERS[i];
     addHideTargetCheckboxes(gdHide, prefix + "corner_hide_targets", cornerHideKeys, CORNER_NAMES);
-    gd.addView(createDrawer("📁 " + T("Corners to hide","Góc viền cần ẩn") + " (▼)", gdHide));
+    LinearLayout hideCornerWrap = new LinearLayout(this);
+    hideCornerWrap.setBackground(getRounded("#2C2C2C", 20f));
+    LinearLayout.LayoutParams hcLp = new LinearLayout.LayoutParams(-1, -2); hcLp.setMargins(0, 15, 0, 15);
+    hideCornerWrap.setLayoutParams(hcLp);
+    hideCornerWrap.addView(createDrawer("📁 " + T("Corners to hide","Góc viền cần ẩn") + " (▼)", gdHide));
+    gd.addView(hideCornerWrap);
+    
     container.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", gd));
-    // [MỚI] Drawer tàng hình thông minh riêng cho Bar — cùng thuật toán triggerFlash()
-    // đã có sẵn trong BarView (chỉ lóe lên khi chạm rồi tự mờ dần), chỉ khác thời
-    // gian chờ (bar_hide_dur) tách biệt khỏi Corner (corner_hide_dur).
-        LinearLayout bd = new LinearLayout(this);
+
+    LinearLayout bd = new LinearLayout(this);
     bd.setOrientation(LinearLayout.VERTICAL); bd.setPadding(30,10,30,30);
     bd.addView(createSlider(T("Bar Corner Radius","Độ bo tròn Thanh Cạnh"), prefix+"bar_radius", 100, 24));
     bd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"bar_hide_dur", 5000, 2500));
     bd.addView(createSlider(T("Icon Thickness on Bar","Độ đậm Icon trên Bar"), prefix+"bar_icon_alpha", 255, 255));
-bd.addView(createSlider(T("Icon Size on Bar","Kích thước Icon trên Bar"), prefix+"bar_icon_size", 120, 40));
+    bd.addView(createSlider(T("Icon Size on Bar","Kích thước Icon trên Bar"), prefix+"bar_icon_size", 120, 40));
+    
+    // [FIX] Bọc Inner Drawer cho Bar
     LinearLayout bdHide = new LinearLayout(this);
     bdHide.setOrientation(LinearLayout.VERTICAL); bdHide.setPadding(20,10,20,20);
     addHideTargetCheckboxes(bdHide, prefix + "bar_hide_targets", BARS, BAR_NAMES);
-    bd.addView(createDrawer(T("Bars to hide","Thanh cạnh cần ẩn (Ẩn Một Số Bar/Corner)"), bdHide));
+    LinearLayout hideBarWrap = new LinearLayout(this);
+    hideBarWrap.setBackground(getRounded("#2C2C2C", 20f));
+    hideBarWrap.setLayoutParams(hcLp);
+    hideBarWrap.addView(createDrawer("📁 " + T("Bars to hide","Thanh cạnh cần ẩn") + " (▼)", bdHide));
+    bd.addView(hideBarWrap);
+    
     container.addView(createDrawer("TÙY CHỈNH CHUNG THANH CẠNH", bd));
-
+}
     // [MỚI] Icon cho 13 cử chỉ — CHỈ hiện ở không gian Homacc, áp dụng CHUNG cho mọi
     // Bar/Corner của Homacc (giống Homeb). Thuật toán vẽ animation kéo icon ra theo
     // sóng làm sau — hiện tại chỉ lưu lựa chọn vào prefs.
