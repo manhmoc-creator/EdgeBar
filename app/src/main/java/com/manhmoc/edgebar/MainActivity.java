@@ -3593,6 +3593,15 @@ private List<String> getDynamicIds(String listKey) {
     if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
     return out;
 }
+// [FIX BUILD ERROR] Hàm dùng chung để parse chuỗi CSV -> List<String>,
+// dùng trong showCombinedPanelPicker(). Logic giống hệt getDynamicIds()
+// nhưng không phụ thuộc SharedPreferences (nhận thẳng chuỗi CSV).
+private List<String> csvToList(String csv) {
+    List<String> out = new ArrayList<>();
+    if (csv == null || csv.isEmpty()) return out;
+    for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
+    return out;
+}
 private static final java.util.regex.Pattern NUM_CHUNK_PACK =
     java.util.regex.Pattern.compile("\\d+|\\D+");
 
