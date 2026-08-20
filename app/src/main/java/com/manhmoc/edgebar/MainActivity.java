@@ -1382,6 +1382,25 @@ ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
         if(count % 2 != 0 && currentRow != null) { View dummy = new View(this); dummy.setLayoutParams(new LinearLayout.LayoutParams(0,1,1f)); currentRow.addView(dummy); }
         if(count == 0) { TextView empty = new TextView(this); empty.setText(T("No rules yet.\nPress + NEW EB to create.", "Chưa có quy tắc nào.\nBấm + NEW EB để tạo.")); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0,100,0,0); listRules.addView(empty); }
     }
+// [MỚI] Ngăn kéo tích chọn Bar/Corner sẽ bị ẩn khi action HIDE_SOME_OVERLAY chạy —
+// lưu TOÀN CỤC theo prefix (lock_/home_/homacc_), không còn theo từng Rule nữa.
+private void addHideTargetCheckboxes(LinearLayout container, String prefix, String[] keys, String[] names) {
+    java.util.Set<String> selected = new java.util.LinkedHashSet<>();
+    for (String s : prefs.getString(prefix+"hide_targets", "").split(",")) if (!s.trim().isEmpty()) selected.add(s.trim());
+    for (int i = 0; i < keys.length; i++) {
+        CheckBox cb = new CheckBox(this);
+        cb.setText(names[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0,10,0,10);
+        cb.setChecked(selected.contains(keys[i]));
+        final String fk = keys[i];
+        cb.setOnCheckedChangeListener((v, checked) -> {
+            java.util.Set<String> cur = new java.util.LinkedHashSet<>();
+            for (String s : prefs.getString(prefix+"hide_targets", "").split(",")) if (!s.trim().isEmpty()) cur.add(s.trim());
+            if (checked) cur.add(fk); else cur.remove(fk);
+            prefs.edit().putString(prefix+"hide_targets", TextUtils.join(",", cur)).apply();
+        });
+        container.addView(cb);
+    }
+}
 // Hàm dùng chung cho Frontier — KHÔNG động vào code Design (giữ nguyên để xoá sau).
 // Battery/RAM Pixel 2XL: mỗi lần đổi subtab chỉ removeAllViews() 1 container nhỏ,
 // KHÔNG đụng tới toàn bộ pageDesign — tránh re-inflate hàng loạt CheckBox/Slider
@@ -1394,18 +1413,28 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
     gd.addView(createSlider("Độ mờ vùng TRĂNG NON", prefix+"corner_moon_alpha", 255, 100));
     gd.addView(createSlider("Độ mờ VIỀN GÓC", prefix+"corner_stroke_alpha", 255, 200));
     gd.addView(createSlider("Độ đậm viền", prefix+"corner_thick", 50, 8));
+    LinearLayout gdHide = new LinearLayout(this);
+    gdHide.setOrientation(LinearLayout.VERTICAL); gdHide.setPadding(20,10,20,20);
+    String[] cornerHideKeys = new String[CORNERS.length];
+    for (int i=0;i<CORNERS.length;i++) cornerHideKeys[i] = "corner_"+CORNERS[i];
+    addHideTargetCheckboxes(gdHide, prefix, cornerHideKeys, CORNER_NAMES);
+    gd.addView(createDrawer(T("Corners to hide","Góc viền cần ẩn (Ẩn Một Số Bar/Corner)"), gdHide));
     container.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", gd));
-
     // [MỚI] Drawer tàng hình thông minh riêng cho Bar — cùng thuật toán triggerFlash()
     // đã có sẵn trong BarView (chỉ lóe lên khi chạm rồi tự mờ dần), chỉ khác thời
     // gian chờ (bar_hide_dur) tách biệt khỏi Corner (corner_hide_dur).
-    LinearLayout bd = new LinearLayout(this);
+        LinearLayout bd = new LinearLayout(this);
     bd.setOrientation(LinearLayout.VERTICAL); bd.setPadding(30,10,30,30);
     bd.addView(createSlider(T("Bar Corner Radius","Độ bo tròn Thanh Cạnh"), prefix+"bar_radius", 100, 24));
     bd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"bar_hide_dur", 5000, 2500));
     bd.addView(createSlider(T("Icon Thickness on Bar","Độ đậm Icon trên Bar"), prefix+"bar_icon_alpha", 255, 255));
 bd.addView(createSlider(T("Icon Size on Bar","Kích thước Icon trên Bar"), prefix+"bar_icon_size", 120, 40));
+    LinearLayout bdHide = new LinearLayout(this);
+    bdHide.setOrientation(LinearLayout.VERTICAL); bdHide.setPadding(20,10,20,20);
+    addHideTargetCheckboxes(bdHide, prefix, BARS, BAR_NAMES);
+    bd.addView(createDrawer(T("Bars to hide","Thanh cạnh cần ẩn (Ẩn Một Số Bar/Corner)"), bdHide));
     container.addView(createDrawer("TÙY CHỈNH CHUNG THANH CẠNH", bd));
+
     // [MỚI] Icon cho 13 cử chỉ — CHỈ hiện ở không gian Homacc, áp dụng CHUNG cho mọi
     // Bar/Corner của Homacc (giống Homeb). Thuật toán vẽ animation kéo icon ra theo
     // sóng làm sau — hiện tại chỉ lưu lựa chọn vào prefs.
@@ -2608,10 +2637,14 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
     List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
         List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"HIDE_SOME_OVERLAY", "SHOW_ALL_OVERLAY", "TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR", "PLAY_MY_PLAYLIST"}, ACT_KEYS, ACT_LABS);
-    final String[] hideTargetsPack = { sourceId != null ? prefs.getString("prule_" + sourceId + "_hide_targets", "") : "" };
-    vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
+        vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
     vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
-    vAct.addView(buildHideTargetsConfigButton(hideTargetsPack));
+    List<String[]> TRIGGER_ITEMS_PACK = buildItemsForKeys(new String[]{
+        "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
+        "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
+        "TRIGGER_DIAG"
+    }, ACT_KEYS, ACT_LABS);
+    vAct.addView(buildActionCategoryButton("GESTURES", "🌀", TRIGGER_ITEMS_PACK, selectedActs, "#009688"));
     vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0", true));
     vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
     vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
@@ -2698,7 +2731,6 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
             .putString("prule_" + targetId + "_acts", android.text.TextUtils.join(",", selectedActs))
             .putString("prule_" + targetId + "_launch_pkg", launchAppPkg[0])
             .putString("prule_" + targetId + "_shortcut_id", shortcutId[0])
-            .putString("prule_" + targetId + "_hide_targets", hideTargetsPack[0])
             .putBoolean("prule_" + targetId + "_vib", cbVib.isChecked())
             .putBoolean("prule_" + targetId + "_anim", cbAnim.isChecked())
             .putBoolean("prule_" + targetId + "_en", true)
@@ -2733,7 +2765,6 @@ private void applyPackRulesToSpace(String itemKey, String targetPrefix, String c
                 .putBoolean(finalKey + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
                 .putString(finalKey + "_launch_pkg", prefs.getString("prule_" + rId + "_launch_pkg", ""))
                 .putString(finalKey + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
-                .putString(finalKey + "_hide_targets", prefs.getString("prule_" + rId + "_hide_targets", ""))
                 .apply();
         }
     }
@@ -3054,7 +3085,6 @@ for (String sa : savedArray) {
             List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
             List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
             vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
-            vAct.addView(buildHideTargetsConfigButton(hideTargets));
             vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0", true));
             vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
             vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
@@ -3142,7 +3172,6 @@ prefs.edit()
      .putBoolean(finalKey+"_anim", cbAnim.isChecked())
      .putString(finalKey+"_launch_pkg", launchAppPkg[0])
      .putString(finalKey+"_shortcut_id", shortcutId[0])
-     .putString(finalKey+"_hide_targets", hideTargets[0])
      .apply();
 }
             }
@@ -3228,89 +3257,6 @@ private List<String[]> buildItemsForPrefix(String prefix, String[] actKeysUsed, 
         if (actKeysUsed[i].startsWith(prefix)) out.add(new String[]{actLabsUsed[i], actKeysUsed[i]});
     }
     return out;
-}
-// [MỚI] Nút mở dialog chọn Bar/Corner sẽ bị ẩn khi HIDE_SOME_OVERLAY chạy.
-// Chỉ 1 String CSV lưu trong RAM lúc dựng dialog — Zero cost nếu user không đụng tới.
-private Button buildHideTargetsConfigButton(String[] hideTargets) {
-    Button btn = new Button(this);
-    btn.setBackground(getRounded("#FF9800", 20f));
-    btn.setTextColor(Color.WHITE);
-    btn.setTextSize(12.5f);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-    lp.setMargins(0, 0, 0, 20);
-    btn.setLayoutParams(lp);
-    Runnable refresh = () -> {
-        int cnt = hideTargets[0].isEmpty() ? 0 : hideTargets[0].split(",").length;
-        btn.setText("📦 " + T("Bar/Corner to hide", "Bar/Corner cần ẩn") + (cnt > 0 ? " (" + cnt + ")" : ""));
-    };
-    refresh.run();
-    btn.setOnClickListener(v -> showHideTargetsPicker(hideTargets[0], picked -> { hideTargets[0] = picked; refresh.run(); }));
-    return btn;
-}
-
-// [MỚI] Danh sách phẳng 12 Bar + 4 Corner (dùng đúng BARS[]/CORNERS[] thật của service,
-// không phải ALL_COMP_KEYS) — vì đây là ẩn/hiện VIEW thật, phải khớp key mà
-// updateVisibility()/updateHomaccLive() đang đọc ("<prefix><bar>_manual_hide").
-private void showHideTargetsPicker(String currentCsv, java.util.function.Consumer<String> onSaved) {
-    java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>();
-    for (String s : currentCsv.split(",")) if (!s.trim().isEmpty()) selected.add(s.trim());
-
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
-    LinearLayout root = new LinearLayout(this);
-    root.setOrientation(LinearLayout.VERTICAL);
-    root.setBackgroundColor(Color.parseColor("#121212"));
-    root.setPadding(30, 80, 30, 30);
-
-    TextView title = new TextView(this);
-    title.setText(T("Choose Bar/Corner to hide", "Chọn Bar/Corner cần ẩn"));
-    title.setTextColor(Color.parseColor("#FF9800")); title.setTextSize(18); title.setPadding(0, 0, 0, 20);
-    root.addView(title);
-
-    ScrollView scroll = new ScrollView(this);
-    scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-    LinearLayout list = new LinearLayout(this);
-    list.setOrientation(LinearLayout.VERTICAL);
-    scroll.addView(list);
-    root.addView(scroll);
-
-    ArrayList<CheckBox> boxes = new ArrayList<>();
-    ArrayList<String> keys = new ArrayList<>();
-    for (int i = 0; i < BARS.length; i++) {
-        CheckBox cb = new CheckBox(this);
-        cb.setText("📊 " + BAR_NAMES[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0, 14, 0, 14);
-        cb.setChecked(selected.contains(BARS[i]));
-        boxes.add(cb); keys.add(BARS[i]); list.addView(cb);
-    }
-    for (int i = 0; i < CORNERS.length; i++) {
-        CheckBox cb = new CheckBox(this);
-        String ck = "corner_" + CORNERS[i];
-        cb.setText("📐 " + CORNER_NAMES[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0, 14, 0, 14);
-        cb.setChecked(selected.contains(ck));
-        boxes.add(cb); keys.add(ck); list.addView(cb);
-    }
-
-    LinearLayout footer = new LinearLayout(this);
-    footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0, 20, 0, 0);
-    Button bCancel = new Button(this); bCancel.setText(T("CANCEL", "HỦY"));
-    bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE);
-    bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    Button bSave2 = new Button(this); bSave2.setText(T("SAVE", "LƯU"));
-    bSave2.setBackground(getRounded("#4CAF50", 20f)); bSave2.setTextColor(Color.WHITE);
-    LinearLayout.LayoutParams slp2 = new LinearLayout.LayoutParams(0, -2, 1f); slp2.setMargins(20, 0, 0, 0);
-    bSave2.setLayoutParams(slp2);
-    footer.addView(bCancel); footer.addView(bSave2);
-    root.addView(footer);
-
-    bCancel.setOnClickListener(v -> d.dismiss());
-    bSave2.setOnClickListener(v -> {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < boxes.size(); i++) {
-            if (boxes.get(i).isChecked()) { if (sb.length() > 0) sb.append(','); sb.append(keys.get(i)); }
-        }
-        onSaved.accept(sb.toString());
-        d.dismiss();
-    });
-    d.setContentView(root); d.show();
 }
 private Button buildActionCategoryButton(String title, String emoji, List<String[]> items, java.util.LinkedHashSet<String> selectedSet, String colorHex) {
     return buildActionCategoryButton(title, emoji, items, selectedSet, colorHex, false);

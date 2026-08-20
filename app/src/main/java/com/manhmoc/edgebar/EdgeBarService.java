@@ -1459,10 +1459,10 @@ private void fireIntentById(String id) {
     // [MỚI] Ẩn thủ công đúng danh sách bar/corner user đã chọn cho rule này — tái dùng
     // NGUYÊN VẸN cờ "_manual_hide" đã có sẵn (đọc trong updateVisibility()/updateHomaccLive()),
     // Zero-cost khi rule không gán HIDE_SOME_OVERLAY: chỉ 1 lệnh đọc prefs, return ngay nếu rỗng.
-    private void hideSomeOverlay(String key) {
-        String targets = prefs.getString(key + "_hide_targets", "");
-        if (targets.isEmpty()) return;
+        private void hideSomeOverlay(String key) {
         String prefix = key.startsWith("homacc_") ? "homacc_" : "lock_";
+        String targets = prefs.getString(prefix + "hide_targets", "");
+        if (targets.isEmpty()) return;
         boolean changed = false;
         SharedPreferences.Editor ed = prefs.edit();
         for (String t : targets.split(",")) {
