@@ -1265,7 +1265,20 @@ case "SCREEN_ON":
                     } catch (SecurityException ignored) {}
                     break;
                 }
-                case "PLAY_MY_PLAYLIST": startMyPlaylist(); break;
+                                case "PLAY_MY_PLAYLIST": startMyPlaylist(); break;
+                case "HIDE_SOME_OVERLAY":
+                    hideSomeOverlay("lock_");
+                    hideSomeOverlay("homacc_");
+                    break;
+                case "SHOW_ALL_OVERLAY":
+                    showAllOverlay("lock_");
+                    showAllOverlay("homacc_");
+                    break;
+                case "TRIGGER_TAP": case "TRIGGER_DTAP": case "TRIGGER_LONG":
+                case "TRIGGER_UP": case "TRIGGER_DOWN": case "TRIGGER_LEFT":
+                case "TRIGGER_RIGHT": case "TRIGGER_DIAG":
+                    dispatchRealScreenGesture(a);
+                    break;
 default:
                         if (a.startsWith("PANEL_")) {
                             // [THAY] Panel định danh bằng UUID Data Pack, không còn 1/2/3 cố định
@@ -1453,60 +1466,64 @@ private void fireIntentById(String id) {
         }
     }
 private void dispatchRealScreenGesture(String trigger) {
-        if (Build.VERSION.SDK_INT < 24) return;
-        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
-        float cx = dm.widthPixels / 2f;
-        float cy = dm.heightPixels / 2f;
-        // Chiều dài nét vuốt (60% nửa màn hình)
-        float swipeDist = Math.min(cx, cy) * 0.6f;
+    if (Build.VERSION.SDK_INT < 24) return;
+    
+    // [FIX 1] Lấy kích thước màn hình tuyệt đối từ WindowManager
+    WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+    android.graphics.Point size = new android.graphics.Point();
+    wm.getDefaultDisplay().getRealSize(size);
+    float cx = size.x / 2f;
+    float cy = size.y / 2f;
+    float swipeDist = Math.min(cx, cy) * 0.6f;
 
-        android.graphics.Path path = new android.graphics.Path();
-        int duration = 250; // Tốc độ vuốt chuẩn (250ms)
+    android.graphics.Path path = new android.graphics.Path();
+    int duration = 250; 
 
-        switch (trigger) {
-            case "TRIGGER_UP": 
-                path.moveTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist); 
-                break;
-            case "TRIGGER_DOWN": 
-                path.moveTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist); 
-                break;
-            case "TRIGGER_LEFT": 
-                path.moveTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist, cy); 
-                break;
-            case "TRIGGER_RIGHT": 
-                path.moveTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist, cy); 
-                break;
-            case "TRIGGER_DIAG": 
-                path.moveTo(cx + swipeDist, cy + swipeDist); path.lineTo(cx - swipeDist, cy - swipeDist); 
-                break;
-            case "TRIGGER_TAP": 
-                path.moveTo(cx, cy); duration = 50; 
-                break;
-            case "TRIGGER_LONG": 
-                path.moveTo(cx, cy); duration = 600; 
-                break;
-            case "TRIGGER_DTAP":
-                path.moveTo(cx, cy); duration = 50;
-                break;
-        }
-
-        android.accessibilityservice.GestureDescription.StrokeDescription stroke = 
-            new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration);
-        android.accessibilityservice.GestureDescription.Builder builder = 
-            new android.accessibilityservice.GestureDescription.Builder();
-        builder.addStroke(stroke);
-        dispatchGesture(builder.build(), null, null);
-        
-        // Bắn nhịp chạm thứ 2 nếu là Double Tap
-        if (trigger.equals("TRIGGER_DTAP")) {
-            new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                android.accessibilityservice.GestureDescription.Builder b2 = 
-                    new android.accessibilityservice.GestureDescription.Builder();
-                b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 50));
-                dispatchGesture(b2.build(), null, null);
-            }, 150);
-        }
+    switch (trigger) {
+        case "TRIGGER_UP": 
+            path.moveTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist); 
+            break;
+        case "TRIGGER_DOWN": 
+            path.moveTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist); 
+            break;
+        case "TRIGGER_LEFT": 
+            path.moveTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist, cy); 
+            break;
+        case "TRIGGER_RIGHT": 
+            path.moveTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist, cy); 
+            break;
+        case "TRIGGER_DIAG": 
+            path.moveTo(cx + swipeDist, cy + swipeDist); path.lineTo(cx - swipeDist, cy - swipeDist); 
+            break;
+        case "TRIGGER_TAP": 
+            // [FIX 2] Thêm lineTo dời 1 pixel để Android nhận diện đây là 1 nét chạm hợp lệ
+            path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 50; 
+            break;
+        case "TRIGGER_LONG": 
+            path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 600; 
+            break;
+        case "TRIGGER_DTAP":
+            path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 50;
+            break;
     }
+
+    android.accessibilityservice.GestureDescription.StrokeDescription stroke = 
+        new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration);
+    android.accessibilityservice.GestureDescription.Builder builder = 
+        new android.accessibilityservice.GestureDescription.Builder();
+    builder.addStroke(stroke);
+    dispatchGesture(builder.build(), null, null);
+    
+    // Bắn nhịp chạm thứ 2 nếu là Double Tap
+    if (trigger.equals("TRIGGER_DTAP")) {
+        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            android.accessibilityservice.GestureDescription.Builder b2 = 
+                new android.accessibilityservice.GestureDescription.Builder();
+            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 50));
+            dispatchGesture(b2.build(), null, null);
+        }, 150);
+    }
+}
     // [MỚI] Ẩn thủ công đúng danh sách bar/corner user đã chọn cho rule này — tái dùng
     // NGUYÊN VẸN cờ "_manual_hide" đã có sẵn (đọc trong updateVisibility()/updateHomaccLive()),
     // Zero-cost khi rule không gán HIDE_SOME_OVERLAY: chỉ 1 lệnh đọc prefs, return ngay nếu rỗng.
@@ -1522,12 +1539,34 @@ private void dispatchRealScreenGesture(String trigger) {
         for (String t : targets.split(",")) {
             String tt = t.trim();
             if (tt.isEmpty()) continue;
-            // Chèn "corner_" vào giữa nếu mục được ẩn là góc viền (để khớp tên biến)
             String mid = (tt.equals("br") || tt.equals("bl") || tt.equals("tr") || tt.equals("tl")) ? "corner_" + tt : tt;
             String k = prefix + mid + "_manual_hide";
             if (!prefs.getBoolean(k, false)) { ed.putBoolean(k, true); changed = true; }
         }
-        if (changed) { ed.apply(); updateVisibility(); }
+        if (changed) { 
+            ed.apply(); 
+            if (prefix.equals("homacc_")) updateHomaccLive();
+            else updateVisibility(); 
+        }
+    }
+
+    private void showAllOverlay(String key) {
+        String prefix = key.startsWith("homacc_") ? "homacc_" : "lock_";
+        boolean changed = false;
+        SharedPreferences.Editor ed = prefs.edit();
+        for (String barKey : BARS) {
+            String k = prefix + barKey + "_manual_hide";
+            if (prefs.getBoolean(k, false)) { ed.putBoolean(k, false); changed = true; }
+        }
+        for (String cornerKey : CORNERS) {
+            String k = prefix + "corner_" + cornerKey + "_manual_hide";
+            if (prefs.getBoolean(k, false)) { ed.putBoolean(k, false); changed = true; }
+        }
+        if (changed) { 
+            ed.apply(); 
+            if (prefix.equals("homacc_")) updateHomaccLive();
+            else updateVisibility(); 
+        }
     }
     // [MỚI] Hồi sinh toàn bộ bar/corner đang bị ẩn thủ công (cờ "_manual_hide") của
     // ĐÚNG không gian chứa key vừa kích hoạt — Lock/Homacc tách biệt qua prefix, không

@@ -1483,7 +1483,9 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
                 }
                 case "SCREEN_OFF": doScreenOff(); break;
                 case "SCREENSHOT": doScreenshot(); break;
-                case "PLAY_MY_PLAYLIST": startMyPlaylist(); break;
+                                case "PLAY_MY_PLAYLIST": startMyPlaylist(); break;
+                case "HIDE_SOME_OVERLAY": hideSomeOverlay("home_"); break;
+                case "SHOW_ALL_OVERLAY": showAllOverlay(); break;
                 case "SCREEN_RECORD": {
                     if (ScreenRecorderService.isRunning) {
                         Intent stopIntent = new Intent(this, ScreenRecorderService.class);
