@@ -6072,7 +6072,6 @@ if (type == 0) {
             btnIcons.setText(T("CHOOSE ICON (", "CHỌN ICON (") + (s.isEmpty() ? 0 : s.split(",").length) + ")");
         }));
         content.addView(btnIcons);
-    }
     } else if (type == 1) {
     String[] cKeys = {"br", "bl", "tr", "tl"};
     // [BỎ UI PREVIEW] Không còn checkbox — Corner luôn xem-trước-sẵn đúng
