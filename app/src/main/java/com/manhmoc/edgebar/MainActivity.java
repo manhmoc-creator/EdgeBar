@@ -6907,11 +6907,12 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                 dragHandle.setTextColor(Color.parseColor("#8AB4F8"));
                 dragHandle.setTextSize(26);
                 dragHandle.setPadding(0, 0, 35, 0);
+                
+                // Đã bỏ lv.requestDisallowInterceptTouchEvent(true) để trả lại luồng Touch cho ListView
                 dragHandle.setOnTouchListener((vh, ev) -> {
                     if (ev.getAction() == MotionEvent.ACTION_DOWN) {
                         dragFromPos[0] = p; // Vị trí hiện tại trong List
                         isDragging[0] = true;
-                        lv.requestDisallowInterceptTouchEvent(true); // Ngăn cuộn ListView khi đang kéo
                     }
                     return false;
                 });
@@ -6954,30 +6955,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                     return b;
                 };
 
-                // Phím chọn vị trí (Luôn hiện cho cả 3 Tab: App, Act, SC)
-                Button btnLetter = makeMiniBtn.apply(curLetter);
-                btnLetter.setTextColor(Color.parseColor("#FFC107"));
-                btnLetter.setOnClickListener(v -> {
-                    new android.app.AlertDialog.Builder(MainActivity.this).setItems(LETTERS, (dlg, which) -> {
-                        String updatedPos = LETTERS[which] + "," + curRoman;
-                        prefs.edit().putString(posKey, updatedPos).apply();
-                        refreshList.run();
-                    }).show();
-                });
-                controls.addView(btnLetter);
-
-                Button btnRoman = makeMiniBtn.apply(curRoman);
-                btnRoman.setTextColor(Color.parseColor("#4CAF50"));
-                btnRoman.setOnClickListener(v -> {
-                    new android.app.AlertDialog.Builder(MainActivity.this).setItems(ROMANS, (dlg, which) -> {
-                        String updatedPos = curLetter + "," + ROMANS[which];
-                        prefs.edit().putString(posKey, updatedPos).apply();
-                        refreshList.run();
-                    }).show();
-                });
-                controls.addView(btnRoman);
-
-                // Nút Thùng Rác (Chỉ có ở Shortcut, đặt BÊN TRÁI nút Brush)
+                // Nút Thùng Rác ĐƯỢC CHUYỂN LÊN ĐÂY (Chỉ có ở Shortcut, sẽ được add vào BÊN TRÁI nút Letter)
                 if (currentTab[0] == 2) { 
                     Button btnTrashSc = makeMiniBtn.apply("🗑");
                     btnTrashSc.setBackground(getRounded("#D32F2F", 20f));
@@ -6997,18 +6975,38 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                     controls.addView(btnTrashSc);
                 }
 
+                // Phím chọn vị trí chữ
+                Button btnLetter = makeMiniBtn.apply(curLetter);
+                btnLetter.setTextColor(Color.parseColor("#FFC107"));
+                btnLetter.setOnClickListener(v -> {
+                    new android.app.AlertDialog.Builder(MainActivity.this).setItems(LETTERS, (dlg, which) -> {
+                        String updatedPos = LETTERS[which] + "," + curRoman;
+                        prefs.edit().putString(posKey, updatedPos).apply();
+                        refreshList.run();
+                    }).show();
+                });
+                controls.addView(btnLetter);
+
+                // Phím chọn vị trí số
+                Button btnRoman = makeMiniBtn.apply(curRoman);
+                btnRoman.setTextColor(Color.parseColor("#4CAF50"));
+                btnRoman.setOnClickListener(v -> {
+                    new android.app.AlertDialog.Builder(MainActivity.this).setItems(ROMANS, (dlg, which) -> {
+                        String updatedPos = curLetter + "," + ROMANS[which];
+                        prefs.edit().putString(posKey, updatedPos).apply();
+                        refreshList.run();
+                    }).show();
+                });
+                controls.addView(btnRoman);
+
                 // Nút Chổi Cọ (Brush Override Icon)
                 if (currentTab[0] == 0 || currentTab[0] == 1) { // APP & ACTION
                     Button btnIcon = makeMiniBtn.apply("🖌");
-                    btnIcon.setOnClickListener(v -> {
-                        showIconPickerForPanelAction(panelId, ref, refreshList);
-                    });
+                    btnIcon.setOnClickListener(v -> showIconPickerForPanelAction(panelId, ref, refreshList));
                     controls.addView(btnIcon);
                 } else if (currentTab[0] == 2) { // SHORTCUT
                     Button btnIcon = makeMiniBtn.apply("🖌");
-                    btnIcon.setOnClickListener(v -> {
-                        showIconPickerDialog("shortcut_" + ref + "_icon_override", refreshList);
-                    });
+                    btnIcon.setOnClickListener(v -> showIconPickerDialog("shortcut_" + ref + "_icon_override", refreshList));
                     controls.addView(btnIcon);
                 }
                 
@@ -7056,7 +7054,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
         if (action == MotionEvent.ACTION_MOVE) {
             int targetPos = lv.pointToPosition((int) e.getX(), (int) e.getY());
             List<String> currentSelList = currentTab[0] == 0 ? selApps : (currentTab[0] == 1 ? selActs : selScs);
-            // Valid logic: Đảm bảo vị trí kéo chỉ đổi chỗ các thành phần đã được chọn (nằm trên cùng danh sách shownList)
+            // Valid logic: Đảm bảo vị trí kéo chỉ đổi chỗ các thành phần đã được chọn
             if (targetPos != android.widget.AdapterView.INVALID_POSITION
                     && targetPos != dragFromPos[0] && targetPos < currentSelList.size()
                     && dragFromPos[0] < currentSelList.size()) {

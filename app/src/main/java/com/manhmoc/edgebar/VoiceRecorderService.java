@@ -324,7 +324,7 @@ private void updateNotif(long sec, boolean paused) {
             .setContentTitle((paused ? "⏸️ Đã tạm dừng — " : "🔴 Đang ghi âm — ") + time)
             .setContentText("EdgeBar Voice")
             .setSmallIcon(android.R.drawable.presence_audio_online)
-            .addAction(android.R.drawable.ic_media_next, "Dừng", actionPI(ACTION_STOP)) // Nút Trái
+            .addAction(android.R.drawable.ic_media_previous, "Dừng", actionPI(ACTION_STOP)) // Nút Trái
             .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     paused ? "Tiếp Tục" : "Tạm Dừng", actionPI(ACTION_PAUSE_TOGGLE)) // Nút Giữa
             .addAction(android.R.drawable.ic_media_ff, "Dừng & Nghe", actionPI(ACTION_STOP_AND_PLAY)) // Nút Phải

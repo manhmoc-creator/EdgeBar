@@ -288,7 +288,7 @@ private void pauseRecording() {
             .setContentTitle((isPaused ? "⏸️ Đã tạm dừng — " : "🔴 Đang quay màn hình — ") + time)
             .setContentText("EdgeBar Screen")
             .setSmallIcon(android.R.drawable.presence_video_online)
-            .addAction(android.R.drawable.ic_media_next, "Dừng", screenRecActionPI(ACTION_STOP)) // Nút Trái
+            .addAction(android.R.drawable.ic_media_previous, "Dừng", screenRecActionPI(ACTION_STOP)) // Nút Trái
             .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
                     isPaused ? "Tiếp Tục" : "Tạm Dừng", screenRecActionPI(ACTION_PAUSE_TOGGLE)) // Nút Giữa
             .addAction(android.R.drawable.ic_media_ff, "Dừng & Xem", screenRecActionPI(ACTION_STOP_AND_PLAY)) // Nút Phải
