@@ -1451,7 +1451,7 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
     // [MỚI] Icon cho 13 cử chỉ — CHỈ hiện ở không gian Homacc, áp dụng CHUNG cho mọi
     // Bar/Corner của Homacc (giống Homeb). Thuật toán vẽ animation kéo icon ra theo
     // sóng làm sau — hiện tại chỉ lưu lựa chọn vào prefs.
-    }
+
 // [MỚI] UI rỗng chọn icon cho 13 cử chỉ, dùng CHUNG cho mọi Bar/Corner của Homacc.
 // Lazy-inflate (giống Panel Config/Handle Config) — 13 dòng chỉ thực sự dựng View
 // khi người dùng bấm mở lần đầu, Zero-RAM khi đóng, tiết kiệm cho Pixel 2XL.
