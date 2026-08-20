@@ -625,6 +625,7 @@ new Thread(() -> {
             }
         });
     }).start();
+} // <-- THÊM DÒNG NÀY: đóng hàm renderPanelGrid(String id)
 private static final String ISLAND_SEP = "#ISL#";
     private boolean isIslandRef(String ref) { return ref != null && ref.contains(ISLAND_SEP); }
     private String islandRefPkg(String ref) { int i = ref.indexOf(ISLAND_SEP); return i < 0 ? ref : ref.substring(0, i); }
