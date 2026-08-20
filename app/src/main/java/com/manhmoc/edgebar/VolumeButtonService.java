@@ -145,32 +145,15 @@ private void handleSide(boolean isUp) {
     // FIX GỐC: hễ có sự kiện mới tới (kể cả cú bấm thứ 2) là HUỶ NGAY timer Long
     // Press cũ trước tiên. Nhờ vậy khi burst >= 2 xảy ra, Long Press chắc chắn
     // không thể bắn nhầm nữa — chỉ còn đúng 1 con đường thắng.
-    Runnable pendingLong = isUp ? upLongTimeout : downLongTimeout;
-    if (pendingLong != null) h.removeCallbacks(pendingLong);
-
-    Runnable prevEnd = isUp ? upEndCheck : downEndCheck;
+        Runnable prevEnd = isUp ? upEndCheck : downEndCheck;
     if (prevEnd != null) h.removeCallbacks(prevEnd);
 
-    if (burst == 1) {
-        Runnable timeout = () -> {
-            // Chỉ bắn Long khi burst tại thời điểm timeout nổ vẫn còn đúng 1 —
-            // nếu có cú bấm thứ 2 xen vào, handleSide() đã huỷ timer này rồi.
-            boolean already = isUp ? upLongFired : downLongFired;
-            if (!already && (isUp ? upBurst : downBurst) == 1) {
-                if (isUp) upLongFired = true; else downLongFired = true;
-                fire("volkey_" + (isUp ? "up" : "down") + "_long");
-                if (isUp) upBurst = 0; else downBurst = 0;
-            }
-        };
-        if (isUp) upLongTimeout = timeout; else downLongTimeout = timeout;
-        h.postDelayed(timeout, HELD_MS_THRESHOLD);
-    }
-
-    Runnable check = () -> {
+        Runnable check = () -> {
         boolean wasLong = isUp ? upLongFired : downLongFired;
         int finalBurst = isUp ? upBurst : downBurst;
         if (!wasLong && finalBurst > 0) {
-            if (finalBurst >= 2) fire("volkey_" + (isUp ? "up" : "down") + "_dtap");
+            if (finalBurst >= 3) fire("volkey_" + (isUp ? "up" : "down") + "_long");   // giữ phím thật -> auto-repeat >=3 lần
+            else if (finalBurst == 2) fire("volkey_" + (isUp ? "up" : "down") + "_dtap");
             else fire("volkey_" + (isUp ? "up" : "down") + "_tap");
         }
         if (isUp) { upBurst = 0; upLongFired = false; }

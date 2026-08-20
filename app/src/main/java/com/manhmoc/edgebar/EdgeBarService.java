@@ -101,13 +101,12 @@ private boolean recIndicatorTestPaused = false;
     private SharedPreferences prefs;
     private Vibrator vibrator;
     private PanelEngine panelEngine;
-    private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c", "b_c", "l_c", "r_c", "r_u", "r_d", "l_u", "l_d"};
+    private final String[] BARS = {"b_c", "r", "l", "r_u", "r_c", "r_d", "t_c", "t_r", "t_l", "l_u", "l_c", "l_d"};
     private final int[] GRAV = {
-        Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, 
-        Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL,
-        Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.CENTER_VERTICAL|Gravity.LEFT,
-        Gravity.CENTER_VERTICAL|Gravity.RIGHT, Gravity.TOP|Gravity.RIGHT,
-        Gravity.BOTTOM|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.BOTTOM|Gravity.LEFT
+        Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT,
+        Gravity.TOP|Gravity.RIGHT, Gravity.CENTER_VERTICAL|Gravity.RIGHT, Gravity.BOTTOM|Gravity.RIGHT,
+        Gravity.TOP|Gravity.CENTER_HORIZONTAL, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT,
+        Gravity.TOP|Gravity.LEFT, Gravity.CENTER_VERTICAL|Gravity.LEFT, Gravity.BOTTOM|Gravity.LEFT
     };
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};

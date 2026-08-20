@@ -69,7 +69,7 @@ private boolean isAccessibleHomeShortcutOn() {
     return prefs.getBoolean("shortcut_acc_home_on", false);
 }
     private WindowManager wm;
-    private View[] bars = new View[5];
+    private View[] bars = new View[12];
     private View[] corners = new View[4];
     private final java.util.Map<View, String> lastLayoutSig = new java.util.HashMap<>();
     private void updateLayoutIfChanged(View v, WindowManager.LayoutParams p) {
@@ -160,9 +160,13 @@ private boolean recIndicatorTestPaused = false;
     private static final long SYNC_THROTTLE_MS = 150;
     private long accCheckTimestamp = 0;
     private static final int KBD_HEIGHT_CHANGE_THRESHOLD = 20;
-    private final String[] BARS = {"r", "l", "t_r", "t_l", "t_c"};
-    private final int[] GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT, Gravity.TOP|Gravity.CENTER_HORIZONTAL};
-
+    private final String[] BARS = {"b_c", "r", "l", "r_u", "r_c", "r_d", "t_c", "t_r", "t_l", "l_u", "l_c", "l_d"};
+    private final int[] GRAV = {
+        Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT,
+        Gravity.TOP|Gravity.RIGHT, Gravity.CENTER_VERTICAL|Gravity.RIGHT, Gravity.BOTTOM|Gravity.RIGHT,
+        Gravity.TOP|Gravity.CENTER_HORIZONTAL, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT,
+        Gravity.TOP|Gravity.LEFT, Gravity.CENTER_VERTICAL|Gravity.LEFT, Gravity.BOTTOM|Gravity.LEFT
+    };
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
     private static final int BAR_ICON_CACHE_LIMIT = 40;
