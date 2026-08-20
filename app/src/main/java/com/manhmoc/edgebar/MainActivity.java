@@ -384,7 +384,13 @@ ALL_COMP_NAMES = new String[]{
 VOLKEY_COMP_NAMES = new String[]{T("Button Up", "Phím Tăng Âm"), T("Button Down", "Phím Giảm Âm")};
 VOLKEY_GESTURE_NAMES = new String[]{T("Press Once", "Nhấn 1 Lần"), T("Press Twice", "Nhấn 2 Lần"), T("Hold", "Giữ (Long Press)")};
 M_BAR_NAMES = new String[]{T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"), T("Top Right", "Cạnh Phải"), T("Top Left", "Cạnh Trái"), T("Top Center", "Đỉnh giữa"), T("Bottom Center", "Đáy Giữa"), T("Top Half Center", "Trung Tâm Trên"), T("Bottom Half Center", "Trung Tâm Dưới")};
-C_GESTURE_NAMES = new String[]{T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ"), T("Diagonal", "Vuốt Chéo"), T("Diagonal + Hold", "Vuốt Chéo + Giữ")};
+C_GESTURE_NAMES = new String[]{
+    T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), 
+    T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Diagonal", "Vuốt Chéo"), 
+    T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ"), T("Diagonal + Hold", "Vuốt Chéo + Giữ"),
+    T("Combo: Up-Down", "Combo: Lên - Xuống"), T("Combo: Down-Up", "Combo: Xuống - Lên"), T("Combo: Left-Right", "Combo: Trái - Phải"), T("Combo: Right-Left", "Combo: Phải - Trái"),
+    T("Hold + Up", "Gài số: Giữ + Vuốt Lên"), T("Hold + Down", "Gài số: Giữ + Vuốt Xuống"), T("Hold + Left", "Gài số: Giữ + Vuốt Trái"), T("Hold + Right", "Gài số: Giữ + Vuốt Phải")
+};
 BAR_NAMES = new String[]{
     T("Bottom Center", "Đáy giữa"), T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"),
     T("Right Up", "Phải trên"), T("Right Center", "Phải giữa"), T("Right Down", "Phải dưới"),
