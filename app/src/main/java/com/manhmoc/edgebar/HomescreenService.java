@@ -315,7 +315,7 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, pGlowMid);
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, pCore);
     }
-
+}
     // ===== GESTURE RIPPLE VIEW (icon + sóng theo điểm chạm) =====
     // ===== GESTURE RIPPLE VIEW (chấm sóng chạm + icon NHẢY LÊN xoay 1 vòng rồi RƠI XUỐNG) =====
     private class GestureRippleView extends View {
