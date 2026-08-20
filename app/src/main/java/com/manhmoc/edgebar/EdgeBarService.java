@@ -24,6 +24,7 @@ import android.graphics.PixelFormat;
 import android.graphics.LinearGradient;
 import android.graphics.Shader;
 import android.graphics.DashPathEffect;
+import android.graphics.BlurMaskFilter;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CameraManager;
@@ -408,26 +409,49 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
     }
     return list;
 }
-    private class FlashView extends View {
-    private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE";
+        private class FlashView extends View {
+    private Paint pCore = new Paint(), pGlowMid = new Paint(), pGlowOuter = new Paint();
+    float radius = 40f; String cTheme = "WHITE";
     int aStyle = 0; private float phaseFraction = 0f;
-    private int effW = 0, effH = 0; // [FIX] cache 2 slider anim_w/anim_h trước đây bị bỏ quên
-    public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE);
-        p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND);
-        p.setAntiAlias(true); setLayerType(LAYER_TYPE_SOFTWARE, p);
-        updateStyle(); }
+    private int effW = 0, effH = 0;
+
+    public FlashView(Context c) {
+        super(c);
+        for (Paint p : new Paint[]{pCore, pGlowMid, pGlowOuter}) {
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeCap(Paint.Cap.ROUND);
+            p.setStrokeJoin(Paint.Join.ROUND);
+            p.setAntiAlias(true);
+        }
+        setLayerType(LAYER_TYPE_SOFTWARE, null); // bắt buộc để BlurMaskFilter hoạt động
+        updateStyle();
+    }
 
     public void updateStyle() {
-        p.setAlpha(prefs.getInt("anim_alpha", 255));
-        p.setStrokeWidth(prefs.getInt("anim_thick", 12));
+        int baseAlpha = prefs.getInt("anim_alpha", 255);
+        int thick = Math.max(4, prefs.getInt("anim_thick", 12));
         radius = prefs.getInt("anim_rad", 40);
         cTheme = prefs.getString("anim_color", "WHITE");
         aStyle = prefs.getInt("anim_style", 0);
-        // [FIX] Trước đây 2 dòng này không tồn tại -> slider "Chiều ngang/dọc
-        // Hiệu ứng" ghi vào prefs nhưng chưa bao giờ được đọc lại ở đâu cả.
         effW = prefs.getInt("anim_w", 0);
         effH = prefs.getInt("anim_h", 0);
-        if(getWidth() > 0) applyGradient(getWidth(), getHeight());
+
+        // Lõi: mảnh, sáng vừa phải, blur nhẹ để không "sắc lẻm"
+        pCore.setStrokeWidth(thick * 0.35f);
+        pCore.setAlpha((int)(baseAlpha * 0.9f));
+        pCore.setMaskFilter(new BlurMaskFilter(thick * 0.5f, BlurMaskFilter.Blur.NORMAL));
+
+        // Glow giữa: rộng hơn, mờ vừa
+        pGlowMid.setStrokeWidth(thick * 1.4f);
+        pGlowMid.setAlpha((int)(baseAlpha * 0.4f));
+        pGlowMid.setMaskFilter(new BlurMaskFilter(thick * 1.3f, BlurMaskFilter.Blur.NORMAL));
+
+        // Glow ngoài: rất rộng, rất mờ -> tạo halo lan tỏa như video
+        pGlowOuter.setStrokeWidth(thick * 3f);
+        pGlowOuter.setAlpha((int)(baseAlpha * 0.2f));
+        pGlowOuter.setMaskFilter(new BlurMaskFilter(thick * 2.8f, BlurMaskFilter.Blur.NORMAL));
+
+        if (getWidth() > 0) applyGradient(getWidth(), getHeight());
         invalidate();
     }
 
@@ -435,51 +459,56 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
         super.onSizeChanged(w, h, oldw, oldh); applyGradient(w, h);
     }
 
-    private void applyGradient(int w, int h) {  /* giống các bản trước */ 
-            int[] cArr; switch(cTheme) {
-                case "NEON": cArr=new int[]{Color.parseColor("#FF0055"), Color.parseColor("#7000FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FF0055")}; break;
-                case "CYBERPUNK": cArr=new int[]{Color.parseColor("#F500FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FFDF00"), Color.parseColor("#F500FF")}; break;
-                case "LAVA": cArr=new int[]{Color.parseColor("#FF0000"), Color.parseColor("#FF5A00"), Color.parseColor("#FF9A00"), Color.parseColor("#FF0000")}; break;
-                case "OCEAN": cArr=new int[]{Color.parseColor("#005BEA"), Color.parseColor("#00C6FB"), Color.parseColor("#005BEA")}; break;
-                case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
-                case "SUNSET": cArr=new int[]{Color.parseColor("#FF512F"), Color.parseColor("#DD2476"), Color.parseColor("#FF512F")}; break;
-                case "GOOGLE": cArr=new int[]{Color.parseColor("#4285F4"), Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4")}; break;
-                case "AURORA": cArr=new int[]{Color.parseColor("#8E2DE2"), Color.parseColor("#4A00E0"), Color.parseColor("#00E5FF"), Color.parseColor("#8E2DE2")}; break;
-                case "ABYSS": cArr=new int[]{Color.parseColor("#0F2027"), Color.parseColor("#203A43"), Color.parseColor("#2C5364"), Color.parseColor("#0F2027")}; break;
-                case "COSMIC": cArr=new int[]{Color.parseColor("#FF00CC"), Color.parseColor("#333399"), Color.parseColor("#FF00CC")}; break;
-                case "FOREST": cArr=new int[]{Color.parseColor("#11998E"), Color.parseColor("#38EF7D"), Color.parseColor("#11998E")}; break;
-                case "FLAME": cArr=new int[]{Color.parseColor("#F12711"), Color.parseColor("#F5AF19"), Color.parseColor("#F12711")}; break;
-                case "MIDNIGHT": cArr=new int[]{Color.parseColor("#1A2980"), Color.parseColor("#26D0CE"), Color.parseColor("#1A2980")}; break;
-                case "TROPICAL": cArr=new int[]{Color.parseColor("#43C6AC"), Color.parseColor("#F8FFAE"), Color.parseColor("#43C6AC")}; break;
-                case "CANDY": cArr=new int[]{Color.parseColor("#FF9A9E"), Color.parseColor("#FECFEF"), Color.parseColor("#FF9A9E")}; break;
-                default: cArr=new int[]{Color.WHITE, Color.parseColor("#E0E0E0"), Color.WHITE}; break;
-            }
-            // Tăng bán kính ShadowLayer từ 15f lên 25f để ánh sáng Neon bung tỏa rực rỡ hơn
-            p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR)); 
-            p.setShadowLayer(25f, 0, 0, cArr[0]);
+    private void applyGradient(int w, int h) {
+        int[] cArr; switch(cTheme) {
+            case "NEON": cArr=new int[]{Color.parseColor("#FF0055"), Color.parseColor("#7000FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FF0055")}; break;
+            case "CYBERPUNK": cArr=new int[]{Color.parseColor("#F500FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FFDF00"), Color.parseColor("#F500FF")}; break;
+            case "LAVA": cArr=new int[]{Color.parseColor("#FF0000"), Color.parseColor("#FF5A00"), Color.parseColor("#FF9A00"), Color.parseColor("#FF0000")}; break;
+            case "OCEAN": cArr=new int[]{Color.parseColor("#005BEA"), Color.parseColor("#00C6FB"), Color.parseColor("#005BEA")}; break;
+            case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
+            case "SUNSET": cArr=new int[]{Color.parseColor("#FF512F"), Color.parseColor("#DD2476"), Color.parseColor("#FF512F")}; break;
+            case "GOOGLE": cArr=new int[]{Color.parseColor("#4285F4"), Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4")}; break;
+            case "AURORA": cArr=new int[]{Color.parseColor("#8E2DE2"), Color.parseColor("#4A00E0"), Color.parseColor("#00E5FF"), Color.parseColor("#8E2DE2")}; break;
+            case "ABYSS": cArr=new int[]{Color.parseColor("#0F2027"), Color.parseColor("#203A43"), Color.parseColor("#2C5364"), Color.parseColor("#0F2027")}; break;
+            case "COSMIC": cArr=new int[]{Color.parseColor("#FF00CC"), Color.parseColor("#333399"), Color.parseColor("#FF00CC")}; break;
+            case "FOREST": cArr=new int[]{Color.parseColor("#11998E"), Color.parseColor("#38EF7D"), Color.parseColor("#11998E")}; break;
+            case "FLAME": cArr=new int[]{Color.parseColor("#F12711"), Color.parseColor("#F5AF19"), Color.parseColor("#F12711")}; break;
+            case "MIDNIGHT": cArr=new int[]{Color.parseColor("#1A2980"), Color.parseColor("#26D0CE"), Color.parseColor("#1A2980")}; break;
+            case "TROPICAL": cArr=new int[]{Color.parseColor("#43C6AC"), Color.parseColor("#F8FFAE"), Color.parseColor("#43C6AC")}; break;
+            case "CANDY": cArr=new int[]{Color.parseColor("#FF9A9E"), Color.parseColor("#FECFEF"), Color.parseColor("#FF9A9E")}; break;
+            default: cArr=new int[]{Color.WHITE, Color.parseColor("#E0E0E0"), Color.WHITE}; break;
         }
-        public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
+        Shader shader = new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR);
+        pCore.setShader(shader);
+        pGlowMid.setShader(shader);
+        pGlowOuter.setShader(shader);
+    }
+
+    public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
+
     @Override protected void onDraw(Canvas canvas) {
         float drawW = getWidth(); float drawH = getHeight();
-        if(drawW <= 0 || drawH <= 0) return;
-        float off = p.getStrokeWidth()/2;
-        // [FIX] Áp dụng anim_w/anim_h làm khoảng thu vào từ mép màn hình.
-        // Giá trị 0 = giữ nguyên Full màn hình (đúng như nhãn "(0=Full)").
-        // Có chặn Math.min để không bao giờ thu quá nửa màn hình (tránh khung
-        // bị lật ngược nếu người dùng kéo slider lên mức quá lớn).
+        if (drawW <= 0 || drawH <= 0) return;
+        float off = pGlowOuter.getStrokeWidth() / 2;
         float insetW = effW > 0 ? Math.min(effW, drawW/2f - 1) : 0f;
         float insetH = effH > 0 ? Math.min(effH, drawH/2f - 1) : 0f;
         float left = off + insetW; float top = off + insetH;
         float right = drawW - off - insetW; float bottom = drawH - off - insetH;
-        p.setStrokeCap(Paint.Cap.ROUND);
-        if(aStyle > 0) {
-            float perim = 2 * ((right - left) + (bottom - top)); // [FIX] tính chu vi theo khung ĐÃ thu, không theo full màn hình nữa, để hiệu ứng chạy viền (Nhấp Nháy/Tia sáng) bám sát đúng khung mới
+
+        if (aStyle > 0) {
+            float perim = 2 * ((right - left) + (bottom - top));
             float currentPhase = -perim * phaseFraction;
-            if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, currentPhase));
-            else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, currentPhase));
-            else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, currentPhase));
-        } else { p.setPathEffect(null); }
-        canvas.drawRoundRect(left, top, right, bottom, radius, radius, p);
+            float[] intervals = aStyle == 1 ? new float[]{perim/4f, 3*perim/4f}
+                : aStyle == 2 ? new float[]{perim/8f, 3*perim/8f}
+                : new float[]{perim/12f, 3*perim/12f};
+            DashPathEffect dash = new DashPathEffect(intervals, currentPhase);
+            pCore.setPathEffect(dash); pGlowMid.setPathEffect(dash); pGlowOuter.setPathEffect(dash);
+        } else {
+            pCore.setPathEffect(null); pGlowMid.setPathEffect(null); pGlowOuter.setPathEffect(null);
+        }
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, pGlowOuter);
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, pGlowMid);
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, pCore);
     }
 }
     // ===== GESTURE RIPPLE VIEW (chấm sóng chạm + icon NHẢY LÊN xoay 1 vòng rồi RƠI XUỐNG) =====
