@@ -1222,7 +1222,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         }
     }
     // [MỚI] Homeb chỉ có đúng 1 không gian "home_" nên không cần suy luận prefix.
-        private void hideSomeOverlay(String key) {
+            private void hideSomeOverlay(String key) {
         String targets = prefs.getString("home_hide_targets", "");
         if (targets.isEmpty()) return;
         boolean changed = false;

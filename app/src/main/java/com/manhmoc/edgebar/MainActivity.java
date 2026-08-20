@@ -1418,7 +1418,7 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
     String[] cornerHideKeys = new String[CORNERS.length];
     for (int i=0;i<CORNERS.length;i++) cornerHideKeys[i] = "corner_"+CORNERS[i];
     addHideTargetCheckboxes(gdHide, prefix, cornerHideKeys, CORNER_NAMES);
-    gd.addView(createDrawer(T("Corners to hide","Góc viền cần ẩn (Ẩn Một Số Bar/Corner)"), gdHide));
+    gd.addView(createDrawer("📁 " + T("Corners to hide","Góc viền cần ẩn") + " (▼)", gdHide));
     container.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", gd));
     // [MỚI] Drawer tàng hình thông minh riêng cho Bar — cùng thuật toán triggerFlash()
     // đã có sẵn trong BarView (chỉ lóe lên khi chạm rồi tự mờ dần), chỉ khác thời
@@ -6965,12 +6965,29 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                 dragHandle.setPadding(0, 0, 35, 0);
                 
                 // Đã bỏ lv.requestDisallowInterceptTouchEvent(true) để trả lại luồng Touch cho ListView
-                dragHandle.setOnTouchListener((vh, ev) -> {
-                    if (ev.getAction() == MotionEvent.ACTION_DOWN) {
-                        dragFromPos[0] = p; // Vị trí hiện tại trong List
-                        isDragging[0] = true;
+                                dragHandle.setOnTouchListener((vh, ev) -> {
+                    switch (ev.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN:
+                            dragFromPos[0] = p; isDragging[0] = true; return true;
+                        case MotionEvent.ACTION_MOVE: {
+                            if (!isDragging[0]) return true;
+                            int[] loc = new int[2]; lv.getLocationOnScreen(loc);
+                            int targetPos = lv.pointToPosition(0, (int) ev.getRawY() - loc[1]);
+                            List<String> curList = currentTab[0] == 0 ? selApps : (currentTab[0] == 1 ? selActs : selScs);
+                            if (targetPos != android.widget.AdapterView.INVALID_POSITION
+                                    && targetPos != dragFromPos[0] && targetPos < curList.size()
+                                    && dragFromPos[0] < curList.size()) {
+                                String moved = curList.remove(dragFromPos[0]);
+                                curList.add(targetPos, moved);
+                                dragFromPos[0] = targetPos;
+                                refreshList.run();
+                            }
+                            return true;
+                        }
+                        case MotionEvent.ACTION_UP: case MotionEvent.ACTION_CANCEL:
+                            isDragging[0] = false; dragFromPos[0] = -1; return true;
                     }
-                    return false;
+                    return true;
                 });
                 row.addView(dragHandle);
             }
@@ -7103,13 +7120,6 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
             refreshList.run();
         });
     });
-
-    lv.setOnTouchListener((v, e) -> {
-        if (!isDragging[0]) return false;
-        int action = e.getAction();
-        if (action == MotionEvent.ACTION_MOVE) {
-            int targetPos = lv.pointToPosition((int) e.getX(), (int) e.getY());
-            List<String> currentSelList = currentTab[0] == 0 ? selApps : (currentTab[0] == 1 ? selActs : selScs);
             // Valid logic: Đảm bảo vị trí kéo chỉ đổi chỗ các thành phần đã được chọn
             if (targetPos != android.widget.AdapterView.INVALID_POSITION
                     && targetPos != dragFromPos[0] && targetPos < currentSelList.size()
