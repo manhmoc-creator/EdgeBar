@@ -244,24 +244,25 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
     
     private void applyGradient(int w, int h) {  /* như cũ */ 
             int[] cArr; switch(cTheme) {
-                case "NEON": cArr=new int[]{Color.parseColor("#FF00FF"), Color.parseColor("#00FFFF"), Color.parseColor("#FF00FF")}; break;
-                case "CYBERPUNK": cArr=new int[]{Color.parseColor("#8A2BE2"), Color.parseColor("#FFD700"), Color.parseColor("#8A2BE2")}; break;
-                case "LAVA": cArr=new int[]{Color.parseColor("#FF4500"), Color.parseColor("#FF8C00"), Color.parseColor("#FF4500")}; break;
-                case "OCEAN": cArr=new int[]{Color.parseColor("#00BFFF"), Color.parseColor("#1E90FF"), Color.parseColor("#00BFFF")}; break;
+                case "NEON": cArr=new int[]{Color.parseColor("#FF0055"), Color.parseColor("#7000FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FF0055")}; break;
+                case "CYBERPUNK": cArr=new int[]{Color.parseColor("#F500FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FFDF00"), Color.parseColor("#F500FF")}; break;
+                case "LAVA": cArr=new int[]{Color.parseColor("#FF0000"), Color.parseColor("#FF5A00"), Color.parseColor("#FF9A00"), Color.parseColor("#FF0000")}; break;
+                case "OCEAN": cArr=new int[]{Color.parseColor("#005BEA"), Color.parseColor("#00C6FB"), Color.parseColor("#005BEA")}; break;
                 case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
-                case "SUNSET": cArr=new int[]{Color.parseColor("#FF1493"), Color.parseColor("#FF8C00"), Color.parseColor("#FF1493")}; break;
-                case "GOOGLE": cArr=new int[]{Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4"), Color.parseColor("#EA4335")}; break;
-                case "AURORA": cArr=new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#B388FF"), Color.parseColor("#FF4081")}; break;
-                case "ABYSS": cArr=new int[]{Color.parseColor("#00E5FF"), Color.parseColor("#1DE9B6"), Color.parseColor("#2979FF")}; break;
-                case "COSMIC": cArr=new int[]{Color.parseColor("#4A148C"), Color.parseColor("#E91E63"), Color.parseColor("#FFD700")}; break;
-                case "FOREST": cArr=new int[]{Color.parseColor("#1B5E20"), Color.parseColor("#4CAF50"), Color.parseColor("#FFEB3B")}; break;
-                case "FLAME": cArr=new int[]{Color.parseColor("#B71C1C"), Color.parseColor("#FF9800"), Color.parseColor("#FFEB3B")}; break;
-                case "MIDNIGHT": cArr=new int[]{Color.parseColor("#1A237E"), Color.parseColor("#7B1FA2"), Color.parseColor("#03A9F4")}; break;
-                case "TROPICAL": cArr=new int[]{Color.parseColor("#00695C"), Color.parseColor("#8BC34A"), Color.parseColor("#FF9800")}; break;
-                case "CANDY": cArr=new int[]{Color.parseColor("#F06292"), Color.parseColor("#4DD0E1"), Color.parseColor("#FFF176")}; break;
-                default: cArr=new int[]{Color.WHITE, Color.WHITE}; break;
+                case "SUNSET": cArr=new int[]{Color.parseColor("#FF512F"), Color.parseColor("#DD2476"), Color.parseColor("#FF512F")}; break;
+                case "GOOGLE": cArr=new int[]{Color.parseColor("#4285F4"), Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4")}; break;
+                case "AURORA": cArr=new int[]{Color.parseColor("#8E2DE2"), Color.parseColor("#4A00E0"), Color.parseColor("#00E5FF"), Color.parseColor("#8E2DE2")}; break;
+                case "ABYSS": cArr=new int[]{Color.parseColor("#0F2027"), Color.parseColor("#203A43"), Color.parseColor("#2C5364"), Color.parseColor("#0F2027")}; break;
+                case "COSMIC": cArr=new int[]{Color.parseColor("#FF00CC"), Color.parseColor("#333399"), Color.parseColor("#FF00CC")}; break;
+                case "FOREST": cArr=new int[]{Color.parseColor("#11998E"), Color.parseColor("#38EF7D"), Color.parseColor("#11998E")}; break;
+                case "FLAME": cArr=new int[]{Color.parseColor("#F12711"), Color.parseColor("#F5AF19"), Color.parseColor("#F12711")}; break;
+                case "MIDNIGHT": cArr=new int[]{Color.parseColor("#1A2980"), Color.parseColor("#26D0CE"), Color.parseColor("#1A2980")}; break;
+                case "TROPICAL": cArr=new int[]{Color.parseColor("#43C6AC"), Color.parseColor("#F8FFAE"), Color.parseColor("#43C6AC")}; break;
+                case "CANDY": cArr=new int[]{Color.parseColor("#FF9A9E"), Color.parseColor("#FECFEF"), Color.parseColor("#FF9A9E")}; break;
+                default: cArr=new int[]{Color.WHITE, Color.parseColor("#E0E0E0"), Color.WHITE}; break;
             }
-            p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR)); p.setShadowLayer(15f, 0, 0, cArr[0]);
+            p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR)); 
+            p.setShadowLayer(25f, 0, 0, cArr[0]);
         }
         public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
     @Override protected void onDraw(Canvas canvas) {
@@ -1588,7 +1589,8 @@ default:
         private long lastTapUpTime = 0;
         private static final long DTAP_WINDOW_MS = 300;
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
-
+        private static final float COMBO_THRESHOLD_PX = 130f;
+        private Runnable pendingTapRunnable = null; // Thêm biến hủy Tap
         public SidebarTouchListener(String keyBase, View v) {
             this.prefKeyBase = keyBase;
             this.myView = v;
@@ -1650,23 +1652,121 @@ default:
                 case MotionEvent.ACTION_DOWN:
                     sx = getFixedX(e); sy = getFixedY(e);
                     lastX = sx; lastY = sy;
+                    maxDx = 0; minDx = 0; maxDy = 0; minDy = 0;
                     st = System.currentTimeMillis();
                     longFired = false;
+                    isHolding = false;
+                    
                     lpHandler.removeCallbacks(holdCheckRunnable);
+                    // HỦY BỎ 1-Tap nếu user bắt đầu nhịp chạm/vuốt mới
+                    if (pendingTapRunnable != null) {
+                        lpHandler.removeCallbacks(pendingTapRunnable);
+                        pendingTapRunnable = null;
+                    }
                     ensureRippleView();
                     rippleView.showAt(sx, sy);
                     lpHandler.postDelayed(holdCheckRunnable, prefs.getInt("hold_dur", 600));
                     return true;
+                    
                 case MotionEvent.ACTION_MOVE:
                     lastX = getFixedX(e); lastY = getFixedY(e);
+                    float cdx = lastX - sx; float cdy = lastY - sy;
+                    if (cdx > maxDx) maxDx = cdx; if (cdx < minDx) minDx = cdx;
+                    if (cdy > maxDy) maxDy = cdy; if (cdy < minDy) minDy = cdy;
                     if (rippleView != null) rippleView.moveTo(lastX, lastY);
                     return true;
-                case MotionEvent.ACTION_UP:
+                    
                 case MotionEvent.ACTION_CANCEL:
+                    lpHandler.removeCallbacks(holdCheckRunnable);
+                    if (rippleView != null) rippleView.popRipple();
+                    return true;
+                    
+                case MotionEvent.ACTION_UP:
                     lpHandler.removeCallbacks(holdCheckRunnable);
                     if (longFired) {
                         if (rippleView != null) rippleView.popRipple();
                         return true;
+                    }
+                    float finalDx = lastX - sx, finalDy = lastY - sy;
+                    float absDx = Math.abs(finalDx), absDy = Math.abs(finalDy);
+                    String actionName = "";
+                    boolean isDiag = (myView instanceof CornerView && absDx > 40 && absDy > 40);
+
+                    if (isHolding) {
+                        if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
+                            actionName = "long"; 
+                        } else {
+                            if (isDiag) actionName = "diag_hold"; 
+                            else {
+                                if (absDx > absDy) actionName = finalDx > 0 ? "hold_right" : "hold_left";
+                                else actionName = finalDy > 0 ? "hold_down" : "hold_up";
+                            }
+                        }
+                    } else {
+                        if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
+                            long now = System.currentTimeMillis();
+                            boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
+                            float[] dirTap = computeJumpDirForTap();
+                            
+                            if (!hasDtap) {
+                                lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
+                                if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                            } else {
+                                long gap = now - lastTapUpTime;
+                                if (lastTapUpTime > 0 && gap <= DTAP_WINDOW_MS) {
+                                    if (gap > 40) { // Lọc nhiễu cảm ứng < 40ms
+                                        lastTapUpTime = 0; handleAction(prefKeyBase + "_dtap");
+                                        if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                                    } else {
+                                        lastTapUpTime = now;
+                                        final long myUpTs = now;
+                                        pendingTapRunnable = () -> {
+                                            if (lastTapUpTime == myUpTs) {
+                                                lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
+                                                if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                                            }
+                                        };
+                                        lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
+                                    }
+                                } else {
+                                    lastTapUpTime = now;
+                                    final long myUpTs = now;
+                                    pendingTapRunnable = () -> {
+                                        if (lastTapUpTime == myUpTs) {
+                                            lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
+                                            if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                                        }
+                                    };
+                                    lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
+                                }
+                            }
+                            if (rippleView != null) rippleView.popRipple();
+                            return true;
+                        } else {
+                            if (!isDiag) {
+                                if (minDy < -COMBO_THRESHOLD_PX && finalDy > minDy + SWIPE_CANCEL_SLOP_PX) actionName = "up_down";
+                                else if (maxDy > COMBO_THRESHOLD_PX && finalDy < maxDy - SWIPE_CANCEL_SLOP_PX) actionName = "down_up";
+                                else if (minDx < -COMBO_THRESHOLD_PX && finalDx > minDx + SWIPE_CANCEL_SLOP_PX) actionName = "left_right";
+                                else if (maxDx > COMBO_THRESHOLD_PX && finalDx < maxDx - SWIPE_CANCEL_SLOP_PX) actionName = "right_left";
+                                else if (absDx > absDy) actionName = finalDx > 0 ? "right" : "left";
+                                else actionName = finalDy > 0 ? "down" : "up";
+                            } else {
+                                actionName = "diag";
+                            }
+                        }
+                    }
+
+                    if (!actionName.isEmpty()) {
+                        handleAction(prefKeyBase + "_" + actionName);
+                        if (rippleView != null) {
+                            rippleView.popRipple();
+                            float swipeMag = (float) Math.sqrt(finalDx * finalDx + finalDy * finalDy);
+                            float dirX = swipeMag > 0.001f ? finalDx / swipeMag : 0f;
+                            float dirY = swipeMag > 0.001f ? finalDy / swipeMag : 0f;
+                            rippleView.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
+                        }
+                    }
+                    return true;
                     }
                     float dx = lastX - sx, dy = lastY - sy;
                     if (Math.abs(dx) > SWIPE_CANCEL_SLOP_PX || Math.abs(dy) > SWIPE_CANCEL_SLOP_PX) {

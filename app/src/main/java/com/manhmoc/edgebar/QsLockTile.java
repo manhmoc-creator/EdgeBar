@@ -16,35 +16,24 @@ public class QsLockTile extends TileService {
 
         if (!hasSecureWrite) {
             // Chưa có quyền → mở trang Accessibility để user bật tay
-            // (Tile không hỗ trợ Toast/Dialog nên dùng startActivityAndCollapse)
             Intent i = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivityAndCollapse(i);
             return;
         }
 
-        // Có quyền → toggle như cũ
+        // Đã có quyền -> Giao cho ToggleReceiver xử lý để kích hoạt chuẩn kịch bản đổi cờ, 
+        // Pause WM, bật Homeb và gọi Watchdog. Tránh lỗi tắt Homacc mà Homeb không lên.
+        Intent toggleIntent = new Intent("com.manhmoc.edgebar.TOGGLE_ACC");
+        toggleIntent.setPackage(getPackageName());
+        sendBroadcast(toggleIntent);
+        
+        // Cập nhật UI tạm thời của Tile cho mượt mắt
         boolean en = isAccOn();
-        try {
-            String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
-            String cur = Settings.Secure.getString(
-                getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            if (cur == null) cur = "";
-            if (en) cur = cur.replace(":" + mySvc, "")
-                             .replace(mySvc + ":", "")
-                             .replace(mySvc, "");
-            else cur = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
-            Settings.Secure.putString(getContentResolver(),
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, cur);
-            Settings.Secure.putString(getContentResolver(),
-                Settings.Secure.ACCESSIBILITY_ENABLED, "1");
-            Tile t = getQsTile();
+        Tile t = getQsTile();
+        if (t != null) {
             t.setState(!en ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
             t.updateTile();
-        } catch (Exception e) {
-            Intent i = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivityAndCollapse(i);
         }
     }
 }

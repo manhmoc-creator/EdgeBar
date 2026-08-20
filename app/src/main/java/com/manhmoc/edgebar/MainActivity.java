@@ -276,17 +276,35 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     } catch (Exception e) { return null; }
 }
     private void refreshPreview() { 
-    boolean inFrontierLock = currentMainTab==1 && currentGesTab==5 && frontierSubTab==0;
-    boolean inFrontierHome = currentMainTab==1 && currentGesTab==5 && frontierSubTab==1;
-    boolean inFrontierHomacc = currentMainTab==1 && currentGesTab==5 && frontierSubTab==2;
-    boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0)
-        || (currentMainTab==1 && currentGesTab==0) || inFrontierLock; 
+        boolean inFrontierLock = currentMainTab==1 && currentGesTab==5 && frontierSubTab==0;
+        boolean inFrontierHome = currentMainTab==1 && currentGesTab==5 && frontierSubTab==1;
+        boolean inFrontierHomacc = currentMainTab==1 && currentGesTab==5 && frontierSubTab==2;
+        boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0)
+            || (currentMainTab==1 && currentGesTab==0) || inFrontierLock; 
         boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4) || inFrontierHomacc;
-prefs.edit().putBoolean("preview_lock", pLock)
-    .putBoolean("preview_homacc", pHomacc)
-    .putBoolean("preview_home", inFrontierHome).apply();
-    Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); 
-}
+        
+        SharedPreferences.Editor ed = prefs.edit();
+        ed.putBoolean("preview_lock", pLock)
+          .putBoolean("preview_homacc", pHomacc)
+          .putBoolean("preview_home", inFrontierHome);
+
+        // Hồi sinh toàn bộ bar/corner của không gian đang được xem trước (Xoá cờ manual_hide)
+        if (pLock) {
+            for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
+            for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
+        }
+        if (inFrontierHome) {
+            for (String b : BARS) ed.putBoolean("home_" + b + "_manual_hide", false);
+            for (String cn : CORNERS) ed.putBoolean("home_corner_" + cn + "_manual_hide", false);
+        }
+        if (pHomacc) {
+            for (String b : BARS) ed.putBoolean("homacc_" + b + "_manual_hide", false);
+            for (String cn : CORNERS) ed.putBoolean("homacc_corner_" + cn + "_manual_hide", false);
+        }
+        ed.apply();
+        
+        Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); 
+    }
     private boolean isNotifListenerEnabled() {
         String flat = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
         return flat != null && flat.contains(getPackageName());
