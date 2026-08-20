@@ -6843,7 +6843,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                 });
 
                 // 3. Nút Số La Mã
-                Button btnRoman = makeMiniBtn(curRoman);
+                Button btnRoman = makeMiniBtn.apply(curRoman);
                 btnRoman.setTextColor(Color.parseColor("#4CAF50"));
                 btnRoman.setOnClickListener(v -> {
                     new android.app.AlertDialog.Builder(MainActivity.this).setItems(ROMANS, (dlg, which) -> {
@@ -6855,7 +6855,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                 });
 
                 // 4. Nút Chọn Icon
-                Button btnIcon = makeMiniBtn("🖌");
+                Button btnIcon = makeMiniBtn.apply("🖌");
                 btnIcon.setOnClickListener(v -> {
                     if (currentTab[0] == 2) showIconPickerDialog("shortcut_" + ref + "_icon_override", refreshList);
                     else showIconPickerForPanelAction(panelId, ref, refreshList);
