@@ -53,8 +53,21 @@ private String[] VOLKEY_GESTURES = {"tap", "dtap", "long"};
 private String[] VOLKEY_GESTURE_NAMES;
 private String[] M_BARS = {"r", "l", "t_r", "t_l", "t_c", "m_b_c", "m_mid_t", "m_mid_b"};
 private String[] M_BAR_NAMES;
-private String[] C_GESTURES = {"tap", "dtap", "long", "up", "down", "left", "right", "up_hold", "down_hold", "left_hold", "right_hold", "diag", "diag_hold"};
-private String[] C_GESTURE_NAMES;
+private String[] C_GESTURES = {
+    "tap", "dtap", "long", 
+    "up", "down", "left", "right", "diag",
+    "up_hold", "down_hold", "left_hold", "right_hold", "diag_hold",
+    "up_down", "down_up", "left_right", "right_left",
+    "hold_up", "hold_down", "hold_left", "hold_right"
+}; 
+private String[] C_GESTURE_NAMES = {
+    "1 Chạm", "2 Chạm", "Nhấn Giữ (Long)", 
+    "Vuốt Lên", "Vuốt Xuống", "Vuốt Trái", "Vuốt Phải", "Vuốt Chéo",
+    "Vuốt rồi Giữ Lên", "Vuốt rồi Giữ Xuống", "Vuốt rồi Giữ Trái", "Vuốt rồi Giữ Phải", "Vuốt rồi Giữ Chéo",
+    "Combo: Lên - Xuống", "Combo: Xuống - Lên", "Combo: Trái - Phải", "Combo: Phải - Trái",
+    "Gài số: Giữ + Vuốt Lên", "Gài số: Giữ + Vuốt Xuống", "Gài số: Giữ + Vuốt Trái", "Gài số: Giữ + Vuốt Phải"
+};
+
 // [TỐI ƯU PIN/RAM] Throttle ghi prefs khi kéo Slider — leading-edge throttle +
     // write bắt buộc lúc nhả tay. Giảm số lần apply() từ "mỗi pixel kéo" (40-100+ lần
     // mỗi lần vuốt) xuống tối đa ~16 lần/giây, vẫn giữ cảm giác preview real-time.
@@ -1462,7 +1475,7 @@ private LinearLayout buildGestureIconDrawer() {
     body.setVisibility(View.GONE);
 
     TextView header = new TextView(this);
-    header.setText("📁 " + T("ICON FOR 13 GESTURES FRONTIER", "ICON CHO 13 CỬ CHỈ") + " (▼)");
+    header.setText("📁 " + T("ICON FOR 21 GESTURES FRONTIER", "ICON CHO 21 CỬ CHỈ") + " (▼)");
     header.setTextColor(Color.parseColor("#00E5FF"));
     header.setPadding(30, 30, 30, 30);
     header.setTextSize(16);
@@ -1516,7 +1529,7 @@ body.addView(createSlider(T("Jump Icon Opacity", "Độ đậm Icon Nhảy"), "h
         }
         body.setVisibility(willOpen ? View.VISIBLE : View.GONE);
         header.setText((willOpen ? "📂 " : "📁 ")
-            + T("ICON FOR 13 GESTURES", "ICON CHO 13 CỬ CHỈ")
+            + T("ICON FOR 21 GESTURES", "ICON CHO 21 CỬ CHỈ")
             + (willOpen ? " (▲)" : " (▼)"));
         header.setBackground(getRounded(willOpen ? "#333333" : "#202124", 25f));
     });

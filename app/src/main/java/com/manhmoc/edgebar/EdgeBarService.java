@@ -1172,11 +1172,19 @@ private void triggerBlacklistAutoHomeb() {
                 case "HOME": performGlobalAction(GLOBAL_ACTION_HOME); break;
                 case "RECENTS": performGlobalAction(GLOBAL_ACTION_RECENTS); break;
                 case "SCREEN_OFF":
-performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); break;
-case "SPLIT_SCREEN":
-performGlobalAction(GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN); break;
-case "SCREEN_ON":
-// Thuật toán WakeLock giải phóng RAM nhanh
+                    // [MỚI] Hồi sinh màn Lock ngay lập tức khi ấn nút khóa màn hình
+                    SharedPreferences.Editor edOff = prefs.edit();
+                    for (String b : BARS) edOff.putBoolean("lock_" + b + "_manual_hide", false);
+                    for (String cn : CORNERS) edOff.putBoolean("lock_corner_" + cn + "_manual_hide", false);
+                    edOff.apply();
+                    updateVisibility();
+                    
+                    performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); 
+                    break;
+                case "SPLIT_SCREEN":
+                    performGlobalAction(GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN); 
+                    break;
+                case "SCREEN_ON":
                     // Thuật toán WakeLock giải phóng RAM nhanh
                     android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
                     if (pm != null && !pm.isInteractive()) {
@@ -1186,7 +1194,16 @@ case "SCREEN_ON":
                         wl.acquire(2000); // Chỉ giữ CPU trong 3 giây để bật màn, sau đó tự nhả RAM
                     }
                     break;
-                case "POWER_DIALOG": performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); break;
+                case "POWER_DIALOG": 
+                    // [MỚI] Hồi sinh màn Lock khi gọi lệnh mở Power Menu
+                    SharedPreferences.Editor edPower = prefs.edit();
+                    for (String b : BARS) edPower.putBoolean("lock_" + b + "_manual_hide", false);
+                    for (String cn : CORNERS) edPower.putBoolean("lock_corner_" + cn + "_manual_hide", false);
+                    edPower.apply();
+                    updateVisibility();
+                    
+                    performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); 
+                    break;
                 case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break;
                 case "SCREEN_RECORD": {
     if (ScreenRecorderService.isRunning) {
@@ -1426,9 +1443,11 @@ private void fireIntentById(String id) {
     private static final int MAX_TRIGGER_DEPTH = 3;
     // [MỚI] Hậu tố gesture (dài → ngắn) để tách "lock_r_up_hold" -> base "lock_r".
     private static final String[] GESTURE_SUFFIXES = {
-        "_up_hold","_down_hold","_left_hold","_right_hold","_diag_hold",
-        "_dtap","_long","_diag","_up","_down","_left","_right","_tap"
-    };
+    "_hold_up", "_hold_down", "_hold_left", "_hold_right",
+    "_up_down", "_down_up", "_left_right", "_right_left",
+    "_up_hold", "_down_hold", "_left_hold", "_right_hold", "_diag_hold",
+    "_dtap", "_long", "_diag", "_up", "_down", "_left", "_right", "_tap"
+};
     private String stripGestureSuffix(String key) {
         for (String suf : GESTURE_SUFFIXES) if (key.endsWith(suf)) return key.substring(0, key.length() - suf.length());
         return key;
@@ -1885,12 +1904,15 @@ if (panelEngine != null) panelEngine.rebuildAll();
         private String prefKeyBase;
         private View myView;
         private float sx, sy, lastX, lastY;
+        private float maxDx, minDx, maxDy, minDy; 
+        private boolean isHolding = false; 
         private long st;
         private boolean longFired = false;
         private final Handler lpHandler = new Handler(android.os.Looper.getMainLooper());
         private long lastTapUpTime = 0;
         private static final long DTAP_WINDOW_MS = 300;
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
+        private static final float COMBO_THRESHOLD_PX = 130f; // Quãng đường tối thiểu để nhận diện Combo vẩy tay
 
         public SidebarTouchListener(String keyBase, View v) {
             this.prefKeyBase = keyBase;
@@ -1920,12 +1942,11 @@ if (panelEngine != null) panelEngine.rebuildAll();
             }
         }
 
-        // [MỚI] Timer dùng chung phân xử Long Press và Swipe+Hold ngay khi ngón tay đang chạm
         private final Runnable holdCheckRunnable = () -> {
-            longFired = true;
             float cdx = lastX - sx, cdy = lastY - sy;
             if (Math.abs(cdx) > SWIPE_CANCEL_SLOP_PX || Math.abs(cdy) > SWIPE_CANCEL_SLOP_PX) {
-                // Đã vuốt ra xa và giữ -> Swipe + Hold
+                // [SWIPE + HOLD CŨ] Đã vuốt ra xa rồi đứng im
+                longFired = true; 
                 String actionName;
                 if (myView instanceof CornerView && Math.abs(cdx) > 40 && Math.abs(cdy) > 40) actionName = "diag_hold";
                 else {
@@ -1935,38 +1956,45 @@ if (panelEngine != null) panelEngine.rebuildAll();
                 handleAction(prefKeyBase + "_" + actionName);
                 if (rippleView != null) {
                     float swipeMag = (float) Math.sqrt(cdx * cdx + cdy * cdy);
-                    float dirX = swipeMag > 0.001f ? cdx / swipeMag : 0f;
-                    float dirY = swipeMag > 0.001f ? cdy / swipeMag : 0f;
-                    rippleView.jumpIcon(sx, sy, actionName, Color.argb(180, 96, 125, 139), dirX, dirY);
+                    rippleView.jumpIcon(sx, sy, actionName, Color.argb(180, 96, 125, 139), cdx/swipeMag, cdy/swipeMag);
                 }
             } else {
-                // Đứng im tại chỗ -> Normal Long Press
-                handleAction(prefKeyBase + "_long");
-                if (rippleView != null) {
-                    float[] dir = computeJumpDirForTap();
-                    rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]);
-                }
+                // [GÀI SỐ MỚI] Tay đứng im tại chỗ -> Rung báo hiệu vào trạng thái "Giữ + Vuốt"
+                isHolding = true;
+                doVibrate(30);
             }
         };
 
         @Override public boolean onTouch(View v, MotionEvent e) {
             if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
+            
             switch (e.getAction()) {
                 case MotionEvent.ACTION_DOWN:
                     sx = getFixedX(e); sy = getFixedY(e);
                     lastX = sx; lastY = sy;
+                    maxDx = 0; minDx = 0; maxDy = 0; minDy = 0;
                     st = System.currentTimeMillis();
                     longFired = false;
+                    isHolding = false;
+                    
                     lpHandler.removeCallbacks(holdCheckRunnable);
                     ensureRippleView();
                     rippleView.showAt(sx, sy);
                     lpHandler.postDelayed(holdCheckRunnable, prefs.getInt("hold_dur", 600));
                     return true;
+                    
                 case MotionEvent.ACTION_MOVE:
                     lastX = getFixedX(e); lastY = getFixedY(e);
+                    float cdx = lastX - sx; float cdy = lastY - sy;
+                    
+                    // Track cực đại/cực tiểu để bắt Combo Vẩy
+                    if (cdx > maxDx) maxDx = cdx; if (cdx < minDx) minDx = cdx;
+                    if (cdy > maxDy) maxDy = cdy; if (cdy < minDy) minDy = cdy;
+                    
                     if (rippleView != null) rippleView.moveTo(lastX, lastY);
                     return true;
+                    
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     lpHandler.removeCallbacks(holdCheckRunnable);
@@ -1974,52 +2002,77 @@ if (panelEngine != null) panelEngine.rebuildAll();
                         if (rippleView != null) rippleView.popRipple();
                         return true;
                     }
-                    float dx = lastX - sx, dy = lastY - sy;
-                    if (Math.abs(dx) > SWIPE_CANCEL_SLOP_PX || Math.abs(dy) > SWIPE_CANCEL_SLOP_PX) {
-                        // Normal Swipe (nhả tay nhanh)
-                        String actionName;
-                        if (myView instanceof CornerView && Math.abs(dx) > 40 && Math.abs(dy) > 40) actionName = "diag";
-                        else {
-                            if (Math.abs(dx) > Math.abs(dy)) actionName = dx > 0 ? "right" : "left";
-                            else actionName = dy > 0 ? "down" : "up";
+                    
+                    float finalDx = lastX - sx, finalDy = lastY - sy;
+                    float absDx = Math.abs(finalDx), absDy = Math.abs(finalDy);
+                    String actionName = "";
+                    boolean isDiag = (myView instanceof CornerView && absDx > 40 && absDy > 40);
+
+                    if (isHolding) {
+                        // ============ [ĐÃ GÀI SỐ: HOLD VÀ VUỐT] ============
+                        if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
+                            actionName = "long"; // Nhả tay tại chỗ
+                        } else {
+                            if (isDiag) actionName = "diag_hold"; // Gom chung chéo gài số
+                            else {
+                                if (absDx > absDy) actionName = finalDx > 0 ? "hold_right" : "hold_left";
+                                else actionName = finalDy > 0 ? "hold_down" : "hold_up";
+                            }
                         }
+                    } else {
+                        // ============ [CHƯA GÀI SỐ: TAP VÀ SWIPE NHANH] ============
+                        if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
+                            long now = System.currentTimeMillis();
+                            boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
+                            float[] dirTap = computeJumpDirForTap();
+                            if (!hasDtap) {
+                                lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
+                                if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                            } else if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
+                                lastTapUpTime = 0; handleAction(prefKeyBase + "_dtap");
+                                if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                            } else {
+                                lastTapUpTime = now; final long myUpTs = now;
+                                lpHandler.postDelayed(() -> {
+                                    if (lastTapUpTime == myUpTs) {
+                                        lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
+                                        if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                                    }
+                                }, DTAP_WINDOW_MS + 20);
+                            }
+                            if (rippleView != null) rippleView.popRipple();
+                            return true;
+                        } else {
+                            // CHECK COMBO SWIPE
+                            if (!isDiag) {
+                                if (minDy < -COMBO_THRESHOLD_PX && finalDy > minDy + SWIPE_CANCEL_SLOP_PX) actionName = "up_down";
+                                else if (maxDy > COMBO_THRESHOLD_PX && finalDy < maxDy - SWIPE_CANCEL_SLOP_PX) actionName = "down_up";
+                                else if (minDx < -COMBO_THRESHOLD_PX && finalDx > minDx + SWIPE_CANCEL_SLOP_PX) actionName = "left_right";
+                                else if (maxDx > COMBO_THRESHOLD_PX && finalDx < maxDx - SWIPE_CANCEL_SLOP_PX) actionName = "right_left";
+                                // NORMAL SWIPE (nếu không dính combo)
+                                else if (absDx > absDy) actionName = finalDx > 0 ? "right" : "left";
+                                else actionName = finalDy > 0 ? "down" : "up";
+                            } else {
+                                actionName = "diag";
+                            }
+                        }
+                    }
+
+                    if (!actionName.isEmpty()) {
                         handleAction(prefKeyBase + "_" + actionName);
                         if (rippleView != null) {
                             rippleView.popRipple();
-                            float swipeMag = (float) Math.sqrt(dx * dx + dy * dy);
-                            float dirX = swipeMag > 0.001f ? dx / swipeMag : 0f;
-                            float dirY = swipeMag > 0.001f ? dy / swipeMag : 0f;
+                            float swipeMag = (float) Math.sqrt(finalDx * finalDx + finalDy * finalDy);
+                            float dirX = swipeMag > 0.001f ? finalDx / swipeMag : 0f;
+                            float dirY = swipeMag > 0.001f ? finalDy / swipeMag : 0f;
                             rippleView.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
                         }
-                        return true;
                     }
-                    // Tap / Double Tap logic
-                    long now = System.currentTimeMillis();
-                    boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
-                    float[] dirTap = computeJumpDirForTap();
-                    if (!hasDtap) {
-                        lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
-                        if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
-                    } else if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
-                        lastTapUpTime = 0; handleAction(prefKeyBase + "_dtap");
-                        if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
-                    } else {
-                        lastTapUpTime = now; final long myUpTs = now;
-                        lpHandler.postDelayed(() -> {
-                            if (lastTapUpTime == myUpTs) {
-                                lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
-                                if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
-                            }
-                        }, DTAP_WINDOW_MS + 20);
-                    }
-                    if (rippleView != null) rippleView.popRipple();
                     return true;
             }
             return true;
         }
     }
-
-
 private void drawAccessibleHome() {
     if (isHomaccDrawn) return; // đã vẽ rồi, tránh addView() 2 lần gây crash
     for (int i = 0; i < 12; i++) {
