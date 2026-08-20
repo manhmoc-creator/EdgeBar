@@ -40,7 +40,7 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs; private boolean isVi;
     private String T(String en, String vi) { return isVi ? vi : en; }
     
-    private String[] ACT_KEYS = new String[40]; private String[] ACT_LABS = new String[40];
+    private String[] ACT_KEYS = new String[60]; private String[] ACT_LABS = new String[60];
     private String[] BARS = {"b_c", "r", "l", "r_u", "r_c", "r_d", "t_c", "t_r", "t_l", "l_u", "l_c", "l_d"}; private String[] BAR_NAMES; 
     private String[] CORNERS = {"br", "bl", "tr", "tl"}; private String[] CORNER_NAMES;
     private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; private String[] COLOR_NAMES;
@@ -116,7 +116,7 @@ private Runnable currentLevelBackAction = null;
     // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "🎃 19.12.3.6.40";
+    private final String CURRENT_VERSION = "👺 19.12.3.6.41";
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
     private Button btnWriteSettings; // MỚI
@@ -303,13 +303,26 @@ String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
         "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA",
         "NOTIFICATIONS", "QUICK_SETTINGS", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "TOGGLE_RECORD",
         "LAUNCH_APP", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE",
-        "PAUSE_RECORD", "OPEN_STORAGE_SCAN", "SCAN_QR", "TOGGLE_WORK_PROFILE", "PLAY_MY_PLAYLIST"};
+        "PAUSE_RECORD", "OPEN_STORAGE_SCAN", "SCAN_QR", "TOGGLE_WORK_PROFILE", "PLAY_MY_PLAYLIST",
+                // [MỚI] Ẩn/Hồi sinh overlay + 8 action Giả Lập Cử Chỉ (TRIGGER_*)
+        "HIDE_SOME_OVERLAY", "SHOW_ALL_OVERLAY",
+        "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
+        "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
+        "TRIGGER_DIAG"};
+
+
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Toggle Voice Record", "Bật/Tắt Ghi Âm"),
         T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình"), T("Screen Record", "Quay màn hình"), T("Auto-Rotate Toggle", "Bật/Tắt Tự Động Xoay"),
         T("Pause/Resume Recording", "Tạm Dừng/Tiếp Tục Ghi Âm"), T("Storage Scan", "Quét Dung Lượng"), T("Scan QR", "Quét QR"),
-         T("Toggle Island (Work Profile)", "Bật/Tắt Đảo (Island)"), T("Play My Playlist", "Phát My Playlist")};
+         T("Toggle Island (Work Profile)", "Bật/Tắt Đảo (Island)"), T("Play My Playlist", "Phát My Playlist"),
+                T("Hide Some Overlay", "Ẩn Một Số Bar/Corner"),
+        T("Show All Overlay", "Hồi Sinh Toàn Bộ Bar/Corner"),
+        T("Trigger: Tap", "Giả Lập: Chạm"), T("Trigger: Double Tap", "Giả Lập: Chạm Đúp"), T("Trigger: Long Press", "Giả Lập: Giữ"),
+        T("Trigger: Swipe Up", "Giả Lập: Vuốt Lên"), T("Trigger: Swipe Down", "Giả Lập: Vuốt Xuống"),
+        T("Trigger: Swipe Left", "Giả Lập: Vuốt Trái"), T("Trigger: Swipe Right", "Giả Lập: Vuốt Phải"),
+        T("Trigger: Diagonal", "Giả Lập: Chéo")};
 for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
 // LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
@@ -2592,11 +2605,11 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
         : new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
     List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeysForPack, ACT_KEYS, ACT_LABS);
     List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
-    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR", "PLAY_MY_PLAYLIST"}, ACT_KEYS, ACT_LABS);
-    List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
-    List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
+        List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"HIDE_SOME_OVERLAY", "SHOW_ALL_OVERLAY", "TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR", "PLAY_MY_PLAYLIST"}, ACT_KEYS, ACT_LABS);
+    final String[] hideTargetsPack = { sourceId != null ? prefs.getString("prule_" + sourceId + "_hide_targets", "") : "" };
     vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
     vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
+    vAct.addView(buildHideTargetsConfigButton(hideTargetsPack));
     vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0", true));
     vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
     vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
@@ -2678,16 +2691,16 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
             curRules.add(targetId);
             prefs.edit().putString(listKey, android.text.TextUtils.join(",", curRules)).apply();
         }
-        prefs.edit()
+                prefs.edit()
             .putString("prule_" + targetId + "_gestures", android.text.TextUtils.join(",", gestures))
             .putString("prule_" + targetId + "_acts", android.text.TextUtils.join(",", selectedActs))
             .putString("prule_" + targetId + "_launch_pkg", launchAppPkg[0])
             .putString("prule_" + targetId + "_shortcut_id", shortcutId[0])
+            .putString("prule_" + targetId + "_hide_targets", hideTargetsPack[0])
             .putBoolean("prule_" + targetId + "_vib", cbVib.isChecked())
             .putBoolean("prule_" + targetId + "_anim", cbAnim.isChecked())
             .putBoolean("prule_" + targetId + "_en", true)
             .apply();
-
         reapplyPackIfEnabledByItemKey(appliedItemKey); // [MỚI] — đồng bộ action xuống lock_r_tap thật
 
         if (onRefresh != null) onRefresh.run();
@@ -2718,6 +2731,7 @@ private void applyPackRulesToSpace(String itemKey, String targetPrefix, String c
                 .putBoolean(finalKey + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
                 .putString(finalKey + "_launch_pkg", prefs.getString("prule_" + rId + "_launch_pkg", ""))
                 .putString(finalKey + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
+                .putString(finalKey + "_hide_targets", prefs.getString("prule_" + rId + "_hide_targets", ""))
                 .apply();
         }
     }
@@ -2933,6 +2947,7 @@ String[] savedArray = savedActs.split(",");
 
 final boolean[] launchAppSelected = { false };
 final String[] launchAppPkg = { editKey != null ? prefs.getString(editKey + "_launch_pkg", "") : "" };
+final String[] hideTargets = { editKey != null ? prefs.getString(editKey + "_hide_targets", "") : "" };
 final boolean[] shortcutSelected = { false };
 final String[] shortcutId = { "" };
 
@@ -2968,9 +2983,18 @@ for (String sa : savedArray) {
         } else {
             sysKeys = new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
         }
-        List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeys, actKeysUsed, actLabsUsed);
+                List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeys, actKeysUsed, actLabsUsed);
                 List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
         vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
+                // [MỚI] Nhóm riêng: 8 action Giả Lập Cử Chỉ — HIDE/SHOW overlay đã dời sang UTILITIES
+        if (!isVolKeyMode) {
+            List<String[]> TRIGGER_ITEMS = buildItemsForKeys(new String[]{
+                "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
+                "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
+                "TRIGGER_DIAG"
+            }, actKeysUsed, actLabsUsed);
+            vAct.addView(buildActionCategoryButton("GESTURES", "🌀", TRIGGER_ITEMS, selectedActs, "#009688"));
+        }
         if (!isLockSpace && !isVolKeyMode) {
             LinearLayout rowApp = new LinearLayout(this);
             rowApp.setOrientation(LinearLayout.HORIZONTAL);
@@ -3024,10 +3048,11 @@ for (String sa : savedArray) {
                 actKeysUsed, actLabsUsed);
             vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", VOLKEY_UTIL_ITEMS, selectedActs, "#FF9800"));
         } else {
-            List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR", "PLAY_MY_PLAYLIST"}, actKeysUsed, actLabsUsed);
+                        List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"HIDE_SOME_OVERLAY", "SHOW_ALL_OVERLAY", "TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR", "PLAY_MY_PLAYLIST"}, actKeysUsed, actLabsUsed);
             List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
             List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
             vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
+            vAct.addView(buildHideTargetsConfigButton(hideTargets));
             vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0", true));
             vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
             vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
@@ -3115,6 +3140,7 @@ prefs.edit()
      .putBoolean(finalKey+"_anim", cbAnim.isChecked())
      .putString(finalKey+"_launch_pkg", launchAppPkg[0])
      .putString(finalKey+"_shortcut_id", shortcutId[0])
+     .putString(finalKey+"_hide_targets", hideTargets[0])
      .apply();
 }
             }
@@ -3201,7 +3227,89 @@ private List<String[]> buildItemsForPrefix(String prefix, String[] actKeysUsed, 
     }
     return out;
 }
+// [MỚI] Nút mở dialog chọn Bar/Corner sẽ bị ẩn khi HIDE_SOME_OVERLAY chạy.
+// Chỉ 1 String CSV lưu trong RAM lúc dựng dialog — Zero cost nếu user không đụng tới.
+private Button buildHideTargetsConfigButton(String[] hideTargets) {
+    Button btn = new Button(this);
+    btn.setBackground(getRounded("#FF9800", 20f));
+    btn.setTextColor(Color.WHITE);
+    btn.setTextSize(12.5f);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+    lp.setMargins(0, 0, 0, 20);
+    btn.setLayoutParams(lp);
+    Runnable refresh = () -> {
+        int cnt = hideTargets[0].isEmpty() ? 0 : hideTargets[0].split(",").length;
+        btn.setText("📦 " + T("Bar/Corner to hide", "Bar/Corner cần ẩn") + (cnt > 0 ? " (" + cnt + ")" : ""));
+    };
+    refresh.run();
+    btn.setOnClickListener(v -> showHideTargetsPicker(hideTargets[0], picked -> { hideTargets[0] = picked; refresh.run(); }));
+    return btn;
+}
 
+// [MỚI] Danh sách phẳng 12 Bar + 4 Corner (dùng đúng BARS[]/CORNERS[] thật của service,
+// không phải ALL_COMP_KEYS) — vì đây là ẩn/hiện VIEW thật, phải khớp key mà
+// updateVisibility()/updateHomaccLive() đang đọc ("<prefix><bar>_manual_hide").
+private void showHideTargetsPicker(String currentCsv, java.util.function.Consumer<String> onSaved) {
+    java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>();
+    for (String s : currentCsv.split(",")) if (!s.trim().isEmpty()) selected.add(s.trim());
+
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212"));
+    root.setPadding(30, 80, 30, 30);
+
+    TextView title = new TextView(this);
+    title.setText(T("Choose Bar/Corner to hide", "Chọn Bar/Corner cần ẩn"));
+    title.setTextColor(Color.parseColor("#FF9800")); title.setTextSize(18); title.setPadding(0, 0, 0, 20);
+    root.addView(title);
+
+    ScrollView scroll = new ScrollView(this);
+    scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    LinearLayout list = new LinearLayout(this);
+    list.setOrientation(LinearLayout.VERTICAL);
+    scroll.addView(list);
+    root.addView(scroll);
+
+    ArrayList<CheckBox> boxes = new ArrayList<>();
+    ArrayList<String> keys = new ArrayList<>();
+    for (int i = 0; i < BARS.length; i++) {
+        CheckBox cb = new CheckBox(this);
+        cb.setText("📊 " + BAR_NAMES[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0, 14, 0, 14);
+        cb.setChecked(selected.contains(BARS[i]));
+        boxes.add(cb); keys.add(BARS[i]); list.addView(cb);
+    }
+    for (int i = 0; i < CORNERS.length; i++) {
+        CheckBox cb = new CheckBox(this);
+        String ck = "corner_" + CORNERS[i];
+        cb.setText("📐 " + CORNER_NAMES[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0, 14, 0, 14);
+        cb.setChecked(selected.contains(ck));
+        boxes.add(cb); keys.add(ck); list.addView(cb);
+    }
+
+    LinearLayout footer = new LinearLayout(this);
+    footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0, 20, 0, 0);
+    Button bCancel = new Button(this); bCancel.setText(T("CANCEL", "HỦY"));
+    bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE);
+    bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Button bSave2 = new Button(this); bSave2.setText(T("SAVE", "LƯU"));
+    bSave2.setBackground(getRounded("#4CAF50", 20f)); bSave2.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams slp2 = new LinearLayout.LayoutParams(0, -2, 1f); slp2.setMargins(20, 0, 0, 0);
+    bSave2.setLayoutParams(slp2);
+    footer.addView(bCancel); footer.addView(bSave2);
+    root.addView(footer);
+
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave2.setOnClickListener(v -> {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < boxes.size(); i++) {
+            if (boxes.get(i).isChecked()) { if (sb.length() > 0) sb.append(','); sb.append(keys.get(i)); }
+        }
+        onSaved.accept(sb.toString());
+        d.dismiss();
+    });
+    d.setContentView(root); d.show();
+}
 private Button buildActionCategoryButton(String title, String emoji, List<String[]> items, java.util.LinkedHashSet<String> selectedSet, String colorHex) {
     return buildActionCategoryButton(title, emoji, items, selectedSet, colorHex, false);
 }

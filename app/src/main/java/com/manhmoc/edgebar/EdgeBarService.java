@@ -1397,38 +1397,101 @@ private void fireIntentById(String id) {
         });
     }
 
-    private void handleAction(String key) {
+        // [MỚI] Chặn đệ quy vô hạn của TRIGGER_* — user tự tạo vòng lặp A→B→A vẫn an toàn.
+    private static final int MAX_TRIGGER_DEPTH = 3;
+    // [MỚI] Hậu tố gesture (dài → ngắn) để tách "lock_r_up_hold" -> base "lock_r".
+    private static final String[] GESTURE_SUFFIXES = {
+        "_up_hold","_down_hold","_left_hold","_right_hold","_diag_hold",
+        "_dtap","_long","_diag","_up","_down","_left","_right","_tap"
+    };
+    private String stripGestureSuffix(String key) {
+        for (String suf : GESTURE_SUFFIXES) if (key.endsWith(suf)) return key.substring(0, key.length() - suf.length());
+        return key;
+    }
+    private void handleAction(String key) { handleAction(key, 0, true); }
+    private void handleAction(String key, int depth, boolean applyVibAnim) {
         String action = prefs.getString(key, "NONE");
         boolean isOn = prefs.getBoolean(key + "_on", true);
-        if (!action.equals("NONE") && isOn) {
+        if (action.equals("NONE") || !isOn) return;
+        // Rung/hiệu ứng CHỈ chạy theo gesture NGUỒN — gesture đích bị TRIGGER tới
+        // không tự bắn thêm rung/animation riêng, tránh nhân đôi cảm giác cho user.
+        if (applyVibAnim) {
             if (prefs.getBoolean(key+"_vib", true)) doVibrate(prefs.getInt("vib_dur",30));
             if (prefs.getBoolean(key+"_anim", true)) playAnim();
-            String[] acts = action.split(",");
-         for (String a : acts) {
-    if (a.trim().equals("RUN_SHORTCUT")) {
-    String scId = prefs.getString(key + "_shortcut_id", "");
-    if (!scId.isEmpty()) {
-        try {
-            String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
-            if (!uri.isEmpty()) {
-                Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
-                scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(scIntent);
-            }
-        } catch (Exception ignored) {}
+        }
+        String[] acts = action.split(",");
+        for (String a : acts) {
+            String at = a.trim();
+            if (at.startsWith("TRIGGER_")) {
+                // [MỚI] Giả lập cử chỉ khác NGAY TẠI component đang phát cử chỉ —
+                // chỉ gọi lại handleAction() nội bộ, không dispatchGesture() ra ngoài.
+                if (depth >= MAX_TRIGGER_DEPTH) continue;
+                String targetGesture = at.substring(8).toLowerCase(java.util.Locale.ROOT);
+                String base = stripGestureSuffix(key);
+                handleAction(base + "_" + targetGesture, depth + 1, false);
+                        } else if (at.equals("HIDE_SOME_OVERLAY")) {
+                hideSomeOverlay(key);
+            } else if (at.equals("SHOW_ALL_OVERLAY")) {
+                showAllOverlay(key);
+            } else if (at.equals("RUN_SHORTCUT")) {
+                String scId = prefs.getString(key + "_shortcut_id", "");
+                if (!scId.isEmpty()) {
+                    try {
+                        String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+                        if (!uri.isEmpty()) {
+                            Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
+                            scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(scIntent);
+                        }
+                    } catch (Exception ignored) {}
+                }
+            } else if (at.equals("LAUNCH_APP")) {
+                String pkg = prefs.getString(key + "_launch_pkg", "");
+                if (!pkg.isEmpty()) {
+                    try {
+                        Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
+                        if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
+                    } catch (Exception ignored) {}
+                }
+            } else exec(at);
+        }
     }
-} else if (a.trim().equals("LAUNCH_APP")) {
-        String pkg = prefs.getString(key + "_launch_pkg", "");
-        if (!pkg.isEmpty()) {
-            try {
-                Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
-                if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
-            } catch (Exception ignored) {}
+    // [MỚI] Ẩn thủ công đúng danh sách bar/corner user đã chọn cho rule này — tái dùng
+    // NGUYÊN VẸN cờ "_manual_hide" đã có sẵn (đọc trong updateVisibility()/updateHomaccLive()),
+    // Zero-cost khi rule không gán HIDE_SOME_OVERLAY: chỉ 1 lệnh đọc prefs, return ngay nếu rỗng.
+    private void hideSomeOverlay(String key) {
+        String targets = prefs.getString(key + "_hide_targets", "");
+        if (targets.isEmpty()) return;
+        String prefix = key.startsWith("homacc_") ? "homacc_" : "lock_";
+        boolean changed = false;
+        SharedPreferences.Editor ed = prefs.edit();
+        for (String t : targets.split(",")) {
+            String tt = t.trim();
+            if (tt.isEmpty()) continue;
+            String k = prefix + tt + "_manual_hide";
+            if (!prefs.getBoolean(k, false)) { ed.putBoolean(k, true); changed = true; }
         }
-    } else exec(a.trim());
-}
-
+        if (changed) { ed.apply(); updateVisibility(); }
+    }
+    // [MỚI] Hồi sinh toàn bộ bar/corner đang bị ẩn thủ công (cờ "_manual_hide") của
+    // ĐÚNG không gian chứa key vừa kích hoạt — Lock/Homacc tách biệt qua prefix, không
+    // lẫn nhau. Chỉ ghi prefs + gọi updateVisibility() 1 lần nếu thật sự có gì đổi;
+    // không bar/corner nào đang ẩn thủ công thì đây là no-op (Zero-cost), và vì
+    // bars[]/corners[] là mảng View cố định add đúng 1 lần lúc khởi động nên tuyệt
+    // đối không có chuyện "nhân bản" bar khi gọi hàm này nhiều lần.
+    private void showAllOverlay(String key) {
+        String prefix = key.startsWith("homacc_") ? "homacc_" : "lock_";
+        boolean changed = false;
+        SharedPreferences.Editor ed = prefs.edit();
+        for (String barKey : BARS) {
+            String k = prefix + barKey + "_manual_hide";
+            if (prefs.getBoolean(k, false)) { ed.putBoolean(k, false); changed = true; }
         }
+        for (String cornerKey : CORNERS) {
+            String k = prefix + "corner_" + cornerKey + "_manual_hide";
+            if (prefs.getBoolean(k, false)) { ed.putBoolean(k, false); changed = true; }
+        }
+        if (changed) { ed.apply(); updateVisibility(); }
     }
     private void doVibrate(int dur) { if (dur<=0) return; try { if (Build.VERSION.SDK_INT>=26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
 
@@ -1673,7 +1736,7 @@ if (hide && fV != null) fV.setVisibility(View.GONE);
 for (int i=0;i<12;i++) {
             if (bars[i]==null) continue;
             boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", false);
-    bars[i].setVisibility((en && isLocked && !hide) ? View.VISIBLE : View.GONE);
+        bars[i].setVisibility((en && isLocked && !hide && !prefs.getBoolean("lock_"+BARS[i]+"_manual_hide", false)) ? View.VISIBLE : View.GONE);
     if (en && isLocked) {
                 int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha",50);
                 int w = prefs.getInt("lock_"+BARS[i]+"_w",300);
@@ -1701,7 +1764,7 @@ int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", prefs.getInt("lock_b
         for (int i=0;i<4;i++) {
             if (corners[i]==null) continue;
             boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", false);
-            corners[i].setVisibility((cornEn && isLocked && !hide) ? View.VISIBLE : View.GONE);
+            corners[i].setVisibility((cornEn && isLocked && !hide && !prefs.getBoolean("lock_corner_"+CORNERS[i]+"_manual_hide", false)) ? View.VISIBLE : View.GONE);
             if (cornEn && isLocked) {
                 String ck = "lock_corner_"+CORNERS[i]+"_";
                 int moonAlpha = prefs.getInt("lock_corner_moon_alpha",100);
@@ -1929,9 +1992,10 @@ private void updateHomaccLive() {
     for (int i = 0; i < 12; i++) {
         View v = accHomeBars[i];
         if (v == null || !(v instanceof BarView)) continue;
-        boolean en = prefs.getBoolean("homacc_" + BARS[i] + "_en", false);
-        v.setVisibility(en ? View.VISIBLE : View.GONE);
-        if (!en) continue;
+                boolean en = prefs.getBoolean("homacc_" + BARS[i] + "_en", false);
+        boolean manualHidden = prefs.getBoolean("homacc_" + BARS[i] + "_manual_hide", false);
+        v.setVisibility((en && !manualHidden) ? View.VISIBLE : View.GONE);
+        if (!en || manualHidden) continue;
         int alpha = prefs.getInt("homacc_" + BARS[i] + "_alpha", 50);
         int w = prefs.getInt("homacc_" + BARS[i] + "_w", 300);
         int h = prefs.getInt("homacc_" + BARS[i] + "_h", 60);
@@ -1956,9 +2020,10 @@ private void updateHomaccLive() {
     for (int i = 0; i < 4; i++) {
         View v = accHomeCorners[i];
         if (v == null || !(v instanceof CornerView)) continue;
-        boolean en = prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_en", false);
-        v.setVisibility(en ? View.VISIBLE : View.GONE);
-        if (!en) continue;
+                boolean en = prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_en", false);
+        boolean manualHidden = prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_manual_hide", false);
+        v.setVisibility((en && !manualHidden) ? View.VISIBLE : View.GONE);
+        if (!en || manualHidden) continue;
         String ck = "homacc_corner_" + CORNERS[i] + "_";
         int moonAlpha = prefs.getInt("homacc_corner_moon_alpha", 100);
         int strokeAlpha = prefs.getInt("homacc_corner_stroke_alpha", 200);
