@@ -1766,7 +1766,7 @@ default:
                             rippleView.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
                         }
                     }
-                    return true;
+                                        return true;
             }
             return true;
         }
