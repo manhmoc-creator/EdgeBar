@@ -1514,21 +1514,19 @@ private void fireIntentById(String id) {
             }
         } catch (Exception ignored) {}
     }
-
-    // 2. Bắn cử chỉ đích xác dựa trên tọa độ điểm chạm thực tế của ngón tay
-    // 2. Bắn cử chỉ đích xác (ZERO LAG, ZERO DELAY)
+// 2. Bắn cử chỉ đích xác dựa trên tọa độ điểm chạm thực tế của ngón tay
     private void dispatchRealScreenGesture(String trigger) {
         if (Build.VERSION.SDK_INT < 24) return;
 
         isDispatchingSyntheticGesture = true;
-        setTransientUntouchable(true); 
+        setTransientUntouchable(true); // Xuyên thấu toàn bộ Bar/Corner
 
         if (syntheticGuardResetRunnable != null) syntheticGuardHandler.removeCallbacks(syntheticGuardResetRunnable);
         syntheticGuardResetRunnable = () -> {
             isDispatchingSyntheticGesture = false;
-            setTransientUntouchable(false);
+            setTransientUntouchable(false); // Khôi phục lại trạng thái cảm ứng
         };
-        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 250); // Mở khoá touch nhanh hơn
+        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 350);
 
         android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
         final float cx = dm.widthPixels / 2f;
@@ -1539,17 +1537,18 @@ private void fireIntentById(String id) {
         final float ey = globalTouchEndY >= 0 ? globalTouchEndY : oy;
         final float actualDist = (float) Math.hypot(ex - ox, ey - oy);
 
-        // [SIÊU TỐC] Dùng post() thay vì postDelayed(), bắn ngay trong chu kỳ Event Loop hiện tại (Độ trễ = 0ms)
-        new Handler(android.os.Looper.getMainLooper()).post(() -> {
+        // [SIÊU TỐC] Ép độ trễ xuống 10ms - Gần như chạm đáy giới hạn của hệ điều hành!
+        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             try {
                 float defaultSwipeDist = Math.min(cx, cy) * 0.80f;
                 android.graphics.Path path = new android.graphics.Path();
-                int duration = 15; // [TĂNG TỐC VƯỢT HẠN] Rút ngắn tốc độ vuốt xuống 15ms
+                // [TĂNG TỐC TỐI ĐA] Thời gian vuốt giảm từ 80ms xuống 50ms
+                int duration = 50; 
 
                 boolean isTapOrLong = trigger.contains("TAP") || trigger.contains("LONG");
                 boolean isCombo = trigger.contains("UP_DOWN") || trigger.contains("DOWN_UP") || trigger.contains("LEFT_RIGHT") || trigger.contains("RIGHT_LEFT");
                 
-                boolean useExactPath = actualDist > 30f && !isTapOrLong && !isCombo; // Nới lỏng nhận diện vuốt tự do
+                boolean useExactPath = actualDist > 40f && !isTapOrLong && !isCombo;
 
                 if (useExactPath) {
                     path.moveTo(ox, oy);
@@ -1561,9 +1560,9 @@ private void fireIntentById(String id) {
                         case "TRIGGER_LEFT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); break;
                         case "TRIGGER_RIGHT": path.moveTo(ox, oy); path.lineTo(ox + defaultSwipeDist, oy); break;
                         case "TRIGGER_DIAG": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy - defaultSwipeDist); break;
-                        case "TRIGGER_TAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 0.1f); duration = 2; break; // Tap 2ms
-                        case "TRIGGER_LONG": path.moveTo(ox, oy); path.lineTo(ox, oy + 0.1f); duration = 500; break;
-                        case "TRIGGER_DTAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 0.1f); duration = 2; break; // Tap 2ms
+                        case "TRIGGER_TAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 15; break;
+                        case "TRIGGER_LONG": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 600; break;
+                        case "TRIGGER_DTAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 15; break;
                         case "TRIGGER_UP_DOWN": path.moveTo(ox, oy); path.lineTo(ox, oy - defaultSwipeDist); path.lineTo(ox, oy + defaultSwipeDist * 0.35f); duration = 150; break;
                         case "TRIGGER_DOWN_UP": path.moveTo(ox, oy); path.lineTo(ox, oy + defaultSwipeDist); path.lineTo(ox, oy - defaultSwipeDist * 0.35f); duration = 150; break;
                         case "TRIGGER_LEFT_RIGHT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); path.lineTo(ox + defaultSwipeDist * 0.35f, oy); duration = 150; break;
@@ -1590,11 +1589,10 @@ private void fireIntentById(String id) {
 
                 if (isDtap) {
                     final android.graphics.Path finalPath = path;
-                    // Bắn nhịp 2 cực khít (35ms thay vì 70ms)
                     new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                         try {
                             android.accessibilityservice.GestureDescription.Builder b2 = new android.accessibilityservice.GestureDescription.Builder();
-                            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, 2));
+                            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, 15));
                             dispatchGesture(b2.build(), new GestureResultCallback() {
                                 @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
                                     isDispatchingSyntheticGesture = false; setTransientUntouchable(false);
@@ -1604,10 +1602,11 @@ private void fireIntentById(String id) {
                                 }
                             }, null);
                         } catch (Exception ignored) {}
-                    }, 35);
+                    // [TĂNG TỐC] Ép độ trễ nhịp 2 của Double Tap xuống còn 40ms
+                    }, 40);
                 }
             } catch (Exception ignored) {}
-        });
+        }, 10);
     }
 
     // [MỚI] Ẩn thủ công đúng danh sách bar/corner user đã chọn cho rule này — tái dùng
@@ -2034,10 +2033,11 @@ private static final int MAX_TRIGGER_DEPTH = 3;
         private long lastTapUpTime = 0;
         private float lastTapUpX = -1f, lastTapUpY = -1f; // [MỚI] Tọa độ của cú chạm trước
         private static final long DTAP_WINDOW_MS = 300;
-        private static final float DTAP_MAX_DIST_PX = 50f; // Siết cực chặt: nhịp 2 phải gần như đè lên nhịp 1
+        private static final float DTAP_MAX_DIST_PX = 40f; // [SIẾT CHẶT] Giảm xuống 40px
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
         private static final float COMBO_THRESHOLD_PX = 130f;
         private Runnable pendingTapRunnable = null;
+        private boolean multiTouchCanceled = false; // [MỚI] Cờ kiểm soát cảm ứng đa điểm
         public SidebarTouchListener(String keyBase, View v) {
             this.prefKeyBase = keyBase;
             this.myView = v;
@@ -2092,31 +2092,24 @@ private static final int MAX_TRIGGER_DEPTH = 3;
         };
 private boolean isHolding = false;
 private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
-                        @Override public boolean onTouch(View v, MotionEvent e) {
-            // [FIX ĐỆ QUY] Đang bắn cử chỉ ảo -> bỏ qua ngay, không cho Bar/Corner
-            // tự "nghe" lại cử chỉ do chính nó vừa tạo ra.
+                @Override public boolean onTouch(View v, MotionEvent e) {
             if (isDispatchingSyntheticGesture) return false;
             if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
             
-            // [XỬ LÝ ĐA ĐIỂM] Tránh nhiễu loạn khi gõ phím cực nhanh bằng nhiều ngón tay
+            // [FIX LỖI GÕ PHÍM 5-7] Sử dụng getActionMasked() để bắt chính xác đa điểm
             switch (e.getActionMasked()) {
-                case MotionEvent.ACTION_POINTER_DOWN:
-                case MotionEvent.ACTION_POINTER_UP:
-                    return true; // Bỏ qua ngón phụ, chỉ đo khoảng cách của ngón chính
                 case MotionEvent.ACTION_DOWN:
+                    multiTouchCanceled = false;
                     sx = getFixedX(e); sy = getFixedY(e);
                     lastX = sx; lastY = sy;
-                    // Bắt toạ độ gốc
                     globalTouchStartX = sx; globalTouchStartY = sy; globalTouchEndX = sx; globalTouchEndY = sy;
-                    maxDx = 0; minDx = 0; maxDy = 0; minDy = 0; // [FIX] reset combo-tracker
+                    maxDx = 0; minDx = 0; maxDy = 0; minDy = 0;
                     st = System.currentTimeMillis();
                     longFired = false;
-                    isHolding = false; // [FIX] BẮT BUỘC — nếu không reset, mọi chạm sau lần "gài số"
-                                        // đầu tiên sẽ bị hiểu nhầm thành hold/long vĩnh viễn
+                    isHolding = false;
                     
                     lpHandler.removeCallbacks(holdCheckRunnable);
-                    // HỦY BỎ 1-Tap nếu user bắt đầu nhịp chạm/vuốt mới
                     if (pendingTapRunnable != null) {
                         lpHandler.removeCallbacks(pendingTapRunnable);
                         pendingTapRunnable = null;
@@ -2125,23 +2118,33 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     rippleView.showAt(sx, sy);
                     lpHandler.postDelayed(holdCheckRunnable, prefs.getInt("hold_dur", 600));
                     return true;
+
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    // [BẢO VỆ CHỐNG NHẦM LẪN] Ngón tay thứ 2 chạm vào (vd: gõ phím nhanh) -> hủy ngay mọi cử chỉ đang chờ
+                    multiTouchCanceled = true;
+                    lpHandler.removeCallbacks(holdCheckRunnable);
+                    if (rippleView != null) rippleView.popRipple();
+                    return true;
                     
                 case MotionEvent.ACTION_MOVE:
+                    if (multiTouchCanceled) return true;
                     lastX = getFixedX(e); lastY = getFixedY(e);
-                    // Bắt toạ độ đường vuốt
                     globalTouchEndX = lastX; globalTouchEndY = lastY;
-                    float cdx = lastX - sx; float cdy = lastY - sy; // [FIX] thiếu hoàn toàn ở bản cũ
+                    float cdx = lastX - sx; float cdy = lastY - sy;
                     if (cdx > maxDx) maxDx = cdx; if (cdx < minDx) minDx = cdx;
                     if (cdy > maxDy) maxDy = cdy; if (cdy < minDy) minDy = cdy;
                     if (rippleView != null) rippleView.moveTo(lastX, lastY);
                     return true;
                     
                 case MotionEvent.ACTION_CANCEL:
+                    if (multiTouchCanceled) return true;
                     lpHandler.removeCallbacks(holdCheckRunnable);
-                    isHolding = false; // [FIX] hủy giữa chừng cũng phải reset, không thì kẹt trạng thái
+                    isHolding = false;
                     if (rippleView != null) rippleView.popRipple();
                     return true;
+                    
                 case MotionEvent.ACTION_UP:
+                    if (multiTouchCanceled) return true;
                     lpHandler.removeCallbacks(holdCheckRunnable);
                     if (longFired) {
                         if (rippleView != null) rippleView.popRipple();
@@ -2152,48 +2155,75 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     String actionName = "";
                     boolean isDiag = (myView instanceof CornerView && absDx > 40 && absDy > 40);
 
-                                        if (isHolding) {
-                        // ============ [ĐÃ GÀI SỐ: HOLD VÀ VUỐT] ============
+                    if (isHolding) {
                         if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
-                            actionName = "long"; // Nhả tay tại chỗ
+                            actionName = "long"; 
                         } else {
-                            if (isDiag) actionName = "hold_diag"; // [FIX] đúng tên gesture Gài số + Chéo
+                            if (isDiag) actionName = "diag_hold"; 
                             else {
                                 if (absDx > absDy) actionName = finalDx > 0 ? "hold_right" : "hold_left";
                                 else actionName = finalDy > 0 ? "hold_down" : "hold_up";
                             }
                         }
                     } else {
-                        // ============ [CHƯA GÀI SỐ: TAP VÀ SWIPE NHANH] ============
                         if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
                             long now = System.currentTimeMillis();
                             boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
                             float[] dirTap = computeJumpDirForTap();
+                            
                             if (!hasDtap) {
                                 lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
                                 if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
-                            } else if (now - lastTapUpTime <= DTAP_WINDOW_MS) {
-                                lastTapUpTime = 0; handleAction(prefKeyBase + "_dtap");
-                                if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                             } else {
-                                lastTapUpTime = now; final long myUpTs = now;
-                                lpHandler.postDelayed(() -> {
-                                    if (lastTapUpTime == myUpTs) {
-                                        lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
-                                        if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                                long gap = now - lastTapUpTime;
+                                float tapDist = 0f;
+                                if (lastTapUpTime > 0) {
+                                    float dX = sx - lastTapUpX;
+                                    float dY = sy - lastTapUpY;
+                                    tapDist = (float) Math.sqrt(dX * dX + dY * dY);
+                                }
+
+                                if (lastTapUpTime > 0 && gap <= DTAP_WINDOW_MS && tapDist <= DTAP_MAX_DIST_PX) {
+                                    if (gap > 40) { 
+                                        lastTapUpTime = 0; handleAction(prefKeyBase + "_dtap");
+                                        if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                                    } else {
+                                        lastTapUpTime = now; lastTapUpX = sx; lastTapUpY = sy;
+                                        final long myUpTs = now;
+                                        pendingTapRunnable = () -> {
+                                            if (lastTapUpTime == myUpTs) {
+                                                lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
+                                                if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                                            }
+                                        };
+                                        lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
                                     }
-                                }, DTAP_WINDOW_MS + 20);
+                                } else {
+                                    if (pendingTapRunnable != null) {
+                                        lpHandler.removeCallbacks(pendingTapRunnable);
+                                        pendingTapRunnable.run(); 
+                                        pendingTapRunnable = null;
+                                    }
+                                    
+                                    lastTapUpTime = now; lastTapUpX = sx; lastTapUpY = sy;
+                                    final long myUpTs = now;
+                                    pendingTapRunnable = () -> {
+                                        if (lastTapUpTime == myUpTs) {
+                                            lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
+                                            if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
+                                        }
+                                    };
+                                    lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
+                                }
                             }
                             if (rippleView != null) rippleView.popRipple();
                             return true;
                         } else {
-                            // CHECK COMBO SWIPE
                             if (!isDiag) {
                                 if (minDy < -COMBO_THRESHOLD_PX && finalDy > minDy + SWIPE_CANCEL_SLOP_PX) actionName = "up_down";
                                 else if (maxDy > COMBO_THRESHOLD_PX && finalDy < maxDy - SWIPE_CANCEL_SLOP_PX) actionName = "down_up";
                                 else if (minDx < -COMBO_THRESHOLD_PX && finalDx > minDx + SWIPE_CANCEL_SLOP_PX) actionName = "left_right";
                                 else if (maxDx > COMBO_THRESHOLD_PX && finalDx < maxDx - SWIPE_CANCEL_SLOP_PX) actionName = "right_left";
-                                // NORMAL SWIPE (nếu không dính combo)
                                 else if (absDx > absDy) actionName = finalDx > 0 ? "right" : "left";
                                 else actionName = finalDy > 0 ? "down" : "up";
                             } else {

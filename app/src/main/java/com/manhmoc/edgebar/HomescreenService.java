@@ -1663,10 +1663,11 @@ default:
         private long lastTapUpTime = 0;
         private float lastTapUpX = -1f, lastTapUpY = -1f; // [MỚI] Tọa độ của cú chạm trước
         private static final long DTAP_WINDOW_MS = 300;
-        private static final float DTAP_MAX_DIST_PX = 50f; // Siết cực chặt: nhịp 2 phải gần như đè lên nhịp 1
+        private static final float DTAP_MAX_DIST_PX = 40f; // [SIẾT CHẶT] Giảm xuống 40px
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
         private static final float COMBO_THRESHOLD_PX = 130f;
-        private Runnable pendingTapRunnable = null; // Thêm biến hủy Tap
+        private Runnable pendingTapRunnable = null;
+        private boolean multiTouchCanceled = false; // [MỚI] Cờ kiểm soát cảm ứng đa điểm
         public SidebarTouchListener(String keyBase, View v) {
             this.prefKeyBase = keyBase;
             this.myView = v;
@@ -1725,23 +1726,23 @@ default:
 private boolean isHolding = false;
 private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
         @Override public boolean onTouch(View v, MotionEvent e) {
+            if (isDispatchingSyntheticGesture) return false;
             if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
-            // [XỬ LÝ ĐA ĐIỂM] Tránh nhiễu loạn khi gõ phím cực nhanh bằng nhiều ngón tay
+            
+            // [FIX LỖI GÕ PHÍM 5-7] Sử dụng getActionMasked() để bắt chính xác đa điểm
             switch (e.getActionMasked()) {
-                case MotionEvent.ACTION_POINTER_DOWN:
-                case MotionEvent.ACTION_POINTER_UP:
-                    return true; // Bỏ qua ngón phụ, chỉ đo khoảng cách của ngón chính
                 case MotionEvent.ACTION_DOWN:
+                    multiTouchCanceled = false;
                     sx = getFixedX(e); sy = getFixedY(e);
                     lastX = sx; lastY = sy;
+                    globalTouchStartX = sx; globalTouchStartY = sy; globalTouchEndX = sx; globalTouchEndY = sy;
                     maxDx = 0; minDx = 0; maxDy = 0; minDy = 0;
                     st = System.currentTimeMillis();
                     longFired = false;
                     isHolding = false;
                     
                     lpHandler.removeCallbacks(holdCheckRunnable);
-                    // HỦY BỎ 1-Tap nếu user bắt đầu nhịp chạm/vuốt mới
                     if (pendingTapRunnable != null) {
                         lpHandler.removeCallbacks(pendingTapRunnable);
                         pendingTapRunnable = null;
@@ -1750,9 +1751,18 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     rippleView.showAt(sx, sy);
                     lpHandler.postDelayed(holdCheckRunnable, prefs.getInt("hold_dur", 600));
                     return true;
+
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    // [BẢO VỆ CHỐNG NHẦM LẪN] Ngón tay thứ 2 chạm vào (vd: gõ phím nhanh) -> hủy ngay mọi cử chỉ đang chờ
+                    multiTouchCanceled = true;
+                    lpHandler.removeCallbacks(holdCheckRunnable);
+                    if (rippleView != null) rippleView.popRipple();
+                    return true;
                     
                 case MotionEvent.ACTION_MOVE:
+                    if (multiTouchCanceled) return true;
                     lastX = getFixedX(e); lastY = getFixedY(e);
+                    globalTouchEndX = lastX; globalTouchEndY = lastY;
                     float cdx = lastX - sx; float cdy = lastY - sy;
                     if (cdx > maxDx) maxDx = cdx; if (cdx < minDx) minDx = cdx;
                     if (cdy > maxDy) maxDy = cdy; if (cdy < minDy) minDy = cdy;
@@ -1760,11 +1770,14 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     return true;
                     
                 case MotionEvent.ACTION_CANCEL:
+                    if (multiTouchCanceled) return true;
                     lpHandler.removeCallbacks(holdCheckRunnable);
+                    isHolding = false;
                     if (rippleView != null) rippleView.popRipple();
                     return true;
                     
                 case MotionEvent.ACTION_UP:
+                    if (multiTouchCanceled) return true;
                     lpHandler.removeCallbacks(holdCheckRunnable);
                     if (longFired) {
                         if (rippleView != null) rippleView.popRipple();
@@ -1803,9 +1816,8 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                                     tapDist = (float) Math.sqrt(dX * dX + dY * dY);
                                 }
 
-                                // [MỚI] Điều kiện: Thời gian gap <= 300ms VÀ Khoảng cách 2 chạm <= 120 pixels
                                 if (lastTapUpTime > 0 && gap <= DTAP_WINDOW_MS && tapDist <= DTAP_MAX_DIST_PX) {
-                                    if (gap > 40) { // Lọc nhiễu cảm ứng < 40ms
+                                    if (gap > 40) { 
                                         lastTapUpTime = 0; handleAction(prefKeyBase + "_dtap");
                                         if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                                     } else {
@@ -1820,8 +1832,6 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                                         lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
                                     }
                                 } else {
-                                    // [MỚI] Nếu chạm ngoài khoảng thời gian HOẶC cách nhau quá xa
-                                    // -> Huỷ chờ và kích hoạt ngay lập tức nhịp 1-Chạm cũ đang treo (nếu có)!
                                     if (pendingTapRunnable != null) {
                                         lpHandler.removeCallbacks(pendingTapRunnable);
                                         pendingTapRunnable.run(); 
@@ -1865,7 +1875,7 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                             rippleView.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
                         }
                     }
-                                        return true;
+                    return true;
             }
             return true;
         }
