@@ -1663,7 +1663,7 @@ default:
         private long lastTapUpTime = 0;
         private float lastTapUpX = -1f, lastTapUpY = -1f; // [MỚI] Tọa độ của cú chạm trước
         private static final long DTAP_WINDOW_MS = 300;
-        private static final float DTAP_MAX_DIST_PX = 120f; // [MỚI] Giới hạn khoảng cách Double Tap (px)
+        private static final float DTAP_MAX_DIST_PX = 50f; // Siết cực chặt: nhịp 2 phải gần như đè lên nhịp 1
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
         private static final float COMBO_THRESHOLD_PX = 130f;
         private Runnable pendingTapRunnable = null; // Thêm biến hủy Tap
@@ -1672,9 +1672,11 @@ default:
             this.myView = v;
         }
 
-        private final int[] locBuf = new int[2];
-        private float getFixedX(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[0] + e.getX(); }
-        private float getFixedY(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[1] + e.getY(); }
+        private static final float DTAP_MAX_DIST_PX = 80f; // 80px là an toàn tuyệt đối với tọa độ RawX/Y
+        
+        // [SỬA LỖI TOẠ ĐỘ] Lấy tọa độ tuyệt đối trực tiếp từ màn hình để đo khoảng cách chuẩn xác 100%
+        private float getFixedX(MotionEvent e) { return e.getRawX(); }
+        private float getFixedY(MotionEvent e) { return e.getRawY(); }
 
         private float[] computeJumpDirForTap() {
             float dxDir = 0f, dyDir = 0f;
@@ -1725,7 +1727,11 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
         @Override public boolean onTouch(View v, MotionEvent e) {
             if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
-            switch (e.getAction()) {
+            // [XỬ LÝ ĐA ĐIỂM] Tránh nhiễu loạn khi gõ phím cực nhanh bằng nhiều ngón tay
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_POINTER_DOWN:
+                case MotionEvent.ACTION_POINTER_UP:
+                    return true; // Bỏ qua ngón phụ, chỉ đo khoảng cách của ngón chính
                 case MotionEvent.ACTION_DOWN:
                     sx = getFixedX(e); sy = getFixedY(e);
                     lastX = sx; lastY = sy;

@@ -1516,19 +1516,19 @@ private void fireIntentById(String id) {
     }
 
     // 2. Bắn cử chỉ đích xác dựa trên tọa độ điểm chạm thực tế của ngón tay
+    // 2. Bắn cử chỉ đích xác (ZERO LAG, ZERO DELAY)
     private void dispatchRealScreenGesture(String trigger) {
         if (Build.VERSION.SDK_INT < 24) return;
 
         isDispatchingSyntheticGesture = true;
-        setTransientUntouchable(true); // Xuyên thấu toàn bộ Bar/Corner
+        setTransientUntouchable(true); 
 
         if (syntheticGuardResetRunnable != null) syntheticGuardHandler.removeCallbacks(syntheticGuardResetRunnable);
         syntheticGuardResetRunnable = () -> {
             isDispatchingSyntheticGesture = false;
-            setTransientUntouchable(false); // Khôi phục lại trạng thái cảm ứng
+            setTransientUntouchable(false);
         };
-        // Giảm thời gian khoá an toàn tương ứng với tốc độ vuốt mới
-        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 400);
+        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 250); // Mở khoá touch nhanh hơn
 
         android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
         final float cx = dm.widthPixels / 2f;
@@ -1539,18 +1539,17 @@ private void fireIntentById(String id) {
         final float ey = globalTouchEndY >= 0 ? globalTouchEndY : oy;
         final float actualDist = (float) Math.hypot(ex - ox, ey - oy);
 
-        // [ÉP XUNG] Ép độ trễ từ 150ms xuống 40ms. Phản hồi gần như tức thì sau khi nhả tay!
-        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+        // [SIÊU TỐC] Dùng post() thay vì postDelayed(), bắn ngay trong chu kỳ Event Loop hiện tại (Độ trễ = 0ms)
+        new Handler(android.os.Looper.getMainLooper()).post(() -> {
             try {
                 float defaultSwipeDist = Math.min(cx, cy) * 0.80f;
                 android.graphics.Path path = new android.graphics.Path();
-                // [TĂNG TỐC] Thời gian vuốt giảm từ 120ms xuống 80ms -> Vuốt siêu gắt
-                int duration = 80; 
+                int duration = 15; // [TĂNG TỐC VƯỢT HẠN] Rút ngắn tốc độ vuốt xuống 15ms
 
                 boolean isTapOrLong = trigger.contains("TAP") || trigger.contains("LONG");
                 boolean isCombo = trigger.contains("UP_DOWN") || trigger.contains("DOWN_UP") || trigger.contains("LEFT_RIGHT") || trigger.contains("RIGHT_LEFT");
                 
-                boolean useExactPath = actualDist > 40f && !isTapOrLong && !isCombo;
+                boolean useExactPath = actualDist > 30f && !isTapOrLong && !isCombo; // Nới lỏng nhận diện vuốt tự do
 
                 if (useExactPath) {
                     path.moveTo(ox, oy);
@@ -1562,13 +1561,13 @@ private void fireIntentById(String id) {
                         case "TRIGGER_LEFT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); break;
                         case "TRIGGER_RIGHT": path.moveTo(ox, oy); path.lineTo(ox + defaultSwipeDist, oy); break;
                         case "TRIGGER_DIAG": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy - defaultSwipeDist); break;
-                        case "TRIGGER_TAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 20; break;
-                        case "TRIGGER_LONG": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 600; break;
-                        case "TRIGGER_DTAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 20; break;
-                        case "TRIGGER_UP_DOWN": path.moveTo(ox, oy); path.lineTo(ox, oy - defaultSwipeDist); path.lineTo(ox, oy + defaultSwipeDist * 0.35f); duration = 200; break;
-                        case "TRIGGER_DOWN_UP": path.moveTo(ox, oy); path.lineTo(ox, oy + defaultSwipeDist); path.lineTo(ox, oy - defaultSwipeDist * 0.35f); duration = 200; break;
-                        case "TRIGGER_LEFT_RIGHT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); path.lineTo(ox + defaultSwipeDist * 0.35f, oy); duration = 200; break;
-                        case "TRIGGER_RIGHT_LEFT": path.moveTo(ox, oy); path.lineTo(ox + defaultSwipeDist, oy); path.lineTo(ox - defaultSwipeDist * 0.35f, oy); duration = 200; break;
+                        case "TRIGGER_TAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 0.1f); duration = 2; break; // Tap 2ms
+                        case "TRIGGER_LONG": path.moveTo(ox, oy); path.lineTo(ox, oy + 0.1f); duration = 500; break;
+                        case "TRIGGER_DTAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 0.1f); duration = 2; break; // Tap 2ms
+                        case "TRIGGER_UP_DOWN": path.moveTo(ox, oy); path.lineTo(ox, oy - defaultSwipeDist); path.lineTo(ox, oy + defaultSwipeDist * 0.35f); duration = 150; break;
+                        case "TRIGGER_DOWN_UP": path.moveTo(ox, oy); path.lineTo(ox, oy + defaultSwipeDist); path.lineTo(ox, oy - defaultSwipeDist * 0.35f); duration = 150; break;
+                        case "TRIGGER_LEFT_RIGHT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); path.lineTo(ox + defaultSwipeDist * 0.35f, oy); duration = 150; break;
+                        case "TRIGGER_RIGHT_LEFT": path.moveTo(ox, oy); path.lineTo(ox + defaultSwipeDist, oy); path.lineTo(ox - defaultSwipeDist * 0.35f, oy); duration = 150; break;
                     }
                 }
 
@@ -1591,10 +1590,11 @@ private void fireIntentById(String id) {
 
                 if (isDtap) {
                     final android.graphics.Path finalPath = path;
+                    // Bắn nhịp 2 cực khít (35ms thay vì 70ms)
                     new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                         try {
                             android.accessibilityservice.GestureDescription.Builder b2 = new android.accessibilityservice.GestureDescription.Builder();
-                            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, 20));
+                            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, 2));
                             dispatchGesture(b2.build(), new GestureResultCallback() {
                                 @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
                                     isDispatchingSyntheticGesture = false; setTransientUntouchable(false);
@@ -1604,11 +1604,10 @@ private void fireIntentById(String id) {
                                 }
                             }, null);
                         } catch (Exception ignored) {}
-                    // [TĂNG TỐC] Ép độ trễ nhịp 2 của Double Tap xuống còn 70ms
-                    }, 70);
+                    }, 35);
                 }
             } catch (Exception ignored) {}
-        }, 40);
+        });
     }
 
     // [MỚI] Ẩn thủ công đúng danh sách bar/corner user đã chọn cho rule này — tái dùng
@@ -2044,9 +2043,11 @@ private static final int MAX_TRIGGER_DEPTH = 3;
             this.myView = v;
         }
 
-        private final int[] locBuf = new int[2];
-        private float getFixedX(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[0] + e.getX(); }
-        private float getFixedY(MotionEvent e) { myView.getLocationOnScreen(locBuf); return locBuf[1] + e.getY(); }
+        private static final float DTAP_MAX_DIST_PX = 80f; // 80px là an toàn tuyệt đối với tọa độ RawX/Y
+        
+        // [SỬA LỖI TOẠ ĐỘ] Lấy tọa độ tuyệt đối trực tiếp từ màn hình để đo khoảng cách chuẩn xác 100%
+        private float getFixedX(MotionEvent e) { return e.getRawX(); }
+        private float getFixedY(MotionEvent e) { return e.getRawY(); }
 
         private float[] computeJumpDirForTap() {
             float dxDir = 0f, dyDir = 0f;
@@ -2098,7 +2099,11 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
             if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
             
-            switch (e.getAction()) {
+            // [XỬ LÝ ĐA ĐIỂM] Tránh nhiễu loạn khi gõ phím cực nhanh bằng nhiều ngón tay
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_POINTER_DOWN:
+                case MotionEvent.ACTION_POINTER_UP:
+                    return true; // Bỏ qua ngón phụ, chỉ đo khoảng cách của ngón chính
                 case MotionEvent.ACTION_DOWN:
                     sx = getFixedX(e); sy = getFixedY(e);
                     lastX = sx; lastY = sy;
