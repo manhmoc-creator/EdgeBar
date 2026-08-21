@@ -32,7 +32,7 @@ public class VolumeButtonService extends Service {
     private Runnable volCheckRunnable;
     private int pendingKey = 0; // 0=none, 1=up, -1=down
     private int burstCount = 0;
-    private static final long COMBO_WINDOW_MS = 350; // Thời gian tối đa để chờ bấm phím thứ 2
+    private static final long COMBO_WINDOW_MS = 260; // Thời gian tối đa để chờ bấm phím thứ 2
     
     private final Handler keepAliveHandler = new Handler();
     private Runnable keepAliveRunnable;
@@ -103,10 +103,13 @@ public class VolumeButtonService extends Service {
         isRunning = true;
     }
 
+        private boolean isRuleSet(String key) {
+        return !prefs.getString(key, "NONE").equals("NONE");
+    }
+
     private void handleSide(boolean isUp) {
         int currentKey = isUp ? 1 : -1;
 
-        // Dừng timer hiện tại nếu có
         if (volCheckRunnable != null) {
             h.removeCallbacks(volCheckRunnable);
             volCheckRunnable = null;
@@ -114,44 +117,43 @@ public class VolumeButtonService extends Service {
 
         if (pendingKey != 0) {
             if (pendingKey == currentKey) {
-                // Nhấn liên tiếp cùng 1 phím (Double Tap)
-                burstCount++;
-                scheduleCheck();
+                // Lần bấm thứ 2 CÙNG phím trong cửa sổ chờ -> chắc chắn là Double Tap.
+                // Bắn NGAY, không đợi thêm nữa (đây là điểm gây "hụt nhịp" cũ).
+                fire(isUp ? "volkey_up_dtap" : "volkey_down_dtap");
             } else {
-                // Nhấn phím ngược lại -> KÍCH HOẠT COMBO TỨC THÌ
-                if (pendingKey == 1 && currentKey == -1) {
-                    fire("volkey_up_combo");
-                } else if (pendingKey == -1 && currentKey == 1) {
-                    fire("volkey_down_combo");
-                }
-                pendingKey = 0;
-                burstCount = 0;
+                // Nhấn phím ngược lại trong cửa sổ chờ -> Combo, bắn ngay (giữ nguyên hành vi cũ)
+                fire(pendingKey == 1 ? "volkey_up_combo" : "volkey_down_combo");
             }
-        } else {
-            // Nhịp bấm đầu tiên
-            pendingKey = currentKey;
-            burstCount = 1;
-            scheduleCheck();
+            pendingKey = 0;
+            burstCount = 0;
+            return;
         }
-    }
 
-    private void scheduleCheck() {
+        // Nhịp bấm đầu tiên: chỉ cần chờ NẾU người dùng thực sự có gán Dtap cho phím này
+        // hoặc Combo cho phím kia (được kích hoạt bởi việc bấm phím còn lại ngay sau).
+        String dtapKey = isUp ? "volkey_up_dtap" : "volkey_down_dtap";
+        String comboFromOtherKey = isUp ? "volkey_down_combo" : "volkey_up_combo";
+        boolean needWait = isRuleSet(dtapKey) || isRuleSet(comboFromOtherKey);
+
+        if (!needWait) {
+            // Không có gì cần phân biệt -> TỨC THỜI 0ms, đúng yêu cầu của bạn
+            fire(isUp ? "volkey_up_tap" : "volkey_down_tap");
+            return;
+        }
+
+        pendingKey = currentKey;
+        burstCount = 1;
+        scheduleCheck();
+    }
+        private void scheduleCheck() {
         volCheckRunnable = () -> {
-            // Timer kết thúc mà không bị phá vỡ (không có combo) -> Thực hiện Tap hoặc Double Tap
-            if (pendingKey == 1) {
-                if (burstCount == 1) fire("volkey_up_tap");
-                else fire("volkey_up_dtap"); // Cứ >= 2 lần là tính Dtap
-            } else if (pendingKey == -1) {
-                if (burstCount == 1) fire("volkey_down_tap");
-                else fire("volkey_down_dtap");
-            }
+            fire(pendingKey == 1 ? "volkey_up_tap" : "volkey_down_tap");
             pendingKey = 0;
             burstCount = 0;
             volCheckRunnable = null;
         };
         h.postDelayed(volCheckRunnable, COMBO_WINDOW_MS);
     }
-
     private void resetBurst() {
         if (volCheckRunnable != null) {
             h.removeCallbacks(volCheckRunnable);
