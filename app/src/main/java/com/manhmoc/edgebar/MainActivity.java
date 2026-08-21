@@ -276,14 +276,13 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     } catch (Exception e) { return null; }
 }
     private void refreshPreview() { 
-        // [FIX] Bỏ điều kiện inFrontierLock/Home/Homacc để không hồi sinh full overlay
-        // khi người dùng chỉ mới lướt xem danh sách ở menu Frontier. 
-        // Overlays sẽ chỉ hiển thị độc lập khi người dùng thực sự ấn vào chỉnh sửa từng Data Pack.
         boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0)
-            || (currentMainTab==1 && currentGesTab==0); 
-        boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4);
-        boolean pHome = false; 
-        
+            || (currentMainTab==1 && currentGesTab==0)
+            || (currentMainTab==1 && currentGesTab==5 && frontierSubTab==0); 
+        boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4)
+            || (currentMainTab==1 && currentGesTab==5 && frontierSubTab==2);
+        boolean pHome = (currentMainTab==1 && currentGesTab==5 && frontierSubTab==1);
+
         SharedPreferences.Editor ed = prefs.edit();
         ed.putBoolean("preview_lock", pLock)
           .putBoolean("preview_homacc", pHomacc)
@@ -2060,7 +2059,30 @@ private String cloneDataPackDeep(String itemKey) {
         LinearLayout row = createSettingsRow((String) space[0], spaceLabel, (String) space[2],
             () -> {
                 frontierSubTab = spaceIdx;
+                
+                // [YÊU CẦU MỚI] Tự động hồi sinh Trợ năng nếu bấm vào Lock (0) hoặc Homacc (2)
+                if (spaceIdx == 0 || spaceIdx == 2) {
+                    try {
+                        String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
+                        String cur = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+                        if (cur == null) cur = "";
+                        if (!cur.contains(mySvc)) {
+                            // Tắt cờ Homeb & Dừng Service
+                            prefs.edit().putBoolean("shortcut_home_on", false).apply();
+                            stopService(new Intent(MainActivity.this, HomescreenService.class));
+                            
+                            // Bật Trợ năng
+                            String newVal = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
+                            android.provider.Settings.Secure.putString(getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
+                            android.provider.Settings.Secure.putString(getContentResolver(), android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
+                        }
+                    } catch (Exception ignored) {}
+                }
+                
+                // Gọi refreshPreview() - Hàm này đã được tinh chỉnh ở bản sửa trước 
+                // để tự động "Show Full Overlay" (reset cờ manual_hide) cho đúng không gian đang mở!
                 refreshPreview();
+                
                 if (spaceIdx == 1) ensureHomeServiceForPreview();
                 subTab.setVisibility(View.GONE);
                 gesSubHeader.setVisibility(View.GONE);
@@ -2612,24 +2634,24 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     // ĐỒNG BỘ với buildRuleEditor() (Homacc/Volkey) — cùng màu #E91E63, cùng padding 20.
     // Pattern KHÔNG có mục "CHỌN COMPONENT" vì Pattern là Rule con nằm BÊN TRONG 1 Data Pack
     // Bar/Corner cụ thể rồi — nó áp dụng cho chính vùng của Pack đó, không cần chọn lại vùng.
-    TextView tvG = new TextView(this);
-    tvG.setText(T("CHOOSE GESTURES (OR logic)", "1. CHỌN CỬ CHỈ (Được chọn nhiều - Lệnh OR)"));
-    tvG.setTextColor(Color.parseColor("#E91E63"));
-    vTrig.addView(tvG);
-
     ArrayList<CheckBox> gestureBoxes = new ArrayList<>();
-        String savedGestures = sourceId != null ? prefs.getString("prule_" + sourceId + "_gestures", "") : "";
-        // FIX: Chọn độ dài mảng ngắn nhất để đảm bảo không index nào bị lọt ra ngoài (Out of Bounds)
-        int safeLimit = Math.min(C_GESTURES.length, C_GESTURE_NAMES.length);
-        for (int i = 0; i < safeLimit; i++) {
-            CheckBox cb = new CheckBox(this);
-            cb.setText(C_GESTURE_NAMES[i]);
-            cb.setTextColor(Color.WHITE);
-            cb.setPadding(0, 20, 0, 20); // khớp buildRuleEditor
+    String savedGestures = sourceId != null ? prefs.getString("prule_" + sourceId + "_gestures", "") : "";
+    int safeLimit = Math.min(C_GESTURES.length, C_GESTURE_NAMES.length);
+    
+    LinearLayout gestureContainer = new LinearLayout(this);
+    gestureContainer.setOrientation(LinearLayout.VERTICAL);
+    gestureContainer.setPadding(20, 10, 20, 20);
+    
+    for (int i = 0; i < safeLimit; i++) {
+        CheckBox cb = new CheckBox(this);
+        cb.setText(C_GESTURE_NAMES[i]);
+        cb.setTextColor(Color.WHITE);
+        cb.setPadding(0, 20, 0, 20);
         cb.setChecked(("," + savedGestures + ",").contains("," + C_GESTURES[i] + ","));
         gestureBoxes.add(cb);
-        vTrig.addView(cb);
+        gestureContainer.addView(cb);
     }
+    vTrig.addView(createDrawer("1. CHỌN CỬ CHỈ (OR LOGIC)", gestureContainer));
     LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
     vAct.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (Được chọn nhiều)"));
 
@@ -3003,22 +3025,22 @@ spComp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
         }
         vTrig.addView(spComp);
 
-        TextView tvG = new TextView(this); tvG.setText(T("\n2. CHOOSE GESTURES (OR logic)", "\n2. CHỌN CỬ CHỈ (Được chọn nhiều - Lệnh OR)")); tvG.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvG);
         final String[] gesturesShown = isVolKeyMode ? VOLKEY_GESTURES : C_GESTURES;
         final String[] gestureNamesShown = isVolKeyMode ? VOLKEY_GESTURE_NAMES : C_GESTURE_NAMES;
-        // V19.12.3.6.23: Texture (vân tay) chỉ hỗ trợ 4 hướng vuốt — phần cứng
-        // KHÔNG BAO GIỜ gửi lên tap/dtap/long/hold/diag. Thay vì tạo đủ 13
-        // CheckBox rồi ẩn (updateGestureVisibilityForFingerprint cũ), giờ
-        // KHÔNG allocate các CheckBox thừa ngay từ đầu — tiết kiệm RAM/CPU
-        // inflate mỗi lần dialog này được mở trên Pixel 2XL.
+        
+        LinearLayout gestureContainer = new LinearLayout(this);
+        gestureContainer.setOrientation(LinearLayout.VERTICAL);
+        gestureContainer.setPadding(20, 10, 20, 20);
+
         for (int i=0; i<gesturesShown.length; i++) {
             if (isTextureMode) {
                 String gCheck = gesturesShown[i];
                 boolean allowed = gCheck.equals("up") || gCheck.equals("down") || gCheck.equals("left") || gCheck.equals("right");
                 if (!allowed) continue;
             }
-            CheckBox cb = new CheckBox(this); cb.setText(gestureNamesShown[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0,20,0,20); if(preGes != -1 && i == preGes) cb.setChecked(true); gestureBoxes.add(cb); gestureKeys.add(gesturesShown[i]); vTrig.addView(cb);
+            CheckBox cb = new CheckBox(this); cb.setText(gestureNamesShown[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0,20,0,20); if(preGes != -1 && i == preGes) cb.setChecked(true); gestureBoxes.add(cb); gestureKeys.add(gesturesShown[i]); gestureContainer.addView(cb);
         }
+        vTrig.addView(createDrawer("2. CHỌN CỬ CHỈ (OR LOGIC)", gestureContainer));
         // Texture đã lọc sẵn ở trên nên bỏ qua — tránh gọi hàm này với danh sách
         // đã bị rút gọn (nếu không sẽ ẩn/tick nhầm checkbox do lệch index)
         if (!isTextureMode) updateGestureVisibilityForFingerprint(selectedComp[0], gestureBoxes);
@@ -5793,8 +5815,8 @@ if (designTabState == 5) { renderPanelDesign(); return; }
     sS.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1.5f));
     lS.addView(tS); lS.addView(sS); dEffect.addView(lS);
 
-    dEffect.addView(createSlider("Chiều ngang Hiệu ứng (0=Full)", "anim_w", 2000, 0));
-    dEffect.addView(createSlider("Chiều dọc Hiệu ứng (0=Full)", "anim_h", 3500, 0));
+    dEffect.addView(createSignedSlider("Chiều ngang Hiệu ứng (0=Full)", "anim_w", -1500, 2000, 0));
+    dEffect.addView(createSignedSlider("Chiều dọc Hiệu ứng (0=Full)", "anim_h", -1500, 3500, 0));
     dEffect.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255));
     dEffect.addView(createSlider("Độ dày viền", "anim_thick", 50, 12));
     dEffect.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500));
@@ -8260,6 +8282,73 @@ private String formatPruleActionLabel(String rId) {
     }
     return sb.length() == 0 ? T("Error","Lỗi") : sb.toString();
 }
+private LinearLayout createSignedSlider(String t, String k, int min, int max, int def) {
+        LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); 
+        TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv);
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); 
+        Button btnMinus = new Button(this); btnMinus.setText("-"); btnMinus.setTextColor(Color.parseColor("#BBBBBB")); btnMinus.setBackgroundColor(Color.TRANSPARENT); btnMinus.setTextSize(20); 
+        Button btnPlus = new Button(this); btnPlus.setText("+"); btnPlus.setTextColor(Color.parseColor("#BBBBBB")); btnPlus.setBackgroundColor(Color.TRANSPARENT); btnPlus.setTextSize(20); 
+        SeekBar sb = new SeekBar(this); 
+        if (Build.VERSION.SDK_INT >= 26) sb.setMin(min);
+        sb.setMax(max); 
+        sb.setProgress(prefs.getInt(k, def)); 
+        sb.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f)); 
+        tv.setOnClickListener(v2 -> {
+            EditText et = new EditText(this);
+            et.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);
+            et.setText(String.valueOf(prefs.getInt(k, def)));
+            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(t).setView(et)
+                .setPositiveButton("OK", (d, w) -> {
+                    try {
+                        int p = Math.max(min, Math.min(max, Integer.parseInt(et.getText().toString().trim())));
+                        if (Build.VERSION.SDK_INT >= 24) sb.setProgress(p, true); else sb.setProgress(p);
+                        tv.setText(t + ": " + p);
+                        Runnable pendingOld = sliderPendingRunnable.remove(k);
+                        if (pendingOld != null) sliderPrefHandler.removeCallbacks(pendingOld);
+                        prefs.edit().putInt(k, p).apply();
+                        sliderLastWriteMs.put(k, System.currentTimeMillis());
+                    } catch (Exception ignored) {}
+                }).setNegativeButton("HỦY", null).show();
+        });
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            public void onProgressChanged(SeekBar s, int p, boolean fromUser){
+                tv.setText(t + ": " + p);
+                if (!fromUser) return;
+                long now = System.currentTimeMillis(); Long last = sliderLastWriteMs.get(k);
+                Runnable pendingOld = sliderPendingRunnable.get(k);
+                if (pendingOld != null) sliderPrefHandler.removeCallbacks(pendingOld);
+                if (last == null || now - last >= SLIDER_WRITE_THROTTLE_MS) {
+                    prefs.edit().putInt(k, p).apply(); sliderLastWriteMs.put(k, now);
+                } else {
+                    long delay = SLIDER_WRITE_THROTTLE_MS - (now - last);
+                    Runnable r = () -> { prefs.edit().putInt(k, p).apply(); sliderLastWriteMs.put(k, System.currentTimeMillis()); };
+                    sliderPendingRunnable.put(k, r); sliderPrefHandler.postDelayed(r, delay);
+                }
+            }
+            public void onStartTrackingTouch(SeekBar s){}
+            public void onStopTrackingTouch(SeekBar s){
+                Runnable pending = sliderPendingRunnable.remove(k);
+                if (pending != null) sliderPrefHandler.removeCallbacks(pending);
+                prefs.edit().putInt(k, s.getProgress()).apply();
+                sliderLastWriteMs.put(k, System.currentTimeMillis());
+            }
+        }); 
+        btnMinus.setOnClickListener(v -> {
+            int p = Math.max(min, sb.getProgress() - 1); sb.setProgress(p); tv.setText(t + ": " + p);
+            Runnable pendingOld = sliderPendingRunnable.remove(k);
+            if (pendingOld != null) sliderPrefHandler.removeCallbacks(pendingOld);
+            prefs.edit().putInt(k, p).apply(); sliderLastWriteMs.put(k, System.currentTimeMillis());
+        });
+        btnPlus.setOnClickListener(v -> {
+            int p = Math.min(max, sb.getProgress() + 1); sb.setProgress(p); tv.setText(t + ": " + p);
+            Runnable pendingOld = sliderPendingRunnable.remove(k);
+            if (pendingOld != null) sliderPrefHandler.removeCallbacks(pendingOld);
+            prefs.edit().putInt(k, p).apply(); sliderLastWriteMs.put(k, System.currentTimeMillis());
+        });
+        row.addView(btnMinus); row.addView(sb); row.addView(btnPlus); l.addView(row); 
+        return l; 
+    }
     private LinearLayout createSlider(String t, String k, int max, int def) { 
         LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); 
         TextView tv = new TextView(this); tv.setTextColor(Color.WHITE); tv.setText(t + ": " + prefs.getInt(k, def)); l.addView(tv);

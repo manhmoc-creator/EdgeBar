@@ -490,8 +490,8 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
         float drawW = getWidth(); float drawH = getHeight();
         if (drawW <= 0 || drawH <= 0) return;
         float off = pGlowOuter.getStrokeWidth() / 2;
-        float insetW = effW > 0 ? Math.min(effW, drawW/2f - 1) : 0f;
-        float insetH = effH > 0 ? Math.min(effH, drawH/2f - 1) : 0f;
+        float insetW = effW != 0 ? Math.min((float)effW, drawW/2f - 1f) : 0f;
+        float insetH = effH != 0 ? Math.min((float)effH, drawH/2f - 1f) : 0f;
         float left = off + insetW; float top = off + insetH;
         float right = drawW - off - insetW; float bottom = drawH - off - insetH;
 
