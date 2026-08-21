@@ -23,6 +23,7 @@ import android.graphics.PixelFormat;
 import android.graphics.LinearGradient;
 import android.graphics.Shader;
 import android.graphics.DashPathEffect;
+import android.graphics.BlurMaskFilter;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -215,71 +216,104 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
     }
     return list;
 }
-    private class FlashView extends View {
-    private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE";
+        private class FlashView extends View {
+    private Paint pCore = new Paint(), pGlowMid = new Paint(), pGlowOuter = new Paint();
+    float radius = 40f; String cTheme = "WHITE";
     int aStyle = 0; private float phaseFraction = 0f;
-    private int effW = 0, effH = 0; // [FIX] cache 2 slider anim_w/anim_h trước đây bị bỏ quên
-    public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE);
-        p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND);
-        p.setAntiAlias(true); setLayerType(LAYER_TYPE_SOFTWARE, p);
-        updateStyle(); }
+    private int effW = 0, effH = 0;
+
+    public FlashView(Context c) {
+        super(c);
+        for (Paint p : new Paint[]{pCore, pGlowMid, pGlowOuter}) {
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeCap(Paint.Cap.ROUND);
+            p.setStrokeJoin(Paint.Join.ROUND);
+            p.setAntiAlias(true);
+        }
+        setLayerType(LAYER_TYPE_SOFTWARE, null); // bắt buộc để BlurMaskFilter hoạt động
+        updateStyle();
+    }
 
     public void updateStyle() {
-        p.setAlpha(prefs.getInt("anim_alpha", 255));
-        p.setStrokeWidth(prefs.getInt("anim_thick", 12));
+        int baseAlpha = prefs.getInt("anim_alpha", 255);
+        int thick = Math.max(4, prefs.getInt("anim_thick", 12));
         radius = prefs.getInt("anim_rad", 40);
         cTheme = prefs.getString("anim_color", "WHITE");
         aStyle = prefs.getInt("anim_style", 0);
-        // [FIX] Trước đây 2 dòng này không tồn tại -> slider "Chiều ngang/dọc
-        // Hiệu ứng" ghi vào prefs nhưng chưa bao giờ được đọc lại ở đâu cả.
         effW = prefs.getInt("anim_w", 0);
         effH = prefs.getInt("anim_h", 0);
-        if(getWidth() > 0) applyGradient(getWidth(), getHeight());
+
+        // Lõi: mảnh, sáng vừa phải, blur nhẹ để không "sắc lẻm"
+        pCore.setStrokeWidth(thick * 0.35f);
+        pCore.setAlpha((int)(baseAlpha * 0.9f));
+        pCore.setMaskFilter(new BlurMaskFilter(thick * 0.5f, BlurMaskFilter.Blur.NORMAL));
+
+        // Glow giữa: rộng hơn, mờ vừa
+        pGlowMid.setStrokeWidth(thick * 1.4f);
+        pGlowMid.setAlpha((int)(baseAlpha * 0.4f));
+        pGlowMid.setMaskFilter(new BlurMaskFilter(thick * 1.3f, BlurMaskFilter.Blur.NORMAL));
+
+        // Glow ngoài: rất rộng, rất mờ -> tạo halo lan tỏa như video
+        pGlowOuter.setStrokeWidth(thick * 3f);
+        pGlowOuter.setAlpha((int)(baseAlpha * 0.2f));
+        pGlowOuter.setMaskFilter(new BlurMaskFilter(thick * 2.8f, BlurMaskFilter.Blur.NORMAL));
+
+        if (getWidth() > 0) applyGradient(getWidth(), getHeight());
         invalidate();
     }
 
     @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh); applyGradient(w, h);
     }
-    
-    private void applyGradient(int w, int h) {  /* như cũ */ 
-            int[] cArr; switch(cTheme) {
-                case "NEON": cArr=new int[]{Color.parseColor("#FF0055"), Color.parseColor("#7000FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FF0055")}; break;
-                case "CYBERPUNK": cArr=new int[]{Color.parseColor("#F500FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FFDF00"), Color.parseColor("#F500FF")}; break;
-                case "LAVA": cArr=new int[]{Color.parseColor("#FF0000"), Color.parseColor("#FF5A00"), Color.parseColor("#FF9A00"), Color.parseColor("#FF0000")}; break;
-                case "OCEAN": cArr=new int[]{Color.parseColor("#005BEA"), Color.parseColor("#00C6FB"), Color.parseColor("#005BEA")}; break;
-                case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
-                case "SUNSET": cArr=new int[]{Color.parseColor("#FF512F"), Color.parseColor("#DD2476"), Color.parseColor("#FF512F")}; break;
-                case "GOOGLE": cArr=new int[]{Color.parseColor("#4285F4"), Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4")}; break;
-                case "AURORA": cArr=new int[]{Color.parseColor("#8E2DE2"), Color.parseColor("#4A00E0"), Color.parseColor("#00E5FF"), Color.parseColor("#8E2DE2")}; break;
-                case "ABYSS": cArr=new int[]{Color.parseColor("#0F2027"), Color.parseColor("#203A43"), Color.parseColor("#2C5364"), Color.parseColor("#0F2027")}; break;
-                case "COSMIC": cArr=new int[]{Color.parseColor("#FF00CC"), Color.parseColor("#333399"), Color.parseColor("#FF00CC")}; break;
-                case "FOREST": cArr=new int[]{Color.parseColor("#11998E"), Color.parseColor("#38EF7D"), Color.parseColor("#11998E")}; break;
-                case "FLAME": cArr=new int[]{Color.parseColor("#F12711"), Color.parseColor("#F5AF19"), Color.parseColor("#F12711")}; break;
-                case "MIDNIGHT": cArr=new int[]{Color.parseColor("#1A2980"), Color.parseColor("#26D0CE"), Color.parseColor("#1A2980")}; break;
-                case "TROPICAL": cArr=new int[]{Color.parseColor("#43C6AC"), Color.parseColor("#F8FFAE"), Color.parseColor("#43C6AC")}; break;
-                case "CANDY": cArr=new int[]{Color.parseColor("#FF9A9E"), Color.parseColor("#FECFEF"), Color.parseColor("#FF9A9E")}; break;
-                default: cArr=new int[]{Color.WHITE, Color.parseColor("#E0E0E0"), Color.WHITE}; break;
-            }
-            p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR)); 
-            p.setShadowLayer(25f, 0, 0, cArr[0]);
+
+    private void applyGradient(int w, int h) {
+        int[] cArr; switch(cTheme) {
+            case "NEON": cArr=new int[]{Color.parseColor("#FF0055"), Color.parseColor("#7000FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FF0055")}; break;
+            case "CYBERPUNK": cArr=new int[]{Color.parseColor("#F500FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FFDF00"), Color.parseColor("#F500FF")}; break;
+            case "LAVA": cArr=new int[]{Color.parseColor("#FF0000"), Color.parseColor("#FF5A00"), Color.parseColor("#FF9A00"), Color.parseColor("#FF0000")}; break;
+            case "OCEAN": cArr=new int[]{Color.parseColor("#005BEA"), Color.parseColor("#00C6FB"), Color.parseColor("#005BEA")}; break;
+            case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
+            case "SUNSET": cArr=new int[]{Color.parseColor("#FF512F"), Color.parseColor("#DD2476"), Color.parseColor("#FF512F")}; break;
+            case "GOOGLE": cArr=new int[]{Color.parseColor("#4285F4"), Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4")}; break;
+            case "AURORA": cArr=new int[]{Color.parseColor("#8E2DE2"), Color.parseColor("#4A00E0"), Color.parseColor("#00E5FF"), Color.parseColor("#8E2DE2")}; break;
+            case "ABYSS": cArr=new int[]{Color.parseColor("#0F2027"), Color.parseColor("#203A43"), Color.parseColor("#2C5364"), Color.parseColor("#0F2027")}; break;
+            case "COSMIC": cArr=new int[]{Color.parseColor("#FF00CC"), Color.parseColor("#333399"), Color.parseColor("#FF00CC")}; break;
+            case "FOREST": cArr=new int[]{Color.parseColor("#11998E"), Color.parseColor("#38EF7D"), Color.parseColor("#11998E")}; break;
+            case "FLAME": cArr=new int[]{Color.parseColor("#F12711"), Color.parseColor("#F5AF19"), Color.parseColor("#F12711")}; break;
+            case "MIDNIGHT": cArr=new int[]{Color.parseColor("#1A2980"), Color.parseColor("#26D0CE"), Color.parseColor("#1A2980")}; break;
+            case "TROPICAL": cArr=new int[]{Color.parseColor("#43C6AC"), Color.parseColor("#F8FFAE"), Color.parseColor("#43C6AC")}; break;
+            case "CANDY": cArr=new int[]{Color.parseColor("#FF9A9E"), Color.parseColor("#FECFEF"), Color.parseColor("#FF9A9E")}; break;
+            default: cArr=new int[]{Color.WHITE, Color.parseColor("#E0E0E0"), Color.WHITE}; break;
         }
-        public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
-    @Override protected void onDraw(Canvas canvas) {
+        Shader shader = new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR);
+        pCore.setShader(shader);
+        pGlowMid.setShader(shader);
+        pGlowOuter.setShader(shader);
+    }
+
+    public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
+
+        @Override protected void onDraw(Canvas canvas) {
         float drawW = getWidth(); float drawH = getHeight();
-        if(drawW <= 0 || drawH <= 0) return;
-        float off = p.getStrokeWidth()/2;
+        if (drawW <= 0 || drawH <= 0) return;
+        float off = pGlowOuter.getStrokeWidth() / 2;
         float left = off; float top = off;
         float right = drawW - off; float bottom = drawH - off;
-        p.setStrokeCap(Paint.Cap.ROUND);
-        if(aStyle > 0) {
+
+        if (aStyle > 0) {
             float perim = 2 * (drawW + drawH);
             float currentPhase = -perim * phaseFraction;
-            if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, currentPhase));
-            else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, currentPhase));
-            else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, currentPhase));
-        } else { p.setPathEffect(null); }
-        canvas.drawRoundRect(left, top, right, bottom, radius, radius, p);
+            float[] intervals = aStyle == 1 ? new float[]{perim/4f, 3*perim/4f}
+                : aStyle == 2 ? new float[]{perim/8f, 3*perim/8f}
+                : new float[]{perim/12f, 3*perim/12f};
+            DashPathEffect dash = new DashPathEffect(intervals, currentPhase);
+            pCore.setPathEffect(dash); pGlowMid.setPathEffect(dash); pGlowOuter.setPathEffect(dash);
+        } else {
+            pCore.setPathEffect(null); pGlowMid.setPathEffect(null); pGlowOuter.setPathEffect(null);
+        }
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, pGlowOuter);
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, pGlowMid);
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, pCore);
     }
 }
     // ===== GESTURE RIPPLE VIEW (icon + sóng theo điểm chạm) =====
@@ -775,6 +809,32 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
             if (Intent.ACTION_SCREEN_OFF.equals(action)) {
     removeYtdlOverlay(); 
     removeRippleViewIfIdle(); 
+    
+    // [YÊU CẦU MỚI] Tự động hồi sinh Trợ năng (cho màn Lock) khi tắt màn hình từ Homeb
+    try {
+        String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
+        String cur = android.provider.Settings.Secure.getString(c.getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        if (cur == null) cur = "";
+        if (!cur.contains(mySvc)) {
+            // 1. Tắt cờ Homeb
+            prefs.edit().putBoolean("shortcut_home_on", false).apply();
+            
+            // 2. Bật Trợ năng bằng lệnh Secure
+            String newVal = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
+            android.provider.Settings.Secure.putString(c.getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
+            android.provider.Settings.Secure.putString(c.getContentResolver(), android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
+            
+            // 3. Show full overlay cho không gian Lock (Hủy mọi thao tác Ẩn thủ công trước đó)
+            SharedPreferences.Editor ed = prefs.edit();
+            for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
+            for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
+            ed.apply();
+            
+            // 4. Tự sát Homeb Service để nhường quyền điều khiển ngay lập tức
+            stopSelf();
+        }
+    } catch (Exception ignored) {}
+    
 } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
     // [THAY BẰNG CODE HỒI SINH HOMEB Ở ĐÂY]
     SharedPreferences.Editor ed = prefs.edit();
@@ -973,19 +1033,21 @@ filter.addAction("com.manhmoc.edgebar.TEST_REC_INDICATOR");
         // máy Android 11+ (API >= 30). Bổ sung đúng phần dựng cửa sổ, dùng TYPE_APPLICATION_OVERLAY
         // (không NO_LIMITS) để nhận đúng WindowInsets.Type.ime() — cùng cấu hình đã sửa bên
         // EdgeBarService. Vẫn chỉ 1 View trong suốt, không thêm chi phí pin/RAM nào.
-        for (int i = 0; i < 12; i++) {
-            bars[i] = new BarView(this);
-            WindowManager.LayoutParams p = new WindowManager.LayoutParams(
-    1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
-            try { wm.addView(bars[i], p); } catch (Exception e) {}
-            bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], bars[i]));
-        }
-        for (int i = 0; i < 4; i++) {
-            corners[i] = new CornerView(this, i, "home_");
-            WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
-            try { wm.addView(corners[i], p); } catch (Exception e) {}
-            corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i]));
-        }
+        int barCount = Math.min(bars.length, Math.min(BARS.length, GRAV.length));
+for (int i = 0; i < barCount; i++) {
+    bars[i] = new BarView(this);
+    WindowManager.LayoutParams p = new WindowManager.LayoutParams(
+1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
+    try { wm.addView(bars[i], p); } catch (Exception e) {}
+    bars[i].setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], bars[i]));
+}
+        int cornerCount = Math.min(corners.length, Math.min(CORNERS.length, C_GRAV.length));
+for (int i = 0; i < cornerCount; i++) {
+    corners[i] = new CornerView(this, i, "home_");
+    WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, 0, PixelFormat.TRANSLUCENT);
+    try { wm.addView(corners[i], p); } catch (Exception e) {}
+    corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i]));
+}
 
         // HYBRID HOME V2: Lắng nghe thay đổi Accessibility bằng ContentObserver
         // Tiết kiệm pin tối đa: KHÔNG polling, KHÔNG query mỗi frame
@@ -1074,8 +1136,9 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
             for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
         }
 
-        boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
-        for (int i = 0; i < 12; i++) {
+                boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
+        int barLoopCount = Math.min(bars.length, BARS.length);
+        for (int i = 0; i < barLoopCount; i++) {
             if (bars[i] == null) continue;
             boolean en = prefs.getBoolean("home_" + BARS[i] + "_en", false);
             bars[i].setVisibility((en && shouldRenderOldHome && !prefs.getBoolean("home_"+BARS[i]+"_manual_hide", false)) ? View.VISIBLE : View.GONE);
@@ -1107,7 +1170,8 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
                 if (priMode == 0) applyAntiTapjacking(bars[i], w, h);
             }
         }
-        for (int i = 0; i < 4; i++) {
+                int cornerLoopCount = Math.min(corners.length, CORNERS.length);
+        for (int i = 0; i < cornerLoopCount; i++) {
             if (corners[i] == null) continue;
             boolean cornEn = prefs.getBoolean("home_corner_" + CORNERS[i] + "_en", false);
             corners[i].setVisibility((cornEn && shouldRenderOldHome && !prefs.getBoolean("home_corner_"+CORNERS[i]+"_manual_hide", false)) ? View.VISIBLE : View.GONE);
@@ -1144,10 +1208,19 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         }
     }
     private void playAnim() {
+        // [FIX CRASH] Tránh NullPointerException và IllegalArgumentException nếu View chưa được add vào WindowManager
+        if (fV == null || fV.getLayoutParams() == null) return;
+        
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams();
         fp.width = WindowManager.LayoutParams.MATCH_PARENT;
         fp.height = WindowManager.LayoutParams.MATCH_PARENT;
-        wm.updateViewLayout(fV, fp);
+        
+        try { 
+            wm.updateViewLayout(fV, fp); 
+        } catch (Exception e) { 
+            return; 
+        }
+        
         fV.setVisibility(View.VISIBLE);
         fV.post(() -> {
             int style = prefs.getInt("anim_style", 0);
@@ -1163,19 +1236,20 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
             }
             anim.setDuration(dur);
             anim.addListener(new AnimatorListenerAdapter() {
-                @Override
+                @Override 
                 public void onAnimationEnd(Animator a) {
                     fV.setAlpha(0f);
                     fV.setVisibility(View.GONE);
-                    fp.width = 0;
+                    fp.width = 0; 
                     fp.height = 0;
-                    wm.updateViewLayout(fV, fp);
+                    try { 
+                        wm.updateViewLayout(fV, fp); 
+                    } catch (Exception e) {}
                 }
             });
             anim.start();
         });
     }
-
         private static final int MAX_TRIGGER_DEPTH = 3;
     private static final String[] GESTURE_SUFFIXES = {
         "_up_hold","_down_hold","_left_hold","_right_hold","_diag_hold",
@@ -1587,7 +1661,9 @@ default:
         private boolean longFired = false;
         private final Handler lpHandler = new Handler(android.os.Looper.getMainLooper());
         private long lastTapUpTime = 0;
+        private float lastTapUpX = -1f, lastTapUpY = -1f; // [MỚI] Tọa độ của cú chạm trước
         private static final long DTAP_WINDOW_MS = 300;
+        private static final float DTAP_MAX_DIST_PX = 120f; // [MỚI] Giới hạn khoảng cách Double Tap (px)
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
         private static final float COMBO_THRESHOLD_PX = 130f;
         private Runnable pendingTapRunnable = null; // Thêm biến hủy Tap
@@ -1714,12 +1790,20 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                                 if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                             } else {
                                 long gap = now - lastTapUpTime;
-                                if (lastTapUpTime > 0 && gap <= DTAP_WINDOW_MS) {
+                                float tapDist = 0f;
+                                if (lastTapUpTime > 0) {
+                                    float dX = sx - lastTapUpX;
+                                    float dY = sy - lastTapUpY;
+                                    tapDist = (float) Math.sqrt(dX * dX + dY * dY);
+                                }
+
+                                // [MỚI] Điều kiện: Thời gian gap <= 300ms VÀ Khoảng cách 2 chạm <= 120 pixels
+                                if (lastTapUpTime > 0 && gap <= DTAP_WINDOW_MS && tapDist <= DTAP_MAX_DIST_PX) {
                                     if (gap > 40) { // Lọc nhiễu cảm ứng < 40ms
                                         lastTapUpTime = 0; handleAction(prefKeyBase + "_dtap");
                                         if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                                     } else {
-                                        lastTapUpTime = now;
+                                        lastTapUpTime = now; lastTapUpX = sx; lastTapUpY = sy;
                                         final long myUpTs = now;
                                         pendingTapRunnable = () -> {
                                             if (lastTapUpTime == myUpTs) {
@@ -1730,7 +1814,15 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                                         lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
                                     }
                                 } else {
-                                    lastTapUpTime = now;
+                                    // [MỚI] Nếu chạm ngoài khoảng thời gian HOẶC cách nhau quá xa
+                                    // -> Huỷ chờ và kích hoạt ngay lập tức nhịp 1-Chạm cũ đang treo (nếu có)!
+                                    if (pendingTapRunnable != null) {
+                                        lpHandler.removeCallbacks(pendingTapRunnable);
+                                        pendingTapRunnable.run(); 
+                                        pendingTapRunnable = null;
+                                    }
+                                    
+                                    lastTapUpTime = now; lastTapUpX = sx; lastTapUpY = sy;
                                     final long myUpTs = now;
                                     pendingTapRunnable = () -> {
                                         if (lastTapUpTime == myUpTs) {
