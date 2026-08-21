@@ -24,7 +24,6 @@ import android.graphics.PixelFormat;
 import android.graphics.LinearGradient;
 import android.graphics.Shader;
 import android.graphics.DashPathEffect;
-import android.graphics.BlurMaskFilter;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CameraManager;
@@ -67,10 +66,6 @@ private boolean fpRegistered = false;
     public static void markPackageUnlocked(String pkg) { AppLockHelper.markUnlocked(pkg); }
     private void checkAppLock(String pkg) { AppLockHelper.check(this, prefs, pkg); }
     // ĐẰNG SAU (Các biến cũ của EdgeBarService)
-        // [FIX ĐỆ QUY] Cờ chặn: đang bắn touch ảo TRIGGER_* xuống màn hình
-    private volatile boolean isDispatchingSyntheticGesture = false;
-    private final Handler syntheticGuardHandler = new Handler(android.os.Looper.getMainLooper());
-    private Runnable syntheticGuardResetRunnable;
     private WindowManager wm;
     private View[] bars = new View[12];
     private View[] corners = new View[4];
@@ -413,49 +408,26 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
     }
     return list;
 }
-        private class FlashView extends View {
-    private Paint pCore = new Paint(), pGlowMid = new Paint(), pGlowOuter = new Paint();
-    float radius = 40f; String cTheme = "WHITE";
+    private class FlashView extends View {
+    private Paint p = new Paint(); float radius = 40f; String cTheme = "WHITE";
     int aStyle = 0; private float phaseFraction = 0f;
-    private int effW = 0, effH = 0;
-
-    public FlashView(Context c) {
-        super(c);
-        for (Paint p : new Paint[]{pCore, pGlowMid, pGlowOuter}) {
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeCap(Paint.Cap.ROUND);
-            p.setStrokeJoin(Paint.Join.ROUND);
-            p.setAntiAlias(true);
-        }
-        setLayerType(LAYER_TYPE_SOFTWARE, null); // bắt buộc để BlurMaskFilter hoạt động
-        updateStyle();
-    }
+    private int effW = 0, effH = 0; // [FIX] cache 2 slider anim_w/anim_h trước đây bị bỏ quên
+    public FlashView(Context c) { super(c); p.setStyle(Paint.Style.STROKE);
+        p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND);
+        p.setAntiAlias(true); setLayerType(LAYER_TYPE_SOFTWARE, p);
+        updateStyle(); }
 
     public void updateStyle() {
-        int baseAlpha = prefs.getInt("anim_alpha", 255);
-        int thick = Math.max(4, prefs.getInt("anim_thick", 12));
+        p.setAlpha(prefs.getInt("anim_alpha", 255));
+        p.setStrokeWidth(prefs.getInt("anim_thick", 12));
         radius = prefs.getInt("anim_rad", 40);
         cTheme = prefs.getString("anim_color", "WHITE");
         aStyle = prefs.getInt("anim_style", 0);
+        // [FIX] Trước đây 2 dòng này không tồn tại -> slider "Chiều ngang/dọc
+        // Hiệu ứng" ghi vào prefs nhưng chưa bao giờ được đọc lại ở đâu cả.
         effW = prefs.getInt("anim_w", 0);
         effH = prefs.getInt("anim_h", 0);
-
-        // Lõi: mảnh, sáng vừa phải, blur nhẹ để không "sắc lẻm"
-        pCore.setStrokeWidth(thick * 0.35f);
-        pCore.setAlpha((int)(baseAlpha * 0.9f));
-        pCore.setMaskFilter(new BlurMaskFilter(thick * 0.5f, BlurMaskFilter.Blur.NORMAL));
-
-        // Glow giữa: rộng hơn, mờ vừa
-        pGlowMid.setStrokeWidth(thick * 1.4f);
-        pGlowMid.setAlpha((int)(baseAlpha * 0.4f));
-        pGlowMid.setMaskFilter(new BlurMaskFilter(thick * 1.3f, BlurMaskFilter.Blur.NORMAL));
-
-        // Glow ngoài: rất rộng, rất mờ -> tạo halo lan tỏa như video
-        pGlowOuter.setStrokeWidth(thick * 3f);
-        pGlowOuter.setAlpha((int)(baseAlpha * 0.2f));
-        pGlowOuter.setMaskFilter(new BlurMaskFilter(thick * 2.8f, BlurMaskFilter.Blur.NORMAL));
-
-        if (getWidth() > 0) applyGradient(getWidth(), getHeight());
+        if(getWidth() > 0) applyGradient(getWidth(), getHeight());
         invalidate();
     }
 
@@ -463,56 +435,51 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
         super.onSizeChanged(w, h, oldw, oldh); applyGradient(w, h);
     }
 
-    private void applyGradient(int w, int h) {
-        int[] cArr; switch(cTheme) {
-            case "NEON": cArr=new int[]{Color.parseColor("#FF0055"), Color.parseColor("#7000FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FF0055")}; break;
-            case "CYBERPUNK": cArr=new int[]{Color.parseColor("#F500FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FFDF00"), Color.parseColor("#F500FF")}; break;
-            case "LAVA": cArr=new int[]{Color.parseColor("#FF0000"), Color.parseColor("#FF5A00"), Color.parseColor("#FF9A00"), Color.parseColor("#FF0000")}; break;
-            case "OCEAN": cArr=new int[]{Color.parseColor("#005BEA"), Color.parseColor("#00C6FB"), Color.parseColor("#005BEA")}; break;
-            case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
-            case "SUNSET": cArr=new int[]{Color.parseColor("#FF512F"), Color.parseColor("#DD2476"), Color.parseColor("#FF512F")}; break;
-            case "GOOGLE": cArr=new int[]{Color.parseColor("#4285F4"), Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4")}; break;
-            case "AURORA": cArr=new int[]{Color.parseColor("#8E2DE2"), Color.parseColor("#4A00E0"), Color.parseColor("#00E5FF"), Color.parseColor("#8E2DE2")}; break;
-            case "ABYSS": cArr=new int[]{Color.parseColor("#0F2027"), Color.parseColor("#203A43"), Color.parseColor("#2C5364"), Color.parseColor("#0F2027")}; break;
-            case "COSMIC": cArr=new int[]{Color.parseColor("#FF00CC"), Color.parseColor("#333399"), Color.parseColor("#FF00CC")}; break;
-            case "FOREST": cArr=new int[]{Color.parseColor("#11998E"), Color.parseColor("#38EF7D"), Color.parseColor("#11998E")}; break;
-            case "FLAME": cArr=new int[]{Color.parseColor("#F12711"), Color.parseColor("#F5AF19"), Color.parseColor("#F12711")}; break;
-            case "MIDNIGHT": cArr=new int[]{Color.parseColor("#1A2980"), Color.parseColor("#26D0CE"), Color.parseColor("#1A2980")}; break;
-            case "TROPICAL": cArr=new int[]{Color.parseColor("#43C6AC"), Color.parseColor("#F8FFAE"), Color.parseColor("#43C6AC")}; break;
-            case "CANDY": cArr=new int[]{Color.parseColor("#FF9A9E"), Color.parseColor("#FECFEF"), Color.parseColor("#FF9A9E")}; break;
-            default: cArr=new int[]{Color.WHITE, Color.parseColor("#E0E0E0"), Color.WHITE}; break;
+    private void applyGradient(int w, int h) {  /* giống các bản trước */ 
+            int[] cArr; switch(cTheme) {
+                case "NEON": cArr=new int[]{Color.parseColor("#FF0055"), Color.parseColor("#7000FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FF0055")}; break;
+                case "CYBERPUNK": cArr=new int[]{Color.parseColor("#F500FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FFDF00"), Color.parseColor("#F500FF")}; break;
+                case "LAVA": cArr=new int[]{Color.parseColor("#FF0000"), Color.parseColor("#FF5A00"), Color.parseColor("#FF9A00"), Color.parseColor("#FF0000")}; break;
+                case "OCEAN": cArr=new int[]{Color.parseColor("#005BEA"), Color.parseColor("#00C6FB"), Color.parseColor("#005BEA")}; break;
+                case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
+                case "SUNSET": cArr=new int[]{Color.parseColor("#FF512F"), Color.parseColor("#DD2476"), Color.parseColor("#FF512F")}; break;
+                case "GOOGLE": cArr=new int[]{Color.parseColor("#4285F4"), Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4")}; break;
+                case "AURORA": cArr=new int[]{Color.parseColor("#8E2DE2"), Color.parseColor("#4A00E0"), Color.parseColor("#00E5FF"), Color.parseColor("#8E2DE2")}; break;
+                case "ABYSS": cArr=new int[]{Color.parseColor("#0F2027"), Color.parseColor("#203A43"), Color.parseColor("#2C5364"), Color.parseColor("#0F2027")}; break;
+                case "COSMIC": cArr=new int[]{Color.parseColor("#FF00CC"), Color.parseColor("#333399"), Color.parseColor("#FF00CC")}; break;
+                case "FOREST": cArr=new int[]{Color.parseColor("#11998E"), Color.parseColor("#38EF7D"), Color.parseColor("#11998E")}; break;
+                case "FLAME": cArr=new int[]{Color.parseColor("#F12711"), Color.parseColor("#F5AF19"), Color.parseColor("#F12711")}; break;
+                case "MIDNIGHT": cArr=new int[]{Color.parseColor("#1A2980"), Color.parseColor("#26D0CE"), Color.parseColor("#1A2980")}; break;
+                case "TROPICAL": cArr=new int[]{Color.parseColor("#43C6AC"), Color.parseColor("#F8FFAE"), Color.parseColor("#43C6AC")}; break;
+                case "CANDY": cArr=new int[]{Color.parseColor("#FF9A9E"), Color.parseColor("#FECFEF"), Color.parseColor("#FF9A9E")}; break;
+                default: cArr=new int[]{Color.WHITE, Color.parseColor("#E0E0E0"), Color.WHITE}; break;
+            }
+            // Tăng bán kính ShadowLayer từ 15f lên 25f để ánh sáng Neon bung tỏa rực rỡ hơn
+            p.setShader(new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR)); 
+            p.setShadowLayer(25f, 0, 0, cArr[0]);
         }
-        Shader shader = new LinearGradient(0, 0, w, h, cArr, null, Shader.TileMode.MIRROR);
-        pCore.setShader(shader);
-        pGlowMid.setShader(shader);
-        pGlowOuter.setShader(shader);
-    }
-
-    public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
-
+        public void setPhase(float fraction) { this.phaseFraction = fraction; invalidate(); }
     @Override protected void onDraw(Canvas canvas) {
         float drawW = getWidth(); float drawH = getHeight();
-        if (drawW <= 0 || drawH <= 0) return;
-        float off = pGlowOuter.getStrokeWidth() / 2;
-        float insetW = effW != 0 ? Math.min((float)effW, drawW/2f - 1f) : 0f;
-        float insetH = effH != 0 ? Math.min((float)effH, drawH/2f - 1f) : 0f;
+        if(drawW <= 0 || drawH <= 0) return;
+        float off = p.getStrokeWidth()/2;
+        // [FIX] Áp dụng anim_w/anim_h làm khoảng thu vào từ mép màn hình.
+        // Giá trị 0 = giữ nguyên Full màn hình (đúng như nhãn "(0=Full)").
+        // Có chặn Math.min để không bao giờ thu quá nửa màn hình (tránh khung
+        // bị lật ngược nếu người dùng kéo slider lên mức quá lớn).
+        float insetW = effW > 0 ? Math.min(effW, drawW/2f - 1) : 0f;
+        float insetH = effH > 0 ? Math.min(effH, drawH/2f - 1) : 0f;
         float left = off + insetW; float top = off + insetH;
         float right = drawW - off - insetW; float bottom = drawH - off - insetH;
-
-        if (aStyle > 0) {
-            float perim = 2 * ((right - left) + (bottom - top));
+        p.setStrokeCap(Paint.Cap.ROUND);
+        if(aStyle > 0) {
+            float perim = 2 * ((right - left) + (bottom - top)); // [FIX] tính chu vi theo khung ĐÃ thu, không theo full màn hình nữa, để hiệu ứng chạy viền (Nhấp Nháy/Tia sáng) bám sát đúng khung mới
             float currentPhase = -perim * phaseFraction;
-            float[] intervals = aStyle == 1 ? new float[]{perim/4f, 3*perim/4f}
-                : aStyle == 2 ? new float[]{perim/8f, 3*perim/8f}
-                : new float[]{perim/12f, 3*perim/12f};
-            DashPathEffect dash = new DashPathEffect(intervals, currentPhase);
-            pCore.setPathEffect(dash); pGlowMid.setPathEffect(dash); pGlowOuter.setPathEffect(dash);
-        } else {
-            pCore.setPathEffect(null); pGlowMid.setPathEffect(null); pGlowOuter.setPathEffect(null);
-        }
-        canvas.drawRoundRect(left, top, right, bottom, radius, radius, pGlowOuter);
-        canvas.drawRoundRect(left, top, right, bottom, radius, radius, pGlowMid);
-        canvas.drawRoundRect(left, top, right, bottom, radius, radius, pCore);
+            if (aStyle == 1) p.setPathEffect(new DashPathEffect(new float[]{perim/4f, 3*perim/4f}, currentPhase));
+            else if (aStyle == 2) p.setPathEffect(new DashPathEffect(new float[]{perim/8f, 3*perim/8f}, currentPhase));
+            else if (aStyle == 3) p.setPathEffect(new DashPathEffect(new float[]{perim/12f, 3*perim/12f}, currentPhase));
+        } else { p.setPathEffect(null); }
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, p);
     }
 }
     // ===== GESTURE RIPPLE VIEW (chấm sóng chạm + icon NHẢY LÊN xoay 1 vòng rồi RƠI XUỐNG) =====
@@ -1338,11 +1305,9 @@ private void triggerBlacklistAutoHomeb() {
                     showAllOverlay("lock_");
                     showAllOverlay("homacc_");
                     break;
-                                case "TRIGGER_TAP": case "TRIGGER_DTAP": case "TRIGGER_LONG":
+                case "TRIGGER_TAP": case "TRIGGER_DTAP": case "TRIGGER_LONG":
                 case "TRIGGER_UP": case "TRIGGER_DOWN": case "TRIGGER_LEFT":
                 case "TRIGGER_RIGHT": case "TRIGGER_DIAG":
-                case "TRIGGER_UP_DOWN": case "TRIGGER_DOWN_UP":
-                case "TRIGGER_LEFT_RIGHT": case "TRIGGER_RIGHT_LEFT":
                     dispatchRealScreenGesture(a);
                     break;
 default:
@@ -1447,160 +1412,151 @@ private void fireIntentById(String id) {
     }
 }
     private void playAnim() {
-        // [FIX CRASH] Tránh NullPointerException và IllegalArgumentException nếu View chưa được add vào WindowManager
-        if (fV == null || fV.getLayoutParams() == null) return;
-        
         WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams();
-        fp.width = WindowManager.LayoutParams.MATCH_PARENT;
-        fp.height = WindowManager.LayoutParams.MATCH_PARENT;
-        
-        try { 
-            wm.updateViewLayout(fV, fp); 
-        } catch (Exception e) { 
-            return; 
-        }
-        
+        fp.width = WindowManager.LayoutParams.MATCH_PARENT; fp.height = WindowManager.LayoutParams.MATCH_PARENT;
+        wm.updateViewLayout(fV, fp);
         fV.setVisibility(View.VISIBLE);
         fV.post(() -> {
             int style = prefs.getInt("anim_style", 0);
             int dur = prefs.getInt("anim_dur", 1500);
             ValueAnimator anim;
             if (style == 0) {
-                anim = ValueAnimator.ofFloat(0f, 1f, 0f);
-                anim.addUpdateListener(a -> fV.setAlpha((float) a.getAnimatedValue()));
+                anim = ValueAnimator.ofFloat(0f,1f,0f);
+                anim.addUpdateListener(a -> fV.setAlpha((float)a.getAnimatedValue()));
             } else {
                 fV.setAlpha(1f);
-                anim = ValueAnimator.ofFloat(0f, 1f);
-                anim.addUpdateListener(a -> fV.setPhase((float) a.getAnimatedValue()));
+                anim = ValueAnimator.ofFloat(0f,1f);
+                anim.addUpdateListener(a -> fV.setPhase((float)a.getAnimatedValue()));
             }
             anim.setDuration(dur);
             anim.addListener(new AnimatorListenerAdapter() {
-                @Override 
-                public void onAnimationEnd(Animator a) {
+                @Override public void onAnimationEnd(Animator a) {
                     fV.setAlpha(0f);
                     fV.setVisibility(View.GONE);
-                    fp.width = 0; 
-                    fp.height = 0;
-                    try { 
-                        wm.updateViewLayout(fV, fp); 
-                    } catch (Exception e) {}
+                    fp.width = 0; fp.height = 0;
+                    wm.updateViewLayout(fV, fp);
                 }
             });
             anim.start();
         });
     }
-    // 1. Thêm hàm này để xử lý xuyên thấu cảm ứng
-    private void setTransientUntouchable(boolean untouchable) {
-        try {
-            for (View[] arr : new View[][]{bars, corners, accHomeBars, accHomeCorners}) {
-                for (int i = 0; i < arr.length; i++) {
-                    View v = arr[i];
-                    if (v == null || v.getWindowToken() == null || v.getVisibility() != View.VISIBLE || v.getLayoutParams() == null) continue;
-                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
-                    if (untouchable) {
-                        p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                    } else {
-                        int priMode = 0;
-                        if (arr == bars) priMode = prefs.getInt("lock_" + BARS[i] + "_pri_mode", 0);
-                        else if (arr == corners) priMode = prefs.getInt("lock_corner_" + CORNERS[i] + "_pri_mode", 0);
-                        else if (arr == accHomeBars) priMode = prefs.getInt("homacc_" + BARS[i] + "_pri_mode", 0);
-                        else if (arr == accHomeCorners) priMode = prefs.getInt("homacc_corner_" + CORNERS[i] + "_pri_mode", 0);
-                        if (priMode == 0) p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                    }
-                    wm.updateViewLayout(v, p);
+
+        // [MỚI] Chặn đệ quy vô hạn của TRIGGER_* — user tự tạo vòng lặp A→B→A vẫn an toàn.
+    private static final int MAX_TRIGGER_DEPTH = 3;
+    // [MỚI] Hậu tố gesture (dài → ngắn) để tách "lock_r_up_hold" -> base "lock_r".
+    private static final String[] GESTURE_SUFFIXES = {
+    "_hold_up", "_hold_down", "_hold_left", "_hold_right",
+    "_up_down", "_down_up", "_left_right", "_right_left",
+    "_up_hold", "_down_hold", "_left_hold", "_right_hold", "_diag_hold",
+    "_dtap", "_long", "_diag", "_up", "_down", "_left", "_right", "_tap"
+};
+    private String stripGestureSuffix(String key) {
+        for (String suf : GESTURE_SUFFIXES) if (key.endsWith(suf)) return key.substring(0, key.length() - suf.length());
+        return key;
+    }
+    private void handleAction(String key) { handleAction(key, 0, true); }
+    private void handleAction(String key, int depth, boolean applyVibAnim) {
+        String action = prefs.getString(key, "NONE");
+        boolean isOn = prefs.getBoolean(key + "_on", true);
+        if (action.equals("NONE") || !isOn) return;
+        // Rung/hiệu ứng CHỈ chạy theo gesture NGUỒN — gesture đích bị TRIGGER tới
+        // không tự bắn thêm rung/animation riêng, tránh nhân đôi cảm giác cho user.
+        if (applyVibAnim) {
+            if (prefs.getBoolean(key+"_vib", true)) doVibrate(prefs.getInt("vib_dur",30));
+            if (prefs.getBoolean(key+"_anim", true)) playAnim();
+        }
+        String[] acts = action.split(",");
+        for (String a : acts) {
+            String at = a.trim();
+            if (at.startsWith("TRIGGER_")) {
+                // Đã nâng cấp: Dùng AccessibilityService bắn cử chỉ vuốt/chạm thẳng xuống màn hình thật!
+                dispatchRealScreenGesture(at);
+            } else if (at.equals("HIDE_SOME_OVERLAY")) {
+                hideSomeOverlay(key);
+            } else if (at.equals("SHOW_ALL_OVERLAY")) {
+                showAllOverlay(key);
+            } else if (at.equals("RUN_SHORTCUT")) {
+                String scId = prefs.getString(key + "_shortcut_id", "");
+                if (!scId.isEmpty()) {
+                    try {
+                        String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+                        if (!uri.isEmpty()) {
+                            Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
+                            scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(scIntent);
+                        }
+                    } catch (Exception ignored) {}
                 }
-            }
-        } catch (Exception ignored) {}
+            } else if (at.equals("LAUNCH_APP")) {
+                String pkg = prefs.getString(key + "_launch_pkg", "");
+                if (!pkg.isEmpty()) {
+                    try {
+                        Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
+                        if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
+                    } catch (Exception ignored) {}
+                }
+            } else exec(at);
+        }
+    }
+private void dispatchRealScreenGesture(String trigger) {
+    if (Build.VERSION.SDK_INT < 24) return;
+    
+    // [FIX 1] Lấy kích thước màn hình tuyệt đối từ WindowManager
+    WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+    android.graphics.Point size = new android.graphics.Point();
+    wm.getDefaultDisplay().getRealSize(size);
+    float cx = size.x / 2f;
+    float cy = size.y / 2f;
+    float swipeDist = Math.min(cx, cy) * 0.6f;
+
+    android.graphics.Path path = new android.graphics.Path();
+    int duration = 250; 
+
+    switch (trigger) {
+        case "TRIGGER_UP": 
+            path.moveTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist); 
+            break;
+        case "TRIGGER_DOWN": 
+            path.moveTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist); 
+            break;
+        case "TRIGGER_LEFT": 
+            path.moveTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist, cy); 
+            break;
+        case "TRIGGER_RIGHT": 
+            path.moveTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist, cy); 
+            break;
+        case "TRIGGER_DIAG": 
+            path.moveTo(cx + swipeDist, cy + swipeDist); path.lineTo(cx - swipeDist, cy - swipeDist); 
+            break;
+        case "TRIGGER_TAP": 
+            // [FIX 2] Thêm lineTo dời 1 pixel để Android nhận diện đây là 1 nét chạm hợp lệ
+            path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 50; 
+            break;
+        case "TRIGGER_LONG": 
+            path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 600; 
+            break;
+        case "TRIGGER_DTAP":
+            path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 50;
+            break;
     }
 
-    // 2. Ghi đè hàm cũ bằng bản đã tối ưu lực vuốt và thêm cơ chế xuyên thấu
-    private void dispatchRealScreenGesture(String trigger) {
-        if (Build.VERSION.SDK_INT < 24) return;
-
-        isDispatchingSyntheticGesture = true;
-        setTransientUntouchable(true); // Xuyên thấu toàn bộ Bar/Corner
-
-        if (syntheticGuardResetRunnable != null) syntheticGuardHandler.removeCallbacks(syntheticGuardResetRunnable);
-        syntheticGuardResetRunnable = () -> {
-            isDispatchingSyntheticGesture = false;
-            setTransientUntouchable(false); // Khôi phục lại trạng thái cảm ứng
-        };
-        // Lưới an toàn: Tự khôi phục cảm ứng sau 800ms nếu cử chỉ bị kẹt
-        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 800);
-
+    android.accessibilityservice.GestureDescription.StrokeDescription stroke = 
+        new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration);
+    android.accessibilityservice.GestureDescription.Builder builder = 
+        new android.accessibilityservice.GestureDescription.Builder();
+    builder.addStroke(stroke);
+    dispatchGesture(builder.build(), null, null);
+    
+    // Bắn nhịp chạm thứ 2 nếu là Double Tap
+    if (trigger.equals("TRIGGER_DTAP")) {
         new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-            try {
-                android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
-                float cx = dm.widthPixels / 2f;
-                float cy = dm.heightPixels / 2f;
-                
-                // [TĂNG ĐỘ NHẠY] Kéo dài quãng đường vuốt (0.80f thay vì 0.6f)
-                float swipeDist = Math.min(cx, cy) * 0.80f;
-
-                android.graphics.Path path = new android.graphics.Path();
-                // [TĂNG ĐỘ MẠNH] Giảm thời gian vuốt -> Tăng tốc độ văng (Fling)
-                int duration = 120; // Cũ: 250ms
-
-                switch (trigger) {
-                    case "TRIGGER_UP": path.moveTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist); break;
-                    case "TRIGGER_DOWN": path.moveTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist); break;
-                    case "TRIGGER_LEFT": path.moveTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist, cy); break;
-                    case "TRIGGER_RIGHT": path.moveTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist, cy); break;
-                    case "TRIGGER_DIAG": path.moveTo(cx + swipeDist, cy + swipeDist); path.lineTo(cx - swipeDist, cy - swipeDist); break;
-                    case "TRIGGER_TAP": path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 25; break;
-                    case "TRIGGER_LONG": path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 600; break;
-                    case "TRIGGER_DTAP": path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 25; break;
-                    case "TRIGGER_UP_DOWN": path.moveTo(cx, cy); path.lineTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist * 0.35f); duration = 280; break;
-                    case "TRIGGER_DOWN_UP": path.moveTo(cx, cy); path.lineTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist * 0.35f); duration = 280; break;
-                    case "TRIGGER_LEFT_RIGHT": path.moveTo(cx, cy); path.lineTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist * 0.35f, cy); duration = 280; break;
-                    case "TRIGGER_RIGHT_LEFT": path.moveTo(cx, cy); path.lineTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist * 0.35f, cy); duration = 280; break;
-                }
-
-                android.accessibilityservice.GestureDescription.StrokeDescription stroke =
-                    new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration);
-                android.accessibilityservice.GestureDescription.Builder builder =
-                    new android.accessibilityservice.GestureDescription.Builder();
-                builder.addStroke(stroke);
-
-                final boolean isDtap = trigger.equals("TRIGGER_DTAP");
-                GestureResultCallback cb = new GestureResultCallback() {
-                    @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
-                        if (!isDtap) {
-                            isDispatchingSyntheticGesture = false;
-                            setTransientUntouchable(false);
-                        }
-                    }
-                    @Override public void onCancelled(android.accessibilityservice.GestureDescription g) {
-                        isDispatchingSyntheticGesture = false;
-                        setTransientUntouchable(false);
-                    }
-                };
-                dispatchGesture(builder.build(), cb, null);
-
-                if (isDtap) {
-                    final android.graphics.Path finalPath = path;
-                    new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                        try {
-                            android.accessibilityservice.GestureDescription.Builder b2 =
-                                new android.accessibilityservice.GestureDescription.Builder();
-                            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, 25));
-                            dispatchGesture(b2.build(), new GestureResultCallback() {
-                                @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
-                                    isDispatchingSyntheticGesture = false;
-                                    setTransientUntouchable(false);
-                                }
-                                @Override public void onCancelled(android.accessibilityservice.GestureDescription g) {
-                                    isDispatchingSyntheticGesture = false;
-                                    setTransientUntouchable(false);
-                                }
-                            }, null);
-                        } catch (Exception ignored) {}
-                    }, 120);
-                }
-            } catch (Exception ignored) {}
+            android.accessibilityservice.GestureDescription.Builder b2 = 
+                new android.accessibilityservice.GestureDescription.Builder();
+            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 50));
+            dispatchGesture(b2.build(), null, null);
         }, 150);
     }
-
+}
     // [MỚI] Ẩn thủ công đúng danh sách bar/corner user đã chọn cho rule này — tái dùng
     // NGUYÊN VẸN cờ "_manual_hide" đã có sẵn (đọc trong updateVisibility()/updateHomaccLive()),
     // Zero-cost khi rule không gán HIDE_SOME_OVERLAY: chỉ 1 lệnh đọc prefs, return ngay nếu rỗng.
@@ -1935,8 +1891,8 @@ int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", prefs.getInt("lock_b
                 int mwPref = prefs.getInt(ck+"moon_w",100), mhPref = prefs.getInt(ck+"moon_h",100);
                 int mxOffset = Math.abs(prefs.getInt(ck+"moon_x",1250)-1250);
                 int myOffset = Math.abs(prefs.getInt(ck+"moon_y",1250)-1250);
-                p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset);
-                p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
+                p.width = Math.max(10, Math.max(wPref, mwPref)+mxOffset);
+                p.height = Math.max(10, Math.max(hPref, mhPref)+myOffset);
                 int pushY = (pushForKbd && (i==0 || i==1)) ? cachedKbdHeight : 0; // "br","bl" là 2 góc đáy
 p.x = prefs.getInt(ck+"x",0); p.y = prefs.getInt(ck+"y",0) + pushY;
                 updateLayoutIfChanged(corners[i], p);
@@ -1945,75 +1901,6 @@ p.x = prefs.getInt(ck+"x",0); p.y = prefs.getInt(ck+"y",0) + pushY;
         }
 // CODE MỚI — thêm ngay trước dấu } đóng hàm:
 if (panelEngine != null) panelEngine.rebuildAll();
-
-        // [FIX BUG LOGIC] Luôn đồng bộ cả Homacc khi có lệnh cập nhật hiển thị chung, 
-        // phòng trường hợp trạng thái Lock thay đổi khiến Homacc cần được ẩn/hiện.
-        updateHomaccLive();
-    }
-private static final int MAX_TRIGGER_DEPTH = 3;
-    private static final String[] GESTURE_SUFFIXES = {
-        "_up_hold","_down_hold","_left_hold","_right_hold","_diag_hold",
-        "_dtap","_long","_diag","_up","_down","_left","_right","_tap"
-    };
-
-    private String stripGestureSuffix(String key) {
-        for (String suf : GESTURE_SUFFIXES) {
-            if (key.endsWith(suf)) return key.substring(0, key.length() - suf.length());
-        }
-        return key;
-    }
-
-    private void handleAction(String key) { 
-        handleAction(key, 0, true); 
-    }
-
-    private void handleAction(String key, int depth, boolean applyVibAnim) {
-        String action = prefs.getString(key, "NONE");
-        boolean isOn = prefs.getBoolean(key + "_on", true);
-        if (action.equals("NONE") || !isOn) return;
-
-        if (applyVibAnim) {
-            if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
-            if (prefs.getBoolean(key + "_anim", true)) playAnim();
-        }
-
-        String[] acts = action.split(",");
-        for (String a : acts) {
-            String at = a.trim();
-            if (at.startsWith("TRIGGER_")) {
-                // [FIX QUAN TRỌNG] Bắn trực tiếp tọa độ vuốt xuống hệ thống, chấm dứt đệ quy!
-                dispatchRealScreenGesture(at);
-            } else if (at.equals("HIDE_SOME_OVERLAY")) {
-                hideSomeOverlay(key);
-            } else if (at.equals("SHOW_ALL_OVERLAY")) {
-                showAllOverlay(key);
-            } else if (at.equals("RUN_SHORTCUT")) {
-                String scId = prefs.getString(key + "_shortcut_id", "");
-                if (!scId.isEmpty()) {
-                    try {
-                        String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
-                        if (!uri.isEmpty()) {
-                            Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
-                            scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            startActivity(scIntent);
-                        }
-                    } catch (Exception ignored) {}
-                }
-            } else if (at.equals("LAUNCH_APP")) {
-                String pkg = prefs.getString(key + "_launch_pkg", "");
-                if (!pkg.isEmpty()) {
-                    try {
-                        Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
-                        if (li != null) { 
-                            li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); 
-                            startActivity(li); 
-                        }
-                    } catch (Exception ignored) {}
-                }
-            } else {
-                exec(at);
-            }
-        }
     }
     private class SidebarTouchListener implements View.OnTouchListener {
         private String prefKeyBase;
@@ -2023,12 +1910,11 @@ private static final int MAX_TRIGGER_DEPTH = 3;
         private boolean longFired = false;
         private final Handler lpHandler = new Handler(android.os.Looper.getMainLooper());
         private long lastTapUpTime = 0;
-        private float lastTapUpX = -1f, lastTapUpY = -1f; // [MỚI] Tọa độ của cú chạm trước
         private static final long DTAP_WINDOW_MS = 300;
-        private static final float DTAP_MAX_DIST_PX = 120f; // [MỚI] Giới hạn khoảng cách Double Tap (px)
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
-        private static final float COMBO_THRESHOLD_PX = 130f;
-        private Runnable pendingTapRunnable = null;
+        private Runnable pendingTapRunnable = null; // Thêm biến này để quản lý hủy Tap
+        private static final float COMBO_THRESHOLD_PX = 130f; // Quãng đường tối thiểu để nhận diện Combo vẩy tay
+
         public SidebarTouchListener(String keyBase, View v) {
             this.prefKeyBase = keyBase;
             this.myView = v;
@@ -2081,10 +1967,7 @@ private static final int MAX_TRIGGER_DEPTH = 3;
         };
 private boolean isHolding = false;
 private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
-                        @Override public boolean onTouch(View v, MotionEvent e) {
-            // [FIX ĐỆ QUY] Đang bắn cử chỉ ảo -> bỏ qua ngay, không cho Bar/Corner
-            // tự "nghe" lại cử chỉ do chính nó vừa tạo ra.
-            if (isDispatchingSyntheticGesture) return false;
+        @Override public boolean onTouch(View v, MotionEvent e) {
             if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
             
@@ -2092,11 +1975,8 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                 case MotionEvent.ACTION_DOWN:
                     sx = getFixedX(e); sy = getFixedY(e);
                     lastX = sx; lastY = sy;
-                    maxDx = 0; minDx = 0; maxDy = 0; minDy = 0; // [FIX] reset combo-tracker
                     st = System.currentTimeMillis();
                     longFired = false;
-                    isHolding = false; // [FIX] BẮT BUỘC — nếu không reset, mọi chạm sau lần "gài số"
-                                        // đầu tiên sẽ bị hiểu nhầm thành hold/long vĩnh viễn
                     
                     lpHandler.removeCallbacks(holdCheckRunnable);
                     // HỦY BỎ 1-Tap nếu user bắt đầu nhịp chạm/vuốt mới
@@ -2111,17 +1991,14 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     
                 case MotionEvent.ACTION_MOVE:
                     lastX = getFixedX(e); lastY = getFixedY(e);
-                    float cdx = lastX - sx; float cdy = lastY - sy; // [FIX] thiếu hoàn toàn ở bản cũ
-                    if (cdx > maxDx) maxDx = cdx; if (cdx < minDx) minDx = cdx;
-                    if (cdy > maxDy) maxDy = cdy; if (cdy < minDy) minDy = cdy;
                     if (rippleView != null) rippleView.moveTo(lastX, lastY);
                     return true;
                     
                 case MotionEvent.ACTION_CANCEL:
                     lpHandler.removeCallbacks(holdCheckRunnable);
-                    isHolding = false; // [FIX] hủy giữa chừng cũng phải reset, không thì kẹt trạng thái
                     if (rippleView != null) rippleView.popRipple();
                     return true;
+                    
                 case MotionEvent.ACTION_UP:
                     lpHandler.removeCallbacks(holdCheckRunnable);
                     if (longFired) {
@@ -2133,12 +2010,12 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     String actionName = "";
                     boolean isDiag = (myView instanceof CornerView && absDx > 40 && absDy > 40);
 
-                                        if (isHolding) {
+                    if (isHolding) {
                         // ============ [ĐÃ GÀI SỐ: HOLD VÀ VUỐT] ============
                         if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
                             actionName = "long"; // Nhả tay tại chỗ
                         } else {
-                            if (isDiag) actionName = "hold_diag"; // [FIX] đúng tên gesture Gài số + Chéo
+                            if (isDiag) actionName = "diag_hold"; // Gom chung chéo gài số
                             else {
                                 if (absDx > absDy) actionName = finalDx > 0 ? "hold_right" : "hold_left";
                                 else actionName = finalDy > 0 ? "hold_down" : "hold_up";
@@ -2239,22 +2116,13 @@ private void removeAccessibleHome() {
 
 private void updateHomaccLive() {
     if (!isHomaccDrawn) return;
-    
-    // [FIX BUG LOGIC] Kiểm tra cờ xem trước và trạng thái khóa màn hình.
-    // Homacc chỉ được hiện khi: Đang KHÔNG ở màn hình khóa, HOẶC đang bật xem trước Homacc.
-    boolean isPreviewHomacc = prefs.getBoolean("preview_homacc", false);
-    boolean isLocked = km != null && km.isKeyguardLocked();
-    boolean shouldShowHomacc = !isLocked || isPreviewHomacc;
-
     for (int i = 0; i < 12; i++) {
         View v = accHomeBars[i];
         if (v == null || !(v instanceof BarView)) continue;
-        boolean en = prefs.getBoolean("homacc_" + BARS[i] + "_en", false);
+                boolean en = prefs.getBoolean("homacc_" + BARS[i] + "_en", false);
         boolean manualHidden = prefs.getBoolean("homacc_" + BARS[i] + "_manual_hide", false);
-        
-        // Ép thêm điều kiện shouldShowHomacc
-        v.setVisibility((en && !manualHidden && shouldShowHomacc) ? View.VISIBLE : View.GONE);
-        if (!en || manualHidden || !shouldShowHomacc) continue;
+        v.setVisibility((en && !manualHidden) ? View.VISIBLE : View.GONE);
+        if (!en || manualHidden) continue;
         int alpha = prefs.getInt("homacc_" + BARS[i] + "_alpha", 50);
         int w = prefs.getInt("homacc_" + BARS[i] + "_w", 300);
         int h = prefs.getInt("homacc_" + BARS[i] + "_h", 60);
@@ -2279,12 +2147,10 @@ private void updateHomaccLive() {
     for (int i = 0; i < 4; i++) {
         View v = accHomeCorners[i];
         if (v == null || !(v instanceof CornerView)) continue;
-        boolean en = prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_en", false);
+                boolean en = prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_en", false);
         boolean manualHidden = prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_manual_hide", false);
-        
-        // Ép thêm điều kiện shouldShowHomacc
-        v.setVisibility((en && !manualHidden && shouldShowHomacc) ? View.VISIBLE : View.GONE);
-        if (!en || manualHidden || !shouldShowHomacc) continue;
+        v.setVisibility((en && !manualHidden) ? View.VISIBLE : View.GONE);
+        if (!en || manualHidden) continue;
         String ck = "homacc_corner_" + CORNERS[i] + "_";
         int moonAlpha = prefs.getInt("homacc_corner_moon_alpha", 100);
         int strokeAlpha = prefs.getInt("homacc_corner_stroke_alpha", 200);

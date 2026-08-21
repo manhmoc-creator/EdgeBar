@@ -575,19 +575,18 @@ new Thread(() -> {
         List<String> letterList = Arrays.asList("-", "A", "B", "C", "D", "E", "F", "G", "H", "I");
         List<String> romanList = Arrays.asList("-", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX");
 
-                for (PanelItemObj obj : allItems) {
+        for (PanelItemObj obj : allItems) {
             String pos = prefs.getString(px + "posmap_" + obj.ref, "-,-");
             String[] parts = pos.split(",");
             if (parts.length == 2 && !parts[0].equals("-") && !parts[1].equals("-")) {
-                int lVal = letterList.indexOf(parts[0]); // trục X (cột) - chữ, trái→phải
-                int rVal = romanList.indexOf(parts[1]);  // trục Y (hàng) - số, trên→dưới
-                // [FIX] Lưới vẽ theo HÀNG trước (row-major): phải ưu tiên số (hàng) trước
-                // rồi mới tới chữ (cột), khớp đúng cách renderPanelGrid() đổ item theo "cols"
-                obj.sortScore = (rVal * 10) + lVal;
+                int lVal = letterList.indexOf(parts[0]);
+                int rVal = romanList.indexOf(parts[1]);
+                obj.sortScore = (lVal * 10) + rVal; // Tính điểm tọa độ bàn cờ
             } else {
                 obj.sortScore = 9999; // Mục không set tọa độ sẽ rớt xuống cuối
             }
         }
+
         Collections.sort(allItems, (a, b) -> {
             if (a.sortScore != b.sortScore) return Integer.compare(a.sortScore, b.sortScore);
             return Integer.compare(a.originalIndex, b.originalIndex); // Fallback thuật toán tuần tự hiện tại
