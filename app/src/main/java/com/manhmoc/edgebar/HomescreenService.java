@@ -1788,12 +1788,20 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                                 if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                             } else {
                                 long gap = now - lastTapUpTime;
-                                if (lastTapUpTime > 0 && gap <= DTAP_WINDOW_MS) {
+                                float tapDist = 0f;
+                                if (lastTapUpTime > 0) {
+                                    float dX = sx - lastTapUpX;
+                                    float dY = sy - lastTapUpY;
+                                    tapDist = (float) Math.sqrt(dX * dX + dY * dY);
+                                }
+
+                                // [MỚI] Điều kiện: Thời gian gap <= 300ms VÀ Khoảng cách 2 chạm <= 120 pixels
+                                if (lastTapUpTime > 0 && gap <= DTAP_WINDOW_MS && tapDist <= DTAP_MAX_DIST_PX) {
                                     if (gap > 40) { // Lọc nhiễu cảm ứng < 40ms
                                         lastTapUpTime = 0; handleAction(prefKeyBase + "_dtap");
                                         if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                                     } else {
-                                        lastTapUpTime = now;
+                                        lastTapUpTime = now; lastTapUpX = sx; lastTapUpY = sy;
                                         final long myUpTs = now;
                                         pendingTapRunnable = () -> {
                                             if (lastTapUpTime == myUpTs) {
@@ -1804,7 +1812,15 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                                         lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
                                     }
                                 } else {
-                                    lastTapUpTime = now;
+                                    // [MỚI] Nếu chạm ngoài khoảng thời gian HOẶC cách nhau quá xa
+                                    // -> Huỷ chờ và kích hoạt ngay lập tức nhịp 1-Chạm cũ đang treo (nếu có)!
+                                    if (pendingTapRunnable != null) {
+                                        lpHandler.removeCallbacks(pendingTapRunnable);
+                                        pendingTapRunnable.run(); 
+                                        pendingTapRunnable = null;
+                                    }
+                                    
+                                    lastTapUpTime = now; lastTapUpX = sx; lastTapUpY = sy;
                                     final long myUpTs = now;
                                     pendingTapRunnable = () -> {
                                         if (lastTapUpTime == myUpTs) {

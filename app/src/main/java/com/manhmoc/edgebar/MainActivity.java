@@ -276,13 +276,17 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     } catch (Exception e) { return null; }
 }
     private void refreshPreview() { 
+        // [FIX] Thêm điều kiện inFrontierSub: Chỉ bung Full Overlay khi người dùng
+        // THỰC SỰ đã bấm vào các không gian Lock/Homeb/Homacc (Hiển thị list Data Pack).
+        // Tránh tình trạng vừa mở danh mục Frontier ở ngoài đã bị bung Overlay.
+        boolean inFrontierSub = (frontierBodyContainer != null && frontierBodyContainer.getVisibility() == View.VISIBLE);
+        
         boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0)
             || (currentMainTab==1 && currentGesTab==0)
-            || (currentMainTab==1 && currentGesTab==5 && frontierSubTab==0); 
+            || (currentMainTab==1 && currentGesTab==5 && frontierSubTab==0 && inFrontierSub); 
         boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4)
-            || (currentMainTab==1 && currentGesTab==5 && frontierSubTab==2);
-        boolean pHome = (currentMainTab==1 && currentGesTab==5 && frontierSubTab==1);
-
+            || (currentMainTab==1 && currentGesTab==5 && frontierSubTab==2 && inFrontierSub);
+        boolean pHome = (currentMainTab==1 && currentGesTab==5 && frontierSubTab==1 && inFrontierSub);
         SharedPreferences.Editor ed = prefs.edit();
         ed.putBoolean("preview_lock", pLock)
           .putBoolean("preview_homacc", pHomacc)
@@ -2729,8 +2733,14 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
 
     TextView tvOpt = new TextView(this);
-    tvOpt.setText(T("\n3. CHOOSE OPTIONS", "\n3. CHỌN TÙY CHỌN"));
+    tvOpt.setText(T("2. CHOOSE OPTIONS", "2. CHỌN TÙY CHỌN"));
     tvOpt.setTextColor(Color.parseColor("#E91E63"));
+    tvOpt.setPadding(30, 30, 30, 30);
+    tvOpt.setTextSize(16);
+    tvOpt.setBackground(getRounded("#222222", 20f));
+    LinearLayout.LayoutParams optLp = new LinearLayout.LayoutParams(-1, -2);
+    optLp.setMargins(0, 20, 0, 10);
+    tvOpt.setLayoutParams(optLp);
     vTrig.addView(tvOpt);
     CheckBox cbVib = new CheckBox(this);
     cbVib.setText("Bật Rung (Haptic Feedback)");
@@ -3047,8 +3057,16 @@ spComp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
 
         // [MỤC 3] Nhãn "3. CHỌN TÙY CHỌN" — đồng bộ style với mục 2 phía trên,
         // trước đây thiếu dòng tiêu đề này ở mọi tab khác (Lock/Home/Homacc...).
-        TextView tvOpt = new TextView(this); tvOpt.setText(T("\n3. CHOOSE OPTIONS", "\n3. CHỌN TÙY CHỌN")); tvOpt.setTextColor(Color.parseColor("#E91E63")); vTrig.addView(tvOpt);
-
+        TextView tvOpt = new TextView(this);
+        tvOpt.setText(T("2. CHOOSE OPTIONS", "2. CHỌN TÙY CHỌN"));
+        tvOpt.setTextColor(Color.parseColor("#E91E63"));
+        tvOpt.setPadding(30, 30, 30, 30);
+        tvOpt.setTextSize(16);
+        tvOpt.setBackground(getRounded("#222222", 20f));
+        LinearLayout.LayoutParams optLp = new LinearLayout.LayoutParams(-1, -2);
+        optLp.setMargins(0, 20, 0, 10);
+        tvOpt.setLayoutParams(optLp);
+        vTrig.addView(tvOpt);
         LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
         TextView tvA = new TextView(this); tvA.setText(T("CHOOSE ACTIONS (Multi-select)", "CHỌN HÀNH ĐỘNG THỰC THI (Được chọn nhiều)")); tvA.setTextColor(Color.parseColor("#00E5FF")); tvA.setPadding(0,0,0,20); vAct.addView(tvA);
         

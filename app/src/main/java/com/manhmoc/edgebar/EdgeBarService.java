@@ -1934,8 +1934,8 @@ int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", prefs.getInt("lock_b
                 int mwPref = prefs.getInt(ck+"moon_w",100), mhPref = prefs.getInt(ck+"moon_h",100);
                 int mxOffset = Math.abs(prefs.getInt(ck+"moon_x",1250)-1250);
                 int myOffset = Math.abs(prefs.getInt(ck+"moon_y",1250)-1250);
-                p.width = Math.max(10, Math.max(wPref, mwPref)+mxOffset);
-                p.height = Math.max(10, Math.max(hPref, mhPref)+myOffset);
+                p.width = Math.max(10, Math.max(wPref, mwPref) + mxOffset);
+                p.height = Math.max(10, Math.max(hPref, mhPref) + myOffset);
                 int pushY = (pushForKbd && (i==0 || i==1)) ? cachedKbdHeight : 0; // "br","bl" là 2 góc đáy
 p.x = prefs.getInt(ck+"x",0); p.y = prefs.getInt(ck+"y",0) + pushY;
                 updateLayoutIfChanged(corners[i], p);
@@ -1944,6 +1944,10 @@ p.x = prefs.getInt(ck+"x",0); p.y = prefs.getInt(ck+"y",0) + pushY;
         }
 // CODE MỚI — thêm ngay trước dấu } đóng hàm:
 if (panelEngine != null) panelEngine.rebuildAll();
+
+        // [FIX BUG LOGIC] Luôn đồng bộ cả Homacc khi có lệnh cập nhật hiển thị chung, 
+        // phòng trường hợp trạng thái Lock thay đổi khiến Homacc cần được ẩn/hiện.
+        updateHomaccLive();
     }
     private class SidebarTouchListener implements View.OnTouchListener {
         private String prefKeyBase;
@@ -1953,11 +1957,12 @@ if (panelEngine != null) panelEngine.rebuildAll();
         private boolean longFired = false;
         private final Handler lpHandler = new Handler(android.os.Looper.getMainLooper());
         private long lastTapUpTime = 0;
+        private float lastTapUpX = -1f, lastTapUpY = -1f; // [MỚI] Tọa độ của cú chạm trước
         private static final long DTAP_WINDOW_MS = 300;
+        private static final float DTAP_MAX_DIST_PX = 120f; // [MỚI] Giới hạn khoảng cách Double Tap (px)
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
-        private Runnable pendingTapRunnable = null; // Thêm biến này để quản lý hủy Tap
-        private static final float COMBO_THRESHOLD_PX = 130f; // Quãng đường tối thiểu để nhận diện Combo vẩy tay
-
+        private static final float COMBO_THRESHOLD_PX = 130f;
+        private Runnable pendingTapRunnable = null;
         public SidebarTouchListener(String keyBase, View v) {
             this.prefKeyBase = keyBase;
             this.myView = v;
@@ -2159,13 +2164,22 @@ private void removeAccessibleHome() {
 
 private void updateHomaccLive() {
     if (!isHomaccDrawn) return;
+    
+    // [FIX BUG LOGIC] Kiểm tra cờ xem trước và trạng thái khóa màn hình.
+    // Homacc chỉ được hiện khi: Đang KHÔNG ở màn hình khóa, HOẶC đang bật xem trước Homacc.
+    boolean isPreviewHomacc = prefs.getBoolean("preview_homacc", false);
+    boolean isLocked = km != null && km.isKeyguardLocked();
+    boolean shouldShowHomacc = !isLocked || isPreviewHomacc;
+
     for (int i = 0; i < 12; i++) {
         View v = accHomeBars[i];
         if (v == null || !(v instanceof BarView)) continue;
-                boolean en = prefs.getBoolean("homacc_" + BARS[i] + "_en", false);
+        boolean en = prefs.getBoolean("homacc_" + BARS[i] + "_en", false);
         boolean manualHidden = prefs.getBoolean("homacc_" + BARS[i] + "_manual_hide", false);
-        v.setVisibility((en && !manualHidden) ? View.VISIBLE : View.GONE);
-        if (!en || manualHidden) continue;
+        
+        // Ép thêm điều kiện shouldShowHomacc
+        v.setVisibility((en && !manualHidden && shouldShowHomacc) ? View.VISIBLE : View.GONE);
+        if (!en || manualHidden || !shouldShowHomacc) continue;
         int alpha = prefs.getInt("homacc_" + BARS[i] + "_alpha", 50);
         int w = prefs.getInt("homacc_" + BARS[i] + "_w", 300);
         int h = prefs.getInt("homacc_" + BARS[i] + "_h", 60);
@@ -2190,10 +2204,12 @@ private void updateHomaccLive() {
     for (int i = 0; i < 4; i++) {
         View v = accHomeCorners[i];
         if (v == null || !(v instanceof CornerView)) continue;
-                boolean en = prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_en", false);
+        boolean en = prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_en", false);
         boolean manualHidden = prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_manual_hide", false);
-        v.setVisibility((en && !manualHidden) ? View.VISIBLE : View.GONE);
-        if (!en || manualHidden) continue;
+        
+        // Ép thêm điều kiện shouldShowHomacc
+        v.setVisibility((en && !manualHidden && shouldShowHomacc) ? View.VISIBLE : View.GONE);
+        if (!en || manualHidden || !shouldShowHomacc) continue;
         String ck = "homacc_corner_" + CORNERS[i] + "_";
         int moonAlpha = prefs.getInt("homacc_corner_moon_alpha", 100);
         int strokeAlpha = prefs.getInt("homacc_corner_stroke_alpha", 200);
