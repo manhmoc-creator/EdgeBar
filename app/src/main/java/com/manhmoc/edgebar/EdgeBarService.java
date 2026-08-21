@@ -1905,6 +1905,47 @@ if (panelEngine != null) panelEngine.rebuildAll();
     }
     private class SidebarTouchListener implements View.OnTouchListener {
         private String prefKeyBase;
+// ==========================================
+    // HÀM XỬ LÝ HÀNH ĐỘNG GESTURE (MỚI)
+    // ==========================================
+    private void handleAction(String key) {
+        if (key == null) return;
+        
+        // 1. Kiểm tra rule có đang bật không
+        if (!prefs.getBoolean(key + "_on", true)) return;
+
+        // 2. Lấy chuỗi hành động
+        String action = prefs.getString(key, "NONE");
+        if (action == null || action.equals("NONE") || action.trim().isEmpty()) return;
+
+        // 3. Rung và Animation
+        if (prefs.getBoolean(key + "_vib", true)) {
+            doVibrate(prefs.getInt("vib_dur", 30));
+        }
+        if (prefs.getBoolean(key + "_anim", true)) {
+            playAnim();
+        }
+
+        // 4. Cắt chuỗi và thực thi đa hành động qua cơ chế IPC an toàn
+        String[] acts = action.split(",");
+        for (String a : acts) {
+            String act = a.trim();
+            if (act.isEmpty()) continue;
+
+            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            if (act.equals("LAUNCH_APP")) {
+                ipc.putExtra("act", "LAUNCH_APP");
+                ipc.putExtra("launch_pkg", prefs.getString(key + "_launch_pkg", ""));
+            } else if (act.equals("RUN_SHORTCUT")) {
+                ipc.putExtra("act", "RUN_SHORTCUT");
+                ipc.putExtra("shortcut_id", prefs.getString(key + "_shortcut_id", ""));
+            } else {
+                ipc.putExtra("act", act);
+            }
+            ipc.setPackage(getPackageName());
+            sendBroadcast(ipc);
+        }
+    }
         private View myView;
         private float sx, sy, lastX, lastY;
         private long st;
