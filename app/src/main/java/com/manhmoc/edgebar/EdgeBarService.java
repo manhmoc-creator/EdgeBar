@@ -1492,103 +1492,77 @@ private void fireIntentById(String id) {
     private void dispatchRealScreenGesture(String trigger) {
         if (Build.VERSION.SDK_INT < 24) return;
 
-        // [FIX ĐỆ QUY] Bật cờ TRƯỚC khi bắn — nếu điểm chạm ảo vô tình rơi trúng
-        // vùng cảm ứng của chính Bar/Corner, SidebarTouchListener sẽ đọc cờ này
-        // và bỏ qua ngay, chặn đứng vòng lặp vô hạn ngay tại nguồn.
+        // Bật cờ chống đệ quy (nếu điểm chạm rơi trúng chính EdgeBar)
         isDispatchingSyntheticGesture = true;
         if (syntheticGuardResetRunnable != null) syntheticGuardHandler.removeCallbacks(syntheticGuardResetRunnable);
         syntheticGuardResetRunnable = () -> isDispatchingSyntheticGesture = false;
-        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 900); // lưới an toàn nếu callback không bắn
+        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 1000);
 
-        WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        android.graphics.Point size = new android.graphics.Point();
-        wm.getDefaultDisplay().getRealSize(size);
-        float cx = size.x / 2f;
-        float cy = size.y / 2f;
-        float swipeDist = Math.min(cx, cy) * 0.6f;
+        // [MẤU CHỐT FIX] Chờ 150ms để hệ thống dọn sạch tín hiệu "nhả tay" (ACTION_UP) phần cứng.
+        // Bắn ngay lập tức sẽ bị Android huỷ vì ngỡ bạn vẫn đang chạm màn hình!
+        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            try {
+                android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+                float cx = dm.widthPixels / 2f;
+                float cy = dm.heightPixels / 2f;
+                float swipeDist = Math.min(cx, cy) * 0.6f;
 
-        android.graphics.Path path = new android.graphics.Path();
-        int duration = 250;
+                android.graphics.Path path = new android.graphics.Path();
+                int duration = 250;
 
-        switch (trigger) {
-            case "TRIGGER_UP":
-                path.moveTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist);
-                break;
-            case "TRIGGER_DOWN":
-                path.moveTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist);
-                break;
-            case "TRIGGER_LEFT":
-                path.moveTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist, cy);
-                break;
-            case "TRIGGER_RIGHT":
-                path.moveTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist, cy);
-                break;
-            case "TRIGGER_DIAG":
-                path.moveTo(cx + swipeDist, cy + swipeDist); path.lineTo(cx - swipeDist, cy - swipeDist);
-                break;
-            case "TRIGGER_TAP":
-                path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 50;
-                break;
-            case "TRIGGER_LONG":
-                path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 600;
-                break;
-            case "TRIGGER_DTAP":
-                path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 50;
-                break;
-            // [MỚI] 4 cử chỉ đích COMBO — 1 nét kéo liên tục đi xa rồi quay đầu,
-            // đúng cách SidebarTouchListener nhận diện combo thật (COMBO_THRESHOLD_PX).
-            case "TRIGGER_UP_DOWN":
-                path.moveTo(cx, cy); path.lineTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist * 0.35f);
-                duration = 420;
-                break;
-            case "TRIGGER_DOWN_UP":
-                path.moveTo(cx, cy); path.lineTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist * 0.35f);
-                duration = 420;
-                break;
-            case "TRIGGER_LEFT_RIGHT":
-                path.moveTo(cx, cy); path.lineTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist * 0.35f, cy);
-                duration = 420;
-                break;
-            case "TRIGGER_RIGHT_LEFT":
-                path.moveTo(cx, cy); path.lineTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist * 0.35f, cy);
-                duration = 420;
-                break;
-        }
+                switch (trigger) {
+                    case "TRIGGER_UP": path.moveTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist); break;
+                    case "TRIGGER_DOWN": path.moveTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist); break;
+                    case "TRIGGER_LEFT": path.moveTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist, cy); break;
+                    case "TRIGGER_RIGHT": path.moveTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist, cy); break;
+                    case "TRIGGER_DIAG": path.moveTo(cx + swipeDist, cy + swipeDist); path.lineTo(cx - swipeDist, cy - swipeDist); break;
+                    case "TRIGGER_TAP": path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 50; break;
+                    case "TRIGGER_LONG": path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 600; break;
+                    case "TRIGGER_DTAP": path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 50; break;
+                    case "TRIGGER_UP_DOWN": path.moveTo(cx, cy); path.lineTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist * 0.35f); duration = 420; break;
+                    case "TRIGGER_DOWN_UP": path.moveTo(cx, cy); path.lineTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist * 0.35f); duration = 420; break;
+                    case "TRIGGER_LEFT_RIGHT": path.moveTo(cx, cy); path.lineTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist * 0.35f, cy); duration = 420; break;
+                    case "TRIGGER_RIGHT_LEFT": path.moveTo(cx, cy); path.lineTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist * 0.35f, cy); duration = 420; break;
+                }
 
-        android.accessibilityservice.GestureDescription.StrokeDescription stroke =
-            new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration);
-        android.accessibilityservice.GestureDescription.Builder builder =
-            new android.accessibilityservice.GestureDescription.Builder();
-        builder.addStroke(stroke);
-
-        final boolean isDtap = trigger.equals("TRIGGER_DTAP");
-        GestureResultCallback cb = new GestureResultCallback() {
-            @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
-                if (!isDtap) isDispatchingSyntheticGesture = false;
-            }
-            @Override public void onCancelled(android.accessibilityservice.GestureDescription g) {
-                isDispatchingSyntheticGesture = false;
-            }
-        };
-        dispatchGesture(builder.build(), cb, null);
-
-        // Bắn nhịp chạm thứ 2 nếu là Double Tap — giữ cờ chặn đệ quy tới khi xong hẳn nhịp 2
-        if (isDtap) {
-            final android.graphics.Path finalPath = path;
-            new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                android.accessibilityservice.GestureDescription.Builder b2 =
+                android.accessibilityservice.GestureDescription.StrokeDescription stroke =
+                    new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration);
+                android.accessibilityservice.GestureDescription.Builder builder =
                     new android.accessibilityservice.GestureDescription.Builder();
-                b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, 50));
-                dispatchGesture(b2.build(), new GestureResultCallback() {
+                builder.addStroke(stroke);
+
+                final boolean isDtap = trigger.equals("TRIGGER_DTAP");
+                GestureResultCallback cb = new GestureResultCallback() {
                     @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
-                        isDispatchingSyntheticGesture = false;
+                        if (!isDtap) isDispatchingSyntheticGesture = false;
                     }
                     @Override public void onCancelled(android.accessibilityservice.GestureDescription g) {
                         isDispatchingSyntheticGesture = false;
                     }
-                }, null);
-            }, 150);
-        }
+                };
+                dispatchGesture(builder.build(), cb, null);
+
+                // Nhịp thứ 2 của Double Tap
+                if (isDtap) {
+                    final android.graphics.Path finalPath = path;
+                    new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                        try {
+                            android.accessibilityservice.GestureDescription.Builder b2 =
+                                new android.accessibilityservice.GestureDescription.Builder();
+                            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, 50));
+                            dispatchGesture(b2.build(), new GestureResultCallback() {
+                                @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
+                                    isDispatchingSyntheticGesture = false;
+                                }
+                                @Override public void onCancelled(android.accessibilityservice.GestureDescription g) {
+                                    isDispatchingSyntheticGesture = false;
+                                }
+                            }, null);
+                        } catch (Exception ignored) {}
+                    }, 150);
+                }
+            } catch (Exception ignored) {}
+        }, 150);
     }
 
     // [MỚI] Ẩn thủ công đúng danh sách bar/corner user đã chọn cho rule này — tái dùng
