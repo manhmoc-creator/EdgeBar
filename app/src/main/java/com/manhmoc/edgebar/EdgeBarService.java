@@ -1940,6 +1940,71 @@ if (panelEngine != null) panelEngine.rebuildAll();
         // phòng trường hợp trạng thái Lock thay đổi khiến Homacc cần được ẩn/hiện.
         updateHomaccLive();
     }
+private static final int MAX_TRIGGER_DEPTH = 3;
+    private static final String[] GESTURE_SUFFIXES = {
+        "_up_hold","_down_hold","_left_hold","_right_hold","_diag_hold",
+        "_dtap","_long","_diag","_up","_down","_left","_right","_tap"
+    };
+
+    private String stripGestureSuffix(String key) {
+        for (String suf : GESTURE_SUFFIXES) {
+            if (key.endsWith(suf)) return key.substring(0, key.length() - suf.length());
+        }
+        return key;
+    }
+
+    private void handleAction(String key) { 
+        handleAction(key, 0, true); 
+    }
+
+    private void handleAction(String key, int depth, boolean applyVibAnim) {
+        String action = prefs.getString(key, "NONE");
+        boolean isOn = prefs.getBoolean(key + "_on", true);
+        if (action.equals("NONE") || !isOn) return;
+
+        if (applyVibAnim) {
+            if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
+            if (prefs.getBoolean(key + "_anim", true)) playAnim();
+        }
+
+        String[] acts = action.split(",");
+        for (String a : acts) {
+            String at = a.trim();
+            if (at.startsWith("TRIGGER_")) {
+                // [FIX QUAN TRỌNG] Bắn trực tiếp tọa độ vuốt xuống hệ thống, chấm dứt đệ quy!
+                dispatchRealScreenGesture(at);
+            } else if (at.equals("HIDE_SOME_OVERLAY")) {
+                hideSomeOverlay(key);
+            } else if (at.equals("SHOW_ALL_OVERLAY")) {
+                showAllOverlay(key);
+            } else if (at.equals("RUN_SHORTCUT")) {
+                String scId = prefs.getString(key + "_shortcut_id", "");
+                if (!scId.isEmpty()) {
+                    try {
+                        String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+                        if (!uri.isEmpty()) {
+                            Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
+                            scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(scIntent);
+                        }
+                    } catch (Exception ignored) {}
+                }
+            } else if (at.equals("LAUNCH_APP")) {
+                String pkg = prefs.getString(key + "_launch_pkg", "");
+                if (!pkg.isEmpty()) {
+                    try {
+                        Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
+                        if (li != null) { 
+                            li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); 
+                            startActivity(li); 
+                        }
+                    } catch (Exception ignored) {}
+                }
+            } else {
+                exec(at);
+            }
+        }
+    }
     private class SidebarTouchListener implements View.OnTouchListener {
         private String prefKeyBase;
         private View myView;
