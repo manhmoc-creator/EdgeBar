@@ -1489,64 +1489,6 @@ private void fireIntentById(String id) {
             anim.start();
         });
     }
-
-        // [MỚI] Chặn đệ quy vô hạn của TRIGGER_* — user tự tạo vòng lặp A→B→A vẫn an toàn.
-    private static final int MAX_TRIGGER_DEPTH = 3;
-    // [MỚI] Hậu tố gesture (dài → ngắn) để tách "lock_r_up_hold" -> base "lock_r".
-    private static final String[] GESTURE_SUFFIXES = {
-    "_hold_up", "_hold_down", "_hold_left", "_hold_right",
-    "_up_down", "_down_up", "_left_right", "_right_left",
-    "_up_hold", "_down_hold", "_left_hold", "_right_hold", "_diag_hold",
-    "_dtap", "_long", "_diag", "_up", "_down", "_left", "_right", "_tap"
-};
-    private String stripGestureSuffix(String key) {
-        for (String suf : GESTURE_SUFFIXES) if (key.endsWith(suf)) return key.substring(0, key.length() - suf.length());
-        return key;
-    }
-    private void handleAction(String key) { handleAction(key, 0, true); }
-    private void handleAction(String key, int depth, boolean applyVibAnim) {
-        String action = prefs.getString(key, "NONE");
-        boolean isOn = prefs.getBoolean(key + "_on", true);
-        if (action.equals("NONE") || !isOn) return;
-        // Rung/hiệu ứng CHỈ chạy theo gesture NGUỒN — gesture đích bị TRIGGER tới
-        // không tự bắn thêm rung/animation riêng, tránh nhân đôi cảm giác cho user.
-        if (applyVibAnim) {
-            if (prefs.getBoolean(key+"_vib", true)) doVibrate(prefs.getInt("vib_dur",30));
-            if (prefs.getBoolean(key+"_anim", true)) playAnim();
-        }
-        String[] acts = action.split(",");
-        for (String a : acts) {
-            String at = a.trim();
-            if (at.startsWith("TRIGGER_")) {
-                // Đã nâng cấp: Dùng AccessibilityService bắn cử chỉ vuốt/chạm thẳng xuống màn hình thật!
-                dispatchRealScreenGesture(at);
-            } else if (at.equals("HIDE_SOME_OVERLAY")) {
-                hideSomeOverlay(key);
-            } else if (at.equals("SHOW_ALL_OVERLAY")) {
-                showAllOverlay(key);
-            } else if (at.equals("RUN_SHORTCUT")) {
-                String scId = prefs.getString(key + "_shortcut_id", "");
-                if (!scId.isEmpty()) {
-                    try {
-                        String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
-                        if (!uri.isEmpty()) {
-                            Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
-                            scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            startActivity(scIntent);
-                        }
-                    } catch (Exception ignored) {}
-                }
-            } else if (at.equals("LAUNCH_APP")) {
-                String pkg = prefs.getString(key + "_launch_pkg", "");
-                if (!pkg.isEmpty()) {
-                    try {
-                        Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
-                        if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
-                    } catch (Exception ignored) {}
-                }
-            } else exec(at);
-        }
-    }
     private void dispatchRealScreenGesture(String trigger) {
         if (Build.VERSION.SDK_INT < 24) return;
 
