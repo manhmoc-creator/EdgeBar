@@ -1489,26 +1489,57 @@ private void fireIntentById(String id) {
             anim.start();
         });
     }
+    // 1. Thêm hàm này để xử lý xuyên thấu cảm ứng
+    private void setTransientUntouchable(boolean untouchable) {
+        try {
+            for (View[] arr : new View[][]{bars, corners, accHomeBars, accHomeCorners}) {
+                for (int i = 0; i < arr.length; i++) {
+                    View v = arr[i];
+                    if (v == null || v.getWindowToken() == null || v.getVisibility() != View.VISIBLE || v.getLayoutParams() == null) continue;
+                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
+                    if (untouchable) {
+                        p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    } else {
+                        int priMode = 0;
+                        if (arr == bars) priMode = prefs.getInt("lock_" + BARS[i] + "_pri_mode", 0);
+                        else if (arr == corners) priMode = prefs.getInt("lock_corner_" + CORNERS[i] + "_pri_mode", 0);
+                        else if (arr == accHomeBars) priMode = prefs.getInt("homacc_" + BARS[i] + "_pri_mode", 0);
+                        else if (arr == accHomeCorners) priMode = prefs.getInt("homacc_corner_" + CORNERS[i] + "_pri_mode", 0);
+                        if (priMode == 0) p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    }
+                    wm.updateViewLayout(v, p);
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    // 2. Ghi đè hàm cũ bằng bản đã tối ưu lực vuốt và thêm cơ chế xuyên thấu
     private void dispatchRealScreenGesture(String trigger) {
         if (Build.VERSION.SDK_INT < 24) return;
 
-        // Bật cờ chống đệ quy (nếu điểm chạm rơi trúng chính EdgeBar)
         isDispatchingSyntheticGesture = true;
-        if (syntheticGuardResetRunnable != null) syntheticGuardHandler.removeCallbacks(syntheticGuardResetRunnable);
-        syntheticGuardResetRunnable = () -> isDispatchingSyntheticGesture = false;
-        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 1000);
+        setTransientUntouchable(true); // Xuyên thấu toàn bộ Bar/Corner
 
-        // [MẤU CHỐT FIX] Chờ 150ms để hệ thống dọn sạch tín hiệu "nhả tay" (ACTION_UP) phần cứng.
-        // Bắn ngay lập tức sẽ bị Android huỷ vì ngỡ bạn vẫn đang chạm màn hình!
+        if (syntheticGuardResetRunnable != null) syntheticGuardHandler.removeCallbacks(syntheticGuardResetRunnable);
+        syntheticGuardResetRunnable = () -> {
+            isDispatchingSyntheticGesture = false;
+            setTransientUntouchable(false); // Khôi phục lại trạng thái cảm ứng
+        };
+        // Lưới an toàn: Tự khôi phục cảm ứng sau 800ms nếu cử chỉ bị kẹt
+        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 800);
+
         new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             try {
                 android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
                 float cx = dm.widthPixels / 2f;
                 float cy = dm.heightPixels / 2f;
-                float swipeDist = Math.min(cx, cy) * 0.6f;
+                
+                // [TĂNG ĐỘ NHẠY] Kéo dài quãng đường vuốt (0.80f thay vì 0.6f)
+                float swipeDist = Math.min(cx, cy) * 0.80f;
 
                 android.graphics.Path path = new android.graphics.Path();
-                int duration = 250;
+                // [TĂNG ĐỘ MẠNH] Giảm thời gian vuốt -> Tăng tốc độ văng (Fling)
+                int duration = 120; // Cũ: 250ms
 
                 switch (trigger) {
                     case "TRIGGER_UP": path.moveTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist); break;
@@ -1516,13 +1547,13 @@ private void fireIntentById(String id) {
                     case "TRIGGER_LEFT": path.moveTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist, cy); break;
                     case "TRIGGER_RIGHT": path.moveTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist, cy); break;
                     case "TRIGGER_DIAG": path.moveTo(cx + swipeDist, cy + swipeDist); path.lineTo(cx - swipeDist, cy - swipeDist); break;
-                    case "TRIGGER_TAP": path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 50; break;
+                    case "TRIGGER_TAP": path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 25; break;
                     case "TRIGGER_LONG": path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 600; break;
-                    case "TRIGGER_DTAP": path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 50; break;
-                    case "TRIGGER_UP_DOWN": path.moveTo(cx, cy); path.lineTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist * 0.35f); duration = 420; break;
-                    case "TRIGGER_DOWN_UP": path.moveTo(cx, cy); path.lineTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist * 0.35f); duration = 420; break;
-                    case "TRIGGER_LEFT_RIGHT": path.moveTo(cx, cy); path.lineTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist * 0.35f, cy); duration = 420; break;
-                    case "TRIGGER_RIGHT_LEFT": path.moveTo(cx, cy); path.lineTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist * 0.35f, cy); duration = 420; break;
+                    case "TRIGGER_DTAP": path.moveTo(cx, cy); path.lineTo(cx, cy + 1); duration = 25; break;
+                    case "TRIGGER_UP_DOWN": path.moveTo(cx, cy); path.lineTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist * 0.35f); duration = 280; break;
+                    case "TRIGGER_DOWN_UP": path.moveTo(cx, cy); path.lineTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist * 0.35f); duration = 280; break;
+                    case "TRIGGER_LEFT_RIGHT": path.moveTo(cx, cy); path.lineTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist * 0.35f, cy); duration = 280; break;
+                    case "TRIGGER_RIGHT_LEFT": path.moveTo(cx, cy); path.lineTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist * 0.35f, cy); duration = 280; break;
                 }
 
                 android.accessibilityservice.GestureDescription.StrokeDescription stroke =
@@ -1534,32 +1565,37 @@ private void fireIntentById(String id) {
                 final boolean isDtap = trigger.equals("TRIGGER_DTAP");
                 GestureResultCallback cb = new GestureResultCallback() {
                     @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
-                        if (!isDtap) isDispatchingSyntheticGesture = false;
+                        if (!isDtap) {
+                            isDispatchingSyntheticGesture = false;
+                            setTransientUntouchable(false);
+                        }
                     }
                     @Override public void onCancelled(android.accessibilityservice.GestureDescription g) {
                         isDispatchingSyntheticGesture = false;
+                        setTransientUntouchable(false);
                     }
                 };
                 dispatchGesture(builder.build(), cb, null);
 
-                // Nhịp thứ 2 của Double Tap
                 if (isDtap) {
                     final android.graphics.Path finalPath = path;
                     new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                         try {
                             android.accessibilityservice.GestureDescription.Builder b2 =
                                 new android.accessibilityservice.GestureDescription.Builder();
-                            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, 50));
+                            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, 25));
                             dispatchGesture(b2.build(), new GestureResultCallback() {
                                 @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
                                     isDispatchingSyntheticGesture = false;
+                                    setTransientUntouchable(false);
                                 }
                                 @Override public void onCancelled(android.accessibilityservice.GestureDescription g) {
                                     isDispatchingSyntheticGesture = false;
+                                    setTransientUntouchable(false);
                                 }
                             }, null);
                         } catch (Exception ignored) {}
-                    }, 150);
+                    }, 120);
                 }
             } catch (Exception ignored) {}
         }, 150);
