@@ -1661,7 +1661,9 @@ default:
         private boolean longFired = false;
         private final Handler lpHandler = new Handler(android.os.Looper.getMainLooper());
         private long lastTapUpTime = 0;
+        private float lastTapUpX = -1f, lastTapUpY = -1f; // [MỚI] Tọa độ của cú chạm trước
         private static final long DTAP_WINDOW_MS = 300;
+        private static final float DTAP_MAX_DIST_PX = 120f; // [MỚI] Giới hạn khoảng cách Double Tap (px)
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
         private static final float COMBO_THRESHOLD_PX = 130f;
         private Runnable pendingTapRunnable = null; // Thêm biến hủy Tap
