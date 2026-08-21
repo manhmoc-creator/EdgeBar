@@ -1664,9 +1664,30 @@ default:
         private long st;
         private boolean longFired = false;
         private final Handler lpHandler = new Handler(android.os.Looper.getMainLooper());
+private void checkAndYieldOS(String actionKey) {
+            if (prefs.getBoolean(actionKey + "_os", false)) {
+                try {
+                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) myView.getLayoutParams();
+                    p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    if (myView instanceof CornerView) {
+                        ((CornerView)myView).updateProps(0, 0, 0, false, 0, true);
+                    } else if (myView instanceof BarView) {
+                        ((BarView)myView).updateProps(0, false, 0, true, 0);
+                    }
+                    wm.updateViewLayout(myView, p);
+                    
+                    lpHandler.postDelayed(() -> {
+                        if (myView.getWindowToken() != null) {
+                            Intent sync = new Intent("com.manhmoc.edgebar.RESUME_WM_OPS");
+                            myView.getContext().sendBroadcast(sync);
+                        }
+                    }, prefs.getInt("os_yield_dur", 1500));
+                } catch (Exception ignored) {}
+            }
+        }
         private long lastTapUpTime = 0;
         private float lastTapUpX = -1f, lastTapUpY = -1f; // [MỚI] Tọa độ của cú chạm trước
-        private static final long DTAP_WINDOW_MS = 150;
+        private static final long DTAP_WINDOW_MS = 280;
         private static final float DTAP_MAX_DIST_PX = 40f; // [SIẾT CHẶT] Giảm xuống 40px
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
         private static final float COMBO_THRESHOLD_PX = 130f;
@@ -1710,6 +1731,7 @@ default:
                     else actionName = cdy > 0 ? "down_hold" : "up_hold";
                 }
                 handleAction(prefKeyBase + "_" + actionName);
+                checkAndYieldOS(prefKeyBase + "_" + actionName);
                 if (rippleView != null) {
                     float swipeMag = (float) Math.sqrt(cdx * cdx + cdy * cdy);
                     float dirX = swipeMag > 0.001f ? cdx / swipeMag : 0f;
@@ -1718,6 +1740,7 @@ default:
                 }
             } else {
                 handleAction(prefKeyBase + "_long");
+                checkAndYieldOS(prefKeyBase + "_long"); // THÊM DÒNG NÀY
                 if (rippleView != null) {
                     float[] dir = computeJumpDirForTap();
                     rippleView.jumpIcon(sx, sy, "long", Color.argb(180, 96, 125, 139), dir[0], dir[1]);
@@ -1807,6 +1830,7 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                             
                             if (!hasDtap) {
                                 lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
+                                checkAndYieldOS(prefKeyBase + "_tap");
                                 if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                             } else {
                                 long gap = now - lastTapUpTime;
@@ -1819,7 +1843,9 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
 
                                 if (lastTapUpTime > 0 && gap <= DTAP_WINDOW_MS && tapDist <= DTAP_MAX_DIST_PX) {
                                     if (gap > 40) { 
-                                        lastTapUpTime = 0; handleAction(prefKeyBase + "_dtap");
+                                        lastTapUpTime = 0; 
+                                        handleAction(prefKeyBase + "_dtap");
+                                        checkAndYieldOS(prefKeyBase + "_dtap");
                                         if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "dtap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                                     } else {
                                         lastTapUpTime = now; lastTapUpX = sx; lastTapUpY = sy;
@@ -1827,10 +1853,11 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                                         pendingTapRunnable = () -> {
                                             if (lastTapUpTime == myUpTs) {
                                                 lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
+                                                checkAndYieldOS(prefKeyBase + "_tap"); // THÊM DÒNG NÀY Ở VỊ TRÍ 2
                                                 if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                                             }
                                         };
-                                        lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS);
+                                        lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
                                     }
                                 } else {
                                     if (pendingTapRunnable != null) {
@@ -1844,10 +1871,11 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                                     pendingTapRunnable = () -> {
                                         if (lastTapUpTime == myUpTs) {
                                             lastTapUpTime = 0; handleAction(prefKeyBase + "_tap");
+                                            checkAndYieldOS(prefKeyBase + "_tap"); // THÊM DÒNG NÀY Ở VỊ TRÍ 3
                                             if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                                         }
                                     };
-                                    lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS);
+                                    lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
                                 }
                             }
                             if (rippleView != null) rippleView.popRipple();
@@ -1868,6 +1896,7 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
 
                     if (!actionName.isEmpty()) {
                         handleAction(prefKeyBase + "_" + actionName);
+                        checkAndYieldOS(prefKeyBase + "_" + actionName);
                         if (rippleView != null) {
                             rippleView.popRipple();
                             float swipeMag = (float) Math.sqrt(finalDx * finalDx + finalDy * finalDy);

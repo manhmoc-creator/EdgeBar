@@ -1314,8 +1314,9 @@ private String getSpacePrefix() {
     optCol.setPadding(0, 0, 15, 0);
     TextView tIcons = new TextView(this);
     tIcons.setText((prefs.getBoolean(key+"_vib", true) ? "📳\n" : "") +
-                   (prefs.getBoolean(key+"_anim", true) ? "✨" : ""));
-    tIcons.setTextSize(16); // Tăng cỡ chữ lên 2 mức, bỏ Typeface.BOLD
+                   (prefs.getBoolean(key+"_anim", true) ? "✨\n" : "") +
+                   (prefs.getBoolean(key+"_os", false) ? "👻" : ""));
+    tIcons.setTextSize(15);
     optCol.addView(tIcons);
 
     // Cột 2 (Giữa): Thông tin Component, Gesture, Action
@@ -2212,8 +2213,9 @@ private void ensureHomeServiceForPreview() {
                 optCol.setPadding(0, 0, 15, 0);
                 TextView tIcons = new TextView(this);
                 tIcons.setText((prefs.getBoolean("prule_" + rId + "_vib", true) ? "📳\n" : "") +
-                               (prefs.getBoolean("prule_" + rId + "_anim", true) ? "✨" : ""));
-                tIcons.setTextSize(16);
+                               (prefs.getBoolean("prule_" + rId + "_anim", true) ? "✨\n" : "") +
+                               (prefs.getBoolean("prule_" + rId + "_os", false) ? "👻" : ""));
+                tIcons.setTextSize(15);
                 optCol.addView(tIcons);
 
                 // Cột 2: Text Gesture & Action
@@ -2527,6 +2529,7 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
                     .putString("prule_" + newId + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
                     .putBoolean("prule_" + newId + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
                     .putBoolean("prule_" + newId + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
+                    .putBoolean("prule_" + newId + "_os", prefs.getBoolean("prule_" + rId + "_os", false))
                     .putBoolean("prule_" + newId + "_en", true)
                     .apply();
                 totalCopied++;
@@ -2577,7 +2580,8 @@ btnDupP.setOnClickListener(v -> {
             .putString("prule_" + newRuleId + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
             .putBoolean("prule_" + newRuleId + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
             .putBoolean("prule_" + newRuleId + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
-            .putBoolean("prule_" + newRuleId + "_en", true)
+            .putBoolean("prule_" + newRuleId + "_os", prefs.getBoolean("prule_" + rId + "_os", false))
+            .putBoolean("prule_" + newRuleId + "_en", prefs.getBoolean("prule_" + rId + "_en", true))
             .apply();
     }
     prefs.edit().putString(listKey, android.text.TextUtils.join(",", rules)).apply();
@@ -2761,6 +2765,12 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     cbAnim.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_anim", true));
     vTrig.addView(cbAnim);
 
+    CheckBox cbOs = new CheckBox(this);
+    cbOs.setText("Nhường OS ở Cử chỉ này (Xuyên thấu)");
+    cbOs.setTextColor(Color.parseColor("#FFC107"));
+    cbOs.setChecked(sourceId != null && prefs.getBoolean("prule_" + sourceId + "_os", false));
+    vTrig.addView(cbOs);
+
     content.addView(vTrig); content.addView(vAct);
     View.OnClickListener tabClick = v -> {
         bTrig.setBackground(getRounded(v==bTrig?"#00E5FF":"#222222", 15f));
@@ -2829,6 +2839,7 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
             .putString("prule_" + targetId + "_shortcut_id", shortcutId[0])
             .putBoolean("prule_" + targetId + "_vib", cbVib.isChecked())
             .putBoolean("prule_" + targetId + "_anim", cbAnim.isChecked())
+            .putBoolean("prule_" + targetId + "_os", cbOs.isChecked()) // THÊM DÒNG NÀY
             .putBoolean("prule_" + targetId + "_en", true)
             .apply();
         reapplyPackIfEnabledByItemKey(appliedItemKey); // [MỚI] — đồng bộ action xuống lock_r_tap thật
@@ -2859,6 +2870,7 @@ private void applyPackRulesToSpace(String itemKey, String targetPrefix, String c
                 .putString(finalKey, acts)
                 .putBoolean(finalKey + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
                 .putBoolean(finalKey + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
+                .putBoolean(finalKey + "_os", prefs.getBoolean("prule_" + rId + "_os", false))
                 .putString(finalKey + "_launch_pkg", prefs.getString("prule_" + rId + "_launch_pkg", ""))
                 .putString(finalKey + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
                 .apply();
@@ -3202,6 +3214,12 @@ cbAnim.setTextColor(Color.WHITE); cbAnim.setChecked(editKey == null ||
 prefs.getBoolean(editKey+"_anim", true));
 if (!isVolKeyMode) vTrig.addView(cbAnim); else cbAnim.setChecked(false);
 
+CheckBox cbOs = new CheckBox(this);
+cbOs.setText("Nhường OS ở Cử chỉ này (Xuyên thấu)");
+cbOs.setTextColor(Color.parseColor("#FFC107"));
+cbOs.setChecked(editKey != null && prefs.getBoolean(editKey+"_os", false));
+if (!isVolKeyMode) vTrig.addView(cbOs); else cbOs.setChecked(false);
+
 content.addView(vTrig); content.addView(vAct);
 View.OnClickListener tabClick = v -> {
 bTrig.setBackground(getRounded(v==bTrig?"#00E5FF":"#222222", 15f));
@@ -3275,6 +3293,7 @@ prefs.edit()
      .putString(finalKey, joinedActions)
      .putBoolean(finalKey+"_vib", cbVib.isChecked())
      .putBoolean(finalKey+"_anim", cbAnim.isChecked())
+     .putBoolean(finalKey+"_os", cbOs.isChecked()) // THÊM DÒNG NÀY
      .putString(finalKey+"_launch_pkg", launchAppPkg[0])
      .putString(finalKey+"_shortcut_id", shortcutId[0])
      .apply();
@@ -4058,6 +4077,7 @@ private void clonePackRules(String srcItemKey, String dstItemKey) {
             .putString("prule_" + newRuleId + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
             .putBoolean("prule_" + newRuleId + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
             .putBoolean("prule_" + newRuleId + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
+            .putBoolean("prule_" + newRuleId + "_os", prefs.getBoolean("prule_" + rId + "_os", false))
             .putBoolean("prule_" + newRuleId + "_en", prefs.getBoolean("prule_" + rId + "_en", true))
             .apply();
     }
@@ -5902,6 +5922,7 @@ if (designTabState == 5) { renderPanelDesign(); return; }
     LinearLayout dOpt = new LinearLayout(this);
     dOpt.setOrientation(LinearLayout.VERTICAL); dOpt.setPadding(20,10,20,20);
     dOpt.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600));
+    dOpt.addView(createSlider("Thời gian Nhường OS (ms)", "os_yield_dur", 3000, 1500)); // THÊM DÒNG NÀY
     dOpt.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30));
     designSliderContainer.addView(createDrawer("⚙️ " + T("GENERAL OPTIONS","TÙY CHỌN CHUNG"), dOpt));
 
