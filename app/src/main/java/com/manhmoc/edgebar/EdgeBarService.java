@@ -1543,7 +1543,7 @@ private void fireIntentById(String id) {
                 float defaultSwipeDist = Math.min(cx, cy) * 0.80f;
                 android.graphics.Path path = new android.graphics.Path();
                 // [TĂNG TỐC TỐI ĐA] Thời gian vuốt giảm từ 80ms xuống 50ms
-                int duration = 50; 
+                int duration = 20; 
 
                 boolean isTapOrLong = trigger.contains("TAP") || trigger.contains("LONG");
                 boolean isCombo = trigger.contains("UP_DOWN") || trigger.contains("DOWN_UP") || trigger.contains("LEFT_RIGHT") || trigger.contains("RIGHT_LEFT");
@@ -1560,9 +1560,9 @@ private void fireIntentById(String id) {
                         case "TRIGGER_LEFT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); break;
                         case "TRIGGER_RIGHT": path.moveTo(ox, oy); path.lineTo(ox + defaultSwipeDist, oy); break;
                         case "TRIGGER_DIAG": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy - defaultSwipeDist); break;
-                        case "TRIGGER_TAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 15; break;
+                        case "TRIGGER_TAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 5; break;
                         case "TRIGGER_LONG": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 600; break;
-                        case "TRIGGER_DTAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 15; break;
+                        case "TRIGGER_DTAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 5; break;
                         case "TRIGGER_UP_DOWN": path.moveTo(ox, oy); path.lineTo(ox, oy - defaultSwipeDist); path.lineTo(ox, oy + defaultSwipeDist * 0.35f); duration = 150; break;
                         case "TRIGGER_DOWN_UP": path.moveTo(ox, oy); path.lineTo(ox, oy + defaultSwipeDist); path.lineTo(ox, oy - defaultSwipeDist * 0.35f); duration = 150; break;
                         case "TRIGGER_LEFT_RIGHT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); path.lineTo(ox + defaultSwipeDist * 0.35f, oy); duration = 150; break;
@@ -2032,7 +2032,7 @@ private static final int MAX_TRIGGER_DEPTH = 3;
         private final Handler lpHandler = new Handler(android.os.Looper.getMainLooper());
         private long lastTapUpTime = 0;
         private float lastTapUpX = -1f, lastTapUpY = -1f; // [MỚI] Tọa độ của cú chạm trước
-        private static final long DTAP_WINDOW_MS = 300;
+        private static final long DTAP_WINDOW_MS = 150;
         private static final float DTAP_MAX_DIST_PX = 40f; // [SIẾT CHẶT] Giảm xuống 40px
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
         private static final float COMBO_THRESHOLD_PX = 130f;
@@ -2193,7 +2193,7 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                                                 if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                                             }
                                         };
-                                        lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
+                                        lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS);
                                     }
                                 } else {
                                     if (pendingTapRunnable != null) {
@@ -2210,7 +2210,7 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                                             if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                                         }
                                     };
-                                    lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
+                                    lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS);
                                 }
                             }
                             if (rippleView != null) rippleView.popRipple();

@@ -1666,7 +1666,7 @@ default:
         private final Handler lpHandler = new Handler(android.os.Looper.getMainLooper());
         private long lastTapUpTime = 0;
         private float lastTapUpX = -1f, lastTapUpY = -1f; // [MỚI] Tọa độ của cú chạm trước
-        private static final long DTAP_WINDOW_MS = 300;
+        private static final long DTAP_WINDOW_MS = 150;
         private static final float DTAP_MAX_DIST_PX = 40f; // [SIẾT CHẶT] Giảm xuống 40px
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
         private static final float COMBO_THRESHOLD_PX = 130f;
@@ -1830,7 +1830,7 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                                                 if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                                             }
                                         };
-                                        lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
+                                        lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS);
                                     }
                                 } else {
                                     if (pendingTapRunnable != null) {
@@ -1847,7 +1847,7 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                                             if (rippleView != null) rippleView.jumpIcon(lastX, lastY, "tap", Color.argb(180, 96, 125, 139), dirTap[0], dirTap[1]);
                                         }
                                     };
-                                    lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS + 20);
+                                    lpHandler.postDelayed(pendingTapRunnable, DTAP_WINDOW_MS);
                                 }
                             }
                             if (rippleView != null) rippleView.popRipple();
