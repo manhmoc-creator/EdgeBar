@@ -282,13 +282,8 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
             for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
             ed.apply();
-    // [THAY BẰNG CODE HỒI SINH LOCK Ở ĐÂY]
-    SharedPreferences.Editor ed = prefs.edit();
-    for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
-    for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
-    ed.apply();
 
-} else if (Intent.ACTION_USER_PRESENT.equals(act)) {
+        } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
             if (AccessibleHomeService.isRunning) drawAccessibleHome();
             refreshFingerprintRegistration(); 
             
