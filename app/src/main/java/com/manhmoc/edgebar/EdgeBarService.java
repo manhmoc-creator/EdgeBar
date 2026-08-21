@@ -1527,9 +1527,9 @@ private void fireIntentById(String id) {
             isDispatchingSyntheticGesture = false;
             setTransientUntouchable(false); // Khôi phục lại trạng thái cảm ứng
         };
-        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 800);
+        // Giảm thời gian khoá an toàn tương ứng với tốc độ vuốt mới
+        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 400);
 
-        // Lấy bản sao của tọa độ để tránh sai lệch nếu ngón tay di chuyển tiếp
         android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
         final float cx = dm.widthPixels / 2f;
         final float cy = dm.heightPixels / 2f;
@@ -1539,17 +1539,17 @@ private void fireIntentById(String id) {
         final float ey = globalTouchEndY >= 0 ? globalTouchEndY : oy;
         final float actualDist = (float) Math.hypot(ex - ox, ey - oy);
 
+        // [ÉP XUNG] Ép độ trễ từ 150ms xuống 40ms. Phản hồi gần như tức thì sau khi nhả tay!
         new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             try {
                 float defaultSwipeDist = Math.min(cx, cy) * 0.80f;
                 android.graphics.Path path = new android.graphics.Path();
-                int duration = 120; // Lực văng siêu nhanh
+                // [TĂNG TỐC] Thời gian vuốt giảm từ 120ms xuống 80ms -> Vuốt siêu gắt
+                int duration = 80; 
 
                 boolean isTapOrLong = trigger.contains("TAP") || trigger.contains("LONG");
                 boolean isCombo = trigger.contains("UP_DOWN") || trigger.contains("DOWN_UP") || trigger.contains("LEFT_RIGHT") || trigger.contains("RIGHT_LEFT");
                 
-                // Thuật toán: Nếu vuốt xa hơn 40px, BẮT CHƯỚC Y ĐÚC ĐƯỜNG VUỐT THẬT.
-                // Nếu khoảng cách quá ngắn (do gán nhầm hành động), vẽ đường giả lập tự động từ tâm điểm chạm.
                 boolean useExactPath = actualDist > 40f && !isTapOrLong && !isCombo;
 
                 if (useExactPath) {
@@ -1562,13 +1562,13 @@ private void fireIntentById(String id) {
                         case "TRIGGER_LEFT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); break;
                         case "TRIGGER_RIGHT": path.moveTo(ox, oy); path.lineTo(ox + defaultSwipeDist, oy); break;
                         case "TRIGGER_DIAG": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy - defaultSwipeDist); break;
-                        case "TRIGGER_TAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 25; break;
+                        case "TRIGGER_TAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 20; break;
                         case "TRIGGER_LONG": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 600; break;
-                        case "TRIGGER_DTAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 25; break;
-                        case "TRIGGER_UP_DOWN": path.moveTo(ox, oy); path.lineTo(ox, oy - defaultSwipeDist); path.lineTo(ox, oy + defaultSwipeDist * 0.35f); duration = 280; break;
-                        case "TRIGGER_DOWN_UP": path.moveTo(ox, oy); path.lineTo(ox, oy + defaultSwipeDist); path.lineTo(ox, oy - defaultSwipeDist * 0.35f); duration = 280; break;
-                        case "TRIGGER_LEFT_RIGHT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); path.lineTo(ox + defaultSwipeDist * 0.35f, oy); duration = 280; break;
-                        case "TRIGGER_RIGHT_LEFT": path.moveTo(ox, oy); path.lineTo(ox + defaultSwipeDist, oy); path.lineTo(ox - defaultSwipeDist * 0.35f, oy); duration = 280; break;
+                        case "TRIGGER_DTAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 20; break;
+                        case "TRIGGER_UP_DOWN": path.moveTo(ox, oy); path.lineTo(ox, oy - defaultSwipeDist); path.lineTo(ox, oy + defaultSwipeDist * 0.35f); duration = 200; break;
+                        case "TRIGGER_DOWN_UP": path.moveTo(ox, oy); path.lineTo(ox, oy + defaultSwipeDist); path.lineTo(ox, oy - defaultSwipeDist * 0.35f); duration = 200; break;
+                        case "TRIGGER_LEFT_RIGHT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); path.lineTo(ox + defaultSwipeDist * 0.35f, oy); duration = 200; break;
+                        case "TRIGGER_RIGHT_LEFT": path.moveTo(ox, oy); path.lineTo(ox + defaultSwipeDist, oy); path.lineTo(ox - defaultSwipeDist * 0.35f, oy); duration = 200; break;
                     }
                 }
 
@@ -1594,7 +1594,7 @@ private void fireIntentById(String id) {
                     new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                         try {
                             android.accessibilityservice.GestureDescription.Builder b2 = new android.accessibilityservice.GestureDescription.Builder();
-                            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, 25));
+                            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, 20));
                             dispatchGesture(b2.build(), new GestureResultCallback() {
                                 @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
                                     isDispatchingSyntheticGesture = false; setTransientUntouchable(false);
@@ -1604,10 +1604,11 @@ private void fireIntentById(String id) {
                                 }
                             }, null);
                         } catch (Exception ignored) {}
-                    }, 120);
+                    // [TĂNG TỐC] Ép độ trễ nhịp 2 của Double Tap xuống còn 70ms
+                    }, 70);
                 }
             } catch (Exception ignored) {}
-        }, 150);
+        }, 40);
     }
 
     // [MỚI] Ẩn thủ công đúng danh sách bar/corner user đã chọn cho rule này — tái dùng
@@ -2034,7 +2035,7 @@ private static final int MAX_TRIGGER_DEPTH = 3;
         private long lastTapUpTime = 0;
         private float lastTapUpX = -1f, lastTapUpY = -1f; // [MỚI] Tọa độ của cú chạm trước
         private static final long DTAP_WINDOW_MS = 300;
-        private static final float DTAP_MAX_DIST_PX = 120f; // [MỚI] Giới hạn khoảng cách Double Tap (px)
+        private static final float DTAP_MAX_DIST_PX = 50f; // Siết cực chặt: nhịp 2 phải gần như đè lên nhịp 1
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
         private static final float COMBO_THRESHOLD_PX = 130f;
         private Runnable pendingTapRunnable = null;
