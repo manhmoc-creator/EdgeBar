@@ -1250,6 +1250,59 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
             anim.start();
         });
     }
+        private static final int MAX_TRIGGER_DEPTH = 3;
+    private static final String[] GESTURE_SUFFIXES = {
+        "_up_hold","_down_hold","_left_hold","_right_hold","_diag_hold",
+        "_dtap","_long","_diag","_up","_down","_left","_right","_tap"
+    };
+    private String stripGestureSuffix(String key) {
+        for (String suf : GESTURE_SUFFIXES) if (key.endsWith(suf)) return key.substring(0, key.length() - suf.length());
+        return key;
+    }
+    private void handleAction(String key) { handleAction(key, 0, true); }
+    private void handleAction(String key, int depth, boolean applyVibAnim) {
+        String action = prefs.getString(key, "NONE");
+        boolean isOn = prefs.getBoolean(key + "_on", true);
+        if (action.equals("NONE") || !isOn) return;
+        if (applyVibAnim) {
+            if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
+            if (prefs.getBoolean(key + "_anim", true)) playAnim();
+        }
+        String[] acts = action.split(",");
+        for (String a : acts) {
+            String at = a.trim();
+            if (at.startsWith("TRIGGER_")) {
+                if (depth >= MAX_TRIGGER_DEPTH) continue;
+                String targetGesture = at.substring(8).toLowerCase(java.util.Locale.ROOT);
+                String base = stripGestureSuffix(key);
+                handleAction(base + "_" + targetGesture, depth + 1, false);
+                        } else if (at.equals("HIDE_SOME_OVERLAY")) {
+                hideSomeOverlay(key);
+            } else if (at.equals("SHOW_ALL_OVERLAY")) {
+                showAllOverlay();
+            } else if (at.equals("RUN_SHORTCUT")) {
+                String scId = prefs.getString(key + "_shortcut_id", "");
+                if (!scId.isEmpty()) {
+                    try {
+                        String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+                        if (!uri.isEmpty()) {
+                            Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
+                            scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(scIntent);
+                        }
+                    } catch (Exception ignored) {}
+                }
+            } else if (at.equals("LAUNCH_APP")) {
+                String pkg = prefs.getString(key + "_launch_pkg", "");
+                if (!pkg.isEmpty()) {
+                    try {
+                        Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
+                        if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
+                    } catch (Exception ignored) {}
+                }
+            } else exec(at);
+        }
+    }
     // [MỚI] Homeb chỉ có đúng 1 không gian "home_" nên không cần suy luận prefix.
             private void hideSomeOverlay(String key) {
         String targetsBar = prefs.getString("home_bar_hide_targets", "");
@@ -1602,47 +1655,6 @@ default:
 
     private class SidebarTouchListener implements View.OnTouchListener {
         private String prefKeyBase;
-// ==========================================
-    // HÀM XỬ LÝ HÀNH ĐỘNG GESTURE (MỚI)
-    // ==========================================
-    private void handleAction(String key) {
-        if (key == null) return;
-        
-        // 1. Kiểm tra rule có đang bật không
-        if (!prefs.getBoolean(key + "_on", true)) return;
-
-        // 2. Lấy chuỗi hành động
-        String action = prefs.getString(key, "NONE");
-        if (action == null || action.equals("NONE") || action.trim().isEmpty()) return;
-
-        // 3. Rung và Animation
-        if (prefs.getBoolean(key + "_vib", true)) {
-            doVibrate(prefs.getInt("vib_dur", 30));
-        }
-        if (prefs.getBoolean(key + "_anim", true)) {
-            playAnim();
-        }
-
-        // 4. Cắt chuỗi và thực thi đa hành động qua cơ chế IPC an toàn
-        String[] acts = action.split(",");
-        for (String a : acts) {
-            String act = a.trim();
-            if (act.isEmpty()) continue;
-
-            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-            if (act.equals("LAUNCH_APP")) {
-                ipc.putExtra("act", "LAUNCH_APP");
-                ipc.putExtra("launch_pkg", prefs.getString(key + "_launch_pkg", ""));
-            } else if (act.equals("RUN_SHORTCUT")) {
-                ipc.putExtra("act", "RUN_SHORTCUT");
-                ipc.putExtra("shortcut_id", prefs.getString(key + "_shortcut_id", ""));
-            } else {
-                ipc.putExtra("act", act);
-            }
-            ipc.setPackage(getPackageName());
-            sendBroadcast(ipc);
-        }
-    }
         private View myView;
         private float sx, sy, lastX, lastY;
         private long st;
@@ -1761,7 +1773,7 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                         if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
                             actionName = "long"; 
                         } else {
-                            if (isDiag) actionName = "hold_diag"; 
+                            if (isDiag) actionName = "diag_hold"; 
                             else {
                                 if (absDx > absDy) actionName = finalDx > 0 ? "hold_right" : "hold_left";
                                 else actionName = finalDy > 0 ? "hold_down" : "hold_up";

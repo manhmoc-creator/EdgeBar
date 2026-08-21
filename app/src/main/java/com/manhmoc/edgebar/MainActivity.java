@@ -341,12 +341,12 @@ String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
         "NOTIFICATIONS", "QUICK_SETTINGS", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "TOGGLE_RECORD",
         "LAUNCH_APP", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE",
         "PAUSE_RECORD", "OPEN_STORAGE_SCAN", "SCAN_QR", "TOGGLE_WORK_PROFILE", "PLAY_MY_PLAYLIST",
-                // [MỚI] Ẩn/Hồi sinh overlay + 8 action Giả Lập Cử Chỉ (TRIGGER_*)
+                                // [MỚI] Ẩn/Hồi sinh overlay + 12 action Giả Lập Cử Chỉ (TRIGGER_*)
         "HIDE_SOME_OVERLAY", "SHOW_ALL_OVERLAY",
         "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
-        "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT", "TRIGGER_DIAG", "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT"};
-
-
+        "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
+        "TRIGGER_DIAG",
+        "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT"};
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Toggle Voice Record", "Bật/Tắt Ghi Âm"),
@@ -355,9 +355,12 @@ String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn
          T("Toggle Island (Work Profile)", "Bật/Tắt Đảo (Island)"), T("Play My Playlist", "Phát My Playlist"),
                 T("Hide Some Overlay", "Ẩn Một Số Bar/Corner"),
         T("Show All Overlay", "Hồi Sinh Toàn Bộ Bar/Corner"),
-        T("Trigger: Tap", "Giả Lập: Chạm"), T("Trigger: Double Tap", "Giả Lập: Chạm Đúp"), T("Trigger: Long Press", "Giả Lập: Giữ"),
+                T("Trigger: Tap", "Giả Lập: Chạm"), T("Trigger: Double Tap", "Giả Lập: Chạm Đúp"), T("Trigger: Long Press", "Giả Lập: Giữ"),
         T("Trigger: Swipe Up", "Giả Lập: Vuốt Lên"), T("Trigger: Swipe Down", "Giả Lập: Vuốt Xuống"),
-        T("Trigger: Swipe Left", "Giả Lập: Vuốt Trái"), T("Trigger: Swipe Right", "Giả Lập: Vuốt Phải"), T("Trigger: Diagonal", "Giả Lập: Chéo"), T("Trigger: Up-Down", "Giả Lập: Lên - Xuống"), T("Trigger: Down-Up", "Giả Lập: Xuống - Lên"), T("Trigger: Left-Right", "Giả Lập: Trái - Phải"), T("Trigger: Right-Left", "Giả Lập: Phải - Trái")};
+        T("Trigger: Swipe Left", "Giả Lập: Vuốt Trái"), T("Trigger: Swipe Right", "Giả Lập: Vuốt Phải"),
+        T("Trigger: Diagonal", "Giả Lập: Chéo"),
+        T("Trigger: Up then Down", "Giả Lập: Lên rồi Xuống"), T("Trigger: Down then Up", "Giả Lập: Xuống rồi Lên"),
+        T("Trigger: Left then Right", "Giả Lập: Trái rồi Phải"), T("Trigger: Right then Left", "Giả Lập: Phải rồi Trái")};
 for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
 // LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
@@ -390,9 +393,9 @@ C_GESTURE_NAMES = new String[]{
     T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Diagonal", "Vuốt Chéo"), 
     T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ"), T("Diagonal + Hold", "Vuốt Chéo + Giữ"),
     T("Combo: Up-Down", "Combo: Lên - Xuống"), T("Combo: Down-Up", "Combo: Xuống - Lên"), T("Combo: Left-Right", "Combo: Trái - Phải"), T("Combo: Right-Left", "Combo: Phải - Trái"),
-    T("Hold + Up", "Gài số: Giữ + Vuốt Lên"), T("Hold + Down", "Gài số: Giữ + Vuốt Xuống"), T("Hold + Left", "Gài số: Giữ + Vuốt Trái"), T("Hold + Right", "Gài số: Giữ + Vuốt Phải"), T("Hold + Diagonal", "Gài số: Giữ + Vuốt Chéo")
+    T("Hold + Up", "Gài số: Giữ + Vuốt Lên"), T("Hold + Down", "Gài số: Giữ + Vuốt Xuống"), T("Hold + Left", "Gài số: Giữ + Vuốt Trái"), T("Hold + Right", "Gài số: Giữ + Vuốt Phải"),
+    T("Hold + Diagonal", "Gài số: Giữ + Vuốt Chéo")
 };
-
 BAR_NAMES = new String[]{
     T("Bottom Center", "Đáy giữa"), T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"),
     T("Right Up", "Phải trên"), T("Right Center", "Phải giữa"), T("Right Down", "Phải dưới"),
@@ -2719,10 +2722,13 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
         List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"HIDE_SOME_OVERLAY", "SHOW_ALL_OVERLAY", "TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR", "PLAY_MY_PLAYLIST"}, ACT_KEYS, ACT_LABS);
         vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
     vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
-    if (!isHomebSpace) {
+        if (!isHomebSpace) {
         List<String[]> TRIGGER_ITEMS_PACK = buildItemsForKeys(new String[]{
             "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
-            "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT", "TRIGGER_DIAG", "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT"}, ACT_KEYS, ACT_LABS);
+            "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
+            "TRIGGER_DIAG",
+            "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT"
+        }, ACT_KEYS, ACT_LABS);
         vAct.addView(buildActionCategoryButton("GESTURES", "🌀", TRIGGER_ITEMS_PACK, selectedActs, "#009688"));
     }
     vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0", true));
@@ -3114,10 +3120,13 @@ for (String sa : savedArray) {
                 List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
         vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
                 // Chỉ hiện nhóm lệnh Giả lập Cử chỉ (Cần Trợ năng) nếu KHÔNG ở trong Homeb
-        if (!isVolKeyMode && !isHomebSpace) {
+                if (!isVolKeyMode && !isHomebSpace) {
             List<String[]> TRIGGER_ITEMS = buildItemsForKeys(new String[]{
                 "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
-                "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT", "TRIGGER_DIAG", "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT"}, actKeysUsed, actLabsUsed);
+                "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
+                "TRIGGER_DIAG",
+                "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT"
+            }, actKeysUsed, actLabsUsed);
             vAct.addView(buildActionCategoryButton("GESTURES", "🌀", TRIGGER_ITEMS, selectedActs, "#009688"));
         }
         if (!isLockSpace && !isVolKeyMode) {
