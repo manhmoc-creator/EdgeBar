@@ -264,14 +264,24 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         if ("com.manhmoc.edgebar.TEST_ANIM".equals(act)) {
             playAnim();
         } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
-    if (isHomaccDrawn) removeAccessibleHome();
-    removeYtdlOverlay(); 
-    removeRippleViewIfIdle(); 
-     AppLockHelper.clearAll(); 
-    if (fpRegistered && fpController != null && fpCallback != null) {
-        try { fpController.unregisterFingerprintGestureCallback(fpCallback); } catch (Exception e) {}
-        fpRegistered = false;
-    }
+            if (isHomaccDrawn) removeAccessibleHome();
+            removeYtdlOverlay(); 
+            removeRippleViewIfIdle(); 
+            AppLockHelper.clearAll(); 
+            if (fpRegistered && fpController != null && fpCallback != null) {
+                try { fpController.unregisterFingerprintGestureCallback(fpCallback); } catch (Exception e) {}
+                fpRegistered = false;
+            }
+            
+            // [MỚI] Hồi sinh hoàn toàn: Hủy mọi cờ xuyên thấu/giả lập đang kẹt
+            isDispatchingSyntheticGesture = false;
+            setTransientUntouchable(false);
+
+            // [THAY BẰNG CODE HỒI SINH LOCK Ở ĐÂY]
+            SharedPreferences.Editor ed = prefs.edit();
+            for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
+            for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
+            ed.apply();
     // [THAY BẰNG CODE HỒI SINH LOCK Ở ĐÂY]
     SharedPreferences.Editor ed = prefs.edit();
     for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
@@ -279,16 +289,20 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     ed.apply();
 
 } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
-    if (AccessibleHomeService.isRunning) drawAccessibleHome();
-    refreshFingerprintRegistration(); 
-    
-    // [THAY BẰNG CODE HỒI SINH HOMACC Ở ĐÂY]
-    SharedPreferences.Editor ed = prefs.edit();
-    for (String b : BARS) ed.putBoolean("homacc_" + b + "_manual_hide", false);
-    for (String cn : CORNERS) ed.putBoolean("homacc_corner_" + cn + "_manual_hide", false);
-    ed.apply();
-    
-    updateVisibility();
+            if (AccessibleHomeService.isRunning) drawAccessibleHome();
+            refreshFingerprintRegistration(); 
+            
+            // [MỚI] Hồi sinh hoàn toàn: Hủy mọi cờ xuyên thấu/giả lập đang kẹt
+            isDispatchingSyntheticGesture = false;
+            setTransientUntouchable(false);
+            
+            // [THAY BẰNG CODE HỒI SINH HOMACC Ở ĐÂY]
+            SharedPreferences.Editor ed = prefs.edit();
+            for (String b : BARS) ed.putBoolean("homacc_" + b + "_manual_hide", false);
+            for (String cn : CORNERS) ed.putBoolean("homacc_corner_" + cn + "_manual_hide", false);
+            ed.apply();
+            
+            updateVisibility();
 // CODE MỚI — thay bằng:
 } else if ("com.manhmoc.edgebar.OPEN_PANEL_REQUEST".equals(act)) {
     String panelId = i.getStringExtra("panel_id");
@@ -1509,7 +1523,7 @@ private void fireIntentById(String id) {
                         else if (arr == accHomeCorners) priMode = prefs.getInt("homacc_corner_" + CORNERS[i] + "_pri_mode", 0);
                         if (priMode == 0) p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
                     }
-                    wm.updateViewLayout(v, p);
+                    updateLayoutIfChanged(v, p); // <--- ĐÃ SỬA THÀNH HÀM CÓ CACHE
                 }
             }
         } catch (Exception ignored) {}
@@ -1636,6 +1650,10 @@ private void fireIntentById(String id) {
     }
 
     private void showAllOverlay(String key) {
+        // [MỚI] Hồi sinh hoàn toàn: Hủy mọi cờ xuyên thấu/giả lập đang kẹt
+        isDispatchingSyntheticGesture = false;
+        setTransientUntouchable(false);
+
         String prefix = key.startsWith("homacc_") ? "homacc_" : "lock_";
         boolean changed = false;
         SharedPreferences.Editor ed = prefs.edit();
