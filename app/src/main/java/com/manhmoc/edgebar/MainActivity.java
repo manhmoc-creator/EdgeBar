@@ -58,14 +58,14 @@ private String[] C_GESTURES = {
     "up", "down", "left", "right", "diag",
     "up_hold", "down_hold", "left_hold", "right_hold", "diag_hold",
     "up_down", "down_up", "left_right", "right_left",
-    "hold_up", "hold_down", "hold_left", "hold_right"
+    "hold_up", "hold_down", "hold_left", "hold_right", "hold_diag"
 }; 
 private String[] C_GESTURE_NAMES = {
     "1 Chạm", "2 Chạm", "Nhấn Giữ (Long)", 
     "Vuốt Lên", "Vuốt Xuống", "Vuốt Trái", "Vuốt Phải", "Vuốt Chéo",
     "Vuốt rồi Giữ Lên", "Vuốt rồi Giữ Xuống", "Vuốt rồi Giữ Trái", "Vuốt rồi Giữ Phải", "Vuốt rồi Giữ Chéo",
     "Combo: Lên - Xuống", "Combo: Xuống - Lên", "Combo: Trái - Phải", "Combo: Phải - Trái",
-    "Gài số: Giữ + Vuốt Lên", "Gài số: Giữ + Vuốt Xuống", "Gài số: Giữ + Vuốt Trái", "Gài số: Giữ + Vuốt Phải"
+    "Gài số: Giữ + Vuốt Lên", "Gài số: Giữ + Vuốt Xuống", "Gài số: Giữ + Vuốt Trái", "Gài số: Giữ + Vuốt Phải", "Gài số: Giữ + Vuốt Chéo"
 };
 
 // [TỐI ƯU PIN/RAM] Throttle ghi prefs khi kéo Slider — leading-edge throttle +
@@ -344,8 +344,7 @@ String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
                 // [MỚI] Ẩn/Hồi sinh overlay + 8 action Giả Lập Cử Chỉ (TRIGGER_*)
         "HIDE_SOME_OVERLAY", "SHOW_ALL_OVERLAY",
         "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
-        "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
-        "TRIGGER_DIAG"};
+        "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT", "TRIGGER_DIAG", "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT"};
 
 
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
@@ -358,8 +357,7 @@ String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn
         T("Show All Overlay", "Hồi Sinh Toàn Bộ Bar/Corner"),
         T("Trigger: Tap", "Giả Lập: Chạm"), T("Trigger: Double Tap", "Giả Lập: Chạm Đúp"), T("Trigger: Long Press", "Giả Lập: Giữ"),
         T("Trigger: Swipe Up", "Giả Lập: Vuốt Lên"), T("Trigger: Swipe Down", "Giả Lập: Vuốt Xuống"),
-        T("Trigger: Swipe Left", "Giả Lập: Vuốt Trái"), T("Trigger: Swipe Right", "Giả Lập: Vuốt Phải"),
-        T("Trigger: Diagonal", "Giả Lập: Chéo")};
+        T("Trigger: Swipe Left", "Giả Lập: Vuốt Trái"), T("Trigger: Swipe Right", "Giả Lập: Vuốt Phải"), T("Trigger: Diagonal", "Giả Lập: Chéo"), T("Trigger: Up-Down", "Giả Lập: Lên - Xuống"), T("Trigger: Down-Up", "Giả Lập: Xuống - Lên"), T("Trigger: Left-Right", "Giả Lập: Trái - Phải"), T("Trigger: Right-Left", "Giả Lập: Phải - Trái")};
 for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
 // LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
@@ -392,8 +390,9 @@ C_GESTURE_NAMES = new String[]{
     T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Diagonal", "Vuốt Chéo"), 
     T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ"), T("Diagonal + Hold", "Vuốt Chéo + Giữ"),
     T("Combo: Up-Down", "Combo: Lên - Xuống"), T("Combo: Down-Up", "Combo: Xuống - Lên"), T("Combo: Left-Right", "Combo: Trái - Phải"), T("Combo: Right-Left", "Combo: Phải - Trái"),
-    T("Hold + Up", "Gài số: Giữ + Vuốt Lên"), T("Hold + Down", "Gài số: Giữ + Vuốt Xuống"), T("Hold + Left", "Gài số: Giữ + Vuốt Trái"), T("Hold + Right", "Gài số: Giữ + Vuốt Phải")
+    T("Hold + Up", "Gài số: Giữ + Vuốt Lên"), T("Hold + Down", "Gài số: Giữ + Vuốt Xuống"), T("Hold + Left", "Gài số: Giữ + Vuốt Trái"), T("Hold + Right", "Gài số: Giữ + Vuốt Phải"), T("Hold + Diagonal", "Gài số: Giữ + Vuốt Chéo")
 };
+
 BAR_NAMES = new String[]{
     T("Bottom Center", "Đáy giữa"), T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"),
     T("Right Up", "Phải trên"), T("Right Center", "Phải giữa"), T("Right Down", "Phải dưới"),
@@ -1505,7 +1504,7 @@ private LinearLayout buildGestureIconDrawer() {
     body.setVisibility(View.GONE);
 
     TextView header = new TextView(this);
-    header.setText("📁 " + T("ICON FOR 21 GESTURES FRONTIER", "ICON CHO 21 CỬ CHỈ") + " (▼)");
+    header.setText("📁 " + T("ICON FOR 22 GESTURES FRONTIER", "ICON CHO 22 CỬ CHỈ") + " (▼)");
     header.setTextColor(Color.parseColor("#00E5FF"));
     header.setPadding(30, 30, 30, 30);
     header.setTextSize(16);
@@ -1559,7 +1558,7 @@ body.addView(createSlider(T("Jump Icon Opacity", "Độ đậm Icon Nhảy"), "h
         }
         body.setVisibility(willOpen ? View.VISIBLE : View.GONE);
         header.setText((willOpen ? "📂 " : "📁 ")
-            + T("ICON FOR 21 GESTURES", "ICON CHO 21 CỬ CHỈ")
+            + T("ICON FOR 22 GESTURES", "ICON CHO 22 CỬ CHỈ")
             + (willOpen ? " (▲)" : " (▼)"));
         header.setBackground(getRounded(willOpen ? "#333333" : "#202124", 25f));
     });
@@ -2723,9 +2722,7 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     if (!isHomebSpace) {
         List<String[]> TRIGGER_ITEMS_PACK = buildItemsForKeys(new String[]{
             "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
-            "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
-            "TRIGGER_DIAG"
-        }, ACT_KEYS, ACT_LABS);
+            "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT", "TRIGGER_DIAG", "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT"}, ACT_KEYS, ACT_LABS);
         vAct.addView(buildActionCategoryButton("GESTURES", "🌀", TRIGGER_ITEMS_PACK, selectedActs, "#009688"));
     }
     vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0", true));
@@ -3120,9 +3117,7 @@ for (String sa : savedArray) {
         if (!isVolKeyMode && !isHomebSpace) {
             List<String[]> TRIGGER_ITEMS = buildItemsForKeys(new String[]{
                 "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
-                "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
-                "TRIGGER_DIAG"
-            }, actKeysUsed, actLabsUsed);
+                "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT", "TRIGGER_DIAG", "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT"}, actKeysUsed, actLabsUsed);
             vAct.addView(buildActionCategoryButton("GESTURES", "🌀", TRIGGER_ITEMS, selectedActs, "#009688"));
         }
         if (!isLockSpace && !isVolKeyMode) {
@@ -3759,6 +3754,28 @@ private List<String> csvToList(String csv) {
     if (csv == null || csv.isEmpty()) return out;
     for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
     return out;
+}
+private void swapOrSetPanelPosition(String panelId, String ref, String newLetter, String newRoman) {
+    String posPrefix = "pack_panel_" + panelId + "_posmap_";
+    String oldPos = prefs.getString(posPrefix + ref, "-,-");
+    String newPos = newLetter + "," + newRoman;
+    if (oldPos.equals(newPos)) return;
+
+    if (!newLetter.equals("-") && !newRoman.equals("-")) {
+        List<String> allRefs = new ArrayList<>();
+        allRefs.addAll(csvToList(prefs.getString("pack_panel_" + panelId + "_apps", "")));
+        allRefs.addAll(csvToList(prefs.getString("pack_panel_" + panelId + "_acts", "")));
+        allRefs.addAll(csvToList(prefs.getString("pack_panel_" + panelId + "_shortcuts", "")));
+        for (String otherRef : allRefs) {
+            if (otherRef.equals(ref)) continue;
+            String otherPos = prefs.getString(posPrefix + otherRef, "-,-");
+            if (otherPos.equals(newPos)) {
+                prefs.edit().putString(posPrefix + otherRef, oldPos).apply(); // hoán đổi
+                break;
+            }
+        }
+    }
+    prefs.edit().putString(posPrefix + ref, newPos).apply();
 }
 private static final java.util.regex.Pattern NUM_CHUNK_PACK =
     java.util.regex.Pattern.compile("\\d+|\\D+");
@@ -6968,13 +6985,17 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
         shownList.clear();
         String q = etSearch.getText().toString().trim().toLowerCase();
         
-        if (currentTab[0] == 0 || currentTab[0] == 2) {
+                if (currentTab[0] == 0 || currentTab[0] == 2) {
             // APP và SHORTCUT: Phẳng (Flat List)
             List<String[]> source = currentTab[0] == 0 ? allApps : allScs;
             List<String> selectedFilter = currentTab[0] == 0 ? selApps : selScs;
-            for (String[] item : source) {
-                if (selectedFilter.contains(item[1]) && (q.isEmpty() || item[0].toLowerCase().contains(q)))
-                    shownList.add(item);
+            // [FIX] Duyệt ĐÚNG theo thứ tự đã lưu (selApps/selScs), không theo alphabet của source
+            for (String ref0 : selectedFilter) {
+                for (String[] item : source) {
+                    if (item[1].equals(ref0) && (q.isEmpty() || item[0].toLowerCase().contains(q))) {
+                        shownList.add(item); break;
+                    }
+                }
             }
             for (String[] item : source) {
                 if (!selectedFilter.contains(item[1]) && (q.isEmpty() || item[0].toLowerCase().contains(q)))
@@ -6982,10 +7003,12 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
             }
         } else {
             // ACTION: Chế độ Ngăn kéo
-            // 1. Đưa tất cả mục đã chọn lên đầu (Luôn mở)
-            for (String[] item : allActs) {
-                if (selActs.contains(item[1]) && (q.isEmpty() || item[0].toLowerCase().contains(q))) {
-                    shownList.add(item);
+            // 1. Đưa tất cả mục đã chọn lên đầu, ĐÚNG theo thứ tự đã lưu trong selActs
+            for (String ref0 : selActs) {
+                for (String[] item : allActs) {
+                    if (item[1].equals(ref0) && (q.isEmpty() || item[0].toLowerCase().contains(q))) {
+                        shownList.add(item); break;
+                    }
                 }
             }
             // 2. Hiển thị 3 Ngăn Kéo cho các mục CHƯA chọn
@@ -7061,11 +7084,12 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                 dragHandle.setTextSize(26);
                 dragHandle.setPadding(0, 0, 35, 0);
                 
-                // Đã bỏ lv.requestDisallowInterceptTouchEvent(true) để trả lại luồng Touch cho ListView
                                 dragHandle.setOnTouchListener((vh, ev) -> {
                     switch (ev.getActionMasked()) {
                         case MotionEvent.ACTION_DOWN:
-                            dragFromPos[0] = p; isDragging[0] = true; return true;
+                            dragFromPos[0] = p; isDragging[0] = true;
+                            lv.requestDisallowInterceptTouchEvent(true); // [FIX] chặn ListView cuộn trong lúc kéo
+                            return true;
                         case MotionEvent.ACTION_MOVE: {
                             if (!isDragging[0]) return true;
                             int[] loc = new int[2]; lv.getLocationOnScreen(loc);
@@ -7081,8 +7105,10 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                             }
                             return true;
                         }
-                        case MotionEvent.ACTION_UP: case MotionEvent.ACTION_CANCEL:
-                            isDragging[0] = false; dragFromPos[0] = -1; return true;
+                                                case MotionEvent.ACTION_UP: case MotionEvent.ACTION_CANCEL:
+                            isDragging[0] = false; dragFromPos[0] = -1;
+                            lv.requestDisallowInterceptTouchEvent(false); // [FIX] trả cuộn lại bình thường
+                            return true;
                     }
                     return true;
                 });
@@ -7146,12 +7172,11 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                 }
 
                 // Phím chọn vị trí chữ
-                Button btnLetter = makeMiniBtn.apply(curLetter);
+                                Button btnLetter = makeMiniBtn.apply(curLetter);
                 btnLetter.setTextColor(Color.parseColor("#FFC107"));
                 btnLetter.setOnClickListener(v -> {
                     new android.app.AlertDialog.Builder(MainActivity.this).setItems(LETTERS, (dlg, which) -> {
-                        String updatedPos = LETTERS[which] + "," + curRoman;
-                        prefs.edit().putString(posKey, updatedPos).apply();
+                        swapOrSetPanelPosition(panelId, ref, LETTERS[which], curRoman); // [FIX] hoán đổi thay vì đè
                         refreshList.run();
                     }).show();
                 });
@@ -7162,13 +7187,11 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                 btnRoman.setTextColor(Color.parseColor("#4CAF50"));
                 btnRoman.setOnClickListener(v -> {
                     new android.app.AlertDialog.Builder(MainActivity.this).setItems(ROMANS, (dlg, which) -> {
-                        String updatedPos = curLetter + "," + ROMANS[which];
-                        prefs.edit().putString(posKey, updatedPos).apply();
+                        swapOrSetPanelPosition(panelId, ref, curLetter, ROMANS[which]); // [FIX] hoán đổi thay vì đè
                         refreshList.run();
                     }).show();
                 });
                 controls.addView(btnRoman);
-
                 // Nút Chổi Cọ (Brush Override Icon)
                 if (currentTab[0] == 0 || currentTab[0] == 1) { // APP & ACTION
                     Button btnIcon = makeMiniBtn.apply("🖌");

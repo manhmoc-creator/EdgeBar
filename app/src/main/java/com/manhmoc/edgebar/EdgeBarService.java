@@ -1483,64 +1483,6 @@ private void fireIntentById(String id) {
             anim.start();
         });
     }
-
-        // [MỚI] Chặn đệ quy vô hạn của TRIGGER_* — user tự tạo vòng lặp A→B→A vẫn an toàn.
-    private static final int MAX_TRIGGER_DEPTH = 3;
-    // [MỚI] Hậu tố gesture (dài → ngắn) để tách "lock_r_up_hold" -> base "lock_r".
-    private static final String[] GESTURE_SUFFIXES = {
-    "_hold_up", "_hold_down", "_hold_left", "_hold_right",
-    "_up_down", "_down_up", "_left_right", "_right_left",
-    "_up_hold", "_down_hold", "_left_hold", "_right_hold", "_diag_hold",
-    "_dtap", "_long", "_diag", "_up", "_down", "_left", "_right", "_tap"
-};
-    private String stripGestureSuffix(String key) {
-        for (String suf : GESTURE_SUFFIXES) if (key.endsWith(suf)) return key.substring(0, key.length() - suf.length());
-        return key;
-    }
-    private void handleAction(String key) { handleAction(key, 0, true); }
-    private void handleAction(String key, int depth, boolean applyVibAnim) {
-        String action = prefs.getString(key, "NONE");
-        boolean isOn = prefs.getBoolean(key + "_on", true);
-        if (action.equals("NONE") || !isOn) return;
-        // Rung/hiệu ứng CHỈ chạy theo gesture NGUỒN — gesture đích bị TRIGGER tới
-        // không tự bắn thêm rung/animation riêng, tránh nhân đôi cảm giác cho user.
-        if (applyVibAnim) {
-            if (prefs.getBoolean(key+"_vib", true)) doVibrate(prefs.getInt("vib_dur",30));
-            if (prefs.getBoolean(key+"_anim", true)) playAnim();
-        }
-        String[] acts = action.split(",");
-        for (String a : acts) {
-            String at = a.trim();
-            if (at.startsWith("TRIGGER_")) {
-                // Đã nâng cấp: Dùng AccessibilityService bắn cử chỉ vuốt/chạm thẳng xuống màn hình thật!
-                dispatchRealScreenGesture(at);
-            } else if (at.equals("HIDE_SOME_OVERLAY")) {
-                hideSomeOverlay(key);
-            } else if (at.equals("SHOW_ALL_OVERLAY")) {
-                showAllOverlay(key);
-            } else if (at.equals("RUN_SHORTCUT")) {
-                String scId = prefs.getString(key + "_shortcut_id", "");
-                if (!scId.isEmpty()) {
-                    try {
-                        String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
-                        if (!uri.isEmpty()) {
-                            Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
-                            scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            startActivity(scIntent);
-                        }
-                    } catch (Exception ignored) {}
-                }
-            } else if (at.equals("LAUNCH_APP")) {
-                String pkg = prefs.getString(key + "_launch_pkg", "");
-                if (!pkg.isEmpty()) {
-                    try {
-                        Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
-                        if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
-                    } catch (Exception ignored) {}
-                }
-            } else exec(at);
-        }
-    }
 private void dispatchRealScreenGesture(String trigger) {
     if (Build.VERSION.SDK_INT < 24) return;
     
@@ -1570,6 +1512,18 @@ private void dispatchRealScreenGesture(String trigger) {
             break;
         case "TRIGGER_DIAG": 
             path.moveTo(cx + swipeDist, cy + swipeDist); path.lineTo(cx - swipeDist, cy - swipeDist); 
+            break;
+        case "TRIGGER_UP_DOWN":
+            path.moveTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist); duration = 400;
+            break;
+        case "TRIGGER_DOWN_UP":
+            path.moveTo(cx, cy - swipeDist); path.lineTo(cx, cy + swipeDist); path.lineTo(cx, cy - swipeDist); duration = 400;
+            break;
+        case "TRIGGER_LEFT_RIGHT":
+            path.moveTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist, cy); duration = 400;
+            break;
+        case "TRIGGER_RIGHT_LEFT":
+            path.moveTo(cx - swipeDist, cy); path.lineTo(cx + swipeDist, cy); path.lineTo(cx - swipeDist, cy); duration = 400;
             break;
         case "TRIGGER_TAP": 
             // [FIX 2] Thêm lineTo dời 1 pixel để Android nhận diện đây là 1 nét chạm hợp lệ
@@ -2015,7 +1969,7 @@ if (panelEngine != null) panelEngine.rebuildAll();
         };
 private boolean isHolding = false;
 private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
-        @Override public boolean onTouch(View v, MotionEvent e) {
+                @Override public boolean onTouch(View v, MotionEvent e) {
             if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
             
@@ -2023,8 +1977,11 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                 case MotionEvent.ACTION_DOWN:
                     sx = getFixedX(e); sy = getFixedY(e);
                     lastX = sx; lastY = sy;
+                    maxDx = 0; minDx = 0; maxDy = 0; minDy = 0; // [FIX] reset combo-tracker
                     st = System.currentTimeMillis();
                     longFired = false;
+                    isHolding = false; // [FIX] BẮT BUỘC — nếu không reset, mọi chạm sau lần "gài số"
+                                        // đầu tiên sẽ bị hiểu nhầm thành hold/long vĩnh viễn
                     
                     lpHandler.removeCallbacks(holdCheckRunnable);
                     // HỦY BỎ 1-Tap nếu user bắt đầu nhịp chạm/vuốt mới
@@ -2039,14 +1996,17 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     
                 case MotionEvent.ACTION_MOVE:
                     lastX = getFixedX(e); lastY = getFixedY(e);
+                    float cdx = lastX - sx; float cdy = lastY - sy; // [FIX] thiếu hoàn toàn ở bản cũ
+                    if (cdx > maxDx) maxDx = cdx; if (cdx < minDx) minDx = cdx;
+                    if (cdy > maxDy) maxDy = cdy; if (cdy < minDy) minDy = cdy;
                     if (rippleView != null) rippleView.moveTo(lastX, lastY);
                     return true;
                     
                 case MotionEvent.ACTION_CANCEL:
                     lpHandler.removeCallbacks(holdCheckRunnable);
+                    isHolding = false; // [FIX] hủy giữa chừng cũng phải reset, không thì kẹt trạng thái
                     if (rippleView != null) rippleView.popRipple();
                     return true;
-                    
                 case MotionEvent.ACTION_UP:
                     lpHandler.removeCallbacks(holdCheckRunnable);
                     if (longFired) {
@@ -2059,11 +2019,10 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     boolean isDiag = (myView instanceof CornerView && absDx > 40 && absDy > 40);
 
                     if (isHolding) {
-                        // ============ [ĐÃ GÀI SỐ: HOLD VÀ VUỐT] ============
                         if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
-                            actionName = "long"; // Nhả tay tại chỗ
+                            actionName = "long"; 
                         } else {
-                            if (isDiag) actionName = "diag_hold"; // Gom chung chéo gài số
+                            if (isDiag) actionName = "hold_diag"; 
                             else {
                                 if (absDx > absDy) actionName = finalDx > 0 ? "hold_right" : "hold_left";
                                 else actionName = finalDy > 0 ? "hold_down" : "hold_up";
