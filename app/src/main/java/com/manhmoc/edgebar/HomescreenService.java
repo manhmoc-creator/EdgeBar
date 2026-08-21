@@ -1667,20 +1667,15 @@ default:
 private void checkAndYieldOS(String actionKey) {
             if (prefs.getBoolean(actionKey + "_os", false)) {
                 try {
-                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) myView.getLayoutParams();
-                    p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                    if (myView instanceof CornerView) {
-                        ((CornerView)myView).updateProps(0, 0, 0, false, 0, true);
-                    } else if (myView instanceof BarView) {
-                        ((BarView)myView).updateProps(0, false, 0, true, 0);
-                    }
-                    wm.updateViewLayout(myView, p);
+                    // Mượn cờ manual_hide để ép tàng hình tuyệt đối (View.GONE)
+                    String hideKey = prefKeyBase + "_manual_hide";
+                    prefs.edit().putBoolean(hideKey, true).apply();
+                    updateVisibility(); // Cập nhật ngay lập tức
                     
+                    // Hẹn giờ hồi sinh Bar
                     lpHandler.postDelayed(() -> {
-                        if (myView.getWindowToken() != null) {
-                            Intent sync = new Intent("com.manhmoc.edgebar.RESUME_WM_OPS");
-                            myView.getContext().sendBroadcast(sync);
-                        }
+                        prefs.edit().putBoolean(hideKey, false).apply();
+                        updateVisibility(); // Tự động hiển thị lại an toàn
                     }, prefs.getInt("os_yield_dur", 1500));
                 } catch (Exception ignored) {}
             }
