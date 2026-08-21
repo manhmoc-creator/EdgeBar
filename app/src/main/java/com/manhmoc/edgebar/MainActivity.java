@@ -49,7 +49,7 @@ private String[] ALL_COMP_KEYS = {"r", "l", "t_r", "t_l", "t_c", "b_c", "l_c", "
 private String[] ALL_COMP_NAMES;
 private String[] VOLKEY_COMPS = {"up", "down"};
 private String[] VOLKEY_COMP_NAMES;
-private String[] VOLKEY_GESTURES = {"tap", "dtap", "long"};
+private String[] VOLKEY_GESTURES = {"tap", "dtap", "combo"};
 private String[] VOLKEY_GESTURE_NAMES;
 private String[] M_BARS = {"r", "l", "t_r", "t_l", "t_c", "m_b_c", "m_mid_t", "m_mid_b"};
 private String[] M_BAR_NAMES;
@@ -386,7 +386,7 @@ ALL_COMP_NAMES = new String[]{
     T("Fingerprint", "Vân Tay")
 };
 VOLKEY_COMP_NAMES = new String[]{T("Button Up", "Phím Tăng Âm"), T("Button Down", "Phím Giảm Âm")};
-VOLKEY_GESTURE_NAMES = new String[]{T("Press Once", "Nhấn 1 Lần"), T("Press Twice", "Nhấn 2 Lần"), T("Hold", "Giữ (Long Press)")};
+VOLKEY_GESTURE_NAMES = new String[]{T("Press Once", "Nhấn 1 Lần"), T("Press Twice", "Nhấn 2 Lần"), T("Then Press Other", "Bấm phím còn lại (Combo)")};
 M_BAR_NAMES = new String[]{T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"), T("Top Right", "Cạnh Phải"), T("Top Left", "Cạnh Trái"), T("Top Center", "Đỉnh giữa"), T("Bottom Center", "Đáy Giữa"), T("Top Half Center", "Trung Tâm Trên"), T("Bottom Half Center", "Trung Tâm Dưới")};
 C_GESTURE_NAMES = new String[]{
     T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), 
@@ -1570,19 +1570,23 @@ body.addView(createSlider(T("Jump Icon Opacity", "Độ đậm Icon Nhảy"), "h
 }
 private void renderVolKeyRules() {
     listRules.removeAllViews();
-    String[] vKeys  = {"up_tap","down_tap","up_long","down_long"};
-    String[] vNames = {"Nhấn Volume Up","Nhấn Volume Down","Giữ Volume Up","Giữ Volume Down"};
+    String[] vKeys  = {"up_tap","down_tap","up_dtap","down_dtap","up_combo","down_combo"};
+    String[] vNames = {
+        "Nhấn Volume Up (1 Lần)", "Nhấn Volume Down (1 Lần)", 
+        "Nhấn Volume Up (2 Lần)", "Nhấn Volume Down (2 Lần)", 
+        "Combo: Vol Up rồi Down", "Combo: Vol Down rồi Up"
+    };
     for (int idx=0; idx<vKeys.length; idx++) {
         final String key = "volkey_" + vKeys[idx];
-        final String vName = vNames[idx]; // ← THÊM DÒNG NÀY 
+        final String vName = vNames[idx]; 
         String action = prefs.getString(key, "NONE");
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(getRounded("#1E1E1E", 25f)); card.setPadding(35,35,35,35);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(15,15,15,15); card.setLayoutParams(lp);
-        TextView t1 = new TextView(this); t1.setText(vNames[idx]); t1.setTextColor(Color.parseColor("#FFC107")); t1.setTextSize(15);
+        TextView t1 = new TextView(this); t1.setText(vName); t1.setTextColor(Color.parseColor("#FFC107")); t1.setTextSize(15);
         TextView t2 = new TextView(this); t2.setText(getActionLabelSmart(action, prefs.getString(key + "_launch_pkg", ""))); t2.setTextColor(Color.parseColor("#00E5FF")); t2.setTextSize(13); t2.setPadding(0,10,0,10);
         card.addView(t1); card.addView(t2);
-        card.setOnClickListener(v -> openVolKeyActionPicker(key, vName)); // ← đổi vNames[idx] thành vName 
+        card.setOnClickListener(v -> openVolKeyActionPicker(key, vName)); 
         card.setOnLongClickListener(v -> {
             new AlertDialog.Builder(this).setTitle("Xoá?").setPositiveButton("XOÁ", (d,w)->{
                 prefs.edit().putString(key, "NONE").apply(); syncVolumeService(); renderVolKeyRules();

@@ -1,4 +1,21 @@
-pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS); repositories { google(); mavenCentral() } }
+pluginManagement { 
+    repositories { 
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+        // [CỨU CÁNH] Fallback tải thư viện khi Maven Central chặn IP của GitHub Actions
+        maven { url "https://maven.aliyun.com/repository/public" }
+    } 
+}
+dependencyResolutionManagement { 
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories { 
+        google()
+        mavenCentral()
+        // [CỨU CÁNH] Cung cấp nguồn tải thay thế vững chắc
+        maven { url "https://maven.aliyun.com/repository/public" }
+        maven { url "https://jitpack.io" }
+    } 
+}
 rootProject.name = "EdgeBar"
 include ':app'
