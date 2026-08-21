@@ -5922,7 +5922,7 @@ if (designTabState == 5) { renderPanelDesign(); return; }
     LinearLayout dOpt = new LinearLayout(this);
     dOpt.setOrientation(LinearLayout.VERTICAL); dOpt.setPadding(20,10,20,20);
     dOpt.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600));
-    dOpt.addView(createSlider("Thời gian Nhường OS (ms)", "os_yield_dur", 3000, 1500)); // THÊM DÒNG NÀY
+    dOpt.addView(createSlider("Thời gian Nhường OS (ms)", "os_yield_dur", 60000, 3000)); // THÊM DÒNG NÀY
     dOpt.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30));
     designSliderContainer.addView(createDrawer("⚙️ " + T("GENERAL OPTIONS","TÙY CHỌN CHUNG"), dOpt));
 

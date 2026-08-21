@@ -87,15 +87,21 @@ private boolean recIndicatorTestMode = false;
 private boolean recIndicatorTestPaused = false;
 
     private void ensureRippleView() {
-        if (rippleView != null) return;
-        rippleView = new GestureRippleView(this);
-        WindowManager.LayoutParams p = new WindowManager.LayoutParams(-1,-1,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT);
-        try { wm.addView(rippleView, p); } catch (Exception ignored) {}
+    if (rippleView != null) return;
+    GestureRippleView newView = new GestureRippleView(this);
+    WindowManager.LayoutParams p = new WindowManager.LayoutParams(-1,-1,
+        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+        PixelFormat.TRANSLUCENT);
+    try {
+        wm.addView(newView, p);
+        rippleView = newView; // chỉ gán field khi addView() THÀNH CÔNG
+    } catch (Exception ignored) {
+        rippleView = null; // không để lại view "ma" chưa gắn vào WindowManager
     }
+}
+
     private void removeRippleViewIfIdle() {
         if (rippleView == null) return;
         try { wm.removeView(rippleView); } catch (Exception ignored) {}
@@ -2055,7 +2061,7 @@ private void checkAndYieldOS(String actionKey) {
                     lpHandler.postDelayed(() -> {
                         prefs.edit().putBoolean(hideKey, false).apply();
                         updateVisibility(); // Tự động hiển thị lại an toàn
-                    }, prefs.getInt("os_yield_dur", 1500));
+                    }, prefs.getInt("os_yield_dur", 3000));
                 } catch (Exception ignored) {}
             }
         }
@@ -2141,8 +2147,8 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                         lpHandler.removeCallbacks(pendingTapRunnable);
                         pendingTapRunnable = null;
                     }
-                    ensureRippleView();
-                    rippleView.showAt(sx, sy);
+                                        ensureRippleView();
+                    if (rippleView != null) rippleView.showAt(sx, sy);
                     lpHandler.postDelayed(holdCheckRunnable, prefs.getInt("hold_dur", 600));
                     return true;
 

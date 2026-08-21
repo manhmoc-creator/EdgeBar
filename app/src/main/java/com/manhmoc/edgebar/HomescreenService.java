@@ -100,16 +100,20 @@ private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap
     private ValueAnimator recBlinkAnim;
     private boolean recIndicatorTestMode = false;
 private boolean recIndicatorTestPaused = false;
-    private void ensureRippleView() {
-        if (rippleView != null) return; // [OPT] chỉ addView đúng 1 lần, tái dùng cho mọi cử chỉ sau đó
-        rippleView = new GestureRippleView(this);
+        private void ensureRippleView() {
+        if (rippleView != null) return;
+        GestureRippleView newView = new GestureRippleView(this);
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(-1,-1,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, // [FIX] Homeb không có Accessibility -> phải dùng type này (khớp với bars/corners/fV cùng file), TYPE_ACCESSIBILITY_OVERLAY luôn bị hệ thống từ chối âm thầm khiến icon-jump vô hình
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT);
-        try { wm.addView(rippleView, p); }
-        catch (Exception e) { rippleView = null; } // [FIX] addView thất bại thì trả về null thay vì giữ object "ma" — lần touch kế tiếp sẽ tự thử tạo lại, không bao giờ bị kẹt ở trạng thái "tưởng có nhưng vô hình"
+        try {
+            wm.addView(newView, p);
+            rippleView = newView; // chỉ gán khi addView() thành công
+        } catch (Exception e) {
+            rippleView = null;
+        }
     }
     private void removeRippleViewIfIdle() {
         if (rippleView == null) return;
@@ -1676,7 +1680,7 @@ private void checkAndYieldOS(String actionKey) {
                     lpHandler.postDelayed(() -> {
                         prefs.edit().putBoolean(hideKey, false).apply();
                         updateVisibility(); // Tự động hiển thị lại an toàn
-                    }, prefs.getInt("os_yield_dur", 1500));
+                    }, prefs.getInt("os_yield_dur", 3000));
                 } catch (Exception ignored) {}
             }
         }
@@ -1766,8 +1770,8 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                         lpHandler.removeCallbacks(pendingTapRunnable);
                         pendingTapRunnable = null;
                     }
-                    ensureRippleView();
-                    rippleView.showAt(sx, sy);
+                                        ensureRippleView();
+                    if (rippleView != null) rippleView.showAt(sx, sy);
                     lpHandler.postDelayed(holdCheckRunnable, prefs.getInt("hold_dur", 600));
                     return true;
 
