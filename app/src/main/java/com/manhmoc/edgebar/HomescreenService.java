@@ -116,7 +116,7 @@ private boolean recIndicatorTestPaused = false;
         try { wm.removeView(rippleView); } catch (Exception ignored) {}
         rippleView = null;
     }
-    private CameraManager cm;
+        private CameraManager cm;
     private String cId;
     private boolean fOn = false, isKbd = false, isBl = false;
     private SharedPreferences prefs;
@@ -124,6 +124,10 @@ private boolean recIndicatorTestPaused = false;
     private Vibrator vibrator;
     private PanelEngine panelEngine;
     private int lastKbdHeight = 0;
+    // [FIX] Bổ sung các biến này vì SidebarTouchListener bên dưới có gọi tới,
+    // nhưng HomescreenService trước đây chưa khai báo (khác với EdgeBarService).
+    private volatile boolean isDispatchingSyntheticGesture = false;
+    private float globalTouchStartX = -1f, globalTouchStartY = -1f, globalTouchEndX = -1f, globalTouchEndY = -1f;
     private long lastSyncMs = 0;
     private final Handler appLockPollHandler = new Handler(android.os.Looper.getMainLooper());
     private String lastPolledFgPkg = "";
@@ -1672,9 +1676,6 @@ default:
             this.prefKeyBase = keyBase;
             this.myView = v;
         }
-
-        private static final float DTAP_MAX_DIST_PX = 80f; // 80px là an toàn tuyệt đối với tọa độ RawX/Y
-        
         // [SỬA LỖI TOẠ ĐỘ] Lấy tọa độ tuyệt đối trực tiếp từ màn hình để đo khoảng cách chuẩn xác 100%
         private float getFixedX(MotionEvent e) { return e.getRawX(); }
         private float getFixedY(MotionEvent e) { return e.getRawY(); }

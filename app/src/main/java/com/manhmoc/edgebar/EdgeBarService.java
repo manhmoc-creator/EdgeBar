@@ -2042,9 +2042,6 @@ private static final int MAX_TRIGGER_DEPTH = 3;
             this.prefKeyBase = keyBase;
             this.myView = v;
         }
-
-        private static final float DTAP_MAX_DIST_PX = 80f; // 80px là an toàn tuyệt đối với tọa độ RawX/Y
-        
         // [SỬA LỖI TOẠ ĐỘ] Lấy tọa độ tuyệt đối trực tiếp từ màn hình để đo khoảng cách chuẩn xác 100%
         private float getFixedX(MotionEvent e) { return e.getRawX(); }
         private float getFixedY(MotionEvent e) { return e.getRawY(); }
