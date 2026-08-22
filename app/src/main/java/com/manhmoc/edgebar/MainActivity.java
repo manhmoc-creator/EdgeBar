@@ -1102,6 +1102,11 @@ showMainMenu();
      *  Storage dù app đang ở trạng thái nào. Cờ lưu trong SharedPreferences (Zero-cost
      *  vì "prefs" đã có sẵn trong RAM) thay vì Intent extra dễ lệch thời điểm giữa
      *  các đời máy/ROM khác nhau. */
+        private void checkPendingStorageScan() {
+        if (!prefs.getBoolean("pending_storage_scan", false)) return;
+        prefs.edit().putBoolean("pending_storage_scan", false).apply();
+        openEco(3, false);
+    }
     private void checkPendingOpenMyPlaylist() {
     if (!prefs.getBoolean("pending_open_myplaylist", false)) return;
     prefs.edit().putBoolean("pending_open_myplaylist", false).apply();
