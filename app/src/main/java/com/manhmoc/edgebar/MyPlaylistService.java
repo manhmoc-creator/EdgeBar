@@ -356,11 +356,18 @@ private final Runnable viewerPollRunnable = new Runnable() {
 private void togglePause(boolean bySystem) {
     if (player == null || !isRunning) return;
     try {
-        if (isPaused) { player.start(); isPaused = false; startPosTicker(); }
-        else { player.pause(); isPaused = true; stopPosTicker(); }
+        if (isPaused) {
+            // Sắp phát tiếp -> XIN LẠI Audio Focus trước — ép mọi trình phát khác
+            // (YouTube, Files by Google...) đang giữ quyền phải tự dừng nhường lại,
+            // dù đây là hệ thống tự resume hay chính bạn bấm nút Tiếp tục.
+            requestAudioFocusNow();
+            player.start(); isPaused = false; startPosTicker();
+        } else {
+            player.pause(); isPaused = true; stopPosTicker();
+        }
         // Người dùng tự bấm nút (bySystem=false) -> huỷ cờ "pause do hệ thống",
         // tránh việc app khác nhả Audio Focus sau đó lại tự bật nhạc ngoài ý muốn.
-                if (!bySystem) { pausedByFocusLoss = false; stopFocusRecoveryPoll(); }
+        if (!bySystem) { pausedByFocusLoss = false; stopFocusRecoveryPoll(); }
         updateSessionState(!isPaused);
         startForegroundNotif(trackNames.get(currentIndex), isPaused);
     } catch (Exception ignored) {}
@@ -407,15 +414,9 @@ private PendingIntent contentTapPI() {
         int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
         return PendingIntent.getService(this, ACTION_OPEN_CURRENT.hashCode(), i, flags);
     }
-        // Lấy đúng icon "nốt nhạc 2 chân" trong bộ 100 icon custom (music_note_2_24px);
-    // nếu vì lý do gì không tìm thấy resource thì fallback về icon play mặc định
-    // của hệ thống, đảm bảo notification luôn hiện được, không bao giờ crash.
-    private int resolveMusicNoteIconRes() {
-        int id = getResources().getIdentifier("music_note_2_24px", "drawable", getPackageName());
-        return id != 0 ? id : android.R.drawable.ic_media_play;
-    }
 
-    private void startForegroundNotif(String title, boolean paused) {
+
+            private void startForegroundNotif(String title, boolean paused) {
     NotificationManager nm = getSystemService(NotificationManager.class);
     NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "My Playlist", NotificationManager.IMPORTANCE_LOW);
     ch.setSound(null, null);
@@ -427,11 +428,12 @@ private PendingIntent contentTapPI() {
         Notification.Builder b = new Notification.Builder(this, CHANNEL_ID)
         .setContentTitle(paused ? "⏸️ " + title : "🎵 " + title)
         .setContentText("My Playlist")
-        .setSmallIcon(resolveMusicNoteIconRes())
+        .setSmallIcon(android.R.drawable.ic_media_play)
         .setLargeIcon(currentArt)
         .setVisibility(Notification.VISIBILITY_PUBLIC)
-        .setOngoing(isRunning)
+        .setOngoing(isRunning && !paused) // đang phát: khoá vuốt xoá; đang dừng: cho vuốt xoá để huỷ hẳn
         .setContentIntent(contentTapPI())
+
         .setDeleteIntent(actionPI(ACTION_STOP))
         .addAction(android.R.drawable.ic_media_rew, "Lùi 10s", actionPI(ACTION_SEEK_BACK))
         .addAction(android.R.drawable.ic_media_previous, "Trước", actionPI(ACTION_PREV))
