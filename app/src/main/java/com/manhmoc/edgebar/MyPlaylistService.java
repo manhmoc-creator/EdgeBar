@@ -83,13 +83,13 @@ private boolean pausedByFocusLoss = false;        // đánh dấu việc pause l
     switch (fc) {
         case AudioManager.AUDIOFOCUS_LOSS:
         case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
-            // [SỬA] Chỉ tạm dừng — KHÔNG tự phát lại khi có Audio Focus trở lại nữa.
-            // Trước đây cứ mất focus rồi có lại là tự bật nhạc, kể cả khi user đang chủ
-            // động nghe nhạc/xem video ở app khác (YouTube, Files by Google...). Giờ chỉ
-            // còn ĐÚNG 1 cách để tự tiếp tục đúng chỗ vừa dừng: user bấm vào thông báo
-            // My Playlist để xem file hiện tại rồi thoát ra — xem openCurrentTrackFile()
-            // và viewerPollRunnable bên dưới.
-            if (isRunning && !isPaused) togglePause();
+            // App khác xen ngang (YouTube, Files by Google, cuộc gọi đến/đi...) ->
+            // toggle dừng NGAY, đồng thời đánh dấu đây là pause DO HỆ THỐNG gây ra
+            // (không phải user tự bấm) để biết đường tự phát lại khi app kia tắt.
+            if (isRunning && !isPaused) {
+                togglePause(true);
+                pausedByFocusLoss = true;
+            }
             break;
         case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
             if (player != null && isRunning && !isPaused) {
@@ -98,6 +98,13 @@ private boolean pausedByFocusLoss = false;        // đánh dấu việc pause l
             break;
         case AudioManager.AUDIOFOCUS_GAIN:
             if (player != null) { try { player.setVolume(1f, 1f); } catch (Exception ignored) {} }
+            // Trình phát khác vừa TẮT (nhả quyền phát) -> chỉ tự phát tiếp nếu
+            // chính hệ thống là người tạm dừng trước đó; nếu user tự bấm Dừng
+            // trong thông báo thì tuyệt đối không tự bật nhạc lại.
+            if (isRunning && isPaused && pausedByFocusLoss) {
+                pausedByFocusLoss = false;
+                togglePause(true);
+            }
             break;
     }
 };
@@ -252,9 +259,9 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
         // Hễ có sự kiện AUDIOFOCUS_GAIN sau đó (app xem file nhả quyền phát ra, thường là
         // lúc bạn thoát nó) thì focusListener() sẽ tự resume đúng chỗ đang dừng.
         if (isRunning && !isPaused) {
-            pausedByFocusLoss = true;
-            togglePause();
-        }
+    pausedByFocusLoss = true;
+    togglePause(true);
+}
         try {
             Intent i = new Intent(Intent.ACTION_VIEW);
             i.setDataAndType(uri, "audio/*");
@@ -312,15 +319,20 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
             if (waitingReturnFromViewer) viewerPollHandler.postDelayed(this, 500);
         }
     };
-    private void togglePause() {
+    private void togglePause() { togglePause(false); }
+private void togglePause(boolean bySystem) {
     if (player == null || !isRunning) return;
     try {
         if (isPaused) { player.start(); isPaused = false; startPosTicker(); }
         else { player.pause(); isPaused = true; stopPosTicker(); }
+        // Người dùng tự bấm nút (bySystem=false) -> huỷ cờ "pause do hệ thống",
+        // tránh việc app khác nhả Audio Focus sau đó lại tự bật nhạc ngoài ý muốn.
+        if (!bySystem) pausedByFocusLoss = false;
         updateSessionState(!isPaused);
         startForegroundNotif(trackNames.get(currentIndex), isPaused);
     } catch (Exception ignored) {}
 }
+
     private void updateSessionState(boolean playing) {
     if (session == null) return;
     long pos = 0;
