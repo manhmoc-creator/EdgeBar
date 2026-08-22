@@ -62,6 +62,8 @@ private final android.os.Handler posHandler = new android.os.Handler(android.os.
 private Runnable posTicker;
 private boolean waitingReturnFromViewer = false; // đang chờ user thoát khỏi app xem file
 private boolean everLeftEdgeBar = false;          // đã thực sự rời khỏi EdgeBar chưa
+private boolean pausedByFocusLoss = false;        // đánh dấu việc pause là do mở app xem file, không phải do người dùng chủ động bấm dừng
+
     private static final String RELATIVE_PATH_PREFIX = "Download/My Playlist";
     private static final String CHANNEL_ID = "eb_my_playlist";
     private static final int NOTIF_ID = 95;
