@@ -79,12 +79,14 @@ private boolean pausedByFocusLoss = false;
     private final AudioManager.OnAudioFocusChangeListener focusListener = fc -> {
     switch (fc) {
         case AudioManager.AUDIOFOCUS_LOSS:
-            // App khác giành quyền lâu dài (mở nhạc/video khác) -> dừng hẳn,
-            // tránh giữ MediaPlayer/WakeLock vô ích trong lúc không phát.
-            if (isRunning) stopPlayback();
-            break;
         case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
-            // Mất tạm thời (cuộc gọi đến...) -> tạm dừng, nhớ để tự phát lại
+            // [FIX] Trước đây AUDIOFOCUS_LOSS (mất vĩnh viễn — VD: mở Files by Google
+            // phát cùng file) gọi thẳng stopPlayback(), huỷ sạch MediaPlayer + notification
+            // của EdgeBar ngay lập tức. Giờ CẢ 2 trường hợp LOSS và LOSS_TRANSIENT đều chỉ
+            // TẠM DỪNG (giữ nguyên vị trí đang phát + giữ nguyên notification), và tự phát
+            // lại NGAY TỪ ĐÚNG VỊ TRÍ đó khi lấy lại được Audio Focus (AUDIOFOCUS_GAIN) —
+            // đúng lúc app kia dừng phát/nhả quyền phát. Nhờ vậy dù bạn thoát khỏi Files by
+            // Google hay tắt màn hình, nhạc trong EdgeBar vẫn tiếp tục nghe được bình thường.
             if (isRunning && !isPaused) { pausedByFocusLoss = true; togglePause(); }
             break;
         case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
@@ -241,18 +243,23 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
 
     // 1 chạm vào thông báo -> mở đúng file bài hát ĐANG PHÁT bằng Files by Google
     // (fallback chooser), tái dùng cùng cơ chế đã có ở VoiceRecorderService.
-        private void openCurrentTrackFile() {
-        // [FIX] Không dùng ACTION_VIEW mở app ngoài nữa — việc đó tạo ra 1 phiên phát
-        // nhạc THỨ HAI hoàn toàn độc lập (phát lại từ đầu) và cướp Audio Focus của
-        // chính Service này khiến stopPlayback() bị gọi (do AUDIOFOCUS_LOSS), làm mất
-        // luôn thông báo + dừng hẳn bài đang phát. Giờ chạm vào thông báo chỉ mở
-        // thẳng màn My Playlist trong EdgeBar để xem danh sách — KHÔNG đụng gì tới
-        // MediaPlayer đang chạy, bài hát tiếp tục phát liên tục dù thoát app hay tắt màn.
-        SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        prefs.edit().putBoolean("pending_open_myplaylist", true).apply();
-        Intent i = new Intent(this, MainActivity.class);
-        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        startActivity(i);
+            private void openCurrentTrackFile() {
+        if (tracks.isEmpty() || currentIndex < 0 || currentIndex >= tracks.size()) return;
+        Uri uri = tracks.get(currentIndex);
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, "audio/*");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            i.setPackage("com.google.android.apps.nbu.files");
+            startActivity(i);
+        } catch (Exception e) {
+            try {
+                Intent i2 = new Intent(Intent.ACTION_VIEW);
+                i2.setDataAndType(uri, "audio/*");
+                i2.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(Intent.createChooser(i2, "Mở bằng").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (Exception ignored) {}
+        }
     }
     private void togglePause() {
     if (player == null || !isRunning) return;

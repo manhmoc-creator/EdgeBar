@@ -157,11 +157,12 @@ private long pendingWindowMs = 0;
             return;
         }
 
-        // Có Combo -> cần khung DÀI (đổi phím, 1 tay cần thời gian di chuyển ngón)
+                // Có Combo -> cần khung DÀI (đổi phím, 1 tay cần thời gian di chuyển ngón)
         // Chỉ có Dtap (không Combo) -> chỉ cần khung NGẮN (cùng ngón tap 2 lần rất nhanh)
         pendingWindowMs = hasCombo ? COMBO_WINDOW_MS : DTAP_WINDOW_MS;
         pendingKey = currentKey;
         burstCount = 1;
+        vibrateAck(); // [MỚI] xác nhận đã ghi nhận, tránh bạn bấm lại quá sớm gây nhầm Dtap/Combo
         scheduleCheck();
     }
         private void scheduleCheck() {
@@ -182,7 +183,16 @@ private long pendingWindowMs = 0;
         pendingKey = 0;
         burstCount = 0;
     }
-
+    private void vibrateAck() {
+        // Rung rất nhẹ, ngắn — báo "đã ghi nhận lần bấm đầu, đang chờ phân biệt Tap/Dtap/Combo"
+        // để người dùng không tưởng nhầm là hệ thống không phản hồi rồi bấm lại quá sớm.
+        try {
+            Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+            if (Build.VERSION.SDK_INT >= 26)
+                v.vibrate(VibrationEffect.createOneShot(12, 40));
+            else v.vibrate(12);
+        } catch (Exception ignored) {}
+    }
     private void fire(String key) {
         if (!prefs.getBoolean(key + "_on", true)) return;
         String action = prefs.getString(key, "NONE");

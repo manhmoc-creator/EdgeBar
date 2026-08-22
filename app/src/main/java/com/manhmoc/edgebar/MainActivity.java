@@ -319,7 +319,6 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
         super.onResume();
         refreshPreview();
         checkPendingStorageScan();
-        checkPendingOpenMyPlaylist();
         if (btnWriteSettings != null) {
 
 btnWriteSettings.setVisibility(android.provider.Settings.System.canWrite(this) ? View.GONE : View.VISIBLE);
@@ -1107,17 +1106,7 @@ showMainMenu();
         prefs.edit().putBoolean("pending_storage_scan", false).apply();
         openEco(3, false);
     }
-    private void checkPendingOpenMyPlaylist() {
-    if (!prefs.getBoolean("pending_open_myplaylist", false)) return;
-    prefs.edit().putBoolean("pending_open_myplaylist", false).apply();
-    pruneDeadMyPlaylistEntries();
-    openEco(4, false);
-    soundMediaSubTab = 2;
-    navBackStack.push(() -> { soundMediaSubTab = -1; updateFabVisibility(); renderEcosystem(); });
-    updateFabVisibility();
-    renderEcosystem();
-}
-private void switchMainTab(int idx, Button b1, Button b2) { 
+    private void switchMainTab(int idx, Button b1, Button b2) { 
     currentMainTab = idx; refreshPreview(); navMain.setVisibility(View.VISIBLE);
     pageDesign.setVisibility(View.GONE); 
     pageConditions.setVisibility(idx==1?View.VISIBLE:View.GONE);
