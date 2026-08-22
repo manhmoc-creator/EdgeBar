@@ -81,31 +81,36 @@ private boolean pausedByFocusLoss = false;        // đánh dấu việc pause l
     private AudioFocusRequest focusRequest;
     private final AudioManager.OnAudioFocusChangeListener focusListener = fc -> {
     switch (fc) {
-        case AudioManager.AUDIOFOCUS_LOSS:
+                case AudioManager.AUDIOFOCUS_LOSS:
         case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
             // App khác xen ngang (YouTube, Files by Google, cuộc gọi đến/đi...) ->
-            // toggle dừng NGAY, đồng thời đánh dấu đây là pause DO HỆ THỐNG gây ra
-            // (không phải user tự bấm) để biết đường tự phát lại khi app kia tắt.
+            // toggle dừng NGAY, đánh dấu pause DO HỆ THỐNG, rồi bắt đầu dò xem khi
+            // nào app kia tắt hẳn để tự phát tiếp (không chờ callback GAIN vì nhiều
+            // app xin quyền vĩnh viễn, hệ thống sẽ không tự gọi lại cho mình).
             if (isRunning && !isPaused) {
                 togglePause(true);
                 pausedByFocusLoss = true;
+                startFocusRecoveryPoll();
             }
             break;
+
         case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
             if (player != null && isRunning && !isPaused) {
                 try { player.setVolume(0.25f, 0.25f); } catch (Exception ignored) {}
             }
             break;
-        case AudioManager.AUDIOFOCUS_GAIN:
+                case AudioManager.AUDIOFOCUS_GAIN:
             if (player != null) { try { player.setVolume(1f, 1f); } catch (Exception ignored) {} }
             // Trình phát khác vừa TẮT (nhả quyền phát) -> chỉ tự phát tiếp nếu
             // chính hệ thống là người tạm dừng trước đó; nếu user tự bấm Dừng
             // trong thông báo thì tuyệt đối không tự bật nhạc lại.
             if (isRunning && isPaused && pausedByFocusLoss) {
                 pausedByFocusLoss = false;
+                stopFocusRecoveryPoll();
                 togglePause(true);
             }
             break;
+
     }
 };
     private boolean requestAudioFocusNow() {
@@ -287,8 +292,13 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
     // chạy) nên hoạt động đúng ở mọi trạng thái Lock/Homacc/Homeb. Cần quyền "Usage access"
     // đã có sẵn trong app (dùng chung với Blacklist Auto-Homeb) — nếu chưa cấp, catch()
     // sẽ bỏ qua êm, không crash, chỉ đơn giản là tính năng tự-tiếp-tục không hoạt động.
-    private final android.os.Handler viewerPollHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-    private final Runnable viewerPollRunnable = new Runnable() {
+    private final android.os.Handler focusPollHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+private Runnable focusPollRunnable;
+private static final long FOCUS_POLL_INTERVAL_MS = 2000; // dò mỗi 2 giây, tự dừng ngay khi phát hiện xong
+
+private final android.os.Handler viewerPollHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+private final Runnable viewerPollRunnable = new Runnable() {
+
         @Override public void run() {
             if (!waitingReturnFromViewer) return; // đã xử lý xong hoặc đã huỷ -> dừng hẳn
             try {
@@ -319,6 +329,29 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
             if (waitingReturnFromViewer) viewerPollHandler.postDelayed(this, 500);
         }
     };
+    /** Dò định kỳ bằng isMusicActive() — KHÔNG xin giành lại quyền phát (không làm
+     *  gián đoạn app đang phát), chỉ kiểm tra xem có ai còn phát nhạc/video không.
+     *  Hết ai phát -> tự xin lại quyền & phát tiếp đúng chỗ đang dừng. Tự huỷ ngay
+     *  khi xong việc hoặc khi user tự bấm Dừng — Zero-CPU lúc không cần dò nữa. */
+    private void startFocusRecoveryPoll() {
+        stopFocusRecoveryPoll();
+        focusPollRunnable = () -> {
+            if (!pausedByFocusLoss) return; // đã resume bằng cách khác hoặc user tự bấm Dừng
+            if (audioManager == null) audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            boolean someoneElsePlaying = audioManager != null && audioManager.isMusicActive();
+            if (!someoneElsePlaying) {
+                pausedByFocusLoss = false;
+                if (requestAudioFocusNow() && isRunning && isPaused) togglePause(true);
+                return;
+            }
+            focusPollHandler.postDelayed(focusPollRunnable, FOCUS_POLL_INTERVAL_MS);
+        };
+        focusPollHandler.postDelayed(focusPollRunnable, FOCUS_POLL_INTERVAL_MS);
+    }
+    private void stopFocusRecoveryPoll() {
+        if (focusPollRunnable != null) focusPollHandler.removeCallbacks(focusPollRunnable);
+        focusPollRunnable = null;
+    }
     private void togglePause() { togglePause(false); }
 private void togglePause(boolean bySystem) {
     if (player == null || !isRunning) return;
@@ -327,7 +360,7 @@ private void togglePause(boolean bySystem) {
         else { player.pause(); isPaused = true; stopPosTicker(); }
         // Người dùng tự bấm nút (bySystem=false) -> huỷ cờ "pause do hệ thống",
         // tránh việc app khác nhả Audio Focus sau đó lại tự bật nhạc ngoài ý muốn.
-        if (!bySystem) pausedByFocusLoss = false;
+                if (!bySystem) { pausedByFocusLoss = false; stopFocusRecoveryPoll(); }
         updateSessionState(!isPaused);
         startForegroundNotif(trackNames.get(currentIndex), isPaused);
     } catch (Exception ignored) {}
@@ -345,13 +378,16 @@ private void togglePause(boolean bySystem) {
         .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED, pos, playing ? 1f : 0f)
         .build());
 }
-    private void stopPlayback() {
+        private void stopPlayback() {
     isRunning = false; isPaused = false;
     stopPosTicker();
+    stopFocusRecoveryPoll();
+    pausedByFocusLoss = false;
     waitingReturnFromViewer = false;
     currentArt = null; // [MỚI] giải phóng RAM ảnh bìa
 
         abandonAudioFocusNow(); // [MỚI]
+
         if (player != null) { try { player.stop(); player.release(); } catch (Exception ignored) {} player = null; }
         if (session != null) { session.setActive(false); session.release(); session = null; }
         stopForeground(true);
@@ -371,6 +407,14 @@ private PendingIntent contentTapPI() {
         int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
         return PendingIntent.getService(this, ACTION_OPEN_CURRENT.hashCode(), i, flags);
     }
+        // Lấy đúng icon "nốt nhạc 2 chân" trong bộ 100 icon custom (music_note_2_24px);
+    // nếu vì lý do gì không tìm thấy resource thì fallback về icon play mặc định
+    // của hệ thống, đảm bảo notification luôn hiện được, không bao giờ crash.
+    private int resolveMusicNoteIconRes() {
+        int id = getResources().getIdentifier("music_note_2_24px", "drawable", getPackageName());
+        return id != 0 ? id : android.R.drawable.ic_media_play;
+    }
+
     private void startForegroundNotif(String title, boolean paused) {
     NotificationManager nm = getSystemService(NotificationManager.class);
     NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "My Playlist", NotificationManager.IMPORTANCE_LOW);
@@ -380,10 +424,10 @@ private PendingIntent contentTapPI() {
 
     // Bộ nút giống media notification chuẩn của hệ thống: Lùi 10s - Trước - Play/Pause - Tiếp - Tới 10s,
     // nút Dừng đổi icon nguồn (power) để không còn giống dấu X gây hiểu nhầm.
-    Notification.Builder b = new Notification.Builder(this, CHANNEL_ID)
+        Notification.Builder b = new Notification.Builder(this, CHANNEL_ID)
         .setContentTitle(paused ? "⏸️ " + title : "🎵 " + title)
         .setContentText("My Playlist")
-        .setSmallIcon(android.R.drawable.ic_media_play)
+        .setSmallIcon(resolveMusicNoteIconRes())
         .setLargeIcon(currentArt)
         .setVisibility(Notification.VISIBILITY_PUBLIC)
         .setOngoing(isRunning)
@@ -471,8 +515,9 @@ private void stopPosTicker() {
     if (posTicker != null) posHandler.removeCallbacks(posTicker);
     posTicker = null;
 }
-    @Override public void onDestroy() {
+        @Override public void onDestroy() {
         viewerPollHandler.removeCallbacksAndMessages(null); // [MỚI] dừng vòng lặp chờ, tránh leak Handler
+        focusPollHandler.removeCallbacksAndMessages(null);  // [MỚI] dừng vòng dò audio focus, tránh leak Handler
         if (isRunning) stopPlayback();
         super.onDestroy();
     }
