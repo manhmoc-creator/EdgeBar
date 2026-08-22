@@ -92,14 +92,18 @@ private long pendingWindowMs = 0;
         mediaSession.setCallback(new MediaSession.Callback() {});
         mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
         
-        VolumeProvider provider = new VolumeProvider(VolumeProvider.VOLUME_CONTROL_ABSOLUTE, 10, 5) {
+                VolumeProvider provider = new VolumeProvider(VolumeProvider.VOLUME_CONTROL_ABSOLUTE, 10, 5) {
     @Override public void onAdjustVolume(int direction) {
         setCurrentVolume(5);
-        try { vibrator.vibrate(VibrationEffect.createOneShot(15, VibrationEffect.DEFAULT_AMPLITUDE)); } catch (Exception ignored) {}
+        try {
+            Vibrator vb = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+            vb.vibrate(VibrationEffect.createOneShot(15, VibrationEffect.DEFAULT_AMPLITUDE));
+        } catch (Exception ignored) {}
         if (direction > 0) handleSide(true);
         else if (direction < 0) handleSide(false);
     }
 };
+
         mediaSession.setPlaybackToRemote(provider);
         mediaSession.setPlaybackState(new PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f).build());	
         
