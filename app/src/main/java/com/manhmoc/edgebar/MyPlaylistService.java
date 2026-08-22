@@ -60,7 +60,8 @@ private static final long SEEK_STEP_MS = 10000;
 
 private final android.os.Handler posHandler = new android.os.Handler(android.os.Looper.getMainLooper());
 private Runnable posTicker;
-private boolean pausedByFocusLoss = false;
+private boolean waitingReturnFromViewer = false; // đang chờ user thoát khỏi app xem file
+private boolean everLeftEdgeBar = false;          // đã thực sự rời khỏi EdgeBar chưa
     private static final String RELATIVE_PATH_PREFIX = "Download/My Playlist";
     private static final String CHANNEL_ID = "eb_my_playlist";
     private static final int NOTIF_ID = 95;
@@ -80,14 +81,13 @@ private boolean pausedByFocusLoss = false;
     switch (fc) {
         case AudioManager.AUDIOFOCUS_LOSS:
         case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
-            // [FIX] Trước đây AUDIOFOCUS_LOSS (mất vĩnh viễn — VD: mở Files by Google
-            // phát cùng file) gọi thẳng stopPlayback(), huỷ sạch MediaPlayer + notification
-            // của EdgeBar ngay lập tức. Giờ CẢ 2 trường hợp LOSS và LOSS_TRANSIENT đều chỉ
-            // TẠM DỪNG (giữ nguyên vị trí đang phát + giữ nguyên notification), và tự phát
-            // lại NGAY TỪ ĐÚNG VỊ TRÍ đó khi lấy lại được Audio Focus (AUDIOFOCUS_GAIN) —
-            // đúng lúc app kia dừng phát/nhả quyền phát. Nhờ vậy dù bạn thoát khỏi Files by
-            // Google hay tắt màn hình, nhạc trong EdgeBar vẫn tiếp tục nghe được bình thường.
-            if (isRunning && !isPaused) { pausedByFocusLoss = true; togglePause(); }
+            // [SỬA] Chỉ tạm dừng — KHÔNG tự phát lại khi có Audio Focus trở lại nữa.
+            // Trước đây cứ mất focus rồi có lại là tự bật nhạc, kể cả khi user đang chủ
+            // động nghe nhạc/xem video ở app khác (YouTube, Files by Google...). Giờ chỉ
+            // còn ĐÚNG 1 cách để tự tiếp tục đúng chỗ vừa dừng: user bấm vào thông báo
+            // My Playlist để xem file hiện tại rồi thoát ra — xem openCurrentTrackFile()
+            // và viewerPollRunnable bên dưới.
+            if (isRunning && !isPaused) togglePause();
             break;
         case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
             if (player != null && isRunning && !isPaused) {
@@ -96,7 +96,6 @@ private boolean pausedByFocusLoss = false;
             break;
         case AudioManager.AUDIOFOCUS_GAIN:
             if (player != null) { try { player.setVolume(1f, 1f); } catch (Exception ignored) {} }
-            if (pausedByFocusLoss && isRunning && isPaused) { pausedByFocusLoss = false; togglePause(); }
             break;
     }
 };
@@ -243,9 +242,17 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
 
     // 1 chạm vào thông báo -> mở đúng file bài hát ĐANG PHÁT bằng Files by Google
     // (fallback chooser), tái dùng cùng cơ chế đã có ở VoiceRecorderService.
-            private void openCurrentTrackFile() {
+    private void openCurrentTrackFile() {
         if (tracks.isEmpty() || currentIndex < 0 || currentIndex >= tracks.size()) return;
         Uri uri = tracks.get(currentIndex);
+        // [MỚI] Chủ động pause trước khi mở app xem file, đồng thời tái dùng ĐÚNG cơ chế
+        // Audio Focus có sẵn (pausedByFocusLoss) — không polling, không cần biết app nào.
+        // Hễ có sự kiện AUDIOFOCUS_GAIN sau đó (app xem file nhả quyền phát ra, thường là
+        // lúc bạn thoát nó) thì focusListener() sẽ tự resume đúng chỗ đang dừng.
+        if (isRunning && !isPaused) {
+            pausedByFocusLoss = true;
+            togglePause();
+        }
         try {
             Intent i = new Intent(Intent.ACTION_VIEW);
             i.setDataAndType(uri, "audio/*");
@@ -258,9 +265,51 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
                 i2.setDataAndType(uri, "audio/*");
                 i2.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
                 startActivity(Intent.createChooser(i2, "Mở bằng").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+                pausedByFocusLoss = false; // mở thất bại -> không cần chờ resume nữa
+            }
         }
     }
+
+    // [MỚI] Vòng lặp nhẹ (500ms/lần, TỰ DỪNG khi xong việc) dùng UsageStatsManager để
+    // phát hiện đúng lúc user đã rời app xem file (Files by Google / app khác qua
+    // chooser) và quay lại EdgeBar — CHỈ lúc đó mới tự phát tiếp đúng vị trí đang dừng.
+    // Không phụ thuộc Accessibility bật/tắt (khác SYNC_STATE vốn chỉ có khi Accessibility
+    // chạy) nên hoạt động đúng ở mọi trạng thái Lock/Homacc/Homeb. Cần quyền "Usage access"
+    // đã có sẵn trong app (dùng chung với Blacklist Auto-Homeb) — nếu chưa cấp, catch()
+    // sẽ bỏ qua êm, không crash, chỉ đơn giản là tính năng tự-tiếp-tục không hoạt động.
+    private final android.os.Handler viewerPollHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable viewerPollRunnable = new Runnable() {
+        @Override public void run() {
+            if (!waitingReturnFromViewer) return; // đã xử lý xong hoặc đã huỷ -> dừng hẳn
+            try {
+                android.app.usage.UsageStatsManager usm = (android.app.usage.UsageStatsManager)
+                    getSystemService(Context.USAGE_STATS_SERVICE);
+                long now = System.currentTimeMillis();
+                android.app.usage.UsageEvents events = usm.queryEvents(now - 3000, now);
+                android.app.usage.UsageEvents.Event ev = new android.app.usage.UsageEvents.Event();
+                String fg = null;
+                while (events.hasNextEvent()) {
+                    events.getNextEvent(ev);
+                    if (ev.getEventType() == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                        fg = ev.getPackageName();
+                    }
+                }
+                if (fg != null) {
+                    if (!fg.equals(getPackageName())) {
+                        everLeftEdgeBar = true;
+                    } else if (everLeftEdgeBar) {
+                        // Đã rời đi xem file và giờ quay lại đúng EdgeBar -> tiếp tục phát
+                        waitingReturnFromViewer = false;
+                        everLeftEdgeBar = false;
+                        if (isRunning && isPaused) togglePause();
+                        return; // không postDelayed nữa, tự kết thúc vòng lặp
+                    }
+                }
+            } catch (Exception ignored) {}
+            if (waitingReturnFromViewer) viewerPollHandler.postDelayed(this, 500);
+        }
+    };
     private void togglePause() {
     if (player == null || !isRunning) return;
     try {
@@ -285,8 +334,9 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
     private void stopPlayback() {
     isRunning = false; isPaused = false;
     stopPosTicker();
-    pausedByFocusLoss = false;
+    waitingReturnFromViewer = false;
     currentArt = null; // [MỚI] giải phóng RAM ảnh bìa
+
         abandonAudioFocusNow(); // [MỚI]
         if (player != null) { try { player.stop(); player.release(); } catch (Exception ignored) {} player = null; }
         if (session != null) { session.setActive(false); session.release(); session = null; }
@@ -408,6 +458,7 @@ private void stopPosTicker() {
     posTicker = null;
 }
     @Override public void onDestroy() {
+        viewerPollHandler.removeCallbacksAndMessages(null); // [MỚI] dừng vòng lặp chờ, tránh leak Handler
         if (isRunning) stopPlayback();
         super.onDestroy();
     }
