@@ -32,8 +32,11 @@ public class VolumeButtonService extends Service {
     private Runnable volCheckRunnable;
     private int pendingKey = 0; // 0=none, 1=up, -1=down
     private int burstCount = 0;
+private long lastKeyEventMs = 0;
+private int lastFiredKey = 0;
+private static final long MIN_GAP_SAME_KEY_MS = 120; // lọc auto-repeat của hệ thống cho CÙNG 1 lần bấm thật
     private static final long DTAP_WINDOW_MS = 240;  // Chờ ngắn — cùng 1 ngón tap 2 lần
-private static final long COMBO_WINDOW_MS = 480; // Chờ dài hơn — đổi phím, cần thời gian di chuyển ngón (1 tay)
+private static final long COMBO_WINDOW_MS = 660; // Chờ dài hơn — đổi phím, cần thời gian di chuyển ngón (1 tay)
 private long pendingWindowMs = 0;
     
     private final Handler keepAliveHandler = new Handler();
@@ -109,21 +112,30 @@ private long pendingWindowMs = 0;
         return !prefs.getString(key, "NONE").equals("NONE");
     }
 
-    private void handleSide(boolean isUp) {
+        private void handleSide(boolean isUp) {
         int currentKey = isUp ? 1 : -1;
+        long now = android.os.SystemClock.elapsedRealtime();
+
+        // Lọc auto-repeat: nếu vừa nhận CÙNG phím cách đây < 120ms và đang không chờ combo
+        // (pendingKey == 0 nghĩa là chu kỳ trước đã xử lý xong) -> đây gần chắc là hệ thống
+        // tự bắn lặp cho 1 lần bấm vật lý, không phải người dùng bấm thêm lần nữa.
+        if (pendingKey == 0 && lastFiredKey == currentKey && (now - lastKeyEventMs) < MIN_GAP_SAME_KEY_MS) {
+            lastKeyEventMs = now;
+            return;
+        }
+        lastKeyEventMs = now;
 
         if (volCheckRunnable != null) {
             h.removeCallbacks(volCheckRunnable);
             volCheckRunnable = null;
         }
 
-        if (pendingKey != 0) {
+                if (pendingKey != 0) {
             if (pendingKey == currentKey) {
-                // Lần 2 CÙNG phím -> Double Tap, bắn ngay
+                lastFiredKey = currentKey;
                 fire(isUp ? "volkey_up_dtap" : "volkey_down_dtap");
             } else {
-                // Lần 2 KHÁC phím -> Combo, bắn ngay
-                // Combo được quyết định bởi phím BẤM TRƯỚC (pendingKey), không phải phím hiện tại
+                lastFiredKey = currentKey;
                 fire(pendingKey == 1 ? "volkey_up_combo" : "volkey_down_combo");
             }
             pendingKey = 0;
@@ -151,8 +163,9 @@ private long pendingWindowMs = 0;
         burstCount = 1;
         scheduleCheck();
     }
-    private void scheduleCheck() {
+        private void scheduleCheck() {
         volCheckRunnable = () -> {
+            lastFiredKey = pendingKey;
             fire(pendingKey == 1 ? "volkey_up_tap" : "volkey_down_tap");
             pendingKey = 0;
             burstCount = 0;
