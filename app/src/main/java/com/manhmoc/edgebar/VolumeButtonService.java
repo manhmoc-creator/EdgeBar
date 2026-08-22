@@ -34,7 +34,7 @@ public class VolumeButtonService extends Service {
     private int burstCount = 0;
 private long lastKeyEventMs = 0;
 private int lastFiredKey = 0;
-private static final long MIN_GAP_SAME_KEY_MS = 120; // lọc auto-repeat của hệ thống cho CÙNG 1 lần bấm thật
+private static final long MIN_GAP_SAME_KEY_MS = 70; // lọc auto-repeat "ma" của hệ thống (thường <50ms) mà không nuốt nhầm cú bấm thật kế tiếp
     private static final long DTAP_WINDOW_MS = 240;  // Chờ ngắn — cùng 1 ngón tap 2 lần
 private static final long COMBO_WINDOW_MS = 660; // Chờ dài hơn — đổi phím, cần thời gian di chuyển ngón (1 tay)
 private long pendingWindowMs = 0;

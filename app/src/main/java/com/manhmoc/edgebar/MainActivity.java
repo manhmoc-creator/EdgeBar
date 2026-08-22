@@ -129,7 +129,7 @@ private Runnable currentLevelBackAction = null;
     // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "☠️ 19.12.3.6.42";
+    private final String CURRENT_VERSION = "👺 19.12.3.6.42";
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
     private Button btnWriteSettings; // MỚI
@@ -315,12 +315,14 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
         String flat = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
         return flat != null && flat.contains(getPackageName());
     }
-    @Override protected void onResume() {
+        @Override protected void onResume() {
         super.onResume();
         refreshPreview();
         checkPendingStorageScan();
+        checkPendingOpenMyPlaylist();
         if (btnWriteSettings != null) {
-            btnWriteSettings.setVisibility(android.provider.Settings.System.canWrite(this) ? View.GONE : View.VISIBLE);
+
+btnWriteSettings.setVisibility(android.provider.Settings.System.canWrite(this) ? View.GONE : View.VISIBLE);
         }
         if (btnDeviceAdmin != null) {
             android.app.admin.DevicePolicyManager dpmR =
@@ -1100,13 +1102,15 @@ showMainMenu();
      *  Storage dù app đang ở trạng thái nào. Cờ lưu trong SharedPreferences (Zero-cost
      *  vì "prefs" đã có sẵn trong RAM) thay vì Intent extra dễ lệch thời điểm giữa
      *  các đời máy/ROM khác nhau. */
-    private void checkPendingStorageScan() {
-    if (!prefs.getBoolean("pending_storage_scan", false)) return;
-    prefs.edit().putBoolean("pending_storage_scan", false).apply();
-    // [FIX] navCondBtnRef/navEcoBtnRef không còn tồn tại sau khi bỏ nav bar cũ —
-    // dùng openEco() (cổng chuẩn hiện tại) để mở thẳng tab Storage.
-    openEco(3, false);
-    runDeepStorageScan();
+    private void checkPendingOpenMyPlaylist() {
+    if (!prefs.getBoolean("pending_open_myplaylist", false)) return;
+    prefs.edit().putBoolean("pending_open_myplaylist", false).apply();
+    pruneDeadMyPlaylistEntries();
+    openEco(4, false);
+    soundMediaSubTab = 2;
+    navBackStack.push(() -> { soundMediaSubTab = -1; updateFabVisibility(); renderEcosystem(); });
+    updateFabVisibility();
+    renderEcosystem();
 }
 private void switchMainTab(int idx, Button b1, Button b2) { 
     currentMainTab = idx; refreshPreview(); navMain.setVisibility(View.VISIBLE);
