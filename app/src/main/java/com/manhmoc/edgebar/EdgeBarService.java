@@ -1463,48 +1463,49 @@ private void fireIntentById(String id) {
         Toast.makeText(this, "Lỗi chạy Intent: " + e.getMessage(), Toast.LENGTH_LONG).show();
     }
 }
+    private Animator activeAnimAnimator;
     private void playAnim() {
-        // [FIX CRASH] Tránh NullPointerException và IllegalArgumentException nếu View chưa được add vào WindowManager
-        if (fV == null || fV.getLayoutParams() == null) return;
-        
-        WindowManager.LayoutParams fp = (WindowManager.LayoutParams) fV.getLayoutParams();
-        fp.width = WindowManager.LayoutParams.MATCH_PARENT;
-        fp.height = WindowManager.LayoutParams.MATCH_PARENT;
-        
-        try { 
-            wm.updateViewLayout(fV, fp); 
-        } catch (Exception e) { 
-            return; 
-        }
-        
+        if (fV == null) return;
+        // [TỐI ƯU] Không còn wm.updateViewLayout() ở đây nữa (view đã MATCH_PARENT cố định) —
+        // Rung/Trigger/Animation giờ bắn ra gần như đồng thời, không còn trễ 1 nhịp IPC.
+        if (activeAnimAnimator != null) { activeAnimAnimator.cancel(); activeAnimAnimator = null; }
+
+        int style = prefs.getInt("anim_style", 0);
+        int dur = Math.max(60, prefs.getInt("anim_dur", 1500));
+        int holdDur = Math.max(0, prefs.getInt("anim_hold_dur", 400)); // [MỚI] thời gian giữ đỉnh sáng
+
         fV.setVisibility(View.VISIBLE);
-        fV.post(() -> {
-            int style = prefs.getInt("anim_style", 0);
-            int dur = prefs.getInt("anim_dur", 1500);
-            ValueAnimator anim;
-            if (style == 0) {
-                anim = ValueAnimator.ofFloat(0f, 1f, 0f);
-                anim.addUpdateListener(a -> fV.setAlpha((float) a.getAnimatedValue()));
-            } else {
-                fV.setAlpha(1f);
-                anim = ValueAnimator.ofFloat(0f, 1f);
-                anim.addUpdateListener(a -> fV.setPhase((float) a.getAnimatedValue()));
+        android.animation.AnimatorSet set = new android.animation.AnimatorSet();
+        if (style == 0) {
+            int halfDur = Math.max(1, dur / 2);
+            ValueAnimator fadeIn = ValueAnimator.ofFloat(0f, 1f);
+            fadeIn.setDuration(halfDur);
+            fadeIn.addUpdateListener(a -> fV.setAlpha((float) a.getAnimatedValue()));
+            ValueAnimator fadeOut = ValueAnimator.ofFloat(1f, 0f);
+            fadeOut.setDuration(halfDur);
+            fadeOut.addUpdateListener(a -> fV.setAlpha((float) a.getAnimatedValue()));
+            set.play(fadeOut).after(holdDur).after(fadeIn); // fadeIn -> giữ holdDur -> fadeOut
+        } else {
+            fV.setAlpha(1f);
+            ValueAnimator dash = ValueAnimator.ofFloat(0f, 1f);
+            dash.setDuration(dur);
+            dash.addUpdateListener(a -> fV.setPhase((float) a.getAnimatedValue()));
+            ValueAnimator fadeOut = ValueAnimator.ofFloat(1f, 0f);
+            fadeOut.setDuration(200);
+            fadeOut.addUpdateListener(a -> fV.setAlpha((float) a.getAnimatedValue()));
+            set.play(fadeOut).after(holdDur).after(dash);
+        }
+        set.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator a) {
+                fV.setAlpha(0f); fV.setVisibility(View.GONE);
+                if (activeAnimAnimator == set) activeAnimAnimator = null;
             }
-            anim.setDuration(dur);
-            anim.addListener(new AnimatorListenerAdapter() {
-                @Override 
-                public void onAnimationEnd(Animator a) {
-                    fV.setAlpha(0f);
-                    fV.setVisibility(View.GONE);
-                    fp.width = 0; 
-                    fp.height = 0;
-                    try { 
-                        wm.updateViewLayout(fV, fp); 
-                    } catch (Exception e) {}
-                }
-            });
-            anim.start();
+            @Override public void onAnimationCancel(Animator a) {
+                fV.setAlpha(0f); fV.setVisibility(View.GONE);
+            }
         });
+        activeAnimAnimator = set;
+        set.start();
     }
     // 1. Thêm hàm này để xử lý xuyên thấu cảm ứng
     private void setTransientUntouchable(boolean untouchable) {
@@ -1634,22 +1635,31 @@ private void fireIntentById(String id) {
         String targets = targetsBar + (targetsBar.isEmpty() || targetsCorner.isEmpty() ? "" : ",") + targetsCorner;
         
         if (targets.isEmpty()) return;
-        boolean changed = false;
+        // [TỐI ƯU] Ẩn TRỰC TIẾP đúng view thay vì gọi updateVisibility()/updateHomaccLive()
+        // (duyệt lại toàn bộ 16 Bar/Corner + panelEngine.rebuildAll()) — đây là nguồn giật
+        // chính khi HIDE_SOME_OVERLAY chạy cùng lúc với TRIGGER_* giả lập cử chỉ thật.
+        boolean isHomacc = prefix.equals("homacc_");
+        View[] barArr = isHomacc ? accHomeBars : bars;
+        View[] cornerArr = isHomacc ? accHomeCorners : corners;
         SharedPreferences.Editor ed = prefs.edit();
+        boolean changed = false;
         for (String t : targets.split(",")) {
             String tt = t.trim();
             if (tt.isEmpty()) continue;
-            String mid = (tt.equals("br") || tt.equals("bl") || tt.equals("tr") || tt.equals("tl")) ? "corner_" + tt : tt;
+            boolean isCorner = tt.equals("br") || tt.equals("bl") || tt.equals("tr") || tt.equals("tl");
+            String mid = isCorner ? "corner_" + tt : tt;
             String k = prefix + mid + "_manual_hide";
             if (!prefs.getBoolean(k, false)) { ed.putBoolean(k, true); changed = true; }
+            if (isCorner) {
+                int idx = java.util.Arrays.asList(CORNERS).indexOf(tt);
+                if (idx >= 0 && cornerArr[idx] != null) cornerArr[idx].setVisibility(View.GONE);
+            } else {
+                int idx = java.util.Arrays.asList(BARS).indexOf(tt);
+                if (idx >= 0 && barArr[idx] != null) barArr[idx].setVisibility(View.GONE);
+            }
         }
-        if (changed) { 
-            ed.apply(); 
-            if (prefix.equals("homacc_")) updateHomaccLive();
-            else updateVisibility(); 
-        }
+        if (changed) ed.apply();
     }
-
     private void showAllOverlay(String key) {
         // [MỚI] Hồi sinh hoàn toàn: Hủy mọi cờ xuyên thấu/giả lập đang kẹt
         isDispatchingSyntheticGesture = false;
@@ -1865,14 +1875,18 @@ private void refreshFingerprintRegistration() {
         fpRegistered = false;
     }
 }
-    private void createFloatingBars() {
+        private void createFloatingBars() {
         fV = new FlashView(this);
         fV.setAlpha(0f); fV.setVisibility(View.GONE);
-        WindowManager.LayoutParams fp = new WindowManager.LayoutParams(0,0, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+        // [TỐI ƯU] Giữ cố định MATCH_PARENT ngay từ đầu — không còn co giãn 0x0↔MATCH_PARENT
+        // qua wm.updateViewLayout() mỗi lần chạy Animation (xem playAnim()), giúp hiệu ứng bắt
+        // đầu gần như tức thời, đồng bộ với Rung/Hành động thay vì trễ 1 nhịp IPC hệ thống.
+        WindowManager.LayoutParams fp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
         try { wm.addView(fV, fp); } catch(Exception e){}
-
         for (int i=0;i<12;i++) {
             bars[i] = new BarView(this);
             WindowManager.LayoutParams p = new WindowManager.LayoutParams(1,1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
@@ -2052,15 +2066,16 @@ private static final int MAX_TRIGGER_DEPTH = 3;
 private void checkAndYieldOS(String actionKey) {
             if (prefs.getBoolean(actionKey + "_os", false)) {
                 try {
-                    // Mượn cờ manual_hide để ép tàng hình tuyệt đối (View.GONE)
+                    // [TỐI ƯU] Ẩn/hồi sinh NGAY TẠI ĐÚNG VIEW đang chạm — không còn gọi
+                    // updateVisibility() (duyệt lại toàn bộ 16 Bar/Corner + rebuild Panel)
+                    // ngay giữa lúc synthetic gesture đang chạy, đây là nguồn giật chính.
                     String hideKey = prefKeyBase + "_manual_hide";
                     prefs.edit().putBoolean(hideKey, true).apply();
-                    updateVisibility(); // Cập nhật ngay lập tức
-                    
-                    // Hẹn giờ hồi sinh Bar
+                    myView.setVisibility(View.GONE);
+
                     lpHandler.postDelayed(() -> {
                         prefs.edit().putBoolean(hideKey, false).apply();
-                        updateVisibility(); // Tự động hiển thị lại an toàn
+                        myView.setVisibility(View.VISIBLE);
                     }, prefs.getInt("os_yield_dur", 3000));
                 } catch (Exception ignored) {}
             }

@@ -5884,8 +5884,9 @@ if (designTabState == 5) { renderPanelDesign(); return; }
     dEffect.addView(createSignedSlider("Chiều ngang Hiệu ứng (0=Full)", "anim_w", -1500, 2000, 0));
     dEffect.addView(createSignedSlider("Chiều dọc Hiệu ứng (0=Full)", "anim_h", -1500, 3500, 0));
     dEffect.addView(createSlider("Độ đậm mờ hiệu ứng (Alpha)", "anim_alpha", 255, 255));
+        dEffect.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500));
+    dEffect.addView(createSlider(T("Animation Hold Duration (ms)","Thời gian giữ Animation (ms)"), "anim_hold_dur", 2000, 400));
     dEffect.addView(createSlider("Độ dày viền", "anim_thick", 50, 12));
-    dEffect.addView(createSlider("Thời gian Animation (ms)", "anim_dur", 5000, 1500));
     designSliderContainer.addView(createDrawer("🎬 " + T("EFFECT","HIỆU ỨNG"), dEffect));
 
     // DRAWER 2: CHỈ BÁO GHI ÂM
