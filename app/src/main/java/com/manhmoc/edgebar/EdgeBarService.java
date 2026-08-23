@@ -2081,13 +2081,22 @@ private static final int MAX_TRIGGER_DEPTH = 3;
 private void checkAndYieldOS(String actionKey) {
             if (prefs.getBoolean(actionKey + "_os", false)) {
                 try {
-                    // [FIX] Ẩn NGAY LẬP TỨC, đồng bộ trong cùng frame chạm — giống hệt
-                    // cách hideSomeOverlay() làm. Bản cũ trì hoãn sang frame kế tiếp
-                    // (lpHandler.post) chính là nguyên nhân gây khựng 1 nhịp khi trùng
-                    // lúc TRIGGER_* đang chạy animation mở khoá.
+                    // [FIX] KHÔNG ẩn View đồng bộ ngay trong lúc đang xử lý ACTION_UP
+                    // của CHÍNH View này — làm vậy buộc hệ thống đồng bộ lại
+                    // WindowManager/InputDispatcher ngay giữa chừng (cùng gốc bug với
+                    // updateViewLayout() vô điều kiện từng làm hỏng bộ đếm long-press,
+                    // xem updateLayoutIfChanged()), gây khựng hẳn 1 nhịp TRƯỚC khi
+                    // TRIGGER_* kịp bắn cử chỉ thật xuống OS. Dời việc ẩn sang đúng
+                    // mốc VSYNC kế tiếp bằng postOnAnimation() thay vì Handler.post()
+                    // thường (tránh xếp hàng chung Looper với holdCheckRunnable/anim
+                    // callback — đây là lý do bản post() cũ từng bị giật) — vẫn xảy ra
+                    // gần như tức thời (≤1 frame, ~16ms), không còn chặn dispatch chạm
+                    // hiện tại nên không còn giật hình dù trùng lúc TRIGGER_* đang chạy.
                     String hideKey = prefKeyBase + "_manual_hide";
-                    myView.setVisibility(View.GONE);
-                    prefs.edit().putBoolean(hideKey, true).apply();
+                    myView.postOnAnimation(() -> {
+                        myView.setVisibility(View.GONE);
+                        prefs.edit().putBoolean(hideKey, true).apply();
+                    });
 
                     lpHandler.postDelayed(() -> {
                         myView.setVisibility(View.VISIBLE);
