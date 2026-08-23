@@ -2751,6 +2751,12 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     optLp.setMargins(0, 20, 0, 10);
     tvOpt.setLayoutParams(optLp);
     vTrig.addView(tvOpt);
+    CheckBox cbJump = new CheckBox(this);
+    cbJump.setText("Icon Jump (Icon nhảy khi kích hoạt)");
+    cbJump.setTextColor(Color.WHITE);
+    cbJump.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_jump_on", true));
+    vTrig.addView(cbJump);
+
     CheckBox cbVib = new CheckBox(this);
     cbVib.setText("Bật Rung (Haptic Feedback)");
     cbVib.setTextColor(Color.WHITE);
@@ -2830,11 +2836,12 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
             curRules.add(targetId);
             prefs.edit().putString(listKey, android.text.TextUtils.join(",", curRules)).apply();
         }
-                prefs.edit()
+        prefs.edit()
             .putString("prule_" + targetId + "_gestures", android.text.TextUtils.join(",", gestures))
             .putString("prule_" + targetId + "_acts", android.text.TextUtils.join(",", selectedActs))
             .putString("prule_" + targetId + "_launch_pkg", launchAppPkg[0])
             .putString("prule_" + targetId + "_shortcut_id", shortcutId[0])
+            .putBoolean("prule_" + targetId + "_jump_on", cbJump.isChecked()) // MỚI
             .putBoolean("prule_" + targetId + "_vib", cbVib.isChecked())
             .putBoolean("prule_" + targetId + "_anim", cbAnim.isChecked())
             .putBoolean("prule_" + targetId + "_os", cbOs.isChecked()) // THÊM DÒNG NÀY
@@ -3204,6 +3211,12 @@ for (String sa : savedArray) {
             vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
             vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
         }
+CheckBox cbJump = new CheckBox(this);
+cbJump.setText(T("Icon Jump (icon nhảy khi kích hoạt)", "Icon Jump (Icon nhảy khi kích hoạt)"));
+cbJump.setTextColor(Color.WHITE);
+cbJump.setChecked(editKey == null || prefs.getBoolean(editKey+"_jump_on", true));
+vTrig.addView(cbJump);
+
 cbVib.setText(T("Haptic Feedback", "Bật Rung (Haptic Feedback)"));
 cbVib.setTextColor(Color.WHITE); cbVib.setChecked(editKey == null ||
 prefs.getBoolean(editKey+"_vib", true)); vTrig.addView(cbVib);
@@ -3289,6 +3302,7 @@ boolean hasChecked = false;
 hasChecked = true; String finalKey = prefix + compKey + "_" + gestureKeys.get(i);
 prefs.edit()
      .putString(finalKey, joinedActions)
+     .putBoolean(finalKey+"_jump_on", cbJump.isChecked()) // MỚI
      .putBoolean(finalKey+"_vib", cbVib.isChecked())
      .putBoolean(finalKey+"_anim", cbAnim.isChecked())
      .putBoolean(finalKey+"_os", cbOs.isChecked()) // THÊM DÒNG NÀY
@@ -5923,6 +5937,10 @@ if (designTabState == 5) { renderPanelDesign(); return; }
     dOpt.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600));
     dOpt.addView(createSlider("Thời gian Nhường OS (ms)", "os_yield_dur", 60000, 3000)); // THÊM DÒNG NÀY
     dOpt.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30));
+    // [MỚI] Tinh chỉnh Cử chỉ giả lập (dùng cho TRIGGER_* / Nhường OS)
+    dOpt.addView(createSlider("Độ trễ khởi động Cử chỉ giả lập (ms)", "sim_gesture_delay", 50, 10));
+    dOpt.addView(createSlider("Thời lượng Vuốt giả lập (ms)", "sim_gesture_dur", 100, 20));
+    dOpt.addView(createSlider("Độ xa Vuốt giả lập (% màn hình)", "sim_swipe_dist_pct", 100, 80));
     designSliderContainer.addView(createDrawer("⚙️ " + T("GENERAL OPTIONS","TÙY CHỌN CHUNG"), dOpt));
 
     // DRAWER 4: ICON CHO 13 CỬ CHỈ (đã chuyển hẳn sang Display, không add lại ở Gesture & Touch)
