@@ -2081,21 +2081,18 @@ private static final int MAX_TRIGGER_DEPTH = 3;
 private void checkAndYieldOS(String actionKey) {
             if (prefs.getBoolean(actionKey + "_os", false)) {
                 try {
-                    // [FIX GIẬT] Dời việc ẩn View + ghi prefs sang khung hình kế tiếp,
-                    // KHÔNG làm ngay lập tức — tránh tranh chấp frame với animation
-                    // chuyển cảnh (VD: mở khoá) mà cử chỉ giả lập vừa kích hoạt.
-                    lpHandler.post(() -> {
-                        try {
-                            String hideKey = prefKeyBase + "_manual_hide";
-                            prefs.edit().putBoolean(hideKey, true).apply();
-                            myView.setVisibility(View.GONE);
+                    // [FIX] Ẩn NGAY LẬP TỨC, đồng bộ trong cùng frame chạm — giống hệt
+                    // cách hideSomeOverlay() làm. Bản cũ trì hoãn sang frame kế tiếp
+                    // (lpHandler.post) chính là nguyên nhân gây khựng 1 nhịp khi trùng
+                    // lúc TRIGGER_* đang chạy animation mở khoá.
+                    String hideKey = prefKeyBase + "_manual_hide";
+                    myView.setVisibility(View.GONE);
+                    prefs.edit().putBoolean(hideKey, true).apply();
 
-                            lpHandler.postDelayed(() -> {
-                                prefs.edit().putBoolean(hideKey, false).apply();
-                                myView.setVisibility(View.VISIBLE);
-                            }, prefs.getInt("os_yield_dur", 3000));
-                        } catch (Exception ignored) {}
-                    });
+                    lpHandler.postDelayed(() -> {
+                        myView.setVisibility(View.VISIBLE);
+                        prefs.edit().putBoolean(hideKey, false).apply();
+                    }, prefs.getInt("os_yield_dur", 3000));
                 } catch (Exception ignored) {}
             }
         }

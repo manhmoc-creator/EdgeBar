@@ -2769,11 +2769,11 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     cbAnim.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_anim", true));
     vTrig.addView(cbAnim);
 
-    CheckBox cbOs = new CheckBox(this);
-    cbOs.setText("Nhường OS ở Cử chỉ này (Xuyên thấu)");
-    cbOs.setTextColor(Color.parseColor("#FFC107"));
-    cbOs.setChecked(sourceId != null && prefs.getBoolean("prule_" + sourceId + "_os", false));
-    vTrig.addView(cbOs);
+CheckBox cbOs = new CheckBox(this);
+cbOs.setText("Ẩn Overlay Này (Tạm thời)");
+cbOs.setTextColor(Color.parseColor("#FFC107"));
+cbOs.setChecked(sourceId != null && prefs.getBoolean("prule_" + sourceId + "_os", false));
+vTrig.addView(cbOs);
 
     content.addView(vTrig); content.addView(vAct);
     View.OnClickListener tabClick = v -> {
@@ -3226,7 +3226,7 @@ prefs.getBoolean(editKey+"_anim", true));
 if (!isVolKeyMode) vTrig.addView(cbAnim); else cbAnim.setChecked(false);
 
 CheckBox cbOs = new CheckBox(this);
-cbOs.setText("Nhường OS ở Cử chỉ này (Xuyên thấu)");
+cbOs.setText("Ẩn Overlay Này (Tạm thời)");
 cbOs.setTextColor(Color.parseColor("#FFC107"));
 cbOs.setChecked(editKey != null && prefs.getBoolean(editKey+"_os", false));
 if (!isVolKeyMode) vTrig.addView(cbOs); else cbOs.setChecked(false);
@@ -5935,7 +5935,7 @@ if (designTabState == 5) { renderPanelDesign(); return; }
     LinearLayout dOpt = new LinearLayout(this);
     dOpt.setOrientation(LinearLayout.VERTICAL); dOpt.setPadding(20,10,20,20);
     dOpt.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600));
-    dOpt.addView(createSlider("Thời gian Nhường OS (ms)", "os_yield_dur", 60000, 3000)); // THÊM DÒNG NÀY
+dOpt.addView(createSlider("Thời gian hồi phục Overlay này (ms)", "os_yield_dur", 60000, 3000)); // THÊM DÒNG NÀY
     dOpt.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30));
     // [MỚI] Tinh chỉnh Cử chỉ giả lập (dùng cho TRIGGER_* / Nhường OS)
     dOpt.addView(createSlider("Độ trễ khởi động Cử chỉ giả lập (ms)", "sim_gesture_delay", 50, 10));
