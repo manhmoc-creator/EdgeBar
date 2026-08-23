@@ -1701,6 +1701,7 @@ private void checkAndYieldOS(String actionKey) {
         private static final float DTAP_MAX_DIST_PX = 40f; // [SIẾT CHẶT] Giảm xuống 40px
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
         private static final float COMBO_THRESHOLD_PX = 130f;
+        private static final float COMBO_RETURN_SLOP_PX = 35f; // [FIX] Ngưỡng "quay đầu" riêng cho combo, không dùng chung SWIPE_CANCEL_SLOP_PX
         private Runnable pendingTapRunnable = null;
         private boolean multiTouchCanceled = false; // [MỚI] Cờ kiểm soát cảm ứng đa điểm
         public SidebarTouchListener(String keyBase, View v) {
@@ -1758,6 +1759,7 @@ private void checkAndYieldOS(String actionKey) {
             }
         };
 private boolean isHolding = false;
+private float holdAnchorX = 0f, holdAnchorY = 0f; // [FIX] mốc đo swipe SAU khi giữ
 private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
         @Override public boolean onTouch(View v, MotionEvent e) {
             if (isDispatchingSyntheticGesture) return false;
@@ -1822,17 +1824,21 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     String actionName = "";
                     boolean isDiag = (myView instanceof CornerView && absDx > 40 && absDy > 40);
 
-                    if (isHolding) {
-                        if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
-                            actionName = "long"; 
-                        } else {
-                            if (isDiag) actionName = "diag_hold"; 
-                            else {
-                                if (absDx > absDy) actionName = finalDx > 0 ? "hold_right" : "hold_left";
-                                else actionName = finalDy > 0 ? "hold_down" : "hold_up";
-                            }
-                        }
-                    } else {
+             if (isHolding) {
+                 float holdDx = lastX - holdAnchorX, holdDy = lastY - holdAnchorY;
+                 float holdAbsDx = Math.abs(holdDx), holdAbsDy = Math.abs(holdDy);
+                 if (holdAbsDx < SWIPE_CANCEL_SLOP_PX && holdAbsDy < SWIPE_CANCEL_SLOP_PX) {
+                     actionName = "long";
+                 } else {
+                     boolean isDiagHold = (myView instanceof CornerView && holdAbsDx > 40 && holdAbsDy > 40);
+                     if (isDiagHold) actionName = "diag_hold";
+                     else {
+                         if (holdAbsDx > holdAbsDy) actionName = holdDx > 0 ? "hold_right" : "hold_left";
+                         else actionName = holdDy > 0 ? "hold_down" : "hold_up";
+                     }
+                 }
+             } else {
+
                         if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
                             long now = System.currentTimeMillis();
                             boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
@@ -1892,10 +1898,10 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                             return true;
                         } else {
                             if (!isDiag) {
-                                if (minDy < -COMBO_THRESHOLD_PX && finalDy > minDy + SWIPE_CANCEL_SLOP_PX) actionName = "up_down";
-                                else if (maxDy > COMBO_THRESHOLD_PX && finalDy < maxDy - SWIPE_CANCEL_SLOP_PX) actionName = "down_up";
-                                else if (minDx < -COMBO_THRESHOLD_PX && finalDx > minDx + SWIPE_CANCEL_SLOP_PX) actionName = "left_right";
-                                else if (maxDx > COMBO_THRESHOLD_PX && finalDx < maxDx - SWIPE_CANCEL_SLOP_PX) actionName = "right_left";
+                                                                if (minDy < -COMBO_THRESHOLD_PX && finalDy > minDy + COMBO_RETURN_SLOP_PX) actionName = "up_down";
+                                else if (maxDy > COMBO_THRESHOLD_PX && finalDy < maxDy - COMBO_RETURN_SLOP_PX) actionName = "down_up";
+                                else if (minDx < -COMBO_THRESHOLD_PX && finalDx > minDx + COMBO_RETURN_SLOP_PX) actionName = "left_right";
+                                else if (maxDx > COMBO_THRESHOLD_PX && finalDx < maxDx - COMBO_RETURN_SLOP_PX) actionName = "right_left";
                                 else if (absDx > absDy) actionName = finalDx > 0 ? "right" : "left";
                                 else actionName = finalDy > 0 ? "down" : "up";
                             } else {

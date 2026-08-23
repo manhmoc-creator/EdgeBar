@@ -1534,7 +1534,7 @@ private void fireIntentById(String id) {
     private void dispatchRealScreenGesture(String trigger) {
         if (Build.VERSION.SDK_INT < 24) return;
 
-        isDispatchingSyntheticGesture = true;
+                isDispatchingSyntheticGesture = true;
         setTransientUntouchable(true); // Xuyên thấu toàn bộ Bar/Corner
 
         if (syntheticGuardResetRunnable != null) syntheticGuardHandler.removeCallbacks(syntheticGuardResetRunnable);
@@ -1542,7 +1542,17 @@ private void fireIntentById(String id) {
             isDispatchingSyntheticGesture = false;
             setTransientUntouchable(false); // Khôi phục lại trạng thái cảm ứng
         };
-        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 350);
+        // [FIX GIẬT TAP LIÊN TỤC] Mốc an toàn dự phòng giờ co giãn theo đúng "sức nặng"
+        // của từng loại trigger, thay vì cố định 350ms cho mọi trường hợp — TAP chỉ
+        // khoá cảm ứng ~150ms (đủ nhả tay ra là chạm lại được ngay), LONG/DTAP vẫn có
+        // đủ thời gian an toàn hơn cả duration thật của gesture.
+        int guardFallbackMs;
+        if (trigger.equals("TRIGGER_TAP")) guardFallbackMs = 150;
+        else if (trigger.equals("TRIGGER_DTAP")) guardFallbackMs = 220;
+        else if (trigger.equals("TRIGGER_LONG")) guardFallbackMs = 750;
+        else if (trigger.contains("_")) guardFallbackMs = 300; // combo 2 nhịp
+        else guardFallbackMs = 200; // swipe đơn hướng
+        syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, guardFallbackMs);
 
         android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
         final float cx = dm.widthPixels / 2f;
@@ -2086,6 +2096,7 @@ private void checkAndYieldOS(String actionKey) {
         private static final float DTAP_MAX_DIST_PX = 40f; // [SIẾT CHẶT] Giảm xuống 40px
         private static final float SWIPE_CANCEL_SLOP_PX = 60f;
         private static final float COMBO_THRESHOLD_PX = 130f;
+        private static final float COMBO_RETURN_SLOP_PX = 35f; // [FIX] Ngưỡng "quay đầu" riêng cho combo, không dùng chung SWIPE_CANCEL_SLOP_PX
         private Runnable pendingTapRunnable = null;
         private boolean multiTouchCanceled = false; // [MỚI] Cờ kiểm soát cảm ứng đa điểm
         public SidebarTouchListener(String keyBase, View v) {
@@ -2132,13 +2143,15 @@ private void checkAndYieldOS(String actionKey) {
                     float swipeMag = (float) Math.sqrt(cdx * cdx + cdy * cdy);
                     rippleView.jumpIcon(sx, sy, actionName, Color.argb(180, 96, 125, 139), cdx/swipeMag, cdy/swipeMag);
                 }
-            } else {
+                        } else {
                 // [GÀI SỐ MỚI] Tay đứng im tại chỗ -> Rung báo hiệu vào trạng thái "Giữ + Vuốt"
                 isHolding = true;
+                holdAnchorX = lastX; holdAnchorY = lastY; // [FIX] chốt mốc TẠI ĐÂY, không tính lẫn độ trôi trước đó
                 doVibrate(30);
             }
         };
 private boolean isHolding = false;
+private float holdAnchorX = 0f, holdAnchorY = 0f; // [FIX] mốc đo swipe SAU khi giữ, tách khỏi điểm chạm ban đầu
 private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                 @Override public boolean onTouch(View v, MotionEvent e) {
             if (isDispatchingSyntheticGesture) return false;
@@ -2203,14 +2216,19 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     String actionName = "";
                     boolean isDiag = (myView instanceof CornerView && absDx > 40 && absDy > 40);
 
-                    if (isHolding) {
-                        if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
-                            actionName = "long"; 
+                     if (isHolding) {
+                        // [FIX] Đo từ mốc lúc rung xác nhận (holdAnchor), không phải từ điểm chạm
+                        // ban đầu — tránh độ trôi tay tự nhiên trước 600ms triệt tiêu quãng vuốt thật.
+                        float holdDx = lastX - holdAnchorX, holdDy = lastY - holdAnchorY;
+                        float holdAbsDx = Math.abs(holdDx), holdAbsDy = Math.abs(holdDy);
+                        if (holdAbsDx < SWIPE_CANCEL_SLOP_PX && holdAbsDy < SWIPE_CANCEL_SLOP_PX) {
+                            actionName = "long";
                         } else {
-                            if (isDiag) actionName = "diag_hold"; 
+                            boolean isDiagHold = (myView instanceof CornerView && holdAbsDx > 40 && holdAbsDy > 40);
+                            if (isDiagHold) actionName = "diag_hold";
                             else {
-                                if (absDx > absDy) actionName = finalDx > 0 ? "hold_right" : "hold_left";
-                                else actionName = finalDy > 0 ? "hold_down" : "hold_up";
+                                if (holdAbsDx > holdAbsDy) actionName = holdDx > 0 ? "hold_right" : "hold_left";
+                                else actionName = holdDy > 0 ? "hold_down" : "hold_up";
                             }
                         }
                     } else {
@@ -2273,10 +2291,10 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                             return true;
                         } else {
                             if (!isDiag) {
-                                if (minDy < -COMBO_THRESHOLD_PX && finalDy > minDy + SWIPE_CANCEL_SLOP_PX) actionName = "up_down";
-                                else if (maxDy > COMBO_THRESHOLD_PX && finalDy < maxDy - SWIPE_CANCEL_SLOP_PX) actionName = "down_up";
-                                else if (minDx < -COMBO_THRESHOLD_PX && finalDx > minDx + SWIPE_CANCEL_SLOP_PX) actionName = "left_right";
-                                else if (maxDx > COMBO_THRESHOLD_PX && finalDx < maxDx - SWIPE_CANCEL_SLOP_PX) actionName = "right_left";
+                                if (minDy < -COMBO_THRESHOLD_PX && finalDy > minDy + COMBO_RETURN_SLOP_PX) actionName = "up_down";
+                                else if (maxDy > COMBO_THRESHOLD_PX && finalDy < maxDy - COMBO_RETURN_SLOP_PX) actionName = "down_up";
+                                else if (minDx < -COMBO_THRESHOLD_PX && finalDx > minDx + COMBO_RETURN_SLOP_PX) actionName = "left_right";
+                                else if (maxDx > COMBO_THRESHOLD_PX && finalDx < maxDx - COMBO_RETURN_SLOP_PX) actionName = "right_left";
                                 else if (absDx > absDy) actionName = finalDx > 0 ? "right" : "left";
                                 else actionName = finalDy > 0 ? "down" : "up";
                             } else {
