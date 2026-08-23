@@ -1273,15 +1273,37 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         for (String suf : GESTURE_SUFFIXES) if (key.endsWith(suf)) return key.substring(0, key.length() - suf.length());
         return key;
     }
-    private void handleAction(String key) { handleAction(key, 0, true); }
+    private void handleAction(String key) { 
+        handleAction(key, 0, true); 
+    }
+
     private void handleAction(String key, int depth, boolean applyVibAnim) {
         String action = prefs.getString(key, "NONE");
         boolean isOn = prefs.getBoolean(key + "_on", true);
         if (action.equals("NONE") || !isOn) return;
+
+        // [FIX KHỰNG HÌNH] Anima dùng LAYER_TYPE_SOFTWARE (bắt buộc cho BlurMaskFilter)
+        // -> vẽ CPU toàn màn hình, có thể mất vài chục ms. Nếu gọi playAnim() TRƯỚC
+        // khi xử lý TRIGGER_*, lượt vẽ software này chiếm main thread đúng lúc
+        // Runnable bắn touch giả lập (đã lên lịch qua postDelayed trong
+        // dispatchRealScreenGesture) tới giờ chạy -> touch bị delay theo, gây khựng
+        // hẳn 1-2 khung hình. Giải pháp: nếu action có TRIGGER_*, hoãn playAnim()
+        // ra SAU khi việc bắn touch đã chắc chắn được lên lịch xong (không phải chạy
+        // xong, chỉ cần lên lịch xong là đủ tách rời 2 luồng công việc), để traversal
+        // vẽ nặng của Anima không còn chen ngang & chặn Runnable touch nữa.
+        boolean hasTriggerAction = action.contains("TRIGGER_");
         if (applyVibAnim) {
             if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
-            if (prefs.getBoolean(key + "_anim", true)) playAnim();
+            if (prefs.getBoolean(key + "_anim", true)) {
+                if (hasTriggerAction) {
+                    int animDelay = prefs.getInt("sim_gesture_delay", 10) + 25;
+                    new Handler(android.os.Looper.getMainLooper()).postDelayed(this::playAnim, animDelay);
+                } else {
+                    playAnim();
+                }
+            }
         }
+
         String[] acts = action.split(",");
         for (String a : acts) {
             String at = a.trim();

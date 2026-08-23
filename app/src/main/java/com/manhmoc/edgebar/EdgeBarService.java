@@ -1569,7 +1569,13 @@ private void fireIntentById(String id) {
         final float ey = globalTouchEndY >= 0 ? globalTouchEndY : oy;
         final float actualDist = (float) Math.hypot(ex - ox, ey - oy);
 
-        // [MỚI] Đọc từ thanh trượt General Options thay vì số cứng
+        // [MỚI] Đọc từ thanh trượt General Options — riêng TAP/DTAP dùng độ trễ
+        // tối thiểu (max 2ms) vì không cần thời gian ổn định hướng vuốt như
+        // Swipe/Hold, giúp tap giả lập nhạy gần bằng chạm thật của OS.
+        boolean isTapLikeTrigger = trigger.equals("TRIGGER_TAP") || trigger.equals("TRIGGER_DTAP");
+        int dispatchDelay = isTapLikeTrigger
+            ? Math.min(prefs.getInt("sim_gesture_delay", 10), 2)
+            : prefs.getInt("sim_gesture_delay", 10);
         new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             try {
                 float defaultSwipeDist = Math.min(cx, cy) * (prefs.getInt("sim_swipe_dist_pct", 80) / 100f);
@@ -1637,7 +1643,7 @@ private void fireIntentById(String id) {
                     }, 40);
                 }
             } catch (Exception ignored) {}
-        }, prefs.getInt("sim_gesture_delay", 10));
+        }, dispatchDelay);
     }
 
     // [MỚI] Ẩn thủ công đúng danh sách bar/corner user đã chọn cho rule này — tái dùng
@@ -2028,9 +2034,26 @@ private static final int MAX_TRIGGER_DEPTH = 3;
         boolean isOn = prefs.getBoolean(key + "_on", true);
         if (action.equals("NONE") || !isOn) return;
 
+        // [FIX KHỰNG HÌNH] Anima dùng LAYER_TYPE_SOFTWARE (bắt buộc cho BlurMaskFilter)
+        // -> vẽ CPU toàn màn hình, có thể mất vài chục ms. Nếu gọi playAnim() TRƯỚC
+        // khi xử lý TRIGGER_*, lượt vẽ software này chiếm main thread đúng lúc
+        // Runnable bắn touch giả lập (đã lên lịch qua postDelayed trong
+        // dispatchRealScreenGesture) tới giờ chạy -> touch bị delay theo, gây khựng
+        // hẳn 1-2 khung hình. Giải pháp: nếu action có TRIGGER_*, hoãn playAnim()
+        // ra SAU khi việc bắn touch đã chắc chắn được lên lịch xong (không phải chạy
+        // xong, chỉ cần lên lịch xong là đủ tách rời 2 luồng công việc), để traversal
+        // vẽ nặng của Anima không còn chen ngang & chặn Runnable touch nữa.
+        boolean hasTriggerAction = action.contains("TRIGGER_");
         if (applyVibAnim) {
             if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
-            if (prefs.getBoolean(key + "_anim", true)) playAnim();
+            if (prefs.getBoolean(key + "_anim", true)) {
+                if (hasTriggerAction) {
+                    int animDelay = prefs.getInt("sim_gesture_delay", 10) + 25;
+                    new Handler(android.os.Looper.getMainLooper()).postDelayed(this::playAnim, animDelay);
+                } else {
+                    playAnim();
+                }
+            }
         }
 
         String[] acts = action.split(",");
