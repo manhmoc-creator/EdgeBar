@@ -33,8 +33,9 @@ public class VolumeButtonService extends Service {
     private int pendingKey = 0; // 0=none, 1=up, -1=down
     private int burstCount = 0;
 private long lastKeyEventMs = 0;
-private int lastFiredKey = 0;
-private static final long MIN_GAP_SAME_KEY_MS = 70; // lọc auto-repeat "ma" của hệ thống (thường <50ms) mà không nuốt nhầm cú bấm thật kế tiếp
+private int lastKeyPressed = 0; // RAW key gần nhất - bất kể đã fire hay đang chờ combo/dtap
+private static final long MIN_GAP_SAME_KEY_MS = 70;
+
     private static final long DTAP_WINDOW_MS = 240;  // Chờ ngắn — cùng 1 ngón tap 2 lần
 private static final long COMBO_WINDOW_MS = 660; // Chờ dài hơn — đổi phím, cần thời gian di chuyển ngón (1 tay)
 private long pendingWindowMs = 0;
@@ -108,66 +109,68 @@ private long pendingWindowMs = 0;
         mediaSession.setActive(screenOffNow);
         isRunning = true;
     }
-
-            private boolean isRuleSet(String key) {
+        private boolean isRuleSet(String key) {
         return !prefs.getString(key, "NONE").equals("NONE");
     }
 
-        private void handleSide(boolean isUp) {
-        int currentKey = isUp ? 1 : -1;
-        long now = android.os.SystemClock.elapsedRealtime();
+private void handleSide(boolean isUp) {
+   // [FIX] Ép chạy tuần tự trên main thread của Handler h — tránh trường hợp
+   // callback hệ thống tới không cùng thread với volCheckRunnable đang chờ,
+   // có thể gây đọc/ghi pendingKey lệch nhịp -> ra sai action (vd Combo lại
+   // fire action của Tap).
+   h.post(() -> handleSideInternal(isUp));
+}
 
-        // Lọc auto-repeat: nếu vừa nhận CÙNG phím cách đây < 120ms và đang không chờ combo
-        // (pendingKey == 0 nghĩa là chu kỳ trước đã xử lý xong) -> đây gần chắc là hệ thống
-        // tự bắn lặp cho 1 lần bấm vật lý, không phải người dùng bấm thêm lần nữa.
-        if (pendingKey == 0 && lastFiredKey == currentKey && (now - lastKeyEventMs) < MIN_GAP_SAME_KEY_MS) {
-            lastKeyEventMs = now;
-            return;
-        }
-        lastKeyEventMs = now;
+private void handleSideInternal(boolean isUp) {
+   int currentKey = isUp ? 1 : -1;
+   long now = android.os.SystemClock.elapsedRealtime();
 
-        if (volCheckRunnable != null) {
-            h.removeCallbacks(volCheckRunnable);
-            volCheckRunnable = null;
-        }
+   // [FIX CHÍNH] So với RAW key gần nhất, áp dụng bộ lọc LUÔN LUÔN — bất kể
+   // đang có pendingKey hay không. Trước đây chỉ lọc khi pendingKey == 0,
+   // nên tín hiệu "echo" đến ngay sau lần bấm đầu tiên (khi đang chờ phân
+   // loại Tap/Dtap/Combo) bị coi là lần bấm thật thứ 2 -> Tap tự nhảy sang
+   // Dtap/Combo. Đây là nguyên nhân chính gây nhầm lẫn tap/2tap/combo.
+   if (lastKeyPressed == currentKey && (now - lastKeyEventMs) < MIN_GAP_SAME_KEY_MS) {
+       lastKeyEventMs = now;
+       return;
+   }
+   lastKeyEventMs = now;
+   lastKeyPressed = currentKey;
 
-                if (pendingKey != 0) {
-            if (pendingKey == currentKey) {
-                lastFiredKey = currentKey;
-                fire(isUp ? "volkey_up_dtap" : "volkey_down_dtap");
-            } else {
-                lastFiredKey = currentKey;
-                fire(pendingKey == 1 ? "volkey_up_combo" : "volkey_down_combo");
-            }
-            pendingKey = 0;
-            burstCount = 0;
-            return;
-        }
+   if (volCheckRunnable != null) {
+       h.removeCallbacks(volCheckRunnable);
+       volCheckRunnable = null;
+   }
 
-        // Nhịp bấm đầu tiên: kiểm tra ĐÚNG rule của CHÍNH phím này
-        // (combo fire dựa theo phím bấm trước = phím hiện tại, nên phải check combo của chính nó)
-        String dtapKey = isUp ? "volkey_up_dtap" : "volkey_down_dtap";
-        String comboKey = isUp ? "volkey_up_combo" : "volkey_down_combo";
-        boolean hasCombo = isRuleSet(comboKey);
-        boolean hasDtap = isRuleSet(dtapKey);
+   if (pendingKey != 0) {
+       if (pendingKey == currentKey) {
+           fire(isUp ? "volkey_up_dtap" : "volkey_down_dtap");
+       } else {
+           fire(pendingKey == 1 ? "volkey_up_combo" : "volkey_down_combo");
+       }
+       pendingKey = 0;
+       burstCount = 0;
+       return;
+   }
 
-        if (!hasCombo && !hasDtap) {
-            // Không có gì cần phân biệt -> tức thời 0ms
-            fire(isUp ? "volkey_up_tap" : "volkey_down_tap");
-            return;
-        }
+   String dtapKey = isUp ? "volkey_up_dtap" : "volkey_down_dtap";
+   String comboKey = isUp ? "volkey_up_combo" : "volkey_down_combo";
+   boolean hasCombo = isRuleSet(comboKey);
+   boolean hasDtap = isRuleSet(dtapKey);
 
-                // Có Combo -> cần khung DÀI (đổi phím, 1 tay cần thời gian di chuyển ngón)
-        // Chỉ có Dtap (không Combo) -> chỉ cần khung NGẮN (cùng ngón tap 2 lần rất nhanh)
-        pendingWindowMs = hasCombo ? COMBO_WINDOW_MS : DTAP_WINDOW_MS;
-        pendingKey = currentKey;
-        burstCount = 1;
-        vibrateAck(); // [MỚI] xác nhận đã ghi nhận, tránh bạn bấm lại quá sớm gây nhầm Dtap/Combo
-        scheduleCheck();
-    }
+   if (!hasCombo && !hasDtap) {
+       fire(isUp ? "volkey_up_tap" : "volkey_down_tap");
+       return;
+   }
+
+   pendingWindowMs = hasCombo ? COMBO_WINDOW_MS : DTAP_WINDOW_MS;
+   pendingKey = currentKey;
+   burstCount = 1;
+   vibrateAck();
+   scheduleCheck();
+}
         private void scheduleCheck() {
         volCheckRunnable = () -> {
-            lastFiredKey = pendingKey;
             fire(pendingKey == 1 ? "volkey_up_tap" : "volkey_down_tap");
             pendingKey = 0;
             burstCount = 0;
