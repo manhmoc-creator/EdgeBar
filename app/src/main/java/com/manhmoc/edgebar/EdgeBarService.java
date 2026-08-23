@@ -257,12 +257,18 @@ if (k != null && k.startsWith("shortcut_") && k.endsWith("_icon_override")) {
     homaccDebounceHandler.postDelayed(homaccDebounceRunnable, HOMACC_DEBOUNCE_MS);
     return;
 }
+    // TẦNG 3.5: "_manual_hide" đã được set TRỰC TIẾP lên View ngay tại nơi ghi
+    // (checkAndYieldOS/hideSomeOverlay/showAllOverlay) — không cần rebuild lại
+    // toàn bộ 16 Bar/Corner + Panel qua updateVisibility() nữa. Bỏ debounce cho
+    // riêng key này để tránh giật hình khi "Nhường OS" trùng lúc TRIGGER_* đang
+    // chạy animation mở khoá.
+    if (k != null && k.endsWith("_manual_hide")) return;
+
     // TẦNG 4: lock bars → debounce 400ms như cũ
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> updateVisibility();
     debounceHandler.postDelayed(debounceRunnable, LOCK_DEBOUNCE_MS);
 };
-   // SAU:
 private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     @Override
     public void onReceive(Context c, Intent i) {
@@ -1585,9 +1591,9 @@ private void fireIntentById(String id) {
                         case "TRIGGER_LEFT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); break;
                         case "TRIGGER_RIGHT": path.moveTo(ox, oy); path.lineTo(ox + defaultSwipeDist, oy); break;
                         case "TRIGGER_DIAG": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy - defaultSwipeDist); break;
-                        case "TRIGGER_TAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 5; break;
-                        case "TRIGGER_LONG": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 600; break;
-                        case "TRIGGER_DTAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = 5; break;
+                        case "TRIGGER_TAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = prefs.getInt("sim_tap_dur", 5); break;
+                        case "TRIGGER_LONG": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = prefs.getInt("sim_long_dur", 600); break;
+                        case "TRIGGER_DTAP": path.moveTo(ox, oy); path.lineTo(ox, oy + 1); duration = prefs.getInt("sim_tap_dur", 5); break;
                         case "TRIGGER_UP_DOWN": path.moveTo(ox, oy); path.lineTo(ox, oy - defaultSwipeDist); path.lineTo(ox, oy + defaultSwipeDist * 0.35f); duration = 90; break;
                         case "TRIGGER_DOWN_UP": path.moveTo(ox, oy); path.lineTo(ox, oy + defaultSwipeDist); path.lineTo(ox, oy - defaultSwipeDist * 0.35f); duration = 90; break;
                         case "TRIGGER_LEFT_RIGHT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); path.lineTo(ox + defaultSwipeDist * 0.35f, oy); duration = 90; break;
@@ -1617,7 +1623,7 @@ private void fireIntentById(String id) {
                     new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                         try {
                             android.accessibilityservice.GestureDescription.Builder b2 = new android.accessibilityservice.GestureDescription.Builder();
-                            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, 15));
+                            b2.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(finalPath, 0, prefs.getInt("sim_tap_dur", 5)));
                             dispatchGesture(b2.build(), new GestureResultCallback() {
                                 @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
                                     isDispatchingSyntheticGesture = false; setTransientUntouchable(false);

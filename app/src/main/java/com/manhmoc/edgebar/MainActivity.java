@@ -5941,6 +5941,9 @@ if (designTabState == 5) { renderPanelDesign(); return; }
     dOpt.addView(createSlider("Độ trễ khởi động Cử chỉ giả lập (ms)", "sim_gesture_delay", 50, 10));
     dOpt.addView(createSlider("Thời lượng Vuốt giả lập (ms)", "sim_gesture_dur", 100, 20));
     dOpt.addView(createSlider("Độ xa Vuốt giả lập (% màn hình)", "sim_swipe_dist_pct", 100, 80));
+    // [MỚI] Riêng Tap/2Tap và Long Press — kéo về siêu nhỏ để khớp tốc độ cử chỉ thật của OS
+    dOpt.addView(createSlider("Thời lượng Tap/2Tap giả lập (ms)", "sim_tap_dur", 50, 5));
+    dOpt.addView(createSlider("Thời lượng Long Press giả lập (ms)", "sim_long_dur", 2000, 600));
     designSliderContainer.addView(createDrawer("⚙️ " + T("GENERAL OPTIONS","TÙY CHỌN CHUNG"), dOpt));
 
     // DRAWER 4: ICON CHO 13 CỬ CHỈ (đã chuyển hẳn sang Display, không add lại ở Gesture & Touch)

@@ -1112,6 +1112,10 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         return;
     }
 
+    // Xem giải thích tại EdgeBarService.java — cờ này đã được set trực tiếp lên
+    // View rồi, khỏi rebuild toàn bộ overlay qua updateVisibility() nữa.
+    if (k.endsWith("_manual_hide")) return;
+
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> {
         debounceRunnable = null;
@@ -1119,6 +1123,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     };
     debounceHandler.postDelayed(debounceRunnable, 500);
 };
+
     /** [FIX #2] Ẩn ĐỒNG THỜI nền đen + icon khóa + toàn bộ bar/corner Morse trong
      *  CÙNG một lệnh gọi — không phụ thuộc broadcast SYNC_STATE bất đồng bộ (đây
      *  chính là nguyên nhân nền đen biến mất trước, bar/corner biến mất trễ hoặc
