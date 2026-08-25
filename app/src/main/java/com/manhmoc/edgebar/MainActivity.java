@@ -347,7 +347,9 @@ String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
         "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
         "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
         "TRIGGER_DIAG",
-        "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT"};
+        "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT",
+        "TRIGGER_UP_HOLD", "TRIGGER_DOWN_HOLD", "TRIGGER_LEFT_HOLD", "TRIGGER_RIGHT_HOLD", "TRIGGER_DIAG_HOLD",
+        "TRIGGER_ACC_MENU_2F"};
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Toggle Voice Record", "Bật/Tắt Ghi Âm"),
@@ -361,7 +363,11 @@ String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn
         T("Trigger: Swipe Left", "Giả Lập: Vuốt Trái"), T("Trigger: Swipe Right", "Giả Lập: Vuốt Phải"),
         T("Trigger: Diagonal", "Giả Lập: Chéo"),
         T("Trigger: Up then Down", "Giả Lập: Lên rồi Xuống"), T("Trigger: Down then Up", "Giả Lập: Xuống rồi Lên"),
-        T("Trigger: Left then Right", "Giả Lập: Trái rồi Phải"), T("Trigger: Right then Left", "Giả Lập: Phải rồi Trái")};
+        T("Trigger: Left then Right", "Giả Lập: Trái rồi Phải"), T("Trigger: Right then Left", "Giả Lập: Phải rồi Trái"),
+        T("Trigger: Swipe Up + Hold", "Giả Lập: Vuốt Lên + Giữ"), T("Trigger: Swipe Down + Hold", "Giả Lập: Vuốt Xuống + Giữ"),
+        T("Trigger: Swipe Left + Hold", "Giả Lập: Vuốt Trái + Giữ"), T("Trigger: Swipe Right + Hold", "Giả Lập: Vuốt Phải + Giữ"),
+        T("Trigger: Diagonal + Hold", "Giả Lập: Chéo + Giữ"),
+        T("2-Finger Accessibility Menu (Nav Bar)", "Giả Lập: 2 Ngón Gọi Trợ Năng (Nav Bar)")};
 for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
 // LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
@@ -2720,7 +2726,7 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     // performGlobalAction() nên rơi vào default và không làm gì. Ẩn hẳn khỏi UI Homeb.
     String[] sysKeysForPack = isHomebSpace
         ? new String[]{"HOME", "FLASH", "VOLUME", "CAMERA", "SCREEN_OFF", "SCREENSHOT", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"}
-        : new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
+        : new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE", "TRIGGER_ACC_MENU_2F"};
         List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeysForPack, ACT_KEYS, ACT_LABS);
     List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
     List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
@@ -2733,7 +2739,8 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
             "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
             "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
             "TRIGGER_DIAG",
-            "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT"
+            "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT",
+            "TRIGGER_UP_HOLD", "TRIGGER_DOWN_HOLD", "TRIGGER_LEFT_HOLD", "TRIGGER_RIGHT_HOLD", "TRIGGER_DIAG_HOLD"
         }, ACT_KEYS, ACT_LABS);
         vAct.addView(buildActionCategoryButton("GESTURES", "🌀", TRIGGER_ITEMS_PACK, selectedActs, "#009688"));
     }
@@ -3135,18 +3142,19 @@ for (String sa : savedArray) {
         } else if (isHomebSpace) {
             sysKeys = new String[]{"HOME", "FLASH", "VOLUME", "CAMERA", "SCREEN_OFF", "SCREENSHOT", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
         } else {
-            sysKeys = new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
+            sysKeys = new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE", "TRIGGER_ACC_MENU_2F"};
         }
                 List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeys, actKeysUsed, actLabsUsed);
                 List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
         vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
                 // Chỉ hiện nhóm lệnh Giả lập Cử chỉ (Cần Trợ năng) nếu KHÔNG ở trong Homeb
-                if (!isVolKeyMode && !isHomebSpace) {
+        if (!isVolKeyMode && !isHomebSpace) {
             List<String[]> TRIGGER_ITEMS = buildItemsForKeys(new String[]{
                 "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
                 "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
                 "TRIGGER_DIAG",
-                "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT"
+                "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT",
+                "TRIGGER_UP_HOLD", "TRIGGER_DOWN_HOLD", "TRIGGER_LEFT_HOLD", "TRIGGER_RIGHT_HOLD", "TRIGGER_DIAG_HOLD"
             }, actKeysUsed, actLabsUsed);
             vAct.addView(buildActionCategoryButton("GESTURES", "🌀", TRIGGER_ITEMS, selectedActs, "#009688"));
         }

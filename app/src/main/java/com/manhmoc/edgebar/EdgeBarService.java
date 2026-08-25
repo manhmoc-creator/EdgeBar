@@ -1361,12 +1361,17 @@ private void triggerBlacklistAutoHomeb() {
                     showAllOverlay("lock_");
                     showAllOverlay("homacc_");
                     break;
-                                case "TRIGGER_TAP": case "TRIGGER_DTAP": case "TRIGGER_LONG":
+                case "TRIGGER_TAP": case "TRIGGER_DTAP": case "TRIGGER_LONG":
                 case "TRIGGER_UP": case "TRIGGER_DOWN": case "TRIGGER_LEFT":
                 case "TRIGGER_RIGHT": case "TRIGGER_DIAG":
                 case "TRIGGER_UP_DOWN": case "TRIGGER_DOWN_UP":
                 case "TRIGGER_LEFT_RIGHT": case "TRIGGER_RIGHT_LEFT":
+                case "TRIGGER_UP_HOLD": case "TRIGGER_DOWN_HOLD":
+                case "TRIGGER_LEFT_HOLD": case "TRIGGER_RIGHT_HOLD": case "TRIGGER_DIAG_HOLD":
                     dispatchRealScreenGesture(a);
+                    break;
+                case "TRIGGER_ACC_MENU_2F":
+                    dispatchTwoFingerAccMenuGesture();
                     break;
 default:
                         if (a.startsWith("PANEL_")) {
@@ -1556,6 +1561,7 @@ private void fireIntentById(String id) {
         if (trigger.equals("TRIGGER_TAP")) guardFallbackMs = 150;
         else if (trigger.equals("TRIGGER_DTAP")) guardFallbackMs = 220;
         else if (trigger.equals("TRIGGER_LONG")) guardFallbackMs = 750;
+        else if (trigger.endsWith("_HOLD")) guardFallbackMs = 200 + prefs.getInt("sim_gesture_hold_dur", 500);
         else if (trigger.contains("_")) guardFallbackMs = 300; // combo 2 nhịp
         else guardFallbackMs = 200; // swipe đơn hướng
         syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, guardFallbackMs);
@@ -1584,8 +1590,9 @@ private void fireIntentById(String id) {
 
                 boolean isTapOrLong = trigger.contains("TAP") || trigger.contains("LONG");
                 boolean isCombo = trigger.contains("UP_DOWN") || trigger.contains("DOWN_UP") || trigger.contains("LEFT_RIGHT") || trigger.contains("RIGHT_LEFT");
+                boolean isHoldGesture = trigger.endsWith("_HOLD");
                 
-                boolean useExactPath = actualDist > 40f && !isTapOrLong && !isCombo;
+                boolean useExactPath = actualDist > 40f && !isTapOrLong && !isCombo && !isHoldGesture;
 
                 if (useExactPath) {
                     path.moveTo(ox, oy);
@@ -1604,14 +1611,15 @@ private void fireIntentById(String id) {
                         case "TRIGGER_DOWN_UP": path.moveTo(ox, oy); path.lineTo(ox, oy + defaultSwipeDist); path.lineTo(ox, oy - defaultSwipeDist * 0.35f); duration = 90; break;
                         case "TRIGGER_LEFT_RIGHT": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); path.lineTo(ox + defaultSwipeDist * 0.35f, oy); duration = 90; break;
                         case "TRIGGER_RIGHT_LEFT": path.moveTo(ox, oy); path.lineTo(ox + defaultSwipeDist, oy); path.lineTo(ox - defaultSwipeDist * 0.35f, oy); duration = 90; break;
+                        case "TRIGGER_UP_HOLD": path.moveTo(ox, oy); path.lineTo(ox, oy - defaultSwipeDist); break;
+                        case "TRIGGER_DOWN_HOLD": path.moveTo(ox, oy); path.lineTo(ox, oy + defaultSwipeDist); break;
+                        case "TRIGGER_LEFT_HOLD": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy); break;
+                        case "TRIGGER_RIGHT_HOLD": path.moveTo(ox, oy); path.lineTo(ox + defaultSwipeDist, oy); break;
+                        case "TRIGGER_DIAG_HOLD": path.moveTo(ox, oy); path.lineTo(ox - defaultSwipeDist, oy - defaultSwipeDist); break;
                     }
                 }
-
-                android.accessibilityservice.GestureDescription.StrokeDescription stroke =
-                    new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration);
                 android.accessibilityservice.GestureDescription.Builder builder =
                     new android.accessibilityservice.GestureDescription.Builder();
-                builder.addStroke(stroke);
 
                 final boolean isDtap = trigger.equals("TRIGGER_DTAP");
                 GestureResultCallback cb = new GestureResultCallback() {
@@ -1622,8 +1630,28 @@ private void fireIntentById(String id) {
                         isDispatchingSyntheticGesture = false; setTransientUntouchable(false);
                     }
                 };
-                dispatchGesture(builder.build(), cb, null);
 
+                if (isHoldGesture) {
+                    // [MỚI] Vuốt tới đích rồi GIỮ NGUYÊN tại đó (dùng continueStroke nối tiếp
+                    // 1 đoạn gần như đứng yên) — willContinue=true ở stroke 1 để OS không nhả tay.
+                    int holdDur = Math.max(60, prefs.getInt("sim_gesture_hold_dur", 500));
+                    android.accessibilityservice.GestureDescription.StrokeDescription moveStroke =
+                        new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration, true);
+                    android.graphics.PathMeasure pmHold = new android.graphics.PathMeasure(path, false);
+                    float[] endXY = new float[2];
+                    pmHold.getPosTan(pmHold.getLength(), endXY, null);
+                    android.graphics.Path holdPath = new android.graphics.Path();
+                    holdPath.moveTo(endXY[0], endXY[1]);
+                    holdPath.lineTo(endXY[0], endXY[1] + 0.01f);
+                    android.accessibilityservice.GestureDescription.StrokeDescription holdStroke =
+                        moveStroke.continueStroke(holdPath, 0, holdDur, false);
+                    builder.addStroke(moveStroke);
+                    builder.addStroke(holdStroke);
+                    dispatchGesture(builder.build(), cb, null);
+                } else {
+                    builder.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration));
+                    dispatchGesture(builder.build(), cb, null);
+                }
                 if (isDtap) {
                     final android.graphics.Path finalPath = path;
                     new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
@@ -1645,7 +1673,48 @@ private void fireIntentById(String id) {
             } catch (Exception ignored) {}
         }, dispatchDelay);
     }
+// [MỚI] Trigger đặc biệt TRIGGER_ACC_MENU_2F — CHỈ chạy được ở EdgeBarService
+// (Lock/Homacc), Homeb không có Accessibility nên không giả lập được cử chỉ này.
+// Luôn xuất phát 2 ngón từ MÉP DƯỚI màn hình (vùng nav bar), KHÔNG dùng toạ độ
+// chạm thật (globalTouchStartX/Y) như 17 trigger còn lại.
+private void dispatchTwoFingerAccMenuGesture() {
+    if (Build.VERSION.SDK_INT < 24) return;
+    isDispatchingSyntheticGesture = true;
+    setTransientUntouchable(true);
+    if (syntheticGuardResetRunnable != null) syntheticGuardHandler.removeCallbacks(syntheticGuardResetRunnable);
+    syntheticGuardResetRunnable = () -> {
+        isDispatchingSyntheticGesture = false;
+        setTransientUntouchable(false);
+    };
+    syntheticGuardHandler.postDelayed(syntheticGuardResetRunnable, 600);
 
+    android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+    float w = dm.widthPixels, h = dm.heightPixels;
+    float startY = h - 4f;                 // sát mép dưới cùng — đúng vùng nav bar
+    float endY = h - (h * 0.55f);           // vuốt lên khoảng nửa màn hình
+    float f1x = w * 0.40f, f2x = w * 0.60f; // 2 ngón song song, cách nhau 20% bề ngang
+
+    android.graphics.Path p1 = new android.graphics.Path();
+    p1.moveTo(f1x, startY); p1.lineTo(f1x, endY);
+    android.graphics.Path p2 = new android.graphics.Path();
+    p2.moveTo(f2x, startY); p2.lineTo(f2x, endY);
+
+    int dur = Math.max(80, prefs.getInt("sim_gesture_dur", 20) * 4);
+
+    android.accessibilityservice.GestureDescription.Builder builder =
+        new android.accessibilityservice.GestureDescription.Builder();
+    builder.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(p1, 0, dur));
+    builder.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(p2, 0, dur));
+
+    dispatchGesture(builder.build(), new GestureResultCallback() {
+        @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
+            isDispatchingSyntheticGesture = false; setTransientUntouchable(false);
+        }
+        @Override public void onCancelled(android.accessibilityservice.GestureDescription g) {
+            isDispatchingSyntheticGesture = false; setTransientUntouchable(false);
+        }
+    }, null);
+}
     // [MỚI] Ẩn thủ công đúng danh sách bar/corner user đã chọn cho rule này — tái dùng
     // NGUYÊN VẸN cờ "_manual_hide" đã có sẵn (đọc trong updateVisibility()/updateHomaccLive()),
     // Zero-cost khi rule không gán HIDE_SOME_OVERLAY: chỉ 1 lệnh đọc prefs, return ngay nếu rỗng.
@@ -2059,7 +2128,9 @@ private static final int MAX_TRIGGER_DEPTH = 3;
         String[] acts = action.split(",");
         for (String a : acts) {
             String at = a.trim();
-            if (at.startsWith("TRIGGER_")) {
+            if (at.equals("TRIGGER_ACC_MENU_2F")) {
+                dispatchTwoFingerAccMenuGesture();
+            } else if (at.startsWith("TRIGGER_")) {
                 // [FIX QUAN TRỌNG] Bắn trực tiếp tọa độ vuốt xuống hệ thống, chấm dứt đệ quy!
                 dispatchRealScreenGesture(at);
             } else if (at.equals("HIDE_SOME_OVERLAY")) {
