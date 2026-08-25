@@ -159,7 +159,85 @@ private final java.util.Map<String, Runnable> sliderPendingRunnable = new java.u
 private static final long SLIDER_WRITE_THROTTLE_MS = 60;
 private final Handler debounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable debounceRunnable = null;
+// [MỚI] Auto Icon Color — throttle chụp màn hình, chỉ chạy khi thực sự cần
+private long lastIconColorSampleMs = 0;
+private static final long ICON_COLOR_SAMPLE_THROTTLE_MS = 1200;
+private static final int ICON_COLOR_LIGHT_THRESHOLD = 175; // >= ngưỡng này -> nền sáng -> icon đen
 
+private boolean isAutoColorOff(String prefix, String barKey) {
+    String off = prefs.getString(prefix + "bar_auto_icon_color_off", "");
+    return ("," + off + ",").contains("," + barKey + ",");
+}
+
+private boolean barNeedsAutoColor(View[] arr, String prefix) {
+    if (arr == null) return false;
+    for (int i = 0; i < 12; i++) {
+        View v = arr[i];
+        if (v == null || v.getVisibility() != View.VISIBLE) continue;
+        if (prefs.getString(prefix + BARS[i] + "_icons", "").isEmpty()) continue;
+        if (isAutoColorOff(prefix, BARS[i])) continue;
+        return true;
+    }
+    return false;
+}
+
+private void sampleAndApplyIconColors() {
+    if (Build.VERSION.SDK_INT < 30) return; // takeScreenshot() cần Android 11+
+    long now = System.currentTimeMillis();
+    if (now - lastIconColorSampleMs < ICON_COLOR_SAMPLE_THROTTLE_MS) return;
+    if (!barNeedsAutoColor(bars, "lock_") && !barNeedsAutoColor(accHomeBars, "homacc_")) return;
+    lastIconColorSampleMs = now;
+    try {
+        takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
+            new AccessibilityService.TakeScreenshotCallback() {
+                @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
+                    try {
+                        Bitmap hw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
+                        if (hw == null) { result.getHardwareBuffer().close(); return; }
+                        Bitmap sw = hw.copy(Bitmap.Config.ARGB_8888, false);
+                        result.getHardwareBuffer().close();
+                        applyAutoColorsFromScreenshot(sw, bars, "lock_");
+                        applyAutoColorsFromScreenshot(sw, accHomeBars, "homacc_");
+                        sw.recycle();
+                    } catch (Exception ignored) {}
+                }
+                @Override public void onFailure(int errorCode) {}
+            });
+    } catch (Exception ignored) {}
+}
+
+private void applyAutoColorsFromScreenshot(Bitmap screen, View[] arr, String prefix) {
+    if (arr == null) return;
+    int[] loc = new int[2];
+    for (int i = 0; i < 12; i++) {
+        View v = arr[i];
+        if (!(v instanceof BarView) || v.getVisibility() != View.VISIBLE) continue;
+        if (prefs.getString(prefix + BARS[i] + "_icons", "").isEmpty()) continue;
+        if (isAutoColorOff(prefix, BARS[i])) { ((BarView) v).setIconTintColor(null); continue; }
+        try {
+            v.getLocationOnScreen(loc);
+            int w = Math.max(1, v.getWidth()), h = Math.max(1, v.getHeight());
+            int x = Math.max(0, Math.min(loc[0], screen.getWidth() - 1));
+            int y = Math.max(0, Math.min(loc[1], screen.getHeight() - 1));
+            int rw = Math.min(w, screen.getWidth() - x);
+            int rh = Math.min(h, screen.getHeight() - y);
+            if (rw <= 0 || rh <= 0) continue;
+            long sum = 0; int count = 0;
+            int stepX = Math.max(1, rw / 12), stepY = Math.max(1, rh / 12); // lấy mẫu thưa, đỡ CPU
+            for (int py = y; py < y + rh; py += stepY) {
+                for (int px = x; px < x + rw; px += stepX) {
+                    int pixel = screen.getPixel(px, py);
+                    int r = (pixel >> 16) & 0xFF, g = (pixel >> 8) & 0xFF, b = pixel & 0xFF;
+                    sum += (r * 299 + g * 587 + b * 114) / 1000;
+                    count++;
+                }
+            }
+            if (count == 0) continue;
+            int avg = (int) (sum / count);
+            ((BarView) v).setIconTintColor(avg >= ICON_COLOR_LIGHT_THRESHOLD ? Color.BLACK : Color.WHITE);
+        } catch (Exception ignored) {}
+    }
+}
 private boolean lastAccHomeRunningState = false;
 private long lastHomaccUpdateMs = 0;
 
@@ -710,6 +788,16 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
         userIconAlpha = alpha;
         invalidate();
     }
+    // [MỚI] Tô lại icon (vốn là bitmap trắng đơn sắc) sang đen/trắng theo nền —
+    // null = giữ nguyên màu gốc (trắng). Zero-alloc: chỉ đổi ColorFilter, không tạo Bitmap mới.
+    private Integer iconTintColor = null;
+    public void setIconTintColor(Integer color) {
+        if (iconTintColor == null ? color == null : iconTintColor.equals(color)) return;
+        iconTintColor = color;
+        iconPaint.setColorFilter(color == null ? null :
+            new android.graphics.PorterDuffColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN));
+        invalidate();
+    }
     private int iconAlphaFactor = 255; // 0 = ẩn hoàn toàn icon, 255 = hiện đầy đủ
 
     public void updateProps(int alpha, boolean autoHide, int delay, boolean inv, float radius) {
@@ -1039,6 +1127,7 @@ if (!stateChanged) return;
     lastIsBl_cache = newIsBl;
 
     updateVisibility();
+    sampleAndApplyIconColors();
     Intent syncIntent = new Intent("com.manhmoc.edgebar.SYNC_STATE");
     syncIntent.putExtra("isKbd", isKbd);
     syncIntent.putExtra("isBl", isBl);

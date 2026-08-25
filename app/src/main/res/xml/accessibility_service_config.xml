@@ -6,4 +6,5 @@
     android:canPerformGestures="true"
     android:canRetrieveWindowContent="true"
     android:canRequestFingerprintGestures="true"
+    android:canTakeScreenshot="true"
     android:notificationTimeout="300" />

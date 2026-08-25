@@ -653,6 +653,16 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
         userIconAlpha = alpha;
         invalidate();
     }
+    // [MỚI] Tô lại icon (vốn là bitmap trắng đơn sắc) sang đen/trắng theo nền —
+    // null = giữ nguyên màu gốc (trắng). Zero-alloc: chỉ đổi ColorFilter, không tạo Bitmap mới.
+    private Integer iconTintColor = null;
+    public void setIconTintColor(Integer color) {
+        if (iconTintColor == null ? color == null : iconTintColor.equals(color)) return;
+        iconTintColor = color;
+        iconPaint.setColorFilter(color == null ? null :
+            new android.graphics.PorterDuffColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN));
+        invalidate();
+    }
     private int iconAlphaFactor = 255; // 0 = ẩn hoàn toàn icon, 255 = hiện đầy đủ
 
     public void updateProps(int alpha, boolean autoHide, int delay, boolean inv, float radius) {

@@ -1451,6 +1451,30 @@ private void addHideTargetCheckboxes(LinearLayout container, String fullPrefKey,
         container.addView(cb);
     }
 }
+// [MỚI] Ngược với addHideTargetCheckboxes(): mặc định TỰ ĐỘNG BẬT cho mọi bar,
+// tick vào bar nào để TẮT tự động đổi màu (giữ icon trắng cố định) cho bar đó.
+private void addAutoColorOffCheckboxes(LinearLayout container, String fullPrefKey, String[] keys, String[] names) {
+    java.util.Set<String> offSet = new java.util.LinkedHashSet<>();
+    for (String s : prefs.getString(fullPrefKey, "").split(",")) if (!s.trim().isEmpty()) offSet.add(s.trim());
+    TextView tvNote = new TextView(this);
+    tvNote.setText(T("Auto: light bg→black icon, dark→white. Check a bar to always keep it white.",
+        "Tự động: nền sáng→icon đen, nền tối→icon trắng. Tick vào bar nào để LUÔN giữ trắng (tắt tự động)."));
+    tvNote.setTextColor(Color.parseColor("#9AA0A6")); tvNote.setTextSize(11.5f); tvNote.setPadding(0,0,0,10);
+    container.addView(tvNote);
+    for (int i = 0; i < keys.length; i++) {
+        CheckBox cb = new CheckBox(this);
+        cb.setText(names[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0,10,0,10);
+        cb.setChecked(offSet.contains(keys[i]));
+        final String fk = keys[i];
+        cb.setOnCheckedChangeListener((v, checked) -> {
+            java.util.Set<String> cur = new java.util.LinkedHashSet<>();
+            for (String s : prefs.getString(fullPrefKey, "").split(",")) if (!s.trim().isEmpty()) cur.add(s.trim());
+            if (checked) cur.add(fk); else cur.remove(fk);
+            prefs.edit().putString(fullPrefKey, TextUtils.join(",", cur)).apply();
+        });
+        container.addView(cb);
+    }
+}
 // Hàm dùng chung cho Frontier — KHÔNG động vào code Design (giữ nguyên để xoá sau).
 // Battery/RAM Pixel 2XL: mỗi lần đổi subtab chỉ removeAllViews() 1 container nhỏ,
 // KHÔNG đụng tới toàn bộ pageDesign — tránh re-inflate hàng loạt CheckBox/Slider
@@ -1495,7 +1519,17 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
     hideBarWrap.setLayoutParams(hcLp);
     hideBarWrap.addView(createDrawer("📁 " + T("Bars to hide","Thanh cạnh cần ẩn") + " (▼)", bdHide));
     bd.addView(hideBarWrap);
-    
+
+    // [MỚI] Tự động đổi màu Icon theo nền — chỉ có tác dụng ở Lock/Homacc (cần Trợ năng)
+    LinearLayout autoColorBody = new LinearLayout(this);
+    autoColorBody.setOrientation(LinearLayout.VERTICAL); autoColorBody.setPadding(20,10,20,20);
+    addAutoColorOffCheckboxes(autoColorBody, prefix + "bar_auto_icon_color_off", BARS, BAR_NAMES);
+    LinearLayout autoColorWrap = new LinearLayout(this);
+    autoColorWrap.setBackground(getRounded("#2C2C2C", 20f));
+    autoColorWrap.setLayoutParams(hcLp);
+    autoColorWrap.addView(createDrawer("🎨 " + T("Auto Icon Color","Tự động đổi màu Icon") + " (▼)", autoColorBody));
+    bd.addView(autoColorWrap);
+
     container.addView(createDrawer("TÙY CHỈNH CHUNG THANH CẠNH", bd));
 }
     // [MỚI] Icon cho 13 cử chỉ — CHỈ hiện ở không gian Homacc, áp dụng CHUNG cho mọi
