@@ -199,6 +199,9 @@ private boolean barNeedsAutoColor(View[] arr, String prefix) {
 
 /** Gọi từ mọi nơi cần yêu cầu lấy mẫu lại màu (đổi app, cuộn nội dung...). Rẻ tới mức
  *  gọi liên tục cũng không sao — tự dồn về tối đa 1 lần thực thi/ICON_COLOR_MIN_INTERVAL_MS. */
+private void requestIconColorSample() {
+    doSampleIconColors(false);
+}
 private void doSampleIconColors(boolean isFollowUp) {
     if (Build.VERSION.SDK_INT < 30) return;
     final boolean needLock = barNeedsAutoColor(bars, "lock_");
