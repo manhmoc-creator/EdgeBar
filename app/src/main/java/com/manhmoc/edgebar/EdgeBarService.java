@@ -159,10 +159,19 @@ private final java.util.Map<String, Runnable> sliderPendingRunnable = new java.u
 private static final long SLIDER_WRITE_THROTTLE_MS = 60;
 private final Handler debounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable debounceRunnable = null;
-// [MỚI] Auto Icon Color — throttle chụp màn hình, chỉ chạy khi thực sự cần
+// [MỚI] Auto Icon Color — cooldown + trailing debounce: lấy mẫu gần như ngay lập tức
+// nếu đã cách lần trước >= ICON_COLOR_MIN_INTERVAL_MS, còn dồn dập (cuộn nhanh) thì
+// gộp thành đúng 1 lần gọi ở cuối chu kỳ thay vì gọi tràn lan mỗi sự kiện.
+private final Handler iconColorHandler = new Handler(android.os.Looper.getMainLooper());
 private long lastIconColorSampleMs = 0;
-private static final long ICON_COLOR_SAMPLE_THROTTLE_MS = 1200;
-private static final int ICON_COLOR_LIGHT_THRESHOLD = 175; // >= ngưỡng này -> nền sáng -> icon đen
+private boolean iconColorSamplePending = false;
+private long lastIconColorEventGateMs = 0;
+private static final long ICON_COLOR_EVENT_GATE_MS = 60;   // chặn bớt spam sự kiện scroll
+private static final long ICON_COLOR_MIN_INTERVAL_MS = 300; // ~3.3 lần lấy mẫu/giây tối đa
+private static final int ICON_COLOR_LIGHT_THRESHOLD = 175;
+private static final int ICON_COLOR_HYSTERESIS = 15; // chống nhấp nháy quanh ngưỡng
+private final java.util.Map<String, Integer> lastBarTintState = new java.util.HashMap<>(); // 1=đen,0=trắng
+private Bitmap fallbackFullCopy = null;
 
 private boolean isAutoColorOff(String prefix, String barKey) {
     String off = prefs.getString(prefix + "bar_auto_icon_color_off", "");
@@ -181,34 +190,56 @@ private boolean barNeedsAutoColor(View[] arr, String prefix) {
     return false;
 }
 
-private void sampleAndApplyIconColors() {
-    if (Build.VERSION.SDK_INT < 30) return; // takeScreenshot() cần Android 11+
-    long now = System.currentTimeMillis();
-    if (now - lastIconColorSampleMs < ICON_COLOR_SAMPLE_THROTTLE_MS) return;
+/** Gọi từ mọi nơi cần yêu cầu lấy mẫu lại màu (đổi app, cuộn nội dung...). Rẻ tới mức
+ *  gọi liên tục cũng không sao — tự dồn về tối đa 1 lần thực thi/ICON_COLOR_MIN_INTERVAL_MS. */
+private void requestIconColorSample() {
+    if (Build.VERSION.SDK_INT < 30) return;
     if (!barNeedsAutoColor(bars, "lock_") && !barNeedsAutoColor(accHomeBars, "homacc_")) return;
-    lastIconColorSampleMs = now;
+    long now = android.os.SystemClock.elapsedRealtime();
+    long elapsed = now - lastIconColorSampleMs;
+    if (elapsed >= ICON_COLOR_MIN_INTERVAL_MS) {
+        lastIconColorSampleMs = now;
+        doSampleIconColors();
+    } else if (!iconColorSamplePending) {
+        iconColorSamplePending = true;
+        iconColorHandler.postDelayed(() -> {
+            iconColorSamplePending = false;
+            lastIconColorSampleMs = android.os.SystemClock.elapsedRealtime();
+            doSampleIconColors();
+        }, ICON_COLOR_MIN_INTERVAL_MS - elapsed);
+    }
+}
+
+private void doSampleIconColors() {
+    if (Build.VERSION.SDK_INT < 30) return;
+    final boolean needLock = barNeedsAutoColor(bars, "lock_");
+    final boolean needHomacc = barNeedsAutoColor(accHomeBars, "homacc_");
+    if (!needLock && !needHomacc) return;
     try {
         takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
             new AccessibilityService.TakeScreenshotCallback() {
                 @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
                     try {
                         Bitmap hw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
-                        if (hw == null) { result.getHardwareBuffer().close(); return; }
-                        Bitmap sw = hw.copy(Bitmap.Config.ARGB_8888, false);
-                        result.getHardwareBuffer().close();
-                        applyAutoColorsFromScreenshot(sw, bars, "lock_");
-                        applyAutoColorsFromScreenshot(sw, accHomeBars, "homacc_");
-                        sw.recycle();
-                    } catch (Exception ignored) {}
+                        if (hw != null) {
+                            if (needLock) applyAutoColorsFromScreenshot(hw, bars, "lock_");
+                            if (needHomacc) applyAutoColorsFromScreenshot(hw, accHomeBars, "homacc_");
+                        }
+                    } catch (Exception ignored) {
+                    } finally {
+                        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+                        if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
+                    }
                 }
                 @Override public void onFailure(int errorCode) {}
             });
     } catch (Exception ignored) {}
 }
 
-private void applyAutoColorsFromScreenshot(Bitmap screen, View[] arr, String prefix) {
+private void applyAutoColorsFromScreenshot(Bitmap screenHw, View[] arr, String prefix) {
     if (arr == null) return;
     int[] loc = new int[2];
+    int screenW = screenHw.getWidth(), screenH = screenHw.getHeight();
     for (int i = 0; i < 12; i++) {
         View v = arr[i];
         if (!(v instanceof BarView) || v.getVisibility() != View.VISIBLE) continue;
@@ -217,26 +248,64 @@ private void applyAutoColorsFromScreenshot(Bitmap screen, View[] arr, String pre
         try {
             v.getLocationOnScreen(loc);
             int w = Math.max(1, v.getWidth()), h = Math.max(1, v.getHeight());
-            int x = Math.max(0, Math.min(loc[0], screen.getWidth() - 1));
-            int y = Math.max(0, Math.min(loc[1], screen.getHeight() - 1));
-            int rw = Math.min(w, screen.getWidth() - x);
-            int rh = Math.min(h, screen.getHeight() - y);
+            int x = Math.max(0, Math.min(loc[0], screenW - 1));
+            int y = Math.max(0, Math.min(loc[1], screenH - 1));
+            int rw = Math.min(w, screenW - x);
+            int rh = Math.min(h, screenH - y);
             if (rw <= 0 || rh <= 0) continue;
-            long sum = 0; int count = 0;
-            int stepX = Math.max(1, rw / 12), stepY = Math.max(1, rh / 12); // lấy mẫu thưa, đỡ CPU
-            for (int py = y; py < y + rh; py += stepY) {
-                for (int px = x; px < x + rw; px += stepX) {
-                    int pixel = screen.getPixel(px, py);
-                    int r = (pixel >> 16) & 0xFF, g = (pixel >> 8) & 0xFF, b = pixel & 0xFF;
-                    sum += (r * 299 + g * 587 + b * 114) / 1000;
-                    count++;
-                }
-            }
-            if (count == 0) continue;
-            int avg = (int) (sum / count);
-            ((BarView) v).setIconTintColor(avg >= ICON_COLOR_LIGHT_THRESHOLD ? Color.BLACK : Color.WHITE);
+
+            int avg = sampleRegionLuminance(screenHw, x, y, rw, rh);
+            if (avg < 0) continue;
+
+            String tintKey = prefix + BARS[i];
+            Integer prevState = lastBarTintState.get(tintKey);
+            boolean toBlack;
+            if (prevState == null) toBlack = avg >= ICON_COLOR_LIGHT_THRESHOLD;
+            else if (prevState == 1) toBlack = avg >= (ICON_COLOR_LIGHT_THRESHOLD - ICON_COLOR_HYSTERESIS);
+            else toBlack = avg >= (ICON_COLOR_LIGHT_THRESHOLD + ICON_COLOR_HYSTERESIS);
+            lastBarTintState.put(tintKey, toBlack ? 1 : 0);
+            ((BarView) v).setIconTintColor(toBlack ? Color.BLACK : Color.WHITE);
         } catch (Exception ignored) {}
     }
+}
+
+/** Trả về độ sáng trung bình [0-255] của 1 vùng nhỏ, -1 nếu lỗi. Ưu tiên crop trực tiếp
+ *  trên Bitmap HARDWARE (thao tác phía GPU, gần như miễn phí) rồi mới copy đúng phần nhỏ
+ *  đó sang ARGB_8888 để đọc pixel — tránh copy nguyên màn hình (~15-20MB) mỗi lần lấy mẫu,
+ *  đây chính là phần tốn RAM/pin nhất của bản cũ. */
+private int sampleRegionLuminance(Bitmap screenHw, int x, int y, int rw, int rh) {
+    Bitmap crop = null;
+    try {
+        Bitmap cropHw = Bitmap.createBitmap(screenHw, x, y, rw, rh);
+        if (cropHw.getConfig() == Bitmap.Config.HARDWARE) {
+            crop = cropHw.copy(Bitmap.Config.ARGB_8888, false);
+            cropHw.recycle();
+        } else {
+            crop = cropHw;
+        }
+    } catch (Exception e) {
+        // Hiếm gặp trên vài ROM không cho crop trực tiếp Bitmap HARDWARE -> copy nguyên
+        // màn hình ĐÚNG 1 LẦN cho cả lượt lấy mẫu này, tái dùng cho mọi Bar còn lại
+        // (vẫn rẻ hơn bản cũ vốn copy full-screen ở MỌI lượt, kể cả khi không cần).
+        try {
+            if (fallbackFullCopy == null || fallbackFullCopy.isRecycled())
+                fallbackFullCopy = screenHw.copy(Bitmap.Config.ARGB_8888, false);
+            crop = Bitmap.createBitmap(fallbackFullCopy, x, y, rw, rh);
+        } catch (Exception ignored2) { return -1; }
+    }
+    if (crop == null) return -1;
+    long sum = 0; int count = 0;
+    int stepX = Math.max(1, rw / 8), stepY = Math.max(1, rh / 8);
+    for (int py = 0; py < rh; py += stepY) {
+        for (int px = 0; px < rw; px += stepX) {
+            int pixel = crop.getPixel(px, py);
+            int r = (pixel >> 16) & 0xFF, g = (pixel >> 8) & 0xFF, b = pixel & 0xFF;
+            sum += (r * 299 + g * 587 + b * 114) / 1000;
+            count++;
+        }
+    }
+    if (crop != fallbackFullCopy) crop.recycle();
+    return count == 0 ? -1 : (int) (sum / count);
 }
 private boolean lastAccHomeRunningState = false;
 private long lastHomaccUpdateMs = 0;
@@ -1070,9 +1139,18 @@ refreshFingerprintRegistration();
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
     int eventType = event.getEventType();
+    // [MỚI] Cuộn nội dung (không đổi app) vẫn phải cập nhật màu icon — đây chính là
+    // tình huống "lướt feed sáng/tối liên tục" mà bản cũ không có sự kiện nào bắt được.
+    if (eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+        long nowEv = android.os.SystemClock.elapsedRealtime();
+        if (nowEv - lastIconColorEventGateMs >= ICON_COLOR_EVENT_GATE_MS) {
+            lastIconColorEventGateMs = nowEv;
+            requestIconColorSample();
+        }
+        return;
+    }
     if (eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             && eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return;
-
     String pName = event.getPackageName() != null ? event.getPackageName().toString() : "";
     String cName = event.getClassName() != null ? event.getClassName().toString() : "";
     long nowMs = System.currentTimeMillis();
@@ -1127,7 +1205,7 @@ if (!stateChanged) return;
     lastIsBl_cache = newIsBl;
 
     updateVisibility();
-    sampleAndApplyIconColors();
+    requestIconColorSample();
     Intent syncIntent = new Intent("com.manhmoc.edgebar.SYNC_STATE");
     syncIntent.putExtra("isKbd", isKbd);
     syncIntent.putExtra("isBl", isBl);
