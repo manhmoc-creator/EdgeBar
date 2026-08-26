@@ -166,8 +166,15 @@ private final Handler iconColorHandler = new Handler(android.os.Looper.getMainLo
 private long lastIconColorSampleMs = 0;
 private boolean iconColorSamplePending = false;
 private long lastIconColorEventGateMs = 0;
-private static final long ICON_COLOR_EVENT_GATE_MS = 60;   // chặn bớt spam sự kiện scroll
-private static final long ICON_COLOR_MIN_INTERVAL_MS = 300; // ~3.3 lần lấy mẫu/giây tối đa
+private static final long ICON_COLOR_EVENT_GATE_MS = 60;
+// [FIX] Interval co giãn: mặc định nhanh (250ms) khi hệ thống đang cho phép,
+// tự nới ra khi bị OS từ chối (throttle) — tránh vòng lặp "gọi dồn -> bị chặn dồn".
+private static final long ICON_COLOR_INTERVAL_MIN_MS = 250;
+private static final long ICON_COLOR_INTERVAL_MAX_MS = 1200;
+private long iconColorCurrentIntervalMs = ICON_COLOR_INTERVAL_MIN_MS;
+// [FIX] Sau khi vẽ xong 1 lần, chụp thêm 1 lần "vét" muộn để bắt đúng khung hình
+// sau khi hiệu ứng chuyển cảnh của app kết thúc — khắc phục cảm giác đổi màu trễ nhịp.
+private boolean iconColorFollowUpPending = false;
 private static final int ICON_COLOR_LIGHT_THRESHOLD = 175;
 private static final int ICON_COLOR_HYSTERESIS = 15; // chống nhấp nháy quanh ngưỡng
 private final java.util.Map<String, Integer> lastBarTintState = new java.util.HashMap<>(); // 1=đen,0=trắng
@@ -192,24 +199,49 @@ private boolean barNeedsAutoColor(View[] arr, String prefix) {
 
 /** Gọi từ mọi nơi cần yêu cầu lấy mẫu lại màu (đổi app, cuộn nội dung...). Rẻ tới mức
  *  gọi liên tục cũng không sao — tự dồn về tối đa 1 lần thực thi/ICON_COLOR_MIN_INTERVAL_MS. */
-private void requestIconColorSample() {
+private void doSampleIconColors(boolean isFollowUp) {
     if (Build.VERSION.SDK_INT < 30) return;
-    if (!barNeedsAutoColor(bars, "lock_") && !barNeedsAutoColor(accHomeBars, "homacc_")) return;
-    long now = android.os.SystemClock.elapsedRealtime();
-    long elapsed = now - lastIconColorSampleMs;
-    if (elapsed >= ICON_COLOR_MIN_INTERVAL_MS) {
-        lastIconColorSampleMs = now;
-        doSampleIconColors();
-    } else if (!iconColorSamplePending) {
-        iconColorSamplePending = true;
-        iconColorHandler.postDelayed(() -> {
-            iconColorSamplePending = false;
-            lastIconColorSampleMs = android.os.SystemClock.elapsedRealtime();
-            doSampleIconColors();
-        }, ICON_COLOR_MIN_INTERVAL_MS - elapsed);
-    }
+    final boolean needLock = barNeedsAutoColor(bars, "lock_");
+    final boolean needHomacc = barNeedsAutoColor(accHomeBars, "homacc_");
+    if (!needLock && !needHomacc) return;
+    try {
+        takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
+            new AccessibilityService.TakeScreenshotCallback() {
+                @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
+                    try {
+                        Bitmap hw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
+                        if (hw != null) {
+                            if (needLock) applyAutoColorsFromScreenshot(hw, bars, "lock_");
+                            if (needHomacc) applyAutoColorsFromScreenshot(hw, accHomeBars, "homacc_");
+                        }
+                    } catch (Exception ignored) {
+                    } finally {
+                        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+                        if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
+                    }
+                    // Thành công -> co interval về mức nhanh nhất, và nếu đây là
+                    // lần chụp gốc (không phải follow-up) thì bắn thêm 1 lần "vét"
+                    // sau 350ms để bắt đúng khung hình lúc hiệu ứng app đã ổn định.
+                    iconColorCurrentIntervalMs = ICON_COLOR_INTERVAL_MIN_MS;
+                    if (!isFollowUp && !iconColorFollowUpPending) {
+                        iconColorFollowUpPending = true;
+                        iconColorHandler.postDelayed(() -> {
+                            iconColorFollowUpPending = false;
+                            doSampleIconColors(true);
+                        }, 350);
+                    }
+                }
+                @Override public void onFailure(int errorCode) {
+                    // [FIX CHÍNH] Trước đây bỏ trống -> icon "đứng màu" vô thời hạn.
+                    // Giờ: nới interval ra (tối đa 1200ms) rồi CHỦ ĐỘNG thử lại,
+                    // không chờ sự kiện scroll/đổi app kế tiếp mới thử.
+                    iconColorCurrentIntervalMs = Math.min(ICON_COLOR_INTERVAL_MAX_MS,
+                        iconColorCurrentIntervalMs * 2);
+                    iconColorHandler.postDelayed(() -> doSampleIconColors(false), iconColorCurrentIntervalMs);
+                }
+            });
+    } catch (Exception ignored) {}
 }
-
 private void doSampleIconColors() {
     if (Build.VERSION.SDK_INT < 30) return;
     final boolean needLock = barNeedsAutoColor(bars, "lock_");
