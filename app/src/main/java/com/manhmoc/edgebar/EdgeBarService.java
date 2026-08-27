@@ -1281,27 +1281,43 @@ if (!stateChanged) return;
     sendBroadcast(syncIntent);
 }
 private void checkBouncerVisible(String currentPkg) {
-    if (!"com.android.systemui".equals(currentPkg)) {
-        // Package khác systemui đang foreground = secure camera/calculator/app khác
-        // đang che màn khoá -> coi như "màn giao diện khoá gốc" đã KHÔNG còn hiện
-        isBouncerVisible = true;
-        return;
-    }
     try {
-        android.view.accessibility.AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null) { isBouncerVisible = false; return; }
-        boolean found = false;
-        for (String id : KEYGUARD_BOUNCER_IDS) {
-            java.util.List<android.view.accessibility.AccessibilityNodeInfo> nodes =
-                root.findAccessibilityNodeInfosByViewId(id);
-            if (nodes != null) {
-                if (!nodes.isEmpty()) found = true;
-                for (android.view.accessibility.AccessibilityNodeInfo n : nodes) n.recycle();
+        java.util.List<android.view.accessibility.AccessibilityWindowInfo> windows = getWindows();
+        boolean foundSecureAppWindow = false;
+        if (windows != null) {
+            for (android.view.accessibility.AccessibilityWindowInfo w : windows) {
+                // Chỉ window kiểu APPLICATION mới tính là "app thật đang che màn khoá"
+                // — loại trừ notification heads-up, IME, system alert (nguyên nhân gây false positive)
+                if (w.getType() == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION) {
+                    android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
+                    if (root != null) {
+                        String pkg = root.getPackageName() != null ? root.getPackageName().toString() : "";
+                        root.recycle();
+                        if (!pkg.isEmpty() && !pkg.equals("com.android.systemui") && !pkg.equals(getPackageName())) {
+                            foundSecureAppWindow = true;
+                        }
+                    }
+                }
             }
-            if (found) break;
         }
-        root.recycle();
-        isBouncerVisible = found;
+
+        boolean foundBouncerNode = false;
+        if (!foundSecureAppWindow) {
+            android.view.accessibility.AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root != null) {
+                for (String id : KEYGUARD_BOUNCER_IDS) {
+                    java.util.List<android.view.accessibility.AccessibilityNodeInfo> nodes =
+                        root.findAccessibilityNodeInfosByViewId(id);
+                    if (nodes != null) {
+                        if (!nodes.isEmpty()) foundBouncerNode = true;
+                        for (android.view.accessibility.AccessibilityNodeInfo n : nodes) n.recycle();
+                    }
+                    if (foundBouncerNode) break;
+                }
+                root.recycle();
+            }
+        }
+        isBouncerVisible = foundSecureAppWindow || foundBouncerNode;
     } catch (Exception e) {
         isBouncerVisible = false;
     }
