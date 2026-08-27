@@ -2951,6 +2951,7 @@ private void applyPackRulesToSpace(String itemKey, String targetPrefix, String c
             .putInt(barKey + "x", prefs.getInt(src + "x", 0))
             .putInt(barKey + "y", prefs.getInt(src + "y", 0))
             .putString(barKey + "icons", prefs.getString(src + "icons", ""))
+            .putInt(barKey + "lockmode", prefs.getInt(src + "lockmode", 1))
             // [FIX] KHÔNG ghi snapshot icon_alpha/icon_size nữa -> luôn fallback về
             // key chung "<prefix>bar_icon_size/alpha" => thanh kéo chung áp dụng real-time.
             .remove(barKey + "icon_alpha")
@@ -2980,6 +2981,7 @@ private void applyPackRulesToSpace(String itemKey, String targetPrefix, String c
             .putInt(cornerKey + "jumpdir", prefs.getInt(src + "jumpdir", 0))
             .putInt(cornerKey + "vis_mode", prefs.getInt(src + "vis_mode", 0))
             .putInt(cornerKey + "pri_mode", prefs.getInt(src + "pri_mode", 0))
+            .putInt(cornerKey + "lockmode", prefs.getInt(src + "lockmode", 1))
             .putInt(cornerKey + "shape", prefs.getInt(src + "shape", 0))
             .putInt(cornerKey + "w", prefs.getInt(src + "w", 100))
             .putInt(cornerKey + "h", prefs.getInt(src + "h", 100))
@@ -6350,6 +6352,11 @@ if (type == 0) {
         
         content.addView(createComboDropdown("Hiển thị", prefix + id + "_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
         content.addView(createComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode", new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+        content.addView(createComboDropdown(T("Lock Screen Visibility","Hiển thị ở màn khoá"),
+prefix + id + "_lockmode",
+new String[]{ T("Only base lockscreen","Chỉ màn khoá gốc (như nút camera/đèn pin)"),
+              T("Always on lock (PIN/camera/calculator...)","Luôn xuyên suốt (PIN/camera/calculator...)") },
+1));
         content.addView(createComboDropdown(T("Icon Jump Direction (Tap/DTap/Long)","Hướng nhảy Icon (Chạm/2 Chạm/Giữ)"), prefix + id + "_jumpdir",
             new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"), T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"), T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
         content.addView(createSlider("Độ trong suốt", prefix + id + "_alpha", 255, 50));
@@ -6402,6 +6409,11 @@ if (type == 0) {
     previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_x");
     content.addView(createComboDropdown("Hiển thị", prefix + id + "_vis_mode", new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
         content.addView(createComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode", new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+content.addView(createComboDropdown(T("Lock Screen Visibility","Hiển thị ở màn khoá"),
+prefix + id + "_lockmode",
+new String[]{ T("Only base lockscreen","Chỉ màn khoá gốc (như nút camera/đèn pin)"),
+              T("Always on lock (PIN/camera/calculator...)","Luôn xuyên suốt (PIN/camera/calculator...)") },
+1));
         content.addView(createComboDropdown(T("Icon Jump Direction (Tap/DTap/Long)","Hướng nhảy Icon (Chạm/2 Chạm/Giữ)"), prefix + id + "_jumpdir",
             new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"), T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"), T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
         content.addView(createComboDropdown("Hình dáng Góc", prefix + id + "_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0));

@@ -111,6 +111,11 @@ private boolean recIndicatorTestPaused = false;
     private String cId;
     private boolean fOn = false, isKbd = false, isBl = false;
     private KeyguardManager km;
+private volatile boolean isBouncerVisible = false;
+private static final String[] KEYGUARD_BOUNCER_IDS = {
+    "com.android.systemui:id/keyguard_pin_view",
+    "com.android.systemui:id/keyguard_security_container"
+};
     private SharedPreferences prefs;
     private Vibrator vibrator;
     private PanelEngine panelEngine;
@@ -1237,11 +1242,19 @@ boolean newIsBl = !pName.isEmpty() && bl.contains(pName);
 if (newIsBl && !lastIsBl_cache && prefs.getBoolean("blacklist_auto_homeb_en", false)) {
     triggerBlacklistAutoHomeb();
 }
-boolean stateChanged = newIsKbd != lastIsKbd_cache
-                    || newIsBl != lastIsBl_cache
-                    || !pName.equals(lastEventPkg)
-                    || Math.abs(newKbdHeight - cachedKbdHeight) >= KBD_HEIGHT_CHANGE_THRESHOLD;
+boolean prevBouncerState = isBouncerVisible;
+if (km != null && km.isKeyguardLocked()) {
+    checkBouncerVisible(pName);
+} else {
+    isBouncerVisible = false;
+}
 
+boolean stateChanged = newIsKbd != lastIsKbd_cache
+|| newIsBl != lastIsBl_cache
+|| !pName.equals(lastEventPkg)
+|| isBouncerVisible != prevBouncerState
+|| Math.abs(newKbdHeight - cachedKbdHeight) >=
+KBD_HEIGHT_CHANGE_THRESHOLD;
 isKbd = newIsKbd;
 isBl = newIsBl;
 cachedKbdHeight = newKbdHeight;
@@ -1266,6 +1279,32 @@ if (!stateChanged) return;
     syncIntent.putExtra("foreground_pkg", pName);
     syncIntent.putExtra("kbd_height", cachedKbdHeight); // [MỚI]
     sendBroadcast(syncIntent);
+}
+private void checkBouncerVisible(String currentPkg) {
+    if (!"com.android.systemui".equals(currentPkg)) {
+        // Package khác systemui đang foreground = secure camera/calculator/app khác
+        // đang che màn khoá -> coi như "màn giao diện khoá gốc" đã KHÔNG còn hiện
+        isBouncerVisible = true;
+        return;
+    }
+    try {
+        android.view.accessibility.AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) { isBouncerVisible = false; return; }
+        boolean found = false;
+        for (String id : KEYGUARD_BOUNCER_IDS) {
+            java.util.List<android.view.accessibility.AccessibilityNodeInfo> nodes =
+                root.findAccessibilityNodeInfosByViewId(id);
+            if (nodes != null) {
+                if (!nodes.isEmpty()) found = true;
+                for (android.view.accessibility.AccessibilityNodeInfo n : nodes) n.recycle();
+            }
+            if (found) break;
+        }
+        root.recycle();
+        isBouncerVisible = found;
+    } catch (Exception e) {
+        isBouncerVisible = false;
+    }
 }
     // V19.12.3.6.8 THE ETERNAL EGO
 // getForegroundPackageFromWindows(): lấy package foreground từ getWindows() API
@@ -2248,8 +2287,10 @@ private void syncHomaccPreviewState() {
 }
     private void updateVisibility() {
     syncHomaccPreviewState(); // THÊM DÒNG NÀY — đồng bộ preview Homacc, zero cost nếu không đổi
-    boolean isPreview = prefs.getBoolean("preview_lock", false);
-        boolean isLocked = km.isKeyguardLocked() || isPreview;
+boolean isPreview = prefs.getBoolean("preview_lock", false);
+boolean isLocked = km.isKeyguardLocked() || isPreview;
+// true = có PIN/camera bảo mật/calculator... đang che màn khoá gốc
+boolean isSecureOverlayVisible = isBouncerVisible && !isPreview;
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hide = isBl; // isKbd không ẩn nữa — đẩy lên thay vì ẩn
 boolean pushForKbd = avoidKbd && cachedKbdHeight > 0;
@@ -2257,7 +2298,11 @@ if (hide && fV != null) fV.setVisibility(View.GONE);
 for (int i=0;i<12;i++) {
             if (bars[i]==null) continue;
             boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", false);
-        bars[i].setVisibility((en && isLocked && !hide && !prefs.getBoolean("lock_"+BARS[i]+"_manual_hide", false)) ? View.VISIBLE : View.GONE);
+        int lockMode = prefs.getInt("lock_"+BARS[i]+"_lockmode", 1); // 0=chỉ màn khoá gốc, 1=luôn hiện xuyên suốt
+boolean passesLockGate = (lockMode == 1) || !isSecureOverlayVisible;
+bars[i].setVisibility((en && isLocked && !hide && passesLockGate &&
+!prefs.getBoolean("lock_"+BARS[i]+"_manual_hide", false)) ? View.VISIBLE :
+View.GONE);
     if (en && isLocked) {
                 int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha",50);
                 int w = prefs.getInt("lock_"+BARS[i]+"_w",300);
@@ -2285,7 +2330,11 @@ int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", prefs.getInt("lock_b
         for (int i=0;i<4;i++) {
             if (corners[i]==null) continue;
             boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", false);
-            corners[i].setVisibility((cornEn && isLocked && !hide && !prefs.getBoolean("lock_corner_"+CORNERS[i]+"_manual_hide", false)) ? View.VISIBLE : View.GONE);
+int cornLockMode = prefs.getInt("lock_corner_"+CORNERS[i]+"_lockmode", 1);
+boolean cornPassesGate = (cornLockMode == 1) || !isSecureOverlayVisible;
+corners[i].setVisibility((cornEn && isLocked && !hide && cornPassesGate &&
+!prefs.getBoolean("lock_corner_"+CORNERS[i]+"_manual_hide", false)) ?
+View.VISIBLE : View.GONE);
             if (cornEn && isLocked) {
                 String ck = "lock_corner_"+CORNERS[i]+"_";
                 int moonAlpha = prefs.getInt("lock_corner_moon_alpha",100);
