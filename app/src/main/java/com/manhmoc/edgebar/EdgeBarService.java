@@ -1205,21 +1205,18 @@ int eventType = event.getEventType();
 // trước mọi early-return khác, throttle riêng 60ms — nhanh hơn nhiều so với
 // EVENT_THROTTLE_MS (200ms) dùng chung cho phần đổi app, giúp bar phản ứng
 // tức thời thay vì trễ/giật.
-if (eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-&& km != null && km.isKeyguardLocked()) {
-String evPkg = event.getPackageName() != null ? event.getPackageName().toString() : "";
-if ("com.android.systemui".equals(evPkg)) {
-long nowBouncer = android.os.SystemClock.elapsedRealtime();
-if (nowBouncer - lastBouncerCheckMs >= BOUNCER_CHECK_THROTTLE_MS) {
-lastBouncerCheckMs = nowBouncer;
-boolean prevBouncer = isBouncerVisible;
-checkBouncerVisible(evPkg);
-// [FIX TỐC ĐỘ] Bouncer đổi -> ẩn/hiện NGAY, không animate — tách khỏi
-// updateVisibility() đầy đủ (có animate 100ms + duyệt lại mọi thứ) để đạt
-// tốc độ ngang HIDE_SOME_OVERLAY / checkAndYieldOS.
-if (isBouncerVisible != prevBouncer) applyLockGateInstant();
-}
-}
+if ((eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+        || eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        || eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
+        && km != null && km.isKeyguardLocked()) {
+    String evPkg = event.getPackageName() != null ? event.getPackageName().toString() : "";
+    long nowBouncer = android.os.SystemClock.elapsedRealtime();
+    if (nowBouncer - lastBouncerCheckMs >= BOUNCER_CHECK_THROTTLE_MS) {
+        lastBouncerCheckMs = nowBouncer;
+        boolean prevBouncer = isBouncerVisible;
+        checkBouncerVisible(evPkg);
+        if (isBouncerVisible != prevBouncer) applyLockGateInstant();
+    }
 }
     // [MỚI] Cuộn nội dung (không đổi app) vẫn phải cập nhật màu icon — đây chính là
     // tình huống "lướt feed sáng/tối liên tục" mà bản cũ không có sự kiện nào bắt được.
