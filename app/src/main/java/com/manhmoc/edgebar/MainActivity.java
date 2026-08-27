@@ -5979,6 +5979,7 @@ if (designTabState == 5) { renderPanelDesign(); return; }
     LinearLayout dOpt = new LinearLayout(this);
     dOpt.setOrientation(LinearLayout.VERTICAL); dOpt.setPadding(20,10,20,20);
     dOpt.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600));
+dOpt.addView(createSlider("Tốc độ chuyển cảnh Bar/Corner ở Lock (ms)", "lock_anim_dur", 300, 100));
 dOpt.addView(createSlider("Thời gian hồi phục Overlay này (ms)", "os_yield_dur", 60000, 3000)); // THÊM DÒNG NÀY
     dOpt.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30));
     // [MỚI] Tinh chỉnh Cử chỉ giả lập (dùng cho TRIGGER_* / Nhường OS)
