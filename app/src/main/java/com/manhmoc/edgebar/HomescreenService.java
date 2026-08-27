@@ -122,7 +122,8 @@ private boolean recIndicatorTestPaused = false;
     }
         private CameraManager cm;
     private String cId;
-    private boolean fOn = false, isKbd = false, isBl = false;
+        private boolean fOn = false, isKbd = false, isBl = false;
+    private boolean isBouncerVisible = false; // [FIX] HomescreenService không tự theo dõi bouncer như EdgeBarService, luôn để false vì Homeb chỉ chạy khi unlocked
     private SharedPreferences prefs;
     private KeyguardManager km;
     private Vibrator vibrator;
