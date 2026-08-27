@@ -207,21 +207,10 @@ private void doSampleIconColors(boolean isFollowUp) {
     final boolean needLock = barNeedsAutoColor(bars, "lock_");
     final boolean needHomacc = barNeedsAutoColor(accHomeBars, "homacc_");
     if (!needLock && !needHomacc) return;
-    // [FIX ÂM THANH] Tắt tạm âm lượng STREAM_SYSTEM để chặn tiếng "tít chụp màn hình"
-    // mà OS tự phát mỗi lần takeScreenshot() được gọi. flags=0 để không hiện popup âm lượng.
-    final AudioManager amMute = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-    final int prevSysVol = amMute != null ? amMute.getStreamVolume(AudioManager.STREAM_SYSTEM) : -1;
-    if (amMute != null) { try { amMute.setStreamVolume(AudioManager.STREAM_SYSTEM, 0, 0); } catch (Exception ignored) {} }
-    Runnable restoreVol = () -> {
-        if (amMute != null && prevSysVol >= 0) {
-            try { amMute.setStreamVolume(AudioManager.STREAM_SYSTEM, prevSysVol, 0); } catch (Exception ignored) {}
-        }
-    };
     try {
         takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
             new AccessibilityService.TakeScreenshotCallback() {
                 @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
-                    restoreVol.run();
                     try {
                         Bitmap hw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
                         if (hw != null) {
@@ -246,7 +235,6 @@ private void doSampleIconColors(boolean isFollowUp) {
                     }
                 }
                 @Override public void onFailure(int errorCode) {
-                    restoreVol.run();
                     // [FIX CHÍNH] Trước đây bỏ trống -> icon "đứng màu" vô thời hạn.
                     // Giờ: nới interval ra (tối đa 1200ms) rồi CHỦ ĐỘNG thử lại,
                     // không chờ sự kiện scroll/đổi app kế tiếp mới thử.
