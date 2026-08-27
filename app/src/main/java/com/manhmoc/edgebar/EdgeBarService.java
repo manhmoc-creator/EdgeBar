@@ -207,10 +207,21 @@ private void doSampleIconColors(boolean isFollowUp) {
     final boolean needLock = barNeedsAutoColor(bars, "lock_");
     final boolean needHomacc = barNeedsAutoColor(accHomeBars, "homacc_");
     if (!needLock && !needHomacc) return;
+    // [FIX ÂM THANH] Tắt tạm âm lượng STREAM_SYSTEM để chặn tiếng "tít chụp màn hình"
+    // mà OS tự phát mỗi lần takeScreenshot() được gọi. flags=0 để không hiện popup âm lượng.
+    final AudioManager amMute = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+    final int prevSysVol = amMute != null ? amMute.getStreamVolume(AudioManager.STREAM_SYSTEM) : -1;
+    if (amMute != null) { try { amMute.setStreamVolume(AudioManager.STREAM_SYSTEM, 0, 0); } catch (Exception ignored) {} }
+    Runnable restoreVol = () -> {
+        if (amMute != null && prevSysVol >= 0) {
+            try { amMute.setStreamVolume(AudioManager.STREAM_SYSTEM, prevSysVol, 0); } catch (Exception ignored) {}
+        }
+    };
     try {
         takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
             new AccessibilityService.TakeScreenshotCallback() {
                 @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
+                    restoreVol.run();
                     try {
                         Bitmap hw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
                         if (hw != null) {
@@ -235,6 +246,7 @@ private void doSampleIconColors(boolean isFollowUp) {
                     }
                 }
                 @Override public void onFailure(int errorCode) {
+                    restoreVol.run();
                     // [FIX CHÍNH] Trước đây bỏ trống -> icon "đứng màu" vô thời hạn.
                     // Giờ: nới interval ra (tối đa 1200ms) rồi CHỦ ĐỘNG thử lại,
                     // không chờ sự kiện scroll/đổi app kế tiếp mới thử.
@@ -253,14 +265,18 @@ private void doSampleIconColors() {
     try {
         takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
             new AccessibilityService.TakeScreenshotCallback() {
-                @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
-                    try {
-                        Bitmap hw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
-                        if (hw != null) {
-                            if (needLock) applyAutoColorsFromScreenshot(hw, bars, "lock_");
-                            if (needHomacc) applyAutoColorsFromScreenshot(hw, accHomeBars, "homacc_");
-                        }
-                    } catch (Exception ignored) {
+@Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
+    try {
+        // [FIX] Chỉ tô màu khi overlay Homacc THẬT SỰ đang tồn tại — tránh trường
+        // hợp hiếm gặp: overlay vừa bị gỡ (do khoá máy/tắt Trợ năng) trong lúc
+        // screenshot đang xử lý bất đồng bộ, khiến việc set tint gây tác dụng phụ
+        // không mong muốn lên vòng đời View.
+        Bitmap hw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
+        if (hw != null) {
+            if (needLock) applyAutoColorsFromScreenshot(hw, bars, "lock_");
+            if (needHomacc && isHomaccDrawn) applyAutoColorsFromScreenshot(hw, accHomeBars, "homacc_");
+        }
+    } catch (Exception ignored) {
                     } finally {
                         try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
                         if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
@@ -275,13 +291,16 @@ private void applyAutoColorsFromScreenshot(Bitmap screenHw, View[] arr, String p
     if (arr == null) return;
     int[] loc = new int[2];
     int screenW = screenHw.getWidth(), screenH = screenHw.getHeight();
-    for (int i = 0; i < 12; i++) {
-        View v = arr[i];
-        if (!(v instanceof BarView) || v.getVisibility() != View.VISIBLE) continue;
-        if (prefs.getString(prefix + BARS[i] + "_icons", "").isEmpty()) continue;
-        if (isAutoColorOff(prefix, BARS[i])) { ((BarView) v).setIconTintColor(null); continue; }
-        try {
-            v.getLocationOnScreen(loc);
+for (int i = 0; i < 12; i++) {
+    View v = arr[i];
+    if (!(v instanceof BarView) || v.getVisibility() != View.VISIBLE) continue;
+    if (prefs.getString(prefix + BARS[i] + "_icons", "").isEmpty()) continue;
+    if (isAutoColorOff(prefix, BARS[i])) { ((BarView) v).setIconTintColor(null); continue; }
+    // [FIX] Bỏ qua nếu View chưa layout xong / chưa gắn vào cửa sổ — đây là
+    // nguyên nhân khiến 1 Bar đổi màu còn Bar khác thì không (đọc sai toạ độ).
+    if (!v.isAttachedToWindow() || v.getWidth() <= 0 || v.getHeight() <= 0) continue;
+    try {
+        v.getLocationOnScreen(loc);
             int w = Math.max(1, v.getWidth()), h = Math.max(1, v.getHeight());
             int x = Math.max(0, Math.min(loc[0], screenW - 1));
             int y = Math.max(0, Math.min(loc[1], screenH - 1));
@@ -895,12 +914,24 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
     // [MỚI] Tô lại icon (vốn là bitmap trắng đơn sắc) sang đen/trắng theo nền —
     // null = giữ nguyên màu gốc (trắng). Zero-alloc: chỉ đổi ColorFilter, không tạo Bitmap mới.
     private Integer iconTintColor = null;
+    private int iconTintCurrentAnimated = Color.WHITE; // màu tint đang thực sự vẽ (đang tween)
+    private ValueAnimator iconTintAnim;
     public void setIconTintColor(Integer color) {
-        if (iconTintColor == null ? color == null : iconTintColor.equals(color)) return;
-        iconTintColor = color;
-        iconPaint.setColorFilter(color == null ? null :
-            new android.graphics.PorterDuffColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN));
-        invalidate();
+        int targetColor = (color == null) ? Color.WHITE : color;
+        if (iconTintColor != null && iconTintColor == targetColor) return;
+        iconTintColor = targetColor;
+        if (iconTintAnim != null) iconTintAnim.cancel();
+        // [FIX] Fade màu mượt như thanh nav Pixel — tween RGB thay vì đổi phắt.
+        iconTintAnim = ValueAnimator.ofObject(new android.animation.ArgbEvaluator(),
+            iconTintCurrentAnimated, targetColor);
+        iconTintAnim.setDuration(260);
+        iconTintAnim.addUpdateListener(a -> {
+            iconTintCurrentAnimated = (int) a.getAnimatedValue();
+            iconPaint.setColorFilter(new android.graphics.PorterDuffColorFilter(
+                iconTintCurrentAnimated, android.graphics.PorterDuff.Mode.SRC_IN));
+            invalidate();
+        });
+        iconTintAnim.start();
     }
     private int iconAlphaFactor = 255; // 0 = ẩn hoàn toàn icon, 255 = hiện đầy đủ
 
@@ -1834,10 +1865,11 @@ private void fireIntentById(String id) {
                 };
 
                 if (isHoldGesture) {
-                    // [MỚI] Vuốt tới đích rồi GIỮ NGUYÊN tại đó (dùng continueStroke nối tiếp
-                    // 1 đoạn gần như đứng yên) — willContinue=true ở stroke 1 để OS không nhả tay.
+                    // [FIX] continueStroke() phải được bắn trong 1 dispatchGesture() RIÊNG,
+                    // SAU khi stroke đầu hoàn tất (onCompleted) — nhét chung 1 lần như bản cũ
+                    // khiến hệ thống bỏ qua/không hiểu, đây là lý do hold không hoạt động.
                     int holdDur = Math.max(60, prefs.getInt("sim_gesture_hold_dur", 500));
-                    android.accessibilityservice.GestureDescription.StrokeDescription moveStroke =
+                    final android.accessibilityservice.GestureDescription.StrokeDescription moveStroke =
                         new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration, true);
                     android.graphics.PathMeasure pmHold = new android.graphics.PathMeasure(path, false);
                     float[] endXY = new float[2];
@@ -1845,11 +1877,27 @@ private void fireIntentById(String id) {
                     android.graphics.Path holdPath = new android.graphics.Path();
                     holdPath.moveTo(endXY[0], endXY[1]);
                     holdPath.lineTo(endXY[0], endXY[1] + 0.01f);
-                    android.accessibilityservice.GestureDescription.StrokeDescription holdStroke =
+                    final android.accessibilityservice.GestureDescription.StrokeDescription holdStroke =
                         moveStroke.continueStroke(holdPath, 0, holdDur, false);
-                    builder.addStroke(moveStroke);
-                    builder.addStroke(holdStroke);
-                    dispatchGesture(builder.build(), cb, null);
+
+                    android.accessibilityservice.GestureDescription.Builder moveBuilder =
+                        new android.accessibilityservice.GestureDescription.Builder();
+                    moveBuilder.addStroke(moveStroke);
+                    dispatchGesture(moveBuilder.build(), new GestureResultCallback() {
+                        @Override public void onCompleted(android.accessibilityservice.GestureDescription g) {
+                            try {
+                                android.accessibilityservice.GestureDescription.Builder holdBuilder =
+                                    new android.accessibilityservice.GestureDescription.Builder();
+                                holdBuilder.addStroke(holdStroke);
+                                dispatchGesture(holdBuilder.build(), cb, null);
+                            } catch (Exception ignored) {
+                                isDispatchingSyntheticGesture = false; setTransientUntouchable(false);
+                            }
+                        }
+                        @Override public void onCancelled(android.accessibilityservice.GestureDescription g) {
+                            isDispatchingSyntheticGesture = false; setTransientUntouchable(false);
+                        }
+                    }, null);
                 } else {
                     builder.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration));
                     dispatchGesture(builder.build(), cb, null);
@@ -2750,6 +2798,13 @@ private void updateHomaccLive() {
         p.x = prefs.getInt(ck + "x", 0); p.y = prefs.getInt(ck + "y", 0);
         updateLayoutIfChanged(v, p);
         if (priMode == 0) applyAntiTapjacking(v, p.width, p.height);
+    }
+    // [MỚI] Lưới an toàn: nếu Homacc đang thực sự chạy nhưng overlay lại chưa
+    // được vẽ (do 1 lần removeAccessibleHome/drawAccessibleHome bị lệch nhịp,
+    // hoặc do sự cố tạm thời khi lấy mẫu màu), tự vẽ lại NGAY — không chờ event
+    // kế tiếp mới phát hiện ra.
+    if (AccessibleHomeService.isRunning && !isHomaccDrawn) {
+        new Handler(android.os.Looper.getMainLooper()).post(this::drawAccessibleHome);
     }
 }
 // [BẮT BUỘC] AccessibilityService yêu cầu override hàm này
