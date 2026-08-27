@@ -1230,6 +1230,17 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
             }
         }
     }
+private void setViewVisibilityAnimated(View v, boolean show) {
+    if (v == null) return;
+    v.animate().cancel();
+    if (show) {
+        if (v.getVisibility() != View.VISIBLE) { v.setAlpha(0f); v.setVisibility(View.VISIBLE); }
+        v.animate().alpha(1f).setDuration(120).start();
+    } else {
+        v.animate().alpha(0f).setDuration(120)
+            .withEndAction(() -> { if (v.getAlpha() == 0f) v.setVisibility(View.GONE); }).start();
+    }
+}
     private Animator activeAnimAnimator;
     private void playAnim() {
         if (fV == null) return;

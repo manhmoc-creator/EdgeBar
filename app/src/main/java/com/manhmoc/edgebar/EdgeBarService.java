@@ -112,6 +112,8 @@ private boolean recIndicatorTestPaused = false;
     private boolean fOn = false, isKbd = false, isBl = false;
     private KeyguardManager km;
 private volatile boolean isBouncerVisible = false;
+private volatile long lastBouncerCheckMs = 0L;
+private static final long BOUNCER_CHECK_THROTTLE_MS = 60;
 private static final String[] KEYGUARD_BOUNCER_IDS = {
     "com.android.systemui:id/keyguard_pin_view",
     "com.android.systemui:id/keyguard_security_container"
@@ -1196,8 +1198,26 @@ try {
 
 refreshFingerprintRegistration();
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
-    @Override public void onAccessibilityEvent(AccessibilityEvent event) {
-    int eventType = event.getEventType();
+@Override public void onAccessibilityEvent(AccessibilityEvent event) {
+int eventType = event.getEventType();
+// [MỚI - FIX 1/3 BOUNCER] typeWindowContentChanged bắt được đúng lúc bouncer
+// PIN xuất hiện/biến mất (cùng window, chỉ đổi nội dung). Xử lý NGAY tại đây,
+// trước mọi early-return khác, throttle riêng 60ms — nhanh hơn nhiều so với
+// EVENT_THROTTLE_MS (200ms) dùng chung cho phần đổi app, giúp bar phản ứng
+// tức thời thay vì trễ/giật.
+if (eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+&& km != null && km.isKeyguardLocked()) {
+String evPkg = event.getPackageName() != null ? event.getPackageName().toString() : "";
+if ("com.android.systemui".equals(evPkg)) {
+long nowBouncer = android.os.SystemClock.elapsedRealtime();
+if (nowBouncer - lastBouncerCheckMs >= BOUNCER_CHECK_THROTTLE_MS) {
+lastBouncerCheckMs = nowBouncer;
+boolean prevBouncer = isBouncerVisible;
+checkBouncerVisible(evPkg);
+if (isBouncerVisible != prevBouncer) updateVisibility();
+}
+}
+}
     // [MỚI] Cuộn nội dung (không đổi app) vẫn phải cập nhật màu icon — đây chính là
     // tình huống "lướt feed sáng/tối liên tục" mà bản cũ không có sự kiện nào bắt được.
     if (eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
@@ -2316,9 +2336,9 @@ for (int i=0;i<12;i++) {
             boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", false);
         int lockMode = prefs.getInt("lock_"+BARS[i]+"_lockmode", 1); // 0=chỉ màn khoá gốc, 1=luôn hiện xuyên suốt
 boolean passesLockGate = (lockMode == 1) || !isSecureOverlayVisible;
-bars[i].setVisibility((en && isLocked && !hide && passesLockGate &&
-!prefs.getBoolean("lock_"+BARS[i]+"_manual_hide", false)) ? View.VISIBLE :
-View.GONE);
+boolean shouldShowBar = en && isLocked && !hide && passesLockGate &&
+    !prefs.getBoolean("lock_"+BARS[i]+"_manual_hide", false);
+setViewVisibilityAnimated(bars[i], shouldShowBar);
     if (en && isLocked) {
                 int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha",50);
                 int w = prefs.getInt("lock_"+BARS[i]+"_w",300);
@@ -2384,6 +2404,17 @@ if (panelEngine != null) panelEngine.rebuildAll();
         // phòng trường hợp trạng thái Lock thay đổi khiến Homacc cần được ẩn/hiện.
         updateHomaccLive();
     }
+private void setViewVisibilityAnimated(View v, boolean show) {
+    if (v == null) return;
+    v.animate().cancel();
+    if (show) {
+        if (v.getVisibility() != View.VISIBLE) { v.setAlpha(0f); v.setVisibility(View.VISIBLE); }
+        v.animate().alpha(1f).setDuration(120).start();
+    } else {
+        v.animate().alpha(0f).setDuration(120)
+            .withEndAction(() -> { if (v.getAlpha() == 0f) v.setVisibility(View.GONE); }).start();
+    }
+}
 private static final int MAX_TRIGGER_DEPTH = 3;
     private static final String[] GESTURE_SUFFIXES = {
         "_up_hold","_down_hold","_left_hold","_right_hold","_diag_hold",
