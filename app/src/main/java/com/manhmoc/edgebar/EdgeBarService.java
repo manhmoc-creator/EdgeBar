@@ -1214,7 +1214,10 @@ if (nowBouncer - lastBouncerCheckMs >= BOUNCER_CHECK_THROTTLE_MS) {
 lastBouncerCheckMs = nowBouncer;
 boolean prevBouncer = isBouncerVisible;
 checkBouncerVisible(evPkg);
-if (isBouncerVisible != prevBouncer) updateVisibility();
+// [FIX TỐC ĐỘ] Bouncer đổi -> ẩn/hiện NGAY, không animate — tách khỏi
+// updateVisibility() đầy đủ (có animate 100ms + duyệt lại mọi thứ) để đạt
+// tốc độ ngang HIDE_SOME_OVERLAY / checkAndYieldOS.
+if (isBouncerVisible != prevBouncer) applyLockGateInstant();
 }
 }
 }
@@ -2416,7 +2419,38 @@ private void setViewVisibilityAnimated(View v, boolean show) {
             .withEndAction(() -> { if (v.getAlpha() == 0f) v.setVisibility(View.GONE); }).start();
     }
 }
-
+/** [FIX TỐC ĐỘ "ONLY BASE LOCKSCREEN"] Ẩn/hiện tức thời (không animate) chỉ cho
+ * các Bar/Corner đang ở lockMode==0 ("Chỉ màn khoá gốc") khi bouncer (PIN/camera
+ * bảo mật/calculator...) vừa xuất hiện hoặc biến mất. Không đụng tới Bar/Corner
+ * lockMode==1 (Luôn xuyên suốt) hay bất kỳ điều kiện nào khác — đây là đường
+ * phản ứng riêng, rẻ hơn hẳn updateVisibility() đầy đủ. */
+private void applyLockGateInstant() {
+    boolean isPreview = prefs.getBoolean("preview_lock", false);
+    boolean isLocked = (km != null && km.isKeyguardLocked()) || isPreview;
+    boolean isSecureOverlayVisible = isBouncerVisible && !isPreview;
+    for (int i = 0; i < 12; i++) {
+        if (bars[i] == null) continue;
+        int lockMode = prefs.getInt("lock_" + BARS[i] + "_lockmode", 1);
+        if (lockMode == 1) continue;
+        boolean en = prefs.getBoolean("lock_" + BARS[i] + "_en", false);
+        boolean manualHidden = prefs.getBoolean("lock_" + BARS[i] + "_manual_hide", false);
+        boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
+        bars[i].animate().cancel();
+        bars[i].setAlpha(1f);
+        bars[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
+    }
+    for (int i = 0; i < 4; i++) {
+        if (corners[i] == null) continue;
+        int lockMode = prefs.getInt("lock_corner_" + CORNERS[i] + "_lockmode", 1);
+        if (lockMode == 1) continue;
+        boolean en = prefs.getBoolean("lock_corner_" + CORNERS[i] + "_en", false);
+        boolean manualHidden = prefs.getBoolean("lock_corner_" + CORNERS[i] + "_manual_hide", false);
+        boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
+        corners[i].animate().cancel();
+        corners[i].setAlpha(1f);
+        corners[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
+    }
+}
 private static final int MAX_TRIGGER_DEPTH = 3;
     private static final String[] GESTURE_SUFFIXES = {
         "_up_hold","_down_hold","_left_hold","_right_hold","_diag_hold",

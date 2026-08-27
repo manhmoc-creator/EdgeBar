@@ -1242,6 +1242,38 @@ private void setViewVisibilityAnimated(View v, boolean show) {
             .withEndAction(() -> { if (v.getAlpha() == 0f) v.setVisibility(View.GONE); }).start();
     }
 }
+/** [FIX TỐC ĐỘ "ONLY BASE LOCKSCREEN"] Ẩn/hiện tức thời (không animate) chỉ cho
+ * các Bar/Corner đang ở lockMode==0 ("Chỉ màn khoá gốc") khi bouncer (PIN/camera
+ * bảo mật/calculator...) vừa xuất hiện hoặc biến mất. Không đụng tới Bar/Corner
+ * lockMode==1 (Luôn xuyên suốt) hay bất kỳ điều kiện nào khác — đây là đường
+ * phản ứng riêng, rẻ hơn hẳn updateVisibility() đầy đủ. */
+private void applyLockGateInstant() {
+    boolean isPreview = prefs.getBoolean("preview_lock", false);
+    boolean isLocked = (km != null && km.isKeyguardLocked()) || isPreview;
+    boolean isSecureOverlayVisible = isBouncerVisible && !isPreview;
+    for (int i = 0; i < 12; i++) {
+        if (bars[i] == null) continue;
+        int lockMode = prefs.getInt("lock_" + BARS[i] + "_lockmode", 1);
+        if (lockMode == 1) continue;
+        boolean en = prefs.getBoolean("lock_" + BARS[i] + "_en", false);
+        boolean manualHidden = prefs.getBoolean("lock_" + BARS[i] + "_manual_hide", false);
+        boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
+        bars[i].animate().cancel();
+        bars[i].setAlpha(1f);
+        bars[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
+    }
+    for (int i = 0; i < 4; i++) {
+        if (corners[i] == null) continue;
+        int lockMode = prefs.getInt("lock_corner_" + CORNERS[i] + "_lockmode", 1);
+        if (lockMode == 1) continue;
+        boolean en = prefs.getBoolean("lock_corner_" + CORNERS[i] + "_en", false);
+        boolean manualHidden = prefs.getBoolean("lock_corner_" + CORNERS[i] + "_manual_hide", false);
+        boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
+        corners[i].animate().cancel();
+        corners[i].setAlpha(1f);
+        corners[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
+    }
+}
     private Animator activeAnimAnimator;
     private void playAnim() {
         if (fV == null) return;
