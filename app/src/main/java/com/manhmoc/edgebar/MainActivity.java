@@ -6343,9 +6343,7 @@ private void showBubbleNodePicker(String type) {
             for (ResolveInfo ri : ShortcutScanner.getProviders(this)) {
                 allItems.add(new String[]{ri.loadLabel(getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
             }
-            for (String id : csvToList(prefs.getString("shortcut_ids", ""))) {
-                allItems.add(new String[]{"(Đã lưu) " + prefs.getString("shortcut_" + id + "_name", "Shortcut"), "act:RUN_SHORTCUT_" + id});
-            }
+            // KHÔNG GỌI panel_shortcut_ids hay shortcut_ids nữa để tránh lặp
         }
         else if (type.equals("SYSTEM")) {
             String[][] sys = { {"BACK","Quay lại"},{"HOME","Màn chính"},{"RECENTS","Đa nhiệm"},{"SCREEN_OFF","Tắt màn hình"},{"FLASH","Đèn pin"},{"SCREENSHOT","Chụp màn hình"},{"CAMERA","Camera"},{"VOLUME","Âm lượng"},{"POWER_DIALOG","Menu nguồn"},{"NOTIFICATIONS","Thông báo"},{"QUICK_SETTINGS","Cài đặt nhanh"},{"SPLIT_SCREEN","Chia đôi màn hình"},{"SCREEN_RECORD","Quay màn hình"},{"AUTO_ROTATE_TOGGLE","Tự động xoay"} };
@@ -6382,19 +6380,41 @@ private void showBubbleNodePicker(String type) {
                 cb.setClickable(false);
                 row.addView(cb);
                 
-                Button btnEditIcon = new Button(MainActivity.this);
-                btnEditIcon.setText("🖌");
-                btnEditIcon.setBackground(getRounded("#303134", 14f));
-                btnEditIcon.setTextColor(Color.WHITE);
-                btnEditIcon.setPadding(16, 8, 16, 8);
-                btnEditIcon.setOnClickListener(v -> showIconPickerDialog("bubble_node_icon_override_" + type + "_" + item[1], () -> refreshHolder[0].run()));
-                row.addView(btnEditIcon);
+                // HIỂN THỊ ICON CHO APP VÀ SHORTCUT ĐỂ DỄ NHẬN DIỆN
+                if (type.equals("APP") || type.equals("SHORTCUT")) {
+                    ImageView iv = new ImageView(MainActivity.this);
+                    LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(70, 70);
+                    ilp.setMargins(0, 0, 20, 0);
+                    iv.setLayoutParams(ilp);
+                    
+                    if (item[1].startsWith("app:")) {
+                        loadAppIconInto(item[1].substring(4), iv);
+                    } else if (item[1].startsWith("act:CREATE_SHORTCUT_")) {
+                        try {
+                            String[] split = item[1].substring(20).split("/");
+                            Drawable d = getPackageManager().getActivityIcon(new ComponentName(split[0], split[1]));
+                            iv.setImageDrawable(d);
+                        } catch (Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
+                    }
+                    row.addView(iv);
+                }
 
                 TextView tv = new TextView(MainActivity.this);
                 tv.setText(item[0]); tv.setTextColor(Color.WHITE);
                 tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
-                tv.setPadding(20, 0, 0, 0);
+                if (!type.equals("APP") && !type.equals("SHORTCUT")) tv.setPadding(20, 0, 0, 0);
                 row.addView(tv);
+
+                // CHỈ HIỆN NÚT ĐỔI ICON KHI ACTION ĐÃ ĐƯỢC CHỌN
+                if (selectedOrder.contains(item[1])) {
+                    Button btnEditIcon = new Button(MainActivity.this);
+                    btnEditIcon.setText("🖌");
+                    btnEditIcon.setBackground(getRounded("#303134", 14f));
+                    btnEditIcon.setTextColor(Color.WHITE);
+                    btnEditIcon.setPadding(16, 8, 16, 8);
+                    btnEditIcon.setOnClickListener(v -> showIconPickerDialog("bubble_node_icon_override_" + type + "_" + item[1], () -> refreshHolder[0].run()));
+                    row.addView(btnEditIcon);
+                }
 
                 row.setOnClickListener(v -> {
                     if (selectedOrder.contains(item[1])) selectedOrder.remove(item[1]);
@@ -6447,6 +6467,7 @@ private void showBubbleNodePicker(String type) {
         });
         d.setContentView(root); d.show();
     }
+
 private LinearLayout buildPanelSelectionToolbar(List<String> ids) {
     LinearLayout bar = new LinearLayout(this);
     bar.setOrientation(LinearLayout.HORIZONTAL);

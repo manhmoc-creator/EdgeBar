@@ -22,12 +22,10 @@ public class AssistiveBubbleEngine {
     private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
     private LinearLayout panelCard;
     
-    // FIX: Khai báo lại mảng nodeButtons
-    private final FrameLayout[] nodeButtons = new FrameLayout[9];
-    
+    private final FrameLayout[] mainNodes = new FrameLayout[9];
     private Integer selectedMainIdx = null;
     private Integer selectedSubIdx = null;
-    private String currentSubmenu = null; 
+    private String currentSubmenu = null; // Null = Màn chính, khác Null = Màn con
     
     private static final String[] DEFAULT_ORDER = {"APP","SHORTCUT","SYSTEM","INTENT","MACRO","PANEL","UTILITY","TRIGGER","SEARCH"};
     
@@ -124,13 +122,13 @@ public class AssistiveBubbleEngine {
             public boolean onSingleTapConfirmed(MotionEvent e) {
                 if (menuOverlay != null) {
                     if (currentSubmenu != null) {
-                        currentSubmenu = null; 
+                        currentSubmenu = null; // Đang ở Menu Con -> Back ra 9 nút chính
                         refreshPanelCard();
                     } else {
-                        closeMenu(); 
+                        closeMenu(); // Đang ở 9 nút chính -> Tắt Panel
                     }
                 } else {
-                    moveToCenterAndOpenMenu(); 
+                    moveToCenterAndOpenMenu(); // Bật Panel
                 }
                 return true;
             }
@@ -299,8 +297,8 @@ public class AssistiveBubbleEngine {
                 return super.dispatchKeyEvent(event);
             }
         };
-        
         int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+        
         menuLp = new WindowManager.LayoutParams(
             prefs.getInt("bubble_bg_w", 800), WindowManager.LayoutParams.WRAP_CONTENT, wmType,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
@@ -388,7 +386,6 @@ public class AssistiveBubbleEngine {
         String csv = prefs.getString("bubble_node_items_" + type, "");
         List<String> out = new ArrayList<>();
         if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
-        while (out.size() < 9) out.add(""); 
         return out;
     }
 
@@ -411,9 +408,9 @@ public class AssistiveBubbleEngine {
         card.setPadding(20, 30, 20, 30);
 
         if (currentSubmenu != null) {
-            if (currentSubmenu.equals("SEARCH")) buildSearchMenu(card);
-            else buildSubmenuGrid(card, currentSubmenu);
+            buildSubmenuList(card, currentSubmenu, "");
         } else {
+            // Lưới 9 Nút Chính
             for (int i = 0; i < 3; i++) {
                 LinearLayout row = new LinearLayout(ctx);
                 row.setOrientation(LinearLayout.HORIZONTAL);
@@ -484,7 +481,7 @@ public class AssistiveBubbleEngine {
 
         content.addView(iconBox); content.addView(tv);
         box.addView(content);
-        nodeButtons[idx] = box; // Đã thêm mảng nodeButtons
+        nodeButtons[idx] = box;
         
         box.setOnLongClickListener(v -> { selectedMainIdx = idx; refreshPanelCard(); return true; });
         box.setOnClickListener(v -> {
@@ -504,131 +501,21 @@ public class AssistiveBubbleEngine {
         return box;
     }
 
-    private void buildSubmenuGrid(LinearLayout card, String type) {
-        TextView tvHeader = new TextView(ctx);
-        tvHeader.setText(getLabelForType(type));
-        tvHeader.setTextColor(Color.parseColor("#00E5FF"));
-        tvHeader.setTextSize(16f);
-        tvHeader.setGravity(Gravity.CENTER);
-        tvHeader.setPadding(0, 0, 0, 20);
-        card.addView(tvHeader);
-
-        List<String> items = getSubItems(type);
-        for (int i = 0; i < 3; i++) {
-            LinearLayout row = new LinearLayout(ctx);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setWeightSum(3);
-            for (int j = 0; j < 3; j++) {
-                int idx = i * 3 + j;
-                row.addView(buildSubNodeButton(type, idx, items.get(idx)));
-            }
-            card.addView(row);
-        }
-    }
-
-    private FrameLayout buildSubNodeButton(String type, int idx, String ref) {
-        FrameLayout box = new FrameLayout(ctx);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        lp.setMargins(10, 15, 10, 15);
-        box.setLayoutParams(lp);
-
-        LinearLayout content = new LinearLayout(ctx);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setGravity(Gravity.CENTER);
-        
-        FrameLayout iconBox = new FrameLayout(ctx);
-        int iconSize = prefs.getInt("bubble_icon_size", 100);
-        LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
-        iconBox.setLayoutParams(ibLp);
-        
-        GradientDrawable boxBg = new GradientDrawable();
-        boxBg.setCornerRadius(100f); 
-        boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#33000000"));
-        iconBox.setBackground(boxBg);
-
-        if (!ref.isEmpty()) {
-            ImageView iv = new ImageView(ctx);
-            FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
-            iv.setLayoutParams(ivLp);
-            
-            Drawable d = getCustomIcon(prefs.getString("bubble_node_icon_override_" + type + "_" + ref, ""));
-            PackageManager pm = ctx.getPackageManager();
-            if (d == null) {
-                if (ref.startsWith("app:")) {
-                    try { d = pm.getApplicationIcon(ref.substring(4)); } catch(Exception ignored) {}
-                } else if (ref.startsWith("act:RUN_SHORTCUT_")) {
-                    try {
-                        String scId = ref.substring(17);
-                        Intent scIntent = Intent.parseUri(prefs.getString("shortcut_" + scId + "_intent_uri", ""), 0);
-                        ComponentName cn = scIntent.getComponent();
-                        if (cn != null) d = pm.getActivityIcon(cn);
-                    } catch (Exception ignored) {}
-                }
-                if (d == null) d = ctx.getDrawable(android.R.drawable.sym_def_app_icon);
-            }
-            
-            if (d != null) {
-                if (!ref.startsWith("app:")) { d = d.mutate(); d.setTint(Color.WHITE); }
-                Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
-                if (norm != null) iv.setImageBitmap(norm);
-                else iv.setImageDrawable(d);
-            }
-            iconBox.addView(iv);
-        }
-        
-        TextView tv = new TextView(ctx);
-        String label = "Trống";
-        if (!ref.isEmpty()) {
-            if (ref.startsWith("app:")) {
-                try { label = ctx.getPackageManager().getApplicationLabel(ctx.getPackageManager().getApplicationInfo(ref.substring(4),0)).toString(); }
-                catch (Exception e) { label = "App"; }
-            } else if (ref.startsWith("act:RUN_SHORTCUT_")) {
-                label = prefs.getString("shortcut_" + ref.substring(17) + "_name", "Shortcut");
-            } else {
-                label = "Action";
-            }
-        }
-        tv.setText(label);
-        tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.WHITE);
-        tv.setTextSize(11f);
-        tv.setSingleLine(true);
-        tv.setGravity(Gravity.CENTER);
-        tv.setPadding(0, 10, 0, 0);
-
-        content.addView(iconBox); content.addView(tv);
-        box.addView(content);
-        
-        box.setOnLongClickListener(v -> { selectedSubIdx = idx; refreshPanelCard(); return true; });
-        box.setOnClickListener(v -> {
-            if (selectedSubIdx != null) {
-                if (selectedSubIdx != idx) {
-                    List<String> list = getSubItems(type);
-                    Collections.swap(list, selectedSubIdx, idx);
-                    prefs.edit().putString("bubble_node_items_" + type, TextUtils.join(",", list)).apply();
-                }
-                selectedSubIdx = null;
-                refreshPanelCard();
-            } else {
-                if (!ref.isEmpty()) { runItem(ref); closeMenu(); }
-            }
-        });
-        return box;
-    }
-
-    private void buildSearchMenu(LinearLayout card) {
+    // Hiển thị Lưới Danh Sách Tìm Kiếm In-Place
+    private void buildSubmenuList(LinearLayout card, String type, String query) {
         EditText et = new EditText(ctx);
-        et.setHint("🔍 Tìm kiếm hệ thống...");
+        et.setHint(type.equals("SEARCH") ? "🔍 Tìm kiếm hệ thống..." : "🔍 Tìm trong " + getLabelForType(type) + "...");
         et.setHintTextColor(Color.parseColor("#9AA0A6"));
         et.setTextColor(Color.WHITE);
         et.setSingleLine(true);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.parseColor("#33000000"));
-        bg.setCornerRadius(100f);
+        bg.setCornerRadius(20f);
         et.setBackground(bg);
         et.setPadding(28, 20, 28, 20);
         
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(0, 0, 0, 15);
+        lp.setMargins(10, 10, 10, 20);
         et.setLayoutParams(lp);
         card.addView(et);
 
@@ -644,12 +531,12 @@ public class AssistiveBubbleEngine {
         card.addView(scroll, slp);
 
         et.addTextChangedListener(new android.text.TextWatcher() {
-            public void afterTextChanged(android.text.Editable s) { showGridListOnly("SEARCH", s.toString().trim()); }
+            public void afterTextChanged(android.text.Editable s) { showGridListOnly(type, s.toString().trim()); }
             public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
             public void onTextChanged(CharSequence s, int a, int b, int c) {}
         });
 
-        showGridListOnly("SEARCH", ""); 
+        showGridListOnly(type, query); 
         
         et.postDelayed(() -> {
             et.requestFocus();
@@ -664,7 +551,22 @@ public class AssistiveBubbleEngine {
         if (listContainer == null) return;
         listContainer.removeAllViews();
 
-        List<String[]> items = buildItems(type); 
+        List<String[]> items;
+        if (type.equals("SEARCH") || type.equals("ALL")) {
+            items = buildItems("ALL"); // Load toàn bộ nếu là Search tổng
+        } else {
+            // Chỉ Load các Action Đã Được Chọn cho Menu này
+            items = new ArrayList<>();
+            List<String> selectedRefs = getSubItems(type);
+            List<String[]> allOfType = buildItems(type); 
+            for (String ref : selectedRefs) {
+                if (ref.isEmpty()) continue;
+                for (String[] it : allOfType) {
+                    if (it[1].equals(ref)) { items.add(it); break; }
+                }
+            }
+        }
+
         String q = query.toLowerCase(Locale.ROOT);
         List<String[]> shown = new ArrayList<>();
         for (String[] it : items) if (q.isEmpty() || it[0].toLowerCase(Locale.ROOT).contains(q)) shown.add(it);
@@ -677,7 +579,8 @@ public class AssistiveBubbleEngine {
         }
         
         PackageManager pm = ctx.getPackageManager();
-        for (String[] item : shown) {
+        for (int p = 0; p < shown.size(); p++) {
+            String[] item = shown.get(p);
             LinearLayout row = new LinearLayout(ctx);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
@@ -686,34 +589,84 @@ public class AssistiveBubbleEngine {
             ImageView iv = new ImageView(ctx);
             int isize = 75;
             LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(isize, isize);
-            ilp.setMargins(0, 0, 26, 0);
+            ilp.setMargins(10, 0, 26, 0);
             iv.setLayoutParams(ilp);
             
-            if (item[1].startsWith("app:")) {
-                try { iv.setImageDrawable(pm.getApplicationIcon(item[1].substring(4))); }
-                catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
-            } else if (item[1].startsWith("act:RUN_SHORTCUT_")) {
-                try {
-                    String scId = item[1].substring(17);
-                    String uriStr = prefs.getString("shortcut_" + scId + "_intent_uri", "");
-                    Intent scIntent = Intent.parseUri(uriStr, 0);
-                    ComponentName cn = scIntent.getComponent();
-                    if (cn != null) iv.setImageDrawable(pm.getActivityIcon(cn));
-                    else iv.setImageResource(android.R.drawable.ic_menu_send);
-                } catch (Exception e) {
-                    iv.setImageResource(android.R.drawable.ic_menu_send);
-                }
+            // Xử lý Icon Override nếu có
+            Drawable customOvr = getCustomIcon(prefs.getString("bubble_node_icon_override_" + type + "_" + item[1], ""));
+            if (customOvr != null) {
+                customOvr = customOvr.mutate(); customOvr.setTint(Color.WHITE);
+                iv.setImageDrawable(customOvr);
             } else {
-                iv.setImageResource(android.R.drawable.ic_menu_view);
-                iv.setColorFilter(Color.WHITE);
+                if (item[1].startsWith("app:")) {
+                    try { iv.setImageDrawable(pm.getApplicationIcon(item[1].substring(4))); }
+                    catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
+                } else if (item[1].startsWith("act:CREATE_SHORTCUT_")) {
+                    try {
+                        String[] split = item[1].substring(20).split("/");
+                        Drawable d = pm.getActivityIcon(new ComponentName(split[0], split[1]));
+                        iv.setImageDrawable(d);
+                    } catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
+                } else if (item[1].startsWith("act:RUN_SHORTCUT_")) {
+                    try {
+                        String scId = item[1].substring(17);
+                        String uriStr = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+                        Intent scIntent = Intent.parseUri(uriStr, 0);
+                        ComponentName cn = scIntent.getComponent();
+                        if (cn != null) iv.setImageDrawable(pm.getActivityIcon(cn));
+                        else iv.setImageResource(android.R.drawable.ic_menu_send);
+                    } catch (Exception e) { iv.setImageResource(android.R.drawable.ic_menu_send); }
+                } else {
+                    iv.setImageResource(android.R.drawable.ic_menu_view);
+                    iv.setColorFilter(Color.WHITE);
+                }
             }
             row.addView(iv);
 
             TextView tvLabel = new TextView(ctx);
             tvLabel.setText(item[0]); tvLabel.setTextColor(Color.WHITE); tvLabel.setTextSize(14f);
             row.addView(tvLabel);
+
+            // Bôi nền xanh nếu đang được Chọn (Long-press)
+            if (selectedSubIdx != null && selectedSubIdx == p) {
+                GradientDrawable rowBg = new GradientDrawable();
+                rowBg.setColor(Color.parseColor("#8AB4F8"));
+                rowBg.setCornerRadius(20f);
+                row.setBackground(rowBg);
+            } else {
+                row.setBackgroundColor(Color.TRANSPARENT);
+            }
+
             final String ref = item[1];
-            row.setOnClickListener(v -> { runItem(ref); closeMenu(); });
+            final int finalP = p;
+            
+            row.setOnClickListener(v -> {
+                if (selectedSubIdx != null) {
+                    if (selectedSubIdx != finalP && !type.equals("SEARCH") && !type.equals("ALL")) {
+                        List<String> order = new ArrayList<>(getSubItems(type));
+                        int idx1 = order.indexOf(shown.get(selectedSubIdx)[1]);
+                        int idx2 = order.indexOf(ref);
+                        if (idx1 >= 0 && idx2 >= 0) {
+                            Collections.swap(order, idx1, idx2);
+                            prefs.edit().putString("bubble_node_items_" + type, TextUtils.join(",", order)).apply();
+                        }
+                    }
+                    selectedSubIdx = null;
+                    showGridListOnly(type, query); // re-render
+                } else {
+                    runItem(ref); 
+                    closeMenu();
+                }
+            });
+
+            row.setOnLongClickListener(v -> {
+                if (!type.equals("SEARCH") && !type.equals("ALL")) {
+                    selectedSubIdx = finalP;
+                    showGridListOnly(type, query);
+                }
+                return true;
+            });
+
             listContainer.addView(row);
         }
         
@@ -738,8 +691,7 @@ public class AssistiveBubbleEngine {
         if (panelCard != null) {
             panelCard.removeAllViews();
             if (currentSubmenu != null) {
-                if (currentSubmenu.equals("SEARCH")) buildSearchMenu(panelCard);
-                else buildSubmenuGrid(panelCard, currentSubmenu);
+                buildSubmenuList(panelCard, currentSubmenu, "");
             } else {
                 for (int i = 0; i < 3; i++) {
                     LinearLayout row = new LinearLayout(ctx);
