@@ -22,10 +22,11 @@ public class AssistiveBubbleEngine {
     private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
     private LinearLayout panelCard;
     
-    private final FrameLayout[] mainNodes = new FrameLayout[9];
+    // Đã khai báo mảng nodeButtons
+    private final FrameLayout[] nodeButtons = new FrameLayout[9];
     private Integer selectedMainIdx = null;
     private Integer selectedSubIdx = null;
-    private String currentSubmenu = null; // Null = Màn chính, khác Null = Màn con
+    private String currentSubmenu = null; 
     
     private static final String[] DEFAULT_ORDER = {"APP","SHORTCUT","SYSTEM","INTENT","MACRO","PANEL","UTILITY","TRIGGER","SEARCH"};
     
@@ -122,10 +123,10 @@ public class AssistiveBubbleEngine {
             public boolean onSingleTapConfirmed(MotionEvent e) {
                 if (menuOverlay != null) {
                     if (currentSubmenu != null) {
-                        currentSubmenu = null; // YÊU CẦU 3: Tap bubble để Back ra 9 nút
+                        currentSubmenu = null; 
                         refreshPanelCard();
                     } else {
-                        closeMenu(); // YÊU CẦU 3: Tap bubble để Đóng
+                        closeMenu(); 
                     }
                 } else {
                     moveToCenterAndOpenMenu(); 
@@ -225,7 +226,7 @@ public class AssistiveBubbleEngine {
     private void fireGestureAction(String gesture) {
         String rulesCsv = prefs.getString("bubble_pack_rules", "");
         if (rulesCsv.isEmpty()) return;
-        for (String rId : csv(rulesCsv)) {
+        for (String rId : csvToList(rulesCsv)) {
             if (!prefs.getBoolean("prule_" + rId + "_en", true)) continue;
             String g = prefs.getString("prule_" + rId + "_gestures", "");
             if (g.contains(gesture)) {
@@ -311,8 +312,8 @@ public class AssistiveBubbleEngine {
                 return super.dispatchKeyEvent(event);
             }
         };
-        
         int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+        
         menuLp = new WindowManager.LayoutParams(
             prefs.getInt("bubble_bg_w", 800), WindowManager.LayoutParams.WRAP_CONTENT, wmType,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
@@ -426,7 +427,6 @@ public class AssistiveBubbleEngine {
             if (currentSubmenu.equals("SEARCH")) buildSearchMenu(card);
             else buildSubmenuGrid(card, currentSubmenu);
         } else {
-            // YÊU CẦU 1 & 4: 9 NÚT ĐỀU CÓ HÌNH TRÒN GIỐNG NHAU (Lưới 3x3)
             for (int i = 0; i < 3; i++) {
                 LinearLayout row = new LinearLayout(ctx);
                 row.setOrientation(LinearLayout.HORIZONTAL);
@@ -510,11 +510,7 @@ public class AssistiveBubbleEngine {
                 selectedMainIdx = null;
                 refreshPanelCard();
             } else {
-                if (type.equals("SEARCH")) {
-                    currentSubmenu = "SEARCH";
-                } else {
-                    currentSubmenu = type;
-                }
+                currentSubmenu = type;
                 refreshPanelCard();
             }
         });
@@ -683,7 +679,7 @@ public class AssistiveBubbleEngine {
 
         List<String[]> items;
         if (type.equals("SEARCH")) {
-            items = buildItems("ALL"); // YÊU CẦU 2: Tìm kiếm toàn bộ hành động của hệ thống
+            items = buildItems("ALL"); 
         } else {
             items = new ArrayList<>();
             List<String> selectedRefs = getSubItems(type);
@@ -708,17 +704,16 @@ public class AssistiveBubbleEngine {
         }
         
         PackageManager pm = ctx.getPackageManager();
-        for (int p = 0; p < shown.size(); p++) {
-            String[] item = shown.get(p);
+        for (String[] item : shown) {
             LinearLayout row = new LinearLayout(ctx);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(16, 22, 16, 22);
+            row.setPadding(10, 16, 10, 16);
             
             ImageView iv = new ImageView(ctx);
             int isize = 75;
             LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(isize, isize);
-            ilp.setMargins(10, 0, 26, 0);
+            ilp.setMargins(0, 0, 26, 0);
             iv.setLayoutParams(ilp);
             
             Drawable customOvr = getCustomIcon(prefs.getString("bubble_node_icon_override_" + type + "_" + item[1], ""));
@@ -743,7 +738,9 @@ public class AssistiveBubbleEngine {
                         ComponentName cn = scIntent.getComponent();
                         if (cn != null) iv.setImageDrawable(pm.getActivityIcon(cn));
                         else iv.setImageResource(android.R.drawable.ic_menu_send);
-                    } catch (Exception e) { iv.setImageResource(android.R.drawable.ic_menu_send); }
+                    } catch (Exception e) {
+                        iv.setImageResource(android.R.drawable.ic_menu_send);
+                    }
                 } else {
                     iv.setImageResource(android.R.drawable.ic_menu_view);
                     iv.setColorFilter(Color.WHITE);
@@ -754,46 +751,8 @@ public class AssistiveBubbleEngine {
             TextView tvLabel = new TextView(ctx);
             tvLabel.setText(item[0]); tvLabel.setTextColor(Color.WHITE); tvLabel.setTextSize(14f);
             row.addView(tvLabel);
-
-            if (selectedSubIdx != null && selectedSubIdx == p) {
-                GradientDrawable rowBg = new GradientDrawable();
-                rowBg.setColor(Color.parseColor("#8AB4F8"));
-                rowBg.setCornerRadius(20f);
-                row.setBackground(rowBg);
-            } else {
-                row.setBackgroundColor(Color.TRANSPARENT);
-            }
-
             final String ref = item[1];
-            final int finalP = p;
-            
-            row.setOnClickListener(v -> {
-                if (selectedSubIdx != null) {
-                    if (selectedSubIdx != finalP && !type.equals("SEARCH") && !type.equals("ALL")) {
-                        List<String> order = new ArrayList<>(getSubItems(type));
-                        int idx1 = order.indexOf(shown.get(selectedSubIdx)[1]);
-                        int idx2 = order.indexOf(ref);
-                        if (idx1 >= 0 && idx2 >= 0) {
-                            Collections.swap(order, idx1, idx2);
-                            prefs.edit().putString("bubble_node_items_" + type, TextUtils.join(",", order)).apply();
-                        }
-                    }
-                    selectedSubIdx = null;
-                    showGridListOnly(type, query); 
-                } else {
-                    runItem(ref); 
-                    closeMenu();
-                }
-            });
-
-            row.setOnLongClickListener(v -> {
-                if (!type.equals("SEARCH") && !type.equals("ALL")) {
-                    selectedSubIdx = finalP;
-                    showGridListOnly(type, query);
-                }
-                return true;
-            });
-
+            row.setOnClickListener(v -> { runItem(ref); closeMenu(); });
             listContainer.addView(row);
         }
         
@@ -836,6 +795,7 @@ public class AssistiveBubbleEngine {
         }
     }
 
+    // Đã thay Cấu trúc gọi Shortcut
     private List<String[]> buildItems(String type) {
         List<String[]> out = new ArrayList<>();
         if (type.equals("SEARCH") || type.equals("ALL")) {
@@ -854,14 +814,14 @@ public class AssistiveBubbleEngine {
                 break;
             }
             case "SHORTCUT": {
-                // YÊU CẦU 3: Chỉ load Shortcut hệ thống, không tự gọi Shortcut trong EdgeBar
+                // CHỈ gọi Shortcut từ hệ thống, KHÔNG load shortcut trùng do Edge Bar tạo
                 for (ResolveInfo ri : ShortcutScanner.getProviders(ctx)) {
                     out.add(new String[]{ri.loadLabel(ctx.getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
                 }
                 break;
             }
             case "SYSTEM": {
-                String[][] sys = { {"BACK","Quay lại"},{"HOME","Màn chính"},{"RECENTS","Đa nhiệm"},{"SCREEN_OFF","Tắt màn hình"},{"FLASH","Đèn pin"},{"SCREENSHOT","Chụp màn hình"},{"CAMERA","Camera"},{"VOLUME","Âm lượng"},{"POWER_DIALOG","Menu nguồn"},{"NOTIFICATIONS","Thông báo"},{"QUICK_SETTINGS","Cài đặt nhanh"},{"SPLIT_SCREEN","Chia đôi màn hình"},{"SCREEN_RECORD","Quay màn hình"},{"AUTO_ROTATE_TOGGLE","Tự động xoay"} };
+                String[][] sys = { {"BACK","Quay lại"},{"HOME","Màn chính"},{"RECENTS","Đa nhiệm"},{"SCREEN_OFF","Tắt màn hình"},{"FLASH","Đèn pin"},{"SCREENSHOT","Chụp màn hình"},{"CAMERA","Camera"},{"VOLUME","Âm lượng"},{"POWER_DIALOG","Menu nguồn"},{"NOTIFICATIONS","Thông báo"},{"QUICK_SETTINGS","Cài đặt nhanh"},{"SPLIT_SCREEN","Chia đôi màn hình"},{"SCREEN_RECORD","Quay màn hình"},{"AUTO_ROTATE_TOGGLE","Tự động xoay"}, {"TRIGGER_ACC_MENU_2F", "Giả lập 2 ngón"} };
                 for (String[] s : sys) out.add(new String[]{s[1], "act:" + s[0]});
                 break;
             }
