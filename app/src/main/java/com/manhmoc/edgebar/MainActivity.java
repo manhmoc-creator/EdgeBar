@@ -6242,59 +6242,55 @@ private void renderBubbleSettings() {
         row.addView(tvOn); row.addView(swOn);
         designSliderContainer.addView(row);
 
+        // Nút đổi Icon chính cho Bong bóng chat
+        Button btnMainIcon = new Button(this);
+        btnMainIcon.setText("🎨 ĐỔI ICON BONG BÓNG CHAT");
+        btnMainIcon.setBackground(getRounded("#FFC107", 20f));
+        btnMainIcon.setTextColor(Color.BLACK);
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-1, -2);
+        btnLp.setMargins(0, 0, 0, 20);
+        btnMainIcon.setLayoutParams(btnLp);
+        btnMainIcon.setOnClickListener(v -> {
+            showIconPickerDialog("bubble_main_icon", () -> {
+                Toast.makeText(this, "Đã đổi Icon Bong bóng chat", Toast.LENGTH_SHORT).show();
+                sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
+            });
+        });
+        designSliderContainer.addView(btnMainIcon);
+
         designSliderContainer.addView(createSlider(T("Bubble Size", "Kích thước bong bóng"), "bubble_size", 300, 120));
-        designSliderContainer.addView(createSlider(T("Icon Size in Panel", "Độ to nhỏ của 8 nút trong Panel"), "bubble_icon_size", 200, 100));
-        
+        designSliderContainer.addView(createSlider(T("Icon Size in Panel", "Độ to nhỏ của 9 nút trong Panel"), "bubble_icon_size", 200, 100));
         designSliderContainer.addView(createSlider(T("Panel Width", "Chiều rộng bảng"), "bubble_bg_w", 1500, 800));
         designSliderContainer.addView(createSlider(T("Panel Max Height", "Chiều cao tối đa (List)"), "bubble_bg_h", 1500, 800));
         designSliderContainer.addView(createSlider(T("Panel Opacity", "Độ đậm mờ bảng"), "bubble_bg_alpha", 255, 160));
-        designSliderContainer.addView(createSlider(T("Panel Corner Radius", "Độ bo góc bảng"), "bubble_bg_radius", 100, 40));
 
-        LinearLayout btnRow = new LinearLayout(this);
-        btnRow.setOrientation(LinearLayout.HORIZONTAL);
-        btnRow.setPadding(0, 20, 0, 0);
-        
-        Button btnDtap = new Button(this);
-        btnDtap.setText("⚙️ CẤU HÌNH 2 CHẠM");
-        btnDtap.setBackground(getRounded("#00E5FF", 20f));
-        btnDtap.setTextColor(Color.BLACK);
-        btnDtap.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        btnDtap.setOnClickListener(v -> openBubbleGestureEditor());
-        
-        Button btnLong = new Button(this);
-        btnLong.setText("⚙️ CẤU HÌNH NHẤN GIỮ");
-        btnLong.setBackground(getRounded("#FFC107", 20f));
-        btnLong.setTextColor(Color.BLACK);
-        LinearLayout.LayoutParams lllp = new LinearLayout.LayoutParams(0, -2, 1f);
-        lllp.setMargins(20, 0, 0, 0);
-        btnLong.setLayoutParams(lllp);
-        btnLong.setOnClickListener(v -> openBubbleGestureEditor());
-        
-        btnRow.addView(btnDtap); btnRow.addView(btnLong);
-        designSliderContainer.addView(btnRow);
-
-        // --- YÊU CẦU: CHO PHÉP CHỌN CUSTOM ICON CHO 8 NÚT TRÊN PANEL ---
-        designSliderContainer.addView(createSectionTitle("🎨 CUSTOM ICON CHO 8 NÚT BUBBLE PANEL"));
+        // --- CẤU HÌNH CUSTOM ICON CHO 9 NÚT (BUỘC THEO TYPE) ---
+        designSliderContainer.addView(createSectionTitle("🎨 ĐỔI ICON 9 NÚT TRÊN PANEL"));
         LinearLayout iconGrid = new LinearLayout(this);
         iconGrid.setOrientation(LinearLayout.VERTICAL);
         iconGrid.setPadding(0, 10, 0, 20);
-        for (int i = 0; i < 2; i++) {
+        
+        String[] nodeTypes = {"APP", "SHORTCUT", "SYSTEM", "INTENT", "MACRO", "PANEL", "UTILITY", "TRIGGER", "SEARCH"};
+        String[] nodeLabels = {"Apps", "Shortcut", "System", "Intent", "Macro", "Panel", "Utility", "Trigger", "Search"};
+        
+        for (int i = 0; i < 3; i++) { // 3 hàng
             LinearLayout rowIcon = new LinearLayout(this);
             rowIcon.setOrientation(LinearLayout.HORIZONTAL);
             rowIcon.setGravity(Gravity.CENTER);
-            for (int j = 0; j < 4; j++) {
-                int idx = i * 4 + j;
+            for (int j = 0; j < 3; j++) { // 3 cột
+                int idx = i * 3 + j;
+                final String type = nodeTypes[idx];
                 Button btnIcon = new Button(this);
-                btnIcon.setText("NÚT " + (idx + 1));
+                btnIcon.setText(nodeLabels[idx]);
                 btnIcon.setBackground(getRounded("#444444", 20f));
                 btnIcon.setTextColor(Color.WHITE);
-                btnIcon.setTextSize(11f);
-                LinearLayout.LayoutParams lpBtn = new LinearLayout.LayoutParams(0, -2, 1f);
+                btnIcon.setTextSize(10.5f);
+                LinearLayout.LayoutParams lpBtn = new LinearLayout.LayoutParams(0, 140, 1f);
                 lpBtn.setMargins(8, 8, 8, 8);
                 btnIcon.setLayoutParams(lpBtn);
                 btnIcon.setOnClickListener(v -> {
-                    showIconPickerDialog("bubble_node_icon_" + idx, () -> {
-                        Toast.makeText(this, "Đã đổi Icon Nút " + (idx + 1), Toast.LENGTH_SHORT).show();
+                    showIconPickerDialog("bubble_node_icon_" + type, () -> {
+                        Toast.makeText(this, "Đã đổi Icon " + nodeLabels[idx], Toast.LENGTH_SHORT).show();
                         sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
                     });
                 });
@@ -6305,8 +6301,8 @@ private void renderBubbleSettings() {
         designSliderContainer.addView(iconGrid);
 
         TextView tvNote = new TextView(this);
-        tvNote.setText(T("1 Tap always opens the panel. Long-press a panel node to select, tap another to swap positions.",
-            "1 Chạm luôn mở bảng. Nhấn giữ 1 nút trên bảng để chọn, chạm nút khác để hoán đổi vị trí. Cử chỉ 2 Chạm & Nhấn Giữ cấu hình ở thanh FAB."));
+        tvNote.setText(T("Tap bubble to open panel. Tap again to close/go back. Long-press a node to select, tap another to swap.",
+            "Chạm bong bóng để mở Panel. Chạm lại để đóng hoặc quay lại. Nhấn giữ 1 nút để chọn, chạm nút khác để đổi vị trí."));
         tvNote.setTextColor(Color.parseColor("#9AA0A6"));
         tvNote.setTextSize(12f);
         tvNote.setPadding(0, 20, 0, 0);
