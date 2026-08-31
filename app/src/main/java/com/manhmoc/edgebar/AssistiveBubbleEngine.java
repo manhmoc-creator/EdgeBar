@@ -22,10 +22,12 @@ public class AssistiveBubbleEngine {
     private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
     private LinearLayout panelCard;
     
-    private final FrameLayout[] mainNodes = new FrameLayout[9];
+    // FIX: Khai báo lại mảng nodeButtons
+    private final FrameLayout[] nodeButtons = new FrameLayout[9];
+    
     private Integer selectedMainIdx = null;
     private Integer selectedSubIdx = null;
-    private String currentSubmenu = null; // Null = Màn chính, khác Null = Màn con
+    private String currentSubmenu = null; 
     
     private static final String[] DEFAULT_ORDER = {"APP","SHORTCUT","SYSTEM","INTENT","MACRO","PANEL","UTILITY","TRIGGER","SEARCH"};
     
@@ -120,18 +122,28 @@ public class AssistiveBubbleEngine {
         gestureDetector = new GestureDetector(ctx, new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onSingleTapConfirmed(MotionEvent e) {
-                // YÊU CẦU 3: Cơ chế TAP Back/Đóng
                 if (menuOverlay != null) {
                     if (currentSubmenu != null) {
-                        currentSubmenu = null; // Back ra 9 nút chính
+                        currentSubmenu = null; 
                         refreshPanelCard();
                     } else {
-                        closeMenu(); // Đóng hẳn Panel
+                        closeMenu(); 
                     }
                 } else {
-                    moveToCenterAndOpenMenu(); // Mở Panel
+                    moveToCenterAndOpenMenu(); 
                 }
                 return true;
+            }
+
+            @Override
+            public boolean onDoubleTap(MotionEvent e) {
+                fireAction("bubble_dtap");
+                return true;
+            }
+
+            @Override
+            public void onLongPress(MotionEvent e) {
+                fireAction("bubble_long");
             }
         });
 
@@ -143,12 +155,15 @@ public class AssistiveBubbleEngine {
                     if (velocityTracker == null) velocityTracker = VelocityTracker.obtain();
                     else velocityTracker.clear();
                     velocityTracker.addMovement(e);
+
                     downRaw[0] = e.getRawX() - bubbleLp.x; 
                     downRaw[1] = e.getRawY() - bubbleLp.y;
                     isDragging[0] = false;
                     return true;
+                    
                 case MotionEvent.ACTION_MOVE:
                     if (velocityTracker != null) velocityTracker.addMovement(e);
+                    
                     float newX = e.getRawX() - downRaw[0];
                     float newY = e.getRawY() - downRaw[1];
                     if (!isDragging[0] && (Math.abs(newX - bubbleLp.x) > 8 || Math.abs(newY - bubbleLp.y) > 8)) {
@@ -160,6 +175,7 @@ public class AssistiveBubbleEngine {
                         try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
                     }
                     return true;
+                    
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     if (isDragging[0]) {
@@ -208,6 +224,43 @@ public class AssistiveBubbleEngine {
         });
     }
 
+    private void fireAction(String baseKey) {
+        String act = prefs.getString(baseKey + "_acts", "NONE");
+        if (act.isEmpty() || act.equals("NONE")) return;
+        
+        if (prefs.getBoolean("bubble_vib", true)) {
+            try {
+                Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+                if (Build.VERSION.SDK_INT >= 26) v.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE));
+                else v.vibrate(30);
+            } catch (Exception ignored) {}
+        }
+        if (prefs.getBoolean("bubble_anim", true)) {
+            Intent anim = new Intent("com.manhmoc.edgebar.TEST_ANIM");
+            anim.setPackage(ctx.getPackageName()); ctx.sendBroadcast(anim);
+        }
+        if (prefs.getBoolean("bubble_jump_on", true)) {
+            int jumpDist = 120;
+            ValueAnimator jump = ValueAnimator.ofFloat(0f, 1f, 0f);
+            jump.setDuration(400);
+            int startY = bubbleLp.y;
+            jump.addUpdateListener(a -> {
+                bubbleLp.y = startY - (int) ((float) a.getAnimatedValue() * jumpDist);
+                try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
+            });
+            jump.start();
+        }
+
+        Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+        if (act.equals("LAUNCH_APP")) {
+            ipc.putExtra("act", "LAUNCH_APP");
+            ipc.putExtra("launch_pkg", prefs.getString(baseKey + "_launch_pkg", ""));
+        } else if (act.equals("RUN_SHORTCUT")) {
+            ipc.putExtra("act", "RUN_SHORTCUT_" + prefs.getString(baseKey + "_shortcut_id", ""));
+        } else ipc.putExtra("act", act);
+        ctx.sendBroadcast(ipc);
+    }
+
     private void moveToCenterAndOpenMenu() {
         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
         int bSize = prefs.getInt("bubble_size", 120);
@@ -246,8 +299,8 @@ public class AssistiveBubbleEngine {
                 return super.dispatchKeyEvent(event);
             }
         };
-        int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         
+        int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         menuLp = new WindowManager.LayoutParams(
             prefs.getInt("bubble_bg_w", 800), WindowManager.LayoutParams.WRAP_CONTENT, wmType,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
@@ -335,7 +388,7 @@ public class AssistiveBubbleEngine {
         String csv = prefs.getString("bubble_node_items_" + type, "");
         List<String> out = new ArrayList<>();
         if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
-        while (out.size() < 9) out.add(""); // Luôn fill đủ 9 chỗ
+        while (out.size() < 9) out.add(""); 
         return out;
     }
 
@@ -361,7 +414,6 @@ public class AssistiveBubbleEngine {
             if (currentSubmenu.equals("SEARCH")) buildSearchMenu(card);
             else buildSubmenuGrid(card, currentSubmenu);
         } else {
-            // Lưới 9 Nút Chính
             for (int i = 0; i < 3; i++) {
                 LinearLayout row = new LinearLayout(ctx);
                 row.setOrientation(LinearLayout.HORIZONTAL);
@@ -401,7 +453,6 @@ public class AssistiveBubbleEngine {
         FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
         iv.setLayoutParams(ivLp);
         
-        // YÊU CẦU 5: Lấy Icon Custom lưu theo Tên chức năng (TYPE) thay vì số Index
         Drawable d = getCustomIcon(prefs.getString("bubble_node_icon_" + type, ""));
         if (d == null) {
             try {
@@ -433,7 +484,7 @@ public class AssistiveBubbleEngine {
 
         content.addView(iconBox); content.addView(tv);
         box.addView(content);
-        nodeButtons[idx] = box;
+        nodeButtons[idx] = box; // Đã thêm mảng nodeButtons
         
         box.setOnLongClickListener(v -> { selectedMainIdx = idx; refreshPanelCard(); return true; });
         box.setOnClickListener(v -> {
@@ -600,7 +651,6 @@ public class AssistiveBubbleEngine {
 
         showGridListOnly("SEARCH", ""); 
         
-        // YÊU CẦU: Gboard tự động bật lên khi vào Search
         et.postDelayed(() -> {
             et.requestFocus();
             android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) ctx.getSystemService(Context.INPUT_METHOD_SERVICE);
@@ -614,7 +664,7 @@ public class AssistiveBubbleEngine {
         if (listContainer == null) return;
         listContainer.removeAllViews();
 
-        List<String[]> items = buildItems(type); // "SEARCH" load ALL
+        List<String[]> items = buildItems(type); 
         String q = query.toLowerCase(Locale.ROOT);
         List<String[]> shown = new ArrayList<>();
         for (String[] it : items) if (q.isEmpty() || it[0].toLowerCase(Locale.ROOT).contains(q)) shown.add(it);
@@ -643,7 +693,6 @@ public class AssistiveBubbleEngine {
                 try { iv.setImageDrawable(pm.getApplicationIcon(item[1].substring(4))); }
                 catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
             } else if (item[1].startsWith("act:RUN_SHORTCUT_")) {
-                // YÊU CẦU 3: Load trực tiếp từ ComponentName của hệ thống
                 try {
                     String scId = item[1].substring(17);
                     String uriStr = prefs.getString("shortcut_" + scId + "_intent_uri", "");
@@ -651,7 +700,9 @@ public class AssistiveBubbleEngine {
                     ComponentName cn = scIntent.getComponent();
                     if (cn != null) iv.setImageDrawable(pm.getActivityIcon(cn));
                     else iv.setImageResource(android.R.drawable.ic_menu_send);
-                } catch (Exception e) { iv.setImageResource(android.R.drawable.ic_menu_send); }
+                } catch (Exception e) {
+                    iv.setImageResource(android.R.drawable.ic_menu_send);
+                }
             } else {
                 iv.setImageResource(android.R.drawable.ic_menu_view);
                 iv.setColorFilter(Color.WHITE);
@@ -707,7 +758,6 @@ public class AssistiveBubbleEngine {
 
     private List<String[]> buildItems(String type) {
         List<String[]> out = new ArrayList<>();
-        // SEARCH sẽ dùng type = ALL để load toàn bộ
         if (type.equals("SEARCH") || type.equals("ALL")) {
             out.addAll(buildItems("APP")); out.addAll(buildItems("SHORTCUT")); out.addAll(buildItems("SYSTEM"));
             out.addAll(buildItems("UTILITY")); out.addAll(buildItems("TRIGGER")); out.addAll(buildItems("INTENT"));
@@ -724,8 +774,9 @@ public class AssistiveBubbleEngine {
                 break;
             }
             case "SHORTCUT": {
-                for (String id : csvToList(prefs.getString("shortcut_ids", "")))
-                    out.add(new String[]{"(Đã lưu) " + prefs.getString("shortcut_" + id + "_name", "Shortcut"), "act:RUN_SHORTCUT_" + id});
+                for (ResolveInfo ri : ShortcutScanner.getProviders(ctx)) {
+                    out.add(new String[]{ri.loadLabel(ctx.getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
+                }
                 break;
             }
             case "SYSTEM": {
@@ -775,6 +826,14 @@ public class AssistiveBubbleEngine {
                 Intent li = ctx.getPackageManager().getLaunchIntentForPackage(ref.substring(4));
                 if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(li); }
             } catch (Exception ignored) {}
+        } else if (ref.startsWith("act:CREATE_SHORTCUT_")) {
+            String[] split = ref.substring(20).split("/");
+            if (split.length == 2) {
+                Intent createIntent = new Intent(Intent.ACTION_CREATE_SHORTCUT);
+                createIntent.setClassName(split[0], split[1]);
+                createIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                try { ctx.startActivity(createIntent); } catch (Exception ignored) {}
+            }
         } else if (ref.startsWith("act:")) {
             Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             ipc.putExtra("act", ref.substring(4));
