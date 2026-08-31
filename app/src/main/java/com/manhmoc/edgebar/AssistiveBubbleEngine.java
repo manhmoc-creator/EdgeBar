@@ -24,6 +24,10 @@ public class AssistiveBubbleEngine {
     private final FrameLayout[] nodeButtons = new FrameLayout[8];
     private Integer selectedIdx = null;
     private static final String[] DEFAULT_ORDER = {"APP","SHORTCUT","SYSTEM","INTENT","MACRO","PANEL","UTILITY","TRIGGER"};
+    
+    // Các biến phục vụ Animation và lưu vị trí
+    private int restoreBubbleX = -1, restoreBubbleY = -1;
+    private ValueAnimator jumpAnim;
 
     private GestureDetector gestureDetector;
     private float sx, sy, lastX, lastY;
@@ -48,6 +52,11 @@ public class AssistiveBubbleEngine {
     }
 
     public void destroy() { destroyAll(); }
+
+    private void destroyAll() {
+        closeMenu();
+        if (bubbleView != null) { try { wm.removeView(bubbleView); } catch (Exception ignored) {} bubbleView = null; }
+    }
 
     private void buildBubble() {
         if (bubbleView != null) return;
@@ -159,6 +168,43 @@ public class AssistiveBubbleEngine {
         });
     }
 
+    private void fireAction(String baseKey) {
+        String act = prefs.getString(baseKey + "_acts", "NONE");
+        if (act.isEmpty() || act.equals("NONE")) return;
+        
+        if (prefs.getBoolean("bubble_vib", true)) {
+            try {
+                Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+                if (Build.VERSION.SDK_INT >= 26) v.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE));
+                else v.vibrate(30);
+            } catch (Exception ignored) {}
+        }
+        if (prefs.getBoolean("bubble_anim", true)) {
+            Intent anim = new Intent("com.manhmoc.edgebar.TEST_ANIM");
+            anim.setPackage(ctx.getPackageName()); ctx.sendBroadcast(anim);
+        }
+        if (prefs.getBoolean("bubble_jump_on", true)) {
+            int jumpDist = 120;
+            ValueAnimator jump = ValueAnimator.ofFloat(0f, 1f, 0f);
+            jump.setDuration(400);
+            int startY = bubbleLp.y;
+            jump.addUpdateListener(a -> {
+                bubbleLp.y = startY - (int) ((float) a.getAnimatedValue() * jumpDist);
+                try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
+            });
+            jump.start();
+        }
+
+        Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+        if (act.equals("LAUNCH_APP")) {
+            ipc.putExtra("act", "LAUNCH_APP");
+            ipc.putExtra("launch_pkg", prefs.getString(baseKey + "_launch_pkg", ""));
+        } else if (act.equals("RUN_SHORTCUT")) {
+            ipc.putExtra("act", "RUN_SHORTCUT_" + prefs.getString(baseKey + "_shortcut_id", ""));
+        } else ipc.putExtra("act", act);
+        ctx.sendBroadcast(ipc);
+    }
+
     private void moveToCenterAndOpenMenu() {
         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
         int bSize = prefs.getInt("bubble_size", 120);
@@ -181,6 +227,8 @@ public class AssistiveBubbleEngine {
         });
         centerAnim.start();
     }
+
+    private void toggleMenu() { if (menuOverlay != null) closeMenu(); else openMenu(); }
 
     private void openMenu() {
         if (menuOverlay != null) return;
@@ -262,6 +310,7 @@ public class AssistiveBubbleEngine {
             jumpAnim.start();
         }
     }
+
     private List<String> getOrder() {
         String csv = prefs.getString("bubble_node_order", "");
         List<String> out = new ArrayList<>();
@@ -282,17 +331,9 @@ public class AssistiveBubbleEngine {
         card.addView(buildNodeRow(0, 1, 2));
         card.addView(buildNodeRow(3, 4, 5));
         
-        // Hàng 3: Gom chung thành Fab Bar
         LinearLayout row3 = new LinearLayout(ctx);
         row3.setOrientation(LinearLayout.HORIZONTAL);
-        row3.setGravity(Gravity.CENTER_VERTICAL);
-        GradientDrawable fabBg = new GradientDrawable();
-        fabBg.setColor(Color.parseColor("#33000000"));
-        fabBg.setCornerRadius(100f);
-        row3.setBackground(fabBg);
-        LinearLayout.LayoutParams r3Lp = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
-        r3Lp.setMargins(15, 15, 15, 15);
-        row3.setLayoutParams(r3Lp);
+        row3.setWeightSum(4f); 
         
         row3.addView(buildNodeButton(6, false, 0));
         row3.addView(buildSearchBar(1f));
@@ -346,7 +387,7 @@ public class AssistiveBubbleEngine {
 
         if (forceBg || (selectedIdx != null && selectedIdx == idx)) {
             GradientDrawable boxBg = new GradientDrawable();
-            boxBg.setCornerRadius(40f); // Bo khung hình vuông hệ thống
+            boxBg.setCornerRadius(36f); // System App Icon Shape
             boxBg.setColor(selectedIdx != null && selectedIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#33000000"));
             box.setBackground(boxBg);
         }
@@ -469,7 +510,6 @@ public class AssistiveBubbleEngine {
                 catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
             } else if (item[1].startsWith("act:CREATE_SHORTCUT_")) {
                 try {
-                    // YÊU CẦU 3: Load chuẩn xác icon shortcut từ hệ thống
                     String[] split = item[1].substring(20).split("/");
                     Drawable d = pm.getActivityIcon(new ComponentName(split[0], split[1]));
                     iv.setImageDrawable(d);
