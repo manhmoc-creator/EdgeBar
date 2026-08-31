@@ -129,7 +129,6 @@ public class AssistiveBubbleEngine {
                     
                     float newX = e.getRawX() - downRaw[0];
                     float newY = e.getRawY() - downRaw[1];
-                    // Ngưỡng kéo cực nhỏ (5px) để nhạy như Messenger
                     if (!isDragging[0] && (Math.abs(newX - bubbleLp.x) > 5 || Math.abs(newY - bubbleLp.y) > 5)) {
                         isDragging[0] = true;
                     }
@@ -230,16 +229,13 @@ public class AssistiveBubbleEngine {
         int bSize = prefs.getInt("bubble_size", 120);
         int targetX = dm.widthPixels / 2 - bSize / 2; 
         
-        // Lưu vị trí viền trước khi bay ra giữa
         restoreBubbleX = bubbleLp.x; 
         restoreBubbleY = bubbleLp.y;
 
         int startX = bubbleLp.x;
         
-        // Bắt đầu mở panel NGAY LẬP TỨC
         openMenu();
         
-        // Hoạt ảnh bong bóng chạy ra giữa mượt mà, tốc độ nhanh (120ms)
         ValueAnimator centerAnim = ValueAnimator.ofFloat(0f, 1f);
         centerAnim.setDuration(120); 
         centerAnim.setInterpolator(new DecelerateInterpolator(1.5f)); 
@@ -287,7 +283,7 @@ public class AssistiveBubbleEngine {
         panelCard = buildPanelCard();
         panelCard.setOnClickListener(v -> {}); 
         
-        recalculateMenuPosition(); // Tính toán Y để không cắn viền
+        recalculateMenuPosition(); 
         
         panelCard.setAlpha(0f);
         panelCard.setScaleX(0.85f);
@@ -357,8 +353,7 @@ public class AssistiveBubbleEngine {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable bg = new GradientDrawable();
-        // Đen hoàn toàn (0, 0, 0)
-        bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 160), 0, 0, 0));
+        bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 160), 0, 0, 0)); // Nền đen tuyền
         bg.setCornerRadius(prefs.getInt("bubble_bg_radius", 40));
         card.setBackground(bg);
         card.setPadding(20, 30, 20, 30);
@@ -366,20 +361,16 @@ public class AssistiveBubbleEngine {
         card.addView(buildNodeRow(0, 1, 2));
         card.addView(buildNodeRow(3, 4, 5));
         
+        // Hàng 3
         LinearLayout row3 = new LinearLayout(ctx);
         row3.setOrientation(LinearLayout.HORIZONTAL);
         row3.setGravity(Gravity.CENTER_VERTICAL);
-        GradientDrawable fabBg = new GradientDrawable();
-        fabBg.setColor(Color.parseColor("#1AFFFFFF")); // Nền xám mờ nhẹ để nổi trên màu đen
-        fabBg.setCornerRadius(100f);
-        row3.setBackground(fabBg);
         LinearLayout.LayoutParams r3Lp = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
-        r3Lp.setMargins(15, 15, 15, 15);
         row3.setLayoutParams(r3Lp);
         
-        row3.addView(buildNodeButton(6, false, 0));
-        row3.addView(buildSearchBar(1f, "ALL")); // Thanh tìm kiếm Tổng hợp
-        row3.addView(buildNodeButton(7, false, 0));
+        row3.addView(buildNodeButton(6, 0f));
+        row3.addView(buildSearchBar(1f, "ALL")); // Thanh tìm kiếm
+        row3.addView(buildNodeButton(7, 0f));
         card.addView(row3);
         
         return card;
@@ -389,50 +380,74 @@ public class AssistiveBubbleEngine {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setWeightSum(idxs.length);
-        for (int idx : idxs) row.addView(buildNodeButton(idx, true, 1f));
+        for (int idx : idxs) row.addView(buildNodeButton(idx, 1f));
         return row;
     }
 
-    private FrameLayout buildNodeButton(int idx, boolean forceBg, float weight) {
+    // YÊU CẦU: Hỗ trợ Load Custom Icon
+    private Drawable resolveCustomIcon(String ref) {
+        if (ref == null || ref.isEmpty()) return null;
+        try {
+            if (ref.startsWith("app:")) return ctx.getPackageManager().getApplicationIcon(ref.substring(4));
+            if (ref.startsWith("poolc:")) {
+                int[] pool = PanelEngine.getCustomIconPool(ctx);
+                int idx = Integer.parseInt(ref.substring(6));
+                if (idx >= 0 && idx < pool.length) return ctx.getDrawable(pool[idx]);
+            }
+            if (ref.startsWith("pool:")) {
+                int idx = Integer.parseInt(ref.substring(5));
+                if (idx >= 0 && idx < PanelEngine.SYSTEM_ICON_POOL.length) return ctx.getDrawable(PanelEngine.SYSTEM_ICON_POOL[idx]);
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    // YÊU CẦU: Tất cả 8 nút đều có Icon Shape tròn xoe dạng Xám trên nền đen
+    private FrameLayout buildNodeButton(int idx, float weight) {
         FrameLayout box = new FrameLayout(ctx);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            weight == 0 ? LinearLayout.LayoutParams.WRAP_CONTENT : 0, 
-            LinearLayout.LayoutParams.WRAP_CONTENT, weight);
-        if (forceBg) lp.setMargins(15, 15, 15, 15);
-        else lp.setMargins(10, 10, 10, 10);
+        LinearLayout.LayoutParams lp;
+        if (weight > 0) {
+            lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, weight);
+        } else {
+            lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        }
+        lp.setMargins(15, 15, 15, 15);
         box.setLayoutParams(lp);
 
         String type = getOrder().get(idx);
         ImageView iv = new ImageView(ctx);
         int iconSize = prefs.getInt("bubble_icon_size", 100);
         FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
-        ivLp.setMargins(18, 18, 18, 18);
+        ivLp.setMargins(20, 20, 20, 20); // Đệm quanh icon để thấy rõ viền nút
         iv.setLayoutParams(ivLp);
         
         Drawable d = null;
-        try {
-            if (type.equals("SYSTEM")) d = ctx.getDrawable(android.R.drawable.ic_menu_preferences);
-            else if (type.equals("UTILITY")) d = ctx.getDrawable(android.R.drawable.ic_menu_manage);
-            else if (type.equals("APP")) d = ctx.getDrawable(android.R.drawable.sym_def_app_icon);
-            else if (type.equals("SHORTCUT")) d = ctx.getDrawable(android.R.drawable.ic_menu_send);
-            else if (type.equals("TRIGGER")) d = ctx.getDrawable(android.R.drawable.ic_menu_directions);
-            else if (type.equals("INTENT")) d = ctx.getDrawable(android.R.drawable.ic_menu_compass);
-            else d = ctx.getDrawable(android.R.drawable.ic_menu_view); 
-            
-            if (d != null) {
-                d = d.mutate(); d.setTint(Color.WHITE);
-                Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
-                if (norm != null) iv.setImageBitmap(norm);
-                else iv.setImageDrawable(d);
-            }
-        } catch (Exception ignored) {}
-
-        if (forceBg || (selectedIdx != null && selectedIdx == idx)) {
-            GradientDrawable boxBg = new GradientDrawable();
-            boxBg.setCornerRadius(100f); // Tròn xoe như QS Tiles
-            boxBg.setColor(selectedIdx != null && selectedIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#33000000"));
-            box.setBackground(boxBg);
+        String customIcon = prefs.getString("bubble_node_icon_" + idx, "");
+        if (!customIcon.isEmpty()) d = resolveCustomIcon(customIcon);
+        
+        if (d == null) { // Nếu ko có custom icon -> Fallback
+            try {
+                if (type.equals("SYSTEM")) d = ctx.getDrawable(android.R.drawable.ic_menu_preferences);
+                else if (type.equals("UTILITY")) d = ctx.getDrawable(android.R.drawable.ic_menu_manage);
+                else if (type.equals("APP")) d = ctx.getDrawable(android.R.drawable.sym_def_app_icon);
+                else if (type.equals("SHORTCUT")) d = ctx.getDrawable(android.R.drawable.ic_menu_send);
+                else if (type.equals("TRIGGER")) d = ctx.getDrawable(android.R.drawable.ic_menu_directions);
+                else if (type.equals("INTENT")) d = ctx.getDrawable(android.R.drawable.ic_menu_compass);
+                else d = ctx.getDrawable(android.R.drawable.ic_menu_view); 
+            } catch (Exception ignored) {}
         }
+            
+        if (d != null) {
+            d = d.mutate(); d.setTint(Color.WHITE);
+            Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
+            if (norm != null) iv.setImageBitmap(norm);
+            else iv.setImageDrawable(d);
+        }
+
+        GradientDrawable boxBg = new GradientDrawable();
+        boxBg.setCornerRadius(100f); // Tròn xoe hoặc viên sỏi
+        boxBg.setColor(selectedIdx != null && selectedIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#444444")); // Màu xám trên nền đen
+        box.setBackground(boxBg);
         
         box.addView(iv);
         nodeButtons[idx] = box;
@@ -450,17 +465,12 @@ public class AssistiveBubbleEngine {
             LinearLayout row3 = new LinearLayout(ctx);
             row3.setOrientation(LinearLayout.HORIZONTAL);
             row3.setGravity(Gravity.CENTER_VERTICAL);
-            GradientDrawable fabBg = new GradientDrawable();
-            fabBg.setColor(Color.parseColor("#1AFFFFFF"));
-            fabBg.setCornerRadius(100f);
-            row3.setBackground(fabBg);
             LinearLayout.LayoutParams r3Lp = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
-            r3Lp.setMargins(15, 15, 15, 15);
             row3.setLayoutParams(r3Lp);
             
-            row3.addView(buildNodeButton(6, false, 0));
+            row3.addView(buildNodeButton(6, 0f));
             row3.addView(buildSearchBar(1f, "ALL"));
-            row3.addView(buildNodeButton(7, false, 0));
+            row3.addView(buildNodeButton(7, 0f));
             panelCard.addView(row3);
 
             recalculateMenuPosition();
@@ -487,17 +497,20 @@ public class AssistiveBubbleEngine {
         et.setHintTextColor(Color.parseColor("#9AA0A6"));
         et.setTextColor(Color.WHITE);
         et.setSingleLine(true);
-        et.setBackgroundColor(Color.TRANSPARENT);
-        et.setPadding(20, 14, 20, 14);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#444444"));
+        bg.setCornerRadius(100f);
+        et.setBackground(bg);
+        et.setPadding(28, 20, 28, 20); // Cân chỉnh lại padding để chiều cao cân với nút 6 và 7
         
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, weight);
-        lp.setMargins(0, 5, 0, 5);
+        lp.setMargins(10, 10, 10, 10);
         et.setLayoutParams(lp);
         
         et.addTextChangedListener(new android.text.TextWatcher() {
             public void afterTextChanged(android.text.Editable s) {
                 String q = s.toString().trim();
-                if (!q.isEmpty()) showGridInPlace(searchType, q);
+                showGridListOnly(searchType, q); // Update LIST không xóa EditText
             }
             public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
             public void onTextChanged(CharSequence s, int a, int b, int c) {}
@@ -505,35 +518,51 @@ public class AssistiveBubbleEngine {
         return et;
     }
 
+    // YÊU CẦU: Không remove toàn bộ View khi gõ, tránh mất focus GBoard
     private void showGridInPlace(String type, String query) {
         if (panelCard == null) return;
         panelCard.removeAllViews(); 
         
         LinearLayout searchRow = new LinearLayout(ctx);
         searchRow.setOrientation(LinearLayout.HORIZONTAL);
-        GradientDrawable fabBg = new GradientDrawable();
-        fabBg.setColor(Color.parseColor("#1AFFFFFF"));
-        fabBg.setCornerRadius(100f);
-        searchRow.setBackground(fabBg);
-        searchRow.addView(buildSearchBar(1f, type)); // Truyền đúng type
+        searchRow.addView(buildSearchBar(1f, type)); 
         panelCard.addView(searchRow);
+
+        ScrollView scroll = new ScrollView(ctx);
+        scroll.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        
+        LinearLayout listContainer = new LinearLayout(ctx);
+        listContainer.setOrientation(LinearLayout.VERTICAL);
+        listContainer.setPadding(10, 10, 10, 10);
+        listContainer.setTag("LIST_CONTAINER"); // Gắn tag để lát lấy lại vẽ
+        scroll.addView(listContainer);
+        
+        int maxHeight = prefs.getInt("bubble_bg_h", 800);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, maxHeight);
+        panelCard.addView(scroll, slp);
+        panelCard.setTag("GRID_" + type); // Gắn tag để biết panelCard đang mở lưới
+
+        showGridListOnly(type, query); // Render List
+        recalculateMenuPosition();
+    }
+
+    private void showGridListOnly(String type, String query) {
+        if (panelCard == null) return;
+        LinearLayout listContainer = panelCard.findViewWithTag("LIST_CONTAINER");
+        if (listContainer == null) return;
+        
+        listContainer.removeAllViews();
 
         List<String[]> items = buildItems(type);
         String q = query.toLowerCase(Locale.ROOT);
         List<String[]> shown = new ArrayList<>();
         for (String[] it : items) if (q.isEmpty() || it[0].toLowerCase(Locale.ROOT).contains(q)) shown.add(it);
 
-        ScrollView scroll = new ScrollView(ctx);
-        scroll.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
-        LinearLayout list = new LinearLayout(ctx);
-        list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(10, 10, 10, 10);
-
         if (shown.isEmpty()) {
             TextView empty = new TextView(ctx);
             empty.setText("Không tìm thấy kết quả"); empty.setTextColor(Color.GRAY);
             empty.setPadding(20, 20, 20, 20);
-            list.addView(empty);
+            listContainer.addView(empty);
         }
         
         PackageManager pm = ctx.getPackageManager();
@@ -574,21 +603,24 @@ public class AssistiveBubbleEngine {
             row.addView(tvLabel);
             final String ref = item[1];
             row.setOnClickListener(v -> { runItem(ref); closeMenu(); });
-            list.addView(row);
+            listContainer.addView(row);
         }
-        scroll.addView(list);
         
-        int maxHeight = prefs.getInt("bubble_bg_h", 800);
-        list.measure(
+        // Gọi Measure lại để list tự giãn 
+        listContainer.measure(
             View.MeasureSpec.makeMeasureSpec(menuLp.width, View.MeasureSpec.EXACTLY), 
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         );
-        int listHeight = list.getMeasuredHeight();
+        int listHeight = listContainer.getMeasuredHeight();
+        int maxHeight = prefs.getInt("bubble_bg_h", 800);
         int finalHeight = Math.min(listHeight + 30, maxHeight); 
         
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, finalHeight);
-        panelCard.addView(scroll, slp);
-
+        View scroll = (View) listContainer.getParent();
+        if (scroll != null) {
+            LinearLayout.LayoutParams slp = (LinearLayout.LayoutParams) scroll.getLayoutParams();
+            slp.height = finalHeight;
+            scroll.setLayoutParams(slp);
+        }
         recalculateMenuPosition();
     }
 
@@ -614,9 +646,6 @@ public class AssistiveBubbleEngine {
                 break;
             }
             case "SHORTCUT": {
-                for (ResolveInfo ri : ShortcutScanner.getProviders(ctx)) {
-                    out.add(new String[]{ri.loadLabel(ctx.getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
-                }
                 for (String id : csv(prefs.getString("shortcut_ids", "")))
                     out.add(new String[]{"(Đã lưu) " + prefs.getString("shortcut_" + id + "_name", "Shortcut"), "act:RUN_SHORTCUT_" + id});
                 break;

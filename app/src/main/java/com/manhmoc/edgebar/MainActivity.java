@@ -6250,9 +6250,63 @@ private void renderBubbleSettings() {
         designSliderContainer.addView(createSlider(T("Panel Opacity", "Độ đậm mờ bảng"), "bubble_bg_alpha", 255, 160));
         designSliderContainer.addView(createSlider(T("Panel Corner Radius", "Độ bo góc bảng"), "bubble_bg_radius", 100, 40));
 
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setPadding(0, 20, 0, 0);
+        
+        Button btnDtap = new Button(this);
+        btnDtap.setText("⚙️ CẤU HÌNH 2 CHẠM");
+        btnDtap.setBackground(getRounded("#00E5FF", 20f));
+        btnDtap.setTextColor(Color.BLACK);
+        btnDtap.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        btnDtap.setOnClickListener(v -> openBubbleGestureEditor());
+        
+        Button btnLong = new Button(this);
+        btnLong.setText("⚙️ CẤU HÌNH NHẤN GIỮ");
+        btnLong.setBackground(getRounded("#FFC107", 20f));
+        btnLong.setTextColor(Color.BLACK);
+        LinearLayout.LayoutParams lllp = new LinearLayout.LayoutParams(0, -2, 1f);
+        lllp.setMargins(20, 0, 0, 0);
+        btnLong.setLayoutParams(lllp);
+        btnLong.setOnClickListener(v -> openBubbleGestureEditor());
+        
+        btnRow.addView(btnDtap); btnRow.addView(btnLong);
+        designSliderContainer.addView(btnRow);
+
+        // --- YÊU CẦU: CHO PHÉP CHỌN CUSTOM ICON CHO 8 NÚT TRÊN PANEL ---
+        designSliderContainer.addView(createSectionTitle("🎨 CUSTOM ICON CHO 8 NÚT BUBBLE PANEL"));
+        LinearLayout iconGrid = new LinearLayout(this);
+        iconGrid.setOrientation(LinearLayout.VERTICAL);
+        iconGrid.setPadding(0, 10, 0, 20);
+        for (int i = 0; i < 2; i++) {
+            LinearLayout rowIcon = new LinearLayout(this);
+            rowIcon.setOrientation(LinearLayout.HORIZONTAL);
+            rowIcon.setGravity(Gravity.CENTER);
+            for (int j = 0; j < 4; j++) {
+                int idx = i * 4 + j;
+                Button btnIcon = new Button(this);
+                btnIcon.setText("NÚT " + (idx + 1));
+                btnIcon.setBackground(getRounded("#444444", 20f));
+                btnIcon.setTextColor(Color.WHITE);
+                btnIcon.setTextSize(11f);
+                LinearLayout.LayoutParams lpBtn = new LinearLayout.LayoutParams(0, -2, 1f);
+                lpBtn.setMargins(8, 8, 8, 8);
+                btnIcon.setLayoutParams(lpBtn);
+                btnIcon.setOnClickListener(v -> {
+                    showIconPickerDialog("bubble_node_icon_" + idx, () -> {
+                        Toast.makeText(this, "Đã đổi Icon Nút " + (idx + 1), Toast.LENGTH_SHORT).show();
+                        sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
+                    });
+                });
+                rowIcon.addView(btnIcon);
+            }
+            iconGrid.addView(rowIcon);
+        }
+        designSliderContainer.addView(iconGrid);
+
         TextView tvNote = new TextView(this);
         tvNote.setText(T("1 Tap always opens the panel. Long-press a panel node to select, tap another to swap positions.",
-            "1 Chạm luôn mở bảng. Nhấn giữ 1 nút trên bảng để chọn, chạm nút khác để hoán đổi vị trí. Cử chỉ 2 Chạm & Nhấn Giữ cho bong bóng cấu hình ở thanh FAB bên dưới."));
+            "1 Chạm luôn mở bảng. Nhấn giữ 1 nút trên bảng để chọn, chạm nút khác để hoán đổi vị trí. Cử chỉ 2 Chạm & Nhấn Giữ cấu hình ở thanh FAB."));
         tvNote.setTextColor(Color.parseColor("#9AA0A6"));
         tvNote.setTextSize(12f);
         tvNote.setPadding(0, 20, 0, 0);
