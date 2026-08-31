@@ -25,7 +25,7 @@ public class AssistiveBubbleEngine {
     private Integer selectedIdx = null;
     private static final String[] DEFAULT_ORDER = {"APP","SHORTCUT","SYSTEM","INTENT","MACRO","PANEL","UTILITY","TRIGGER"};
     
-    // Các biến phục vụ Animation và lưu vị trí
+    // Lưu trữ vị trí Bong Bóng
     private int restoreBubbleX = -1, restoreBubbleY = -1;
     private ValueAnimator jumpAnim;
 
@@ -35,6 +35,9 @@ public class AssistiveBubbleEngine {
     private boolean isHolding = false;
     private final Handler tapHandler = new Handler(Looper.getMainLooper());
     private Runnable pendingTapRunnable = null;
+    
+    // Gia tốc kế đo lực vuốt (ném bong bóng)
+    private VelocityTracker velocityTracker;
 
     public AssistiveBubbleEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode) {
         this.ctx = ctx; this.wm = wm; this.prefs = prefs; this.isAnyMode = isAnyMode;
@@ -113,17 +116,20 @@ public class AssistiveBubbleEngine {
             
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    if (velocityTracker == null) velocityTracker = VelocityTracker.obtain();
+                    else velocityTracker.clear();
+                    velocityTracker.addMovement(e);
+
                     downRaw[0] = e.getRawX() - bubbleLp.x; 
                     downRaw[1] = e.getRawY() - bubbleLp.y;
                     isDragging[0] = false;
-                    
-                    // Phóng to nhẹ khi chạm vào (mượt)
-                    bubbleView.animate().scaleX(1.05f).scaleY(1.05f).setDuration(150).start();
                     return true;
+                    
                 case MotionEvent.ACTION_MOVE:
+                    if (velocityTracker != null) velocityTracker.addMovement(e);
+                    
                     float newX = e.getRawX() - downRaw[0];
                     float newY = e.getRawY() - downRaw[1];
-                    // Giảm slop xuống 8px để kéo siêu nhạy, dính tay ngay lập tức như Mes
                     if (!isDragging[0] && (Math.abs(newX - bubbleLp.x) > 8 || Math.abs(newY - bubbleLp.y) > 8)) {
                         isDragging[0] = true;
                     }
@@ -133,21 +139,36 @@ public class AssistiveBubbleEngine {
                         try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
                     }
                     return true;
+                    
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
-                    bubbleView.animate().scaleX(1f).scaleY(1f).setDuration(150).start();
-                    
                     if (isDragging[0]) {
+                        float vX = 0, vY = 0;
+                        if (velocityTracker != null) {
+                            velocityTracker.addMovement(e);
+                            velocityTracker.computeCurrentVelocity(1000);
+                            vX = velocityTracker.getXVelocity();
+                            vY = velocityTracker.getYVelocity();
+                            velocityTracker.recycle();
+                            velocityTracker = null;
+                        }
+
                         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
                         int bSize = prefs.getInt("bubble_size", 120);
                         
-                        // YÊU CẦU: Tự hút về sát cạnh trái/phải màn hình, cách lề MARGIN
-                        int targetX = (bubbleLp.x + bSize / 2 < dm.widthPixels / 2) ? MARGIN : dm.widthPixels - bSize - MARGIN;
-                        int targetY = Math.max(MARGIN, Math.min(bubbleLp.y, dm.heightPixels - bSize - MARGIN));
+                        // YÊU CẦU: Thuật toán ném (Fling) hoặc Snap
+                        int targetX;
+                        if (vX > 1500) targetX = dm.widthPixels - bSize - MARGIN; // Ném mạnh sang phải
+                        else if (vX < -1500) targetX = MARGIN; // Ném mạnh sang trái
+                        else targetX = (bubbleLp.x + bSize / 2 < dm.widthPixels / 2) ? MARGIN : dm.widthPixels - bSize - MARGIN;
+                        
+                        // Trôi thêm 1 xíu theo lực ném dọc cho mượt
+                        int targetY = bubbleLp.y + (int) (vY * 0.12f);
+                        targetY = Math.max(MARGIN, Math.min(targetY, dm.heightPixels - bSize - MARGIN));
                         
                         ValueAnimator snapAnim = ValueAnimator.ofFloat(0f, 1f);
-                        snapAnim.setDuration(400); // Mượt và có độ nảy
-                        snapAnim.setInterpolator(new OvershootInterpolator(0.85f)); // Hiệu ứng lò xo (Spring-like)
+                        snapAnim.setDuration(400); 
+                        snapAnim.setInterpolator(new OvershootInterpolator(0.9f)); 
                         int startX = bubbleLp.x; int startY = bubbleLp.y;
                         snapAnim.addUpdateListener(a -> {
                             float val = (float) a.getAnimatedValue();
@@ -208,12 +229,16 @@ public class AssistiveBubbleEngine {
     private void moveToCenterAndOpenMenu() {
         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
         int bSize = prefs.getInt("bubble_size", 120);
-        int targetX = dm.widthPixels / 2 - bSize / 2; // Đường chia 2 nửa
+        int targetX = dm.widthPixels / 2 - bSize / 2; 
         
+        // CỐ ĐỊNH vị trí gốc TẠI ĐÂY trước khi nó bị anim trôi đi
+        restoreBubbleX = bubbleLp.x; 
+        restoreBubbleY = bubbleLp.y;
+
         int startX = bubbleLp.x;
         
         ValueAnimator centerAnim = ValueAnimator.ofFloat(0f, 1f);
-        centerAnim.setDuration(300); // Trượt êm, không giật
+        centerAnim.setDuration(250); 
         centerAnim.setInterpolator(new DecelerateInterpolator(1.5f)); 
         centerAnim.addUpdateListener(a -> {
             float val = (float) a.getAnimatedValue();
@@ -222,7 +247,7 @@ public class AssistiveBubbleEngine {
         });
         centerAnim.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
-                openMenu(); // Mở panel
+                openMenu(); 
             }
         });
         centerAnim.start();
@@ -233,7 +258,6 @@ public class AssistiveBubbleEngine {
     private void openMenu() {
         if (menuOverlay != null) return;
         selectedIdx = null;
-        restoreBubbleX = bubbleLp.x; restoreBubbleY = bubbleLp.y;
 
         FrameLayout overlay = new FrameLayout(ctx) {
             @Override
@@ -254,22 +278,7 @@ public class AssistiveBubbleEngine {
             PixelFormat.TRANSLUCENT);
         
         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        int bSize = prefs.getInt("bubble_size", 120);
-        int pw = menuLp.width;
-        int ph = prefs.getInt("bubble_bg_h", 800); 
-        int margin = 40; 
-        int gap = 35; // YÊU CẦU 1: Cân đối lại khoảng cách (nhích ra xa thêm xíu)
-
-        // Panel luôn cân giữa X
-        menuLp.x = dm.widthPixels / 2 - pw / 2; 
-        
-        // YÊU CẦU: Căn Y, Panel luôn ưu tiên mở bên DƯỚI bong bóng
-        int targetY = bubbleLp.y + bSize + gap;
-        // Nếu mở bên dưới bị cắn viền đáy thì đổi hướng mở LÊN TRÊN bong bóng
-        if (targetY + ph > dm.heightPixels - margin) { 
-            targetY = bubbleLp.y - ph - gap;
-        }
-        menuLp.y = Math.max(margin, targetY);
+        menuLp.x = dm.widthPixels / 2 - menuLp.width / 2; 
         menuLp.gravity = Gravity.TOP | Gravity.LEFT;
 
         overlay.setOnTouchListener((v, event) -> {
@@ -279,6 +288,8 @@ public class AssistiveBubbleEngine {
 
         panelCard = buildPanelCard();
         panelCard.setOnClickListener(v -> {}); 
+        
+        recalculateMenuPosition(); // Đo đạc chính xác chiều cao thực để gán vị trí Y
         
         panelCard.setAlpha(0f);
         panelCard.setScaleX(0.85f);
@@ -290,11 +301,36 @@ public class AssistiveBubbleEngine {
         try { wm.addView(overlay, menuLp); menuOverlay = overlay; } catch (Exception e) { return; }
     }
 
+    private void recalculateMenuPosition() {
+        if (panelCard == null || menuLp == null) return;
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        int bSize = prefs.getInt("bubble_size", 120);
+        int margin = 40; 
+        int gap = 45; 
+
+        // Đo chiều cao thực tế của giao diện Panel hiện tại
+        panelCard.measure(
+            View.MeasureSpec.makeMeasureSpec(menuLp.width, View.MeasureSpec.EXACTLY), 
+            View.MeasureSpec.makeMeasureSpec(dm.heightPixels, View.MeasureSpec.AT_MOST)
+        );
+        int actualPh = panelCard.getMeasuredHeight();
+
+        // Mặc định ưu tiên mở bên dưới bong bóng
+        int targetY = bubbleLp.y + bSize + gap;
+        // Nếu cắn đáy, đẩy ngược LÊN TRÊN bong bóng đúng bằng chiều cao thực tế vừa đo
+        if (targetY + actualPh > dm.heightPixels - margin) { 
+            targetY = bubbleLp.y - actualPh - gap;
+        }
+        menuLp.y = Math.max(margin, targetY);
+        
+        if (menuOverlay != null && menuOverlay.isAttachedToWindow()) {
+            try { wm.updateViewLayout(menuOverlay, menuLp); } catch (Exception ignored) {}
+        }
+    }
     private void closeMenu() {
         if (menuOverlay != null) { try { wm.removeView(menuOverlay); } catch (Exception ignored) {} menuOverlay = null; }
         selectedIdx = null;
         
-        // YÊU CẦU: Tự động chạy về vị trí cũ ở sát viền sau khi Panel được đóng
         if (jumpAnim != null) jumpAnim.cancel();
         if (restoreBubbleX != -1 && restoreBubbleY != -1) {
             jumpAnim = ValueAnimator.ofFloat(0f, 1f);
@@ -331,13 +367,18 @@ public class AssistiveBubbleEngine {
         card.addView(buildNodeRow(0, 1, 2));
         card.addView(buildNodeRow(3, 4, 5));
         
+        // Hàng 3 cấu trúc rời rạc
         LinearLayout row3 = new LinearLayout(ctx);
         row3.setOrientation(LinearLayout.HORIZONTAL);
         row3.setWeightSum(4f); 
         
-        row3.addView(buildNodeButton(6, false, 0));
-        row3.addView(buildSearchBar(1f));
-        row3.addView(buildNodeButton(7, false, 0));
+        LinearLayout.LayoutParams r3Lp = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
+        r3Lp.setMargins(0, 15, 0, 0);
+        row3.setLayoutParams(r3Lp);
+        
+        row3.addView(buildNodeButton(6, true, 1f));
+        row3.addView(buildSearchBar(2f));
+        row3.addView(buildNodeButton(7, true, 1f));
         card.addView(row3);
         
         return card;
@@ -356,8 +397,7 @@ public class AssistiveBubbleEngine {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
             weight == 0 ? LinearLayout.LayoutParams.WRAP_CONTENT : 0, 
             LinearLayout.LayoutParams.WRAP_CONTENT, weight);
-        if (forceBg) lp.setMargins(15, 15, 15, 15);
-        else lp.setMargins(10, 10, 10, 10);
+        lp.setMargins(10, 10, 10, 10);
         box.setLayoutParams(lp);
 
         String type = getOrder().get(idx);
@@ -387,7 +427,8 @@ public class AssistiveBubbleEngine {
 
         if (forceBg || (selectedIdx != null && selectedIdx == idx)) {
             GradientDrawable boxBg = new GradientDrawable();
-            boxBg.setCornerRadius(36f); // System App Icon Shape
+            // Nút 6, 7 tròn vo (100f), nút 0-5 hình vuông bo cạnh (36f)
+            boxBg.setCornerRadius(idx >= 6 ? 100f : 36f);
             boxBg.setColor(selectedIdx != null && selectedIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#33000000"));
             box.setBackground(boxBg);
         }
@@ -420,9 +461,10 @@ public class AssistiveBubbleEngine {
             row3.addView(buildSearchBar(1f));
             row3.addView(buildNodeButton(7, false, 0));
             panelCard.addView(row3);
+
+            recalculateMenuPosition(); // Tính toán và gán lại vị trí Y
         }
     }
-
     private void onNodeClick(int idx) {
         if (selectedIdx != null) {
             if (selectedIdx != idx) {
@@ -439,15 +481,18 @@ public class AssistiveBubbleEngine {
 
     private EditText buildSearchBar(float weight) {
         EditText et = new EditText(ctx);
-        et.setHint("🔍 Tìm kiếm...");
+        et.setHint("🔍 Tìm ứng dụng…");
         et.setHintTextColor(Color.parseColor("#9AA0A6"));
         et.setTextColor(Color.WHITE);
         et.setSingleLine(true);
-        et.setBackgroundColor(Color.TRANSPARENT);
-        et.setPadding(20, 14, 20, 14);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#33000000"));
+        bg.setCornerRadius(100f);
+        et.setBackground(bg);
+        et.setPadding(28, 14, 28, 14);
         
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, weight);
-        lp.setMargins(0, 5, 0, 5);
+        lp.setMargins(10, 10, 10, 10);
         et.setLayoutParams(lp);
         
         et.addTextChangedListener(new android.text.TextWatcher() {
@@ -467,10 +512,6 @@ public class AssistiveBubbleEngine {
         
         LinearLayout searchRow = new LinearLayout(ctx);
         searchRow.setOrientation(LinearLayout.HORIZONTAL);
-        GradientDrawable fabBg = new GradientDrawable();
-        fabBg.setColor(Color.parseColor("#33000000"));
-        fabBg.setCornerRadius(100f);
-        searchRow.setBackground(fabBg);
         searchRow.addView(buildSearchBar(1f));
         panelCard.addView(searchRow);
 
@@ -514,11 +555,6 @@ public class AssistiveBubbleEngine {
                     Drawable d = pm.getActivityIcon(new ComponentName(split[0], split[1]));
                     iv.setImageDrawable(d);
                 } catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
-            } else if (item[1].startsWith("act:RUN_SHORTCUT_")) {
-                String scId = item[1].substring("act:RUN_SHORTCUT_".length());
-                String path = prefs.getString("shortcut_" + scId + "_icon_path", "");
-                if (!path.isEmpty()) iv.setImageBitmap(BitmapFactory.decodeFile(path));
-                else iv.setImageResource(android.R.drawable.ic_menu_send);
             } else {
                 iv.setImageResource(android.R.drawable.ic_menu_view);
                 iv.setColorFilter(Color.WHITE);
@@ -534,11 +570,20 @@ public class AssistiveBubbleEngine {
         }
         scroll.addView(list);
         
+        // Đo chiều cao thực của List để không giãn quá chiều cao Max
         int maxHeight = prefs.getInt("bubble_bg_h", 800);
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, maxHeight);
+        list.measure(
+            View.MeasureSpec.makeMeasureSpec(menuLp.width, View.MeasureSpec.EXACTLY), 
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        );
+        int listHeight = list.getMeasuredHeight();
+        int finalHeight = Math.min(listHeight + 30, maxHeight); // Cộng thêm padding bù trừ
+        
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, finalHeight);
         panelCard.addView(scroll, slp);
-    }
 
+        recalculateMenuPosition(); // Tính toán và gán lại vị trí Y
+    }
     private List<String[]> buildItems(String type) {
         List<String[]> out = new ArrayList<>();
         switch (type) {
@@ -551,11 +596,10 @@ public class AssistiveBubbleEngine {
                 break;
             }
             case "SHORTCUT": {
+                // Quét Shortcut trong hệ thống thay vì nội bộ
                 for (ResolveInfo ri : ShortcutScanner.getProviders(ctx)) {
                     out.add(new String[]{ri.loadLabel(ctx.getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
                 }
-                for (String id : csv(prefs.getString("shortcut_ids", "")))
-                    out.add(new String[]{"(Đã lưu) " + prefs.getString("shortcut_" + id + "_name", "Shortcut"), "act:RUN_SHORTCUT_" + id});
                 break;
             }
             case "SYSTEM": {
