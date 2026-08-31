@@ -158,13 +158,14 @@ public class AssistiveBubbleEngine {
                         
                         // YÊU CẦU: Thuật toán ném (Fling) hoặc Snap
                         int targetX;
-                        if (vX > 1500) targetX = dm.widthPixels - bSize - MARGIN; // Ném mạnh sang phải
-                        else if (vX < -1500) targetX = MARGIN; // Ném mạnh sang trái
+                        if (vX > 1500) targetX = dm.widthPixels - bSize - MARGIN; 
+                        else if (vX < -1500) targetX = MARGIN; 
                         else targetX = (bubbleLp.x + bSize / 2 < dm.widthPixels / 2) ? MARGIN : dm.widthPixels - bSize - MARGIN;
                         
                         // Trôi thêm 1 xíu theo lực ném dọc cho mượt
-                        int targetY = bubbleLp.y + (int) (vY * 0.12f);
-                        targetY = Math.max(MARGIN, Math.min(targetY, dm.heightPixels - bSize - MARGIN));
+                        int calculatedTargetY = bubbleLp.y + (int) (vY * 0.12f);
+                        final int finalTargetYDrag = Math.max(MARGIN, Math.min(calculatedTargetY, dm.heightPixels - bSize - MARGIN));
+                        final int finalTargetXDrag = targetX;
                         
                         ValueAnimator snapAnim = ValueAnimator.ofFloat(0f, 1f);
                         snapAnim.setDuration(400); 
@@ -172,8 +173,8 @@ public class AssistiveBubbleEngine {
                         int startX = bubbleLp.x; int startY = bubbleLp.y;
                         snapAnim.addUpdateListener(a -> {
                             float val = (float) a.getAnimatedValue();
-                            bubbleLp.x = (int) (startX + (targetX - startX) * val);
-                            bubbleLp.y = (int) (startY + (targetY - startY) * val);
+                            bubbleLp.x = (int) (startX + (finalTargetXDrag - startX) * val);
+                            bubbleLp.y = (int) (startY + (finalTargetYDrag - startY) * val);
                             try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
                         });
                         snapAnim.addListener(new AnimatorListenerAdapter() {
@@ -315,13 +316,16 @@ public class AssistiveBubbleEngine {
         );
         int actualPh = panelCard.getMeasuredHeight();
 
-        // Mặc định ưu tiên mở bên dưới bong bóng
-        int targetY = bubbleLp.y + bSize + gap;
-        // Nếu cắn đáy, đẩy ngược LÊN TRÊN bong bóng đúng bằng chiều cao thực tế vừa đo
-        if (targetY + actualPh > dm.heightPixels - margin) { 
-            targetY = bubbleLp.y - actualPh - gap;
+        // Tính toán vị trí Y
+        int calculatedTargetY = bubbleLp.y + bSize + gap;
+        if (calculatedTargetY + actualPh > dm.heightPixels - margin) { 
+            calculatedTargetY = bubbleLp.y - actualPh - gap;
         }
-        menuLp.y = Math.max(margin, targetY);
+        
+        // Gán vào biến final để dùng an toàn trong lambda (Fix lỗi biên dịch)
+        final int finalTargetY = Math.max(margin, calculatedTargetY);
+        
+        menuLp.y = finalTargetY;
         
         if (menuOverlay != null && menuOverlay.isAttachedToWindow()) {
             try { wm.updateViewLayout(menuOverlay, menuLp); } catch (Exception ignored) {}
