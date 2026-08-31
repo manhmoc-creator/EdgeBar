@@ -13,15 +13,35 @@ public class AccessibleHomeService extends Service {
     public static boolean isRunning = false;
 
     @Override
-        public void onCreate() {
-            super.onCreate();
-            // [TỐI ƯU PIXEL 2XL] Đã xóa bỏ hoàn toàn Notification "Động cơ Trợ năng".
-            // Zero-RAM overhead: Không khởi tạo NotificationChannel và Builder vô ích.
-            // Để service không bị OOM Killer dọn dẹp, ta sẽ dựa vào cờ đặc quyền của
-            // AccessibilityService (EdgeBarService) để kéo nó sống cùng.
+    public void onCreate() {
+        super.onCreate();
+        // [FIX] BẮT BUỘC gọi startForeground() vì service này được khởi động bằng
+        // startForegroundService() (QsAccHomeTile, HomaccWatchdogReceiver) và Manifest
+        // đã khai báo foregroundServiceType="specialUse". Không gọi trong 5s sẽ khiến
+        // hệ thống crash TOÀN BỘ tiến trình app (kéo cả EdgeBarService/overlay theo).
+        // Ngoài ra, nếu KHÔNG phải Foreground Service thật, Android sẽ tự dừng service
+        // này sau một khoảng chạy nền (Background Execution Limits) — đây chính là
+        // nguyên nhân Homacc "biến mất tự nhiên" dù không có thao tác gì.
+        String cid = "eb_acc_home_engine";
+        NotificationChannel c = new NotificationChannel(cid, "Homacc Engine", NotificationManager.IMPORTANCE_MIN);
+        c.setSound(null, null);
+        c.enableLights(false);
+        c.enableVibration(false);
+        c.setShowBadge(false);
+        getSystemService(NotificationManager.class).createNotificationChannel(c);
+        Notification n = new Notification.Builder(this, cid)
+                .setContentTitle("Homacc")
+                .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
+                .setOngoing(true)
+                .setPriority(Notification.PRIORITY_MIN)
+                .build();
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(98, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        } else {
+            startForeground(98, n);
+        }
 scheduleWatchdog();
     }
-
     private void scheduleWatchdog() {
         android.app.AlarmManager am =
             (android.app.AlarmManager) getSystemService(ALARM_SERVICE);
@@ -31,8 +51,8 @@ scheduleWatchdog();
             android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
         // inexact = OS tự gộp cùng các báo thức khác của hệ thống → tiết kiệm pin,
         // sai số vài phút không ảnh hưởng vì mục đích chỉ là "tự phục hồi", không cần chính xác
-        am.setInexactRepeating(android.app.AlarmManager.ELAPSED_REALTIME,
-            android.os.SystemClock.elapsedRealtime() + 5*60*1000, 5*60*1000, pi);
+                am.setInexactRepeating(android.app.AlarmManager.ELAPSED_REALTIME,
+            android.os.SystemClock.elapsedRealtime() + 60*1000, 60*1000, pi);
     }
 @Override
 public int onStartCommand(Intent intent, int flags, int startId) {
