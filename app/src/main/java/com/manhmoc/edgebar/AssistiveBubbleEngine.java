@@ -22,7 +22,7 @@ public class AssistiveBubbleEngine {
     private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
     private LinearLayout panelCard;
     
-    private final FrameLayout[] mainNodes = new FrameLayout[9];
+    private final FrameLayout[] nodeButtons = new FrameLayout[9];
     private Integer selectedMainIdx = null;
     private Integer selectedSubIdx = null;
     private String currentSubmenu = null; // Null = Màn chính, khác Null = Màn con

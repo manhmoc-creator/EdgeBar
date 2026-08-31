@@ -6392,7 +6392,7 @@ private void showBubbleNodePicker(String type) {
                     } else if (item[1].startsWith("act:CREATE_SHORTCUT_")) {
                         try {
                             String[] split = item[1].substring(20).split("/");
-                            Drawable d = getPackageManager().getActivityIcon(new ComponentName(split[0], split[1]));
+                            android.graphics.drawable.Drawable d = getPackageManager().getActivityIcon(new ComponentName(split[0], split[1]));
                             iv.setImageDrawable(d);
                         } catch (Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
                     }
