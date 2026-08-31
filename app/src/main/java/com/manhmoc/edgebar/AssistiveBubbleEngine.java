@@ -21,11 +21,12 @@ public class AssistiveBubbleEngine {
     private View bubbleView; private WindowManager.LayoutParams bubbleLp;
     private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
     private LinearLayout panelCard;
-    private final LinearLayout[] nodeButtons = new LinearLayout[9];
-    private Integer selectedIdx = null;
-    private String currentSubmenu = null; // Null = lưới 9 nút, có giá trị = đang trong list
     
-    // Mảng 9 nút mặc định
+    private final FrameLayout[] mainNodes = new FrameLayout[9];
+    private Integer selectedMainIdx = null;
+    private Integer selectedSubIdx = null;
+    private String currentSubmenu = null; // Null = Màn chính, khác Null = Màn con
+    
     private static final String[] DEFAULT_ORDER = {"APP","SHORTCUT","SYSTEM","INTENT","MACRO","PANEL","UTILITY","TRIGGER","SEARCH"};
     
     private int restoreBubbleX = -1, restoreBubbleY = -1;
@@ -59,9 +60,8 @@ public class AssistiveBubbleEngine {
         if (bubbleView != null) { try { wm.removeView(bubbleView); } catch (Exception ignored) {} bubbleView = null; }
     }
 
-    private Drawable getCustomMainIcon() {
-        String ref = prefs.getString("bubble_main_icon", "");
-        if (ref.isEmpty()) return null;
+    private Drawable getCustomIcon(String ref) {
+        if (ref == null || ref.isEmpty()) return null;
         try {
             if (ref.startsWith("app:")) return ctx.getPackageManager().getApplicationIcon(ref.substring(4));
             if (ref.startsWith("poolc:")) {
@@ -82,7 +82,7 @@ public class AssistiveBubbleEngine {
         ImageView iv = new ImageView(ctx);
         int size = prefs.getInt("bubble_size", 120);
         
-        Drawable customIcon = getCustomMainIcon();
+        Drawable customIcon = getCustomIcon(prefs.getString("bubble_main_icon", ""));
         if (customIcon != null) {
             Bitmap norm = PanelEngine.normalizeIconBitmap(customIcon.mutate(), size, 0.7f);
             if (norm != null) iv.setImageBitmap(norm);
@@ -120,11 +120,11 @@ public class AssistiveBubbleEngine {
         gestureDetector = new GestureDetector(ctx, new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onSingleTapConfirmed(MotionEvent e) {
-                // Nếu Panel đang mở, Tap vào bong bóng sẽ đóng Panel hoặc Quay lại
+                // YÊU CẦU 3: Cơ chế TAP Back/Đóng
                 if (menuOverlay != null) {
                     if (currentSubmenu != null) {
-                        currentSubmenu = null;
-                        refreshPanelCard(); // Quay lại lưới 9 nút
+                        currentSubmenu = null; // Back ra 9 nút chính
+                        refreshPanelCard();
                     } else {
                         closeMenu(); // Đóng hẳn Panel
                     }
@@ -143,15 +143,12 @@ public class AssistiveBubbleEngine {
                     if (velocityTracker == null) velocityTracker = VelocityTracker.obtain();
                     else velocityTracker.clear();
                     velocityTracker.addMovement(e);
-
                     downRaw[0] = e.getRawX() - bubbleLp.x; 
                     downRaw[1] = e.getRawY() - bubbleLp.y;
                     isDragging[0] = false;
                     return true;
-                    
                 case MotionEvent.ACTION_MOVE:
                     if (velocityTracker != null) velocityTracker.addMovement(e);
-                    
                     float newX = e.getRawX() - downRaw[0];
                     float newY = e.getRawY() - downRaw[1];
                     if (!isDragging[0] && (Math.abs(newX - bubbleLp.x) > 8 || Math.abs(newY - bubbleLp.y) > 8)) {
@@ -163,7 +160,6 @@ public class AssistiveBubbleEngine {
                         try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
                     }
                     return true;
-                    
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     if (isDragging[0]) {
@@ -237,27 +233,21 @@ public class AssistiveBubbleEngine {
 
     private void openMenu() {
         if (menuOverlay != null) return;
-        selectedIdx = null;
-        currentSubmenu = null;
+        selectedMainIdx = null; selectedSubIdx = null; currentSubmenu = null;
 
         FrameLayout overlay = new FrameLayout(ctx) {
             @Override
             public boolean dispatchKeyEvent(KeyEvent event) {
                 if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
-                    if (currentSubmenu != null) {
-                        currentSubmenu = null;
-                        refreshPanelCard();
-                    } else {
-                        closeMenu(); 
-                    }
+                    if (currentSubmenu != null) { currentSubmenu = null; refreshPanelCard(); } 
+                    else closeMenu(); 
                     return true;
                 }
                 return super.dispatchKeyEvent(event);
             }
         };
-        
-        // Không dùng FLAG_NOT_FOCUSABLE để Gboard có thể hiện ra
         int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+        
         menuLp = new WindowManager.LayoutParams(
             prefs.getInt("bubble_bg_w", 800), WindowManager.LayoutParams.WRAP_CONTENT, wmType,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
@@ -279,9 +269,7 @@ public class AssistiveBubbleEngine {
         
         recalculateMenuPosition(); 
         
-        panelCard.setAlpha(0f);
-        panelCard.setScaleX(0.85f);
-        panelCard.setScaleY(0.85f);
+        panelCard.setAlpha(0f); panelCard.setScaleX(0.85f); panelCard.setScaleY(0.85f);
         panelCard.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(220).setInterpolator(new OvershootInterpolator(1.1f)).start();
 
         FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT);
@@ -317,13 +305,12 @@ public class AssistiveBubbleEngine {
 
     private void closeMenu() {
         if (menuOverlay != null) { try { wm.removeView(menuOverlay); } catch (Exception ignored) {} menuOverlay = null; }
-        selectedIdx = null;
-        currentSubmenu = null;
+        selectedMainIdx = null; selectedSubIdx = null; currentSubmenu = null;
         
         if (jumpAnim != null) jumpAnim.cancel();
         if (restoreBubbleX != -1 && restoreBubbleY != -1) {
             jumpAnim = ValueAnimator.ofFloat(0f, 1f);
-            jumpAnim.setDuration(350);
+            jumpAnim.setDuration(250);
             jumpAnim.setInterpolator(new OvershootInterpolator(0.85f));
             int currentX = bubbleLp.x; int currentY = bubbleLp.y;
             jumpAnim.addUpdateListener(a -> {
@@ -336,7 +323,7 @@ public class AssistiveBubbleEngine {
         }
     }
 
-    private List<String> getOrder() {
+    private List<String> getMainOrder() {
         String csv = prefs.getString("bubble_node_order", "");
         List<String> out = new ArrayList<>();
         if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
@@ -344,92 +331,78 @@ public class AssistiveBubbleEngine {
         return out;
     }
 
-    private LinearLayout buildPanelCard() {
-        LinearLayout card = new LinearLayout(ctx);
-        card.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 160), 0, 0, 0)); // Nền đen tuyền
-        bg.setCornerRadius(prefs.getInt("bubble_bg_radius", 40));
-        card.setBackground(bg);
-        card.setPadding(20, 30, 20, 30);
-
-        // 3 Hàng, mỗi hàng 3 nút (Quick Settings Style)
-        card.addView(buildNodeRow(0, 1, 2));
-        card.addView(buildNodeRow(3, 4, 5));
-        card.addView(buildNodeRow(6, 7, 8));
-        
-        return card;
-    }
-
-    private LinearLayout buildNodeRow(int... idxs) {
-        LinearLayout row = new LinearLayout(ctx);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setWeightSum(idxs.length);
-        for (int idx : idxs) row.addView(buildNodeButton(idx));
-        return row;
-    }
-
-    private Drawable resolveCustomIcon(String ref) {
-        if (ref == null || ref.isEmpty()) return null;
-        try {
-            if (ref.startsWith("app:")) return ctx.getPackageManager().getApplicationIcon(ref.substring(4));
-            if (ref.startsWith("poolc:")) {
-                int[] pool = PanelEngine.getCustomIconPool(ctx);
-                int idx = Integer.parseInt(ref.substring(6));
-                if (idx >= 0 && idx < pool.length) return ctx.getDrawable(pool[idx]);
-            }
-            if (ref.startsWith("pool:")) {
-                int idx = Integer.parseInt(ref.substring(5));
-                if (idx >= 0 && idx < PanelEngine.SYSTEM_ICON_POOL.length) return ctx.getDrawable(PanelEngine.SYSTEM_ICON_POOL[idx]);
-            }
-        } catch (Exception ignored) {}
-        return null;
+    private List<String> getSubItems(String type) {
+        String csv = prefs.getString("bubble_node_items_" + type, "");
+        List<String> out = new ArrayList<>();
+        if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
+        while (out.size() < 9) out.add(""); // Luôn fill đủ 9 chỗ
+        return out;
     }
 
     private String getLabelForType(String type) {
         switch (type) {
-            case "APP": return "Apps";
-            case "SHORTCUT": return "Shortcut";
-            case "SYSTEM": return "System";
-            case "UTILITY": return "Utility";
-            case "TRIGGER": return "Trigger";
-            case "INTENT": return "Intent";
-            case "MACRO": return "Macro";
-            case "PANEL": return "Panel";
-            case "SEARCH": return "Search";
+            case "APP": return "Apps"; case "SHORTCUT": return "Shortcut"; case "SYSTEM": return "System";
+            case "UTILITY": return "Utility"; case "TRIGGER": return "Trigger"; case "INTENT": return "Intent";
+            case "MACRO": return "Macro"; case "PANEL": return "Panel"; case "SEARCH": return "Search";
             default: return "Node";
         }
     }
 
-    private LinearLayout buildNodeButton(int idx) {
-        LinearLayout box = new LinearLayout(ctx);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setGravity(Gravity.CENTER);
+    private LinearLayout buildPanelCard() {
+        LinearLayout card = new LinearLayout(ctx);
+        card.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 160), 0, 0, 0));
+        bg.setCornerRadius(prefs.getInt("bubble_bg_radius", 40));
+        card.setBackground(bg);
+        card.setPadding(20, 30, 20, 30);
+
+        if (currentSubmenu != null) {
+            if (currentSubmenu.equals("SEARCH")) buildSearchMenu(card);
+            else buildSubmenuGrid(card, currentSubmenu);
+        } else {
+            // Lưới 9 Nút Chính
+            for (int i = 0; i < 3; i++) {
+                LinearLayout row = new LinearLayout(ctx);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setWeightSum(3);
+                for (int j = 0; j < 3; j++) {
+                    int idx = i * 3 + j;
+                    row.addView(buildMainButton(idx));
+                }
+                card.addView(row);
+            }
+        }
+        return card;
+    }
+
+    private FrameLayout buildMainButton(int idx) {
+        FrameLayout box = new FrameLayout(ctx);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         lp.setMargins(10, 15, 10, 15);
         box.setLayoutParams(lp);
 
-        String type = getOrder().get(idx);
+        String type = getMainOrder().get(idx);
+        LinearLayout content = new LinearLayout(ctx);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setGravity(Gravity.CENTER);
         
-        // Vùng chứa Icon (Hình tròn)
         FrameLayout iconBox = new FrameLayout(ctx);
         int iconSize = prefs.getInt("bubble_icon_size", 100);
         LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
         iconBox.setLayoutParams(ibLp);
         
         GradientDrawable boxBg = new GradientDrawable();
-        boxBg.setCornerRadius(100f); // Luôn tròn xoe
-        boxBg.setColor(selectedIdx != null && selectedIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#1AFFFFFF"));
+        boxBg.setCornerRadius(100f); 
+        boxBg.setColor(selectedMainIdx != null && selectedMainIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#33000000"));
         iconBox.setBackground(boxBg);
 
         ImageView iv = new ImageView(ctx);
         FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
         iv.setLayoutParams(ivLp);
         
-        Drawable d = null;
-        String customIcon = prefs.getString("bubble_node_icon_" + type, "");
-        if (!customIcon.isEmpty()) d = resolveCustomIcon(customIcon);
-        
+        // YÊU CẦU 5: Lấy Icon Custom lưu theo Tên chức năng (TYPE) thay vì số Index
+        Drawable d = getCustomIcon(prefs.getString("bubble_node_icon_" + type, ""));
         if (d == null) {
             try {
                 if (type.equals("SYSTEM")) d = ctx.getDrawable(android.R.drawable.ic_menu_preferences);
@@ -442,7 +415,6 @@ public class AssistiveBubbleEngine {
                 else d = ctx.getDrawable(android.R.drawable.ic_menu_view); 
             } catch (Exception ignored) {}
         }
-            
         if (d != null) {
             d = d.mutate(); d.setTint(Color.WHITE);
             Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
@@ -451,7 +423,6 @@ public class AssistiveBubbleEngine {
         }
         iconBox.addView(iv);
         
-        // Nhãn văn bản
         TextView tv = new TextView(ctx);
         tv.setText(getLabelForType(type));
         tv.setTextColor(Color.WHITE);
@@ -460,118 +431,190 @@ public class AssistiveBubbleEngine {
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(0, 10, 0, 0);
 
-        box.addView(iconBox);
-        box.addView(tv);
+        content.addView(iconBox); content.addView(tv);
+        box.addView(content);
         nodeButtons[idx] = box;
         
-        box.setOnLongClickListener(v -> { selectedIdx = idx; refreshPanelCard(); return true; });
-        box.setOnClickListener(v -> onNodeClick(idx));
+        box.setOnLongClickListener(v -> { selectedMainIdx = idx; refreshPanelCard(); return true; });
+        box.setOnClickListener(v -> {
+            if (selectedMainIdx != null) {
+                if (selectedMainIdx != idx) {
+                    List<String> order = new ArrayList<>(getMainOrder());
+                    Collections.swap(order, selectedMainIdx, idx);
+                    prefs.edit().putString("bubble_node_order", TextUtils.join(",", order)).apply();
+                }
+                selectedMainIdx = null;
+                refreshPanelCard();
+            } else {
+                currentSubmenu = type;
+                refreshPanelCard();
+            }
+        });
         return box;
     }
 
-    private void refreshPanelCard() {
-        if (panelCard != null) {
-            panelCard.removeAllViews();
-            
-            if (currentSubmenu != null) {
-                // Đang trong list con -> Render List
-                showGridInPlace(currentSubmenu, "");
-            } else {
-                // Đang ở lưới chính -> Render lưới
-                panelCard.addView(buildNodeRow(0, 1, 2));
-                panelCard.addView(buildNodeRow(3, 4, 5));
-                panelCard.addView(buildNodeRow(6, 7, 8));
+    private void buildSubmenuGrid(LinearLayout card, String type) {
+        TextView tvHeader = new TextView(ctx);
+        tvHeader.setText(getLabelForType(type));
+        tvHeader.setTextColor(Color.parseColor("#00E5FF"));
+        tvHeader.setTextSize(16f);
+        tvHeader.setGravity(Gravity.CENTER);
+        tvHeader.setPadding(0, 0, 0, 20);
+        card.addView(tvHeader);
+
+        List<String> items = getSubItems(type);
+        for (int i = 0; i < 3; i++) {
+            LinearLayout row = new LinearLayout(ctx);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setWeightSum(3);
+            for (int j = 0; j < 3; j++) {
+                int idx = i * 3 + j;
+                row.addView(buildSubNodeButton(type, idx, items.get(idx)));
             }
-            recalculateMenuPosition();
+            card.addView(row);
         }
     }
 
-    private void onNodeClick(int idx) {
-        if (selectedIdx != null) {
-            if (selectedIdx != idx) {
-                List<String> order = new ArrayList<>(getOrder());
-                Collections.swap(order, selectedIdx, idx);
-                prefs.edit().putString("bubble_node_order", TextUtils.join(",", order)).apply();
+    private FrameLayout buildSubNodeButton(String type, int idx, String ref) {
+        FrameLayout box = new FrameLayout(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        lp.setMargins(10, 15, 10, 15);
+        box.setLayoutParams(lp);
+
+        LinearLayout content = new LinearLayout(ctx);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setGravity(Gravity.CENTER);
+        
+        FrameLayout iconBox = new FrameLayout(ctx);
+        int iconSize = prefs.getInt("bubble_icon_size", 100);
+        LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
+        iconBox.setLayoutParams(ibLp);
+        
+        GradientDrawable boxBg = new GradientDrawable();
+        boxBg.setCornerRadius(100f); 
+        boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#33000000"));
+        iconBox.setBackground(boxBg);
+
+        if (!ref.isEmpty()) {
+            ImageView iv = new ImageView(ctx);
+            FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
+            iv.setLayoutParams(ivLp);
+            
+            Drawable d = getCustomIcon(prefs.getString("bubble_node_icon_override_" + type + "_" + ref, ""));
+            PackageManager pm = ctx.getPackageManager();
+            if (d == null) {
+                if (ref.startsWith("app:")) {
+                    try { d = pm.getApplicationIcon(ref.substring(4)); } catch(Exception ignored) {}
+                } else if (ref.startsWith("act:RUN_SHORTCUT_")) {
+                    try {
+                        String scId = ref.substring(17);
+                        Intent scIntent = Intent.parseUri(prefs.getString("shortcut_" + scId + "_intent_uri", ""), 0);
+                        ComponentName cn = scIntent.getComponent();
+                        if (cn != null) d = pm.getActivityIcon(cn);
+                    } catch (Exception ignored) {}
+                }
+                if (d == null) d = ctx.getDrawable(android.R.drawable.sym_def_app_icon);
             }
-            selectedIdx = null;
-            refreshPanelCard();
-            return;
+            
+            if (d != null) {
+                if (!ref.startsWith("app:")) { d = d.mutate(); d.setTint(Color.WHITE); }
+                Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
+                if (norm != null) iv.setImageBitmap(norm);
+                else iv.setImageDrawable(d);
+            }
+            iconBox.addView(iv);
         }
         
-        String targetType = getOrder().get(idx);
-        if (targetType.equals("SEARCH")) {
-            currentSubmenu = "ALL"; // Bấm Search thì tìm tất cả
-        } else {
-            currentSubmenu = targetType;
+        TextView tv = new TextView(ctx);
+        String label = "Trống";
+        if (!ref.isEmpty()) {
+            if (ref.startsWith("app:")) {
+                try { label = ctx.getPackageManager().getApplicationLabel(ctx.getPackageManager().getApplicationInfo(ref.substring(4),0)).toString(); }
+                catch (Exception e) { label = "App"; }
+            } else if (ref.startsWith("act:RUN_SHORTCUT_")) {
+                label = prefs.getString("shortcut_" + ref.substring(17) + "_name", "Shortcut");
+            } else {
+                label = "Action";
+            }
         }
-        refreshPanelCard();
+        tv.setText(label);
+        tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.WHITE);
+        tv.setTextSize(11f);
+        tv.setSingleLine(true);
+        tv.setGravity(Gravity.CENTER);
+        tv.setPadding(0, 10, 0, 0);
+
+        content.addView(iconBox); content.addView(tv);
+        box.addView(content);
+        
+        box.setOnLongClickListener(v -> { selectedSubIdx = idx; refreshPanelCard(); return true; });
+        box.setOnClickListener(v -> {
+            if (selectedSubIdx != null) {
+                if (selectedSubIdx != idx) {
+                    List<String> list = getSubItems(type);
+                    Collections.swap(list, selectedSubIdx, idx);
+                    prefs.edit().putString("bubble_node_items_" + type, TextUtils.join(",", list)).apply();
+                }
+                selectedSubIdx = null;
+                refreshPanelCard();
+            } else {
+                if (!ref.isEmpty()) { runItem(ref); closeMenu(); }
+            }
+        });
+        return box;
     }
 
-    private EditText buildSearchBar() {
+    private void buildSearchMenu(LinearLayout card) {
         EditText et = new EditText(ctx);
-        et.setHint("🔍 Nhập để tìm kiếm...");
+        et.setHint("🔍 Tìm kiếm hệ thống...");
         et.setHintTextColor(Color.parseColor("#9AA0A6"));
         et.setTextColor(Color.WHITE);
         et.setSingleLine(true);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.parseColor("#33000000"));
-        bg.setCornerRadius(20f);
+        bg.setCornerRadius(100f);
         et.setBackground(bg);
         et.setPadding(28, 20, 28, 20);
         
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(10, 10, 10, 20);
+        lp.setMargins(0, 0, 0, 15);
         et.setLayoutParams(lp);
-        
-        et.addTextChangedListener(new android.text.TextWatcher() {
-            public void afterTextChanged(android.text.Editable s) {
-                String q = s.toString().trim();
-                showGridListOnly(currentSubmenu != null ? currentSubmenu : "ALL", q);
-            }
-            public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
-            public void onTextChanged(CharSequence s, int a, int b, int c) {}
-        });
-        
-        // Gọi Gboard tự động khi mở Search
-        et.postDelayed(() -> {
-            et.requestFocus();
-            android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) ctx.getSystemService(Context.INPUT_METHOD_SERVICE);
-            if (imm != null) imm.showSoftInput(et, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
-        }, 200);
-        
-        return et;
-    }
-
-    private void showGridInPlace(String type, String query) {
-        if (panelCard == null) return;
-        panelCard.removeAllViews(); 
-        
-        panelCard.addView(buildSearchBar());
+        card.addView(et);
 
         ScrollView scroll = new ScrollView(ctx);
         scroll.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
-        
         LinearLayout listContainer = new LinearLayout(ctx);
         listContainer.setOrientation(LinearLayout.VERTICAL);
-        listContainer.setPadding(10, 10, 10, 10);
         listContainer.setTag("LIST_CONTAINER"); 
         scroll.addView(listContainer);
         
         int maxHeight = prefs.getInt("bubble_bg_h", 800);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, maxHeight);
-        panelCard.addView(scroll, slp);
+        card.addView(scroll, slp);
 
-        showGridListOnly(type, query); 
+        et.addTextChangedListener(new android.text.TextWatcher() {
+            public void afterTextChanged(android.text.Editable s) { showGridListOnly("SEARCH", s.toString().trim()); }
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            public void onTextChanged(CharSequence s, int a, int b, int c) {}
+        });
+
+        showGridListOnly("SEARCH", ""); 
+        
+        // YÊU CẦU: Gboard tự động bật lên khi vào Search
+        et.postDelayed(() -> {
+            et.requestFocus();
+            android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) ctx.getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) imm.showSoftInput(et, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        }, 200);
     }
 
     private void showGridListOnly(String type, String query) {
         if (panelCard == null) return;
         LinearLayout listContainer = panelCard.findViewWithTag("LIST_CONTAINER");
         if (listContainer == null) return;
-        
         listContainer.removeAllViews();
 
-        List<String[]> items = buildItems(type);
+        List<String[]> items = buildItems(type); // "SEARCH" load ALL
         String q = query.toLowerCase(Locale.ROOT);
         List<String[]> shown = new ArrayList<>();
         for (String[] it : items) if (q.isEmpty() || it[0].toLowerCase(Locale.ROOT).contains(q)) shown.add(it);
@@ -588,7 +631,7 @@ public class AssistiveBubbleEngine {
             LinearLayout row = new LinearLayout(ctx);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(16, 22, 16, 22);
+            row.setPadding(10, 16, 10, 16);
             
             ImageView iv = new ImageView(ctx);
             int isize = 75;
@@ -599,14 +642,8 @@ public class AssistiveBubbleEngine {
             if (item[1].startsWith("app:")) {
                 try { iv.setImageDrawable(pm.getApplicationIcon(item[1].substring(4))); }
                 catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
-            } else if (item[1].startsWith("act:CREATE_SHORTCUT_")) {
-                try {
-                    String[] split = item[1].substring(20).split("/");
-                    Drawable d = pm.getActivityIcon(new ComponentName(split[0], split[1]));
-                    iv.setImageDrawable(d);
-                } catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
             } else if (item[1].startsWith("act:RUN_SHORTCUT_")) {
-                // Đọc icon từ hệ thống thay vì file nội bộ
+                // YÊU CẦU 3: Load trực tiếp từ ComponentName của hệ thống
                 try {
                     String scId = item[1].substring(17);
                     String uriStr = prefs.getString("shortcut_" + scId + "_intent_uri", "");
@@ -614,9 +651,7 @@ public class AssistiveBubbleEngine {
                     ComponentName cn = scIntent.getComponent();
                     if (cn != null) iv.setImageDrawable(pm.getActivityIcon(cn));
                     else iv.setImageResource(android.R.drawable.ic_menu_send);
-                } catch (Exception e) {
-                    iv.setImageResource(android.R.drawable.ic_menu_send);
-                }
+                } catch (Exception e) { iv.setImageResource(android.R.drawable.ic_menu_send); }
             } else {
                 iv.setImageResource(android.R.drawable.ic_menu_view);
                 iv.setColorFilter(Color.WHITE);
@@ -624,7 +659,7 @@ public class AssistiveBubbleEngine {
             row.addView(iv);
 
             TextView tvLabel = new TextView(ctx);
-            tvLabel.setText(item[0]); tvLabel.setTextColor(Color.WHITE); tvLabel.setTextSize(15f);
+            tvLabel.setText(item[0]); tvLabel.setTextColor(Color.WHITE); tvLabel.setTextSize(14f);
             row.addView(tvLabel);
             final String ref = item[1];
             row.setOnClickListener(v -> { runItem(ref); closeMenu(); });
@@ -648,19 +683,38 @@ public class AssistiveBubbleEngine {
         recalculateMenuPosition();
     }
 
+    private void refreshPanelCard() {
+        if (panelCard != null) {
+            panelCard.removeAllViews();
+            if (currentSubmenu != null) {
+                if (currentSubmenu.equals("SEARCH")) buildSearchMenu(panelCard);
+                else buildSubmenuGrid(panelCard, currentSubmenu);
+            } else {
+                for (int i = 0; i < 3; i++) {
+                    LinearLayout row = new LinearLayout(ctx);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    row.setWeightSum(3);
+                    for (int j = 0; j < 3; j++) {
+                        int idx = i * 3 + j;
+                        row.addView(buildMainButton(idx));
+                    }
+                    panelCard.addView(row);
+                }
+            }
+            recalculateMenuPosition();
+        }
+    }
+
     private List<String[]> buildItems(String type) {
         List<String[]> out = new ArrayList<>();
+        // SEARCH sẽ dùng type = ALL để load toàn bộ
+        if (type.equals("SEARCH") || type.equals("ALL")) {
+            out.addAll(buildItems("APP")); out.addAll(buildItems("SHORTCUT")); out.addAll(buildItems("SYSTEM"));
+            out.addAll(buildItems("UTILITY")); out.addAll(buildItems("TRIGGER")); out.addAll(buildItems("INTENT"));
+            out.addAll(buildItems("MACRO")); out.addAll(buildItems("PANEL"));
+            return out;
+        }
         switch (type) {
-            case "ALL":
-                out.addAll(buildItems("APP"));
-                out.addAll(buildItems("SHORTCUT"));
-                out.addAll(buildItems("SYSTEM"));
-                out.addAll(buildItems("UTILITY"));
-                out.addAll(buildItems("TRIGGER"));
-                out.addAll(buildItems("INTENT"));
-                out.addAll(buildItems("MACRO"));
-                out.addAll(buildItems("PANEL"));
-                break;
             case "APP": {
                 PackageManager pm = ctx.getPackageManager();
                 Intent i = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
@@ -670,10 +724,8 @@ public class AssistiveBubbleEngine {
                 break;
             }
             case "SHORTCUT": {
-                // Đọc toàn bộ shortcut hệ thống
-                for (ResolveInfo ri : ShortcutScanner.getProviders(ctx)) {
-                    out.add(new String[]{ri.loadLabel(ctx.getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
-                }
+                for (String id : csvToList(prefs.getString("shortcut_ids", "")))
+                    out.add(new String[]{"(Đã lưu) " + prefs.getString("shortcut_" + id + "_name", "Shortcut"), "act:RUN_SHORTCUT_" + id});
                 break;
             }
             case "SYSTEM": {
@@ -692,17 +744,17 @@ public class AssistiveBubbleEngine {
                 break;
             }
             case "INTENT": {
-                for (String id : csv(prefs.getString("intent_ids", "")))
+                for (String id : csvToList(prefs.getString("intent_ids", "")))
                     out.add(new String[]{prefs.getString("intent_" + id + "_name", "Intent"), "act:INTENT_" + id});
                 break;
             }
             case "MACRO": {
-                for (String id : csv(prefs.getString("macro_ids", "")))
+                for (String id : csvToList(prefs.getString("macro_ids", "")))
                     out.add(new String[]{prefs.getString("macro_" + id + "_name", "Macro"), "act:MACRO_" + id});
                 break;
             }
             case "PANEL": {
-                for (String id : csv(prefs.getString("pack_panel_ids", "")))
+                for (String id : csvToList(prefs.getString("pack_panel_ids", "")))
                     out.add(new String[]{prefs.getString("pack_panel_" + id + "_name", "Panel"), "act:PANEL_" + id});
                 break;
             }
@@ -710,9 +762,10 @@ public class AssistiveBubbleEngine {
         return out;
     }
 
-    private List<String> csv(String s) {
+    private List<String> csvToList(String csv) {
         List<String> out = new ArrayList<>();
-        if (s != null && !s.isEmpty()) for (String x : s.split(",")) if (!x.trim().isEmpty()) out.add(x.trim());
+        if (csv == null || csv.isEmpty()) return out;
+        for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
         return out;
     }
 
@@ -722,14 +775,6 @@ public class AssistiveBubbleEngine {
                 Intent li = ctx.getPackageManager().getLaunchIntentForPackage(ref.substring(4));
                 if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(li); }
             } catch (Exception ignored) {}
-        } else if (ref.startsWith("act:CREATE_SHORTCUT_")) {
-            String[] split = ref.substring(20).split("/");
-            if (split.length == 2) {
-                Intent createIntent = new Intent(Intent.ACTION_CREATE_SHORTCUT);
-                createIntent.setClassName(split[0], split[1]);
-                createIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                try { ctx.startActivity(createIntent); } catch (Exception ignored) {}
-            }
         } else if (ref.startsWith("act:")) {
             Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             ipc.putExtra("act", ref.substring(4));

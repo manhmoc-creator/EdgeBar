@@ -6242,7 +6242,6 @@ private void renderBubbleSettings() {
         row.addView(tvOn); row.addView(swOn);
         designSliderContainer.addView(row);
 
-        // Nút đổi Icon chính cho Bong bóng chat
         Button btnMainIcon = new Button(this);
         btnMainIcon.setText("🎨 ĐỔI ICON BONG BÓNG CHAT");
         btnMainIcon.setBackground(getRounded("#FFC107", 20f));
@@ -6264,8 +6263,7 @@ private void renderBubbleSettings() {
         designSliderContainer.addView(createSlider(T("Panel Max Height", "Chiều cao tối đa (List)"), "bubble_bg_h", 1500, 800));
         designSliderContainer.addView(createSlider(T("Panel Opacity", "Độ đậm mờ bảng"), "bubble_bg_alpha", 255, 160));
 
-        // --- CẤU HÌNH CUSTOM ICON CHO 9 NÚT (BUỘC THEO TYPE) ---
-        designSliderContainer.addView(createSectionTitle("🎨 ĐỔI ICON 9 NÚT TRÊN PANEL"));
+        designSliderContainer.addView(createSectionTitle("🎨 CẤU HÌNH & ICON 9 NÚT TRÊN BẢNG"));
         LinearLayout iconGrid = new LinearLayout(this);
         iconGrid.setOrientation(LinearLayout.VERTICAL);
         iconGrid.setPadding(0, 10, 0, 20);
@@ -6273,26 +6271,34 @@ private void renderBubbleSettings() {
         String[] nodeTypes = {"APP", "SHORTCUT", "SYSTEM", "INTENT", "MACRO", "PANEL", "UTILITY", "TRIGGER", "SEARCH"};
         String[] nodeLabels = {"Apps", "Shortcut", "System", "Intent", "Macro", "Panel", "Utility", "Trigger", "Search"};
         
-        for (int i = 0; i < 3; i++) { // 3 hàng
+        for (int i = 0; i < 3; i++) { 
             LinearLayout rowIcon = new LinearLayout(this);
             rowIcon.setOrientation(LinearLayout.HORIZONTAL);
             rowIcon.setGravity(Gravity.CENTER);
-            for (int j = 0; j < 3; j++) { // 3 cột
+            for (int j = 0; j < 3; j++) { 
                 int idx = i * 3 + j;
                 final String type = nodeTypes[idx];
                 Button btnIcon = new Button(this);
                 btnIcon.setText(nodeLabels[idx]);
                 btnIcon.setBackground(getRounded("#444444", 20f));
                 btnIcon.setTextColor(Color.WHITE);
-                btnIcon.setTextSize(10.5f);
-                LinearLayout.LayoutParams lpBtn = new LinearLayout.LayoutParams(0, 140, 1f);
+                btnIcon.setTextSize(10f);
+                LinearLayout.LayoutParams lpBtn = new LinearLayout.LayoutParams(0, 160, 1f);
                 lpBtn.setMargins(8, 8, 8, 8);
                 btnIcon.setLayoutParams(lpBtn);
                 btnIcon.setOnClickListener(v -> {
+                    if (type.equals("SEARCH")) {
+                        Toast.makeText(this, "Nút Search không cần chọn Action, hãy nhấn giữ để đổi Icon.", Toast.LENGTH_LONG).show();
+                    } else {
+                        showBubbleNodePicker(type); 
+                    }
+                });
+                btnIcon.setOnLongClickListener(v -> {
                     showIconPickerDialog("bubble_node_icon_" + type, () -> {
                         Toast.makeText(this, "Đã đổi Icon " + nodeLabels[idx], Toast.LENGTH_SHORT).show();
                         sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
                     });
+                    return true;
                 });
                 rowIcon.addView(btnIcon);
             }
@@ -6301,14 +6307,146 @@ private void renderBubbleSettings() {
         designSliderContainer.addView(iconGrid);
 
         TextView tvNote = new TextView(this);
-        tvNote.setText(T("Tap bubble to open panel. Tap again to close/go back. Long-press a node to select, tap another to swap.",
-            "Chạm bong bóng để mở Panel. Chạm lại để đóng hoặc quay lại. Nhấn giữ 1 nút để chọn, chạm nút khác để đổi vị trí."));
+        tvNote.setText(T("1 Tap bubble to open panel. Tap again to close/go back. Tap nodes to config up to 9 actions. Long-press node to change icon.",
+            "Chạm bong bóng để mở Panel. Chạm lại để đóng/quay lại. Chạm 8 nút trên để gán tối đa 9 hành động. Nhấn giữ để đổi Icon."));
         tvNote.setTextColor(Color.parseColor("#9AA0A6"));
         tvNote.setTextSize(12f);
         tvNote.setPadding(0, 20, 0, 0);
         designSliderContainer.addView(tvNote);
     }
+private void showBubbleNodePicker(String type) {
+        String prefKey = "bubble_node_items_" + type;
+        List<String> selectedOrder = csvToList(prefs.getString(prefKey, ""));
+        
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.parseColor("#121212"));
+        root.setPadding(30,80,30,30);
+        
+        TextView title = new TextView(this); title.setText("Cấu hình tối đa 9 mục cho " + type);
+        title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(16); title.setPadding(0,0,0,20);
+        root.addView(title);
 
+        EditText etSearch = new EditText(this);
+        etSearch.setHint("🔍 Tìm kiếm...");
+        etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
+        etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
+        root.addView(etSearch);
+        
+        ListView lv = new ListView(this);
+        lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+        
+        final List<String[]> allItems = new ArrayList<>();
+        if (type.equals("APP")) allItems.addAll(getAppListCached());
+        else if (type.equals("SHORTCUT")) {
+            for (ResolveInfo ri : ShortcutScanner.getProviders(this)) {
+                allItems.add(new String[]{ri.loadLabel(getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
+            }
+            for (String id : csvToList(prefs.getString("shortcut_ids", ""))) {
+                allItems.add(new String[]{"(Đã lưu) " + prefs.getString("shortcut_" + id + "_name", "Shortcut"), "act:RUN_SHORTCUT_" + id});
+            }
+        }
+        else if (type.equals("SYSTEM")) {
+            String[][] sys = { {"BACK","Quay lại"},{"HOME","Màn chính"},{"RECENTS","Đa nhiệm"},{"SCREEN_OFF","Tắt màn hình"},{"FLASH","Đèn pin"},{"SCREENSHOT","Chụp màn hình"},{"CAMERA","Camera"},{"VOLUME","Âm lượng"},{"POWER_DIALOG","Menu nguồn"},{"NOTIFICATIONS","Thông báo"},{"QUICK_SETTINGS","Cài đặt nhanh"},{"SPLIT_SCREEN","Chia đôi màn hình"},{"SCREEN_RECORD","Quay màn hình"},{"AUTO_ROTATE_TOGGLE","Tự động xoay"} };
+            for (String[] s : sys) allItems.add(new String[]{s[1], "act:" + s[0]});
+        }
+        else if (type.equals("UTILITY")) {
+            String[][] utl = { {"TOGGLE_OVERLAY","Bật/tắt Trợ năng"},{"TOGGLE_RECORD","Bật/tắt Ghi âm"},{"PAUSE_RECORD","Dừng/Tiếp Ghi âm"},{"YTDL_DOWNLOAD","Tải YTDLnis"},{"TOGGLE_WORK_PROFILE","Bật/tắt Hồ sơ CV"},{"OPEN_STORAGE_SCAN","Quét Dung Lượng"},{"SCAN_QR","Quét QR"},{"PLAY_MY_PLAYLIST","Phát My Playlist"} };
+            for (String[] s : utl) allItems.add(new String[]{s[1], "act:" + s[0]});
+        }
+        else if (type.equals("TRIGGER")) {
+            String[][] trg = { {"TRIGGER_TAP","Tap"},{"TRIGGER_DTAP","Double Tap"},{"TRIGGER_LONG","Long Press"},{"TRIGGER_UP","Vuốt Lên"},{"TRIGGER_DOWN","Vuốt Xuống"},{"TRIGGER_LEFT","Vuốt Trái"},{"TRIGGER_RIGHT","Vuốt Phải"} };
+            for (String[] s : trg) allItems.add(new String[]{s[1], "act:" + s[0]});
+        }
+        else if (type.equals("INTENT")) allItems.addAll(buildDynamicPackItems("intent_ids", "intent_", "act:INTENT_", "Intent"));
+        else if (type.equals("MACRO")) allItems.addAll(buildDynamicPackItems("macro_ids", "macro_", "act:MACRO_", "Macro"));
+        else if (type.equals("PANEL")) allItems.addAll(buildDynamicPackItems("pack_panel_ids", "pack_panel_", "act:PANEL_", "Panel"));
+
+        final List<String[]> shown = new ArrayList<>();
+        final Runnable[] refreshHolder = new Runnable[1];
+        
+        BaseAdapter adapter = new BaseAdapter() {
+            @Override public int getCount() { return shown.size(); }
+            @Override public Object getItem(int p) { return shown.get(p); }
+            @Override public long getItemId(int p) { return p; }
+            @Override public View getView(int p, View cv, ViewGroup parent) {
+                LinearLayout row = new LinearLayout(MainActivity.this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(20,22,20,22);
+                String[] item = shown.get(p);
+                
+                CheckBox cb = new CheckBox(MainActivity.this);
+                cb.setChecked(selectedOrder.contains(item[1]));
+                cb.setClickable(false);
+                row.addView(cb);
+                
+                Button btnEditIcon = new Button(MainActivity.this);
+                btnEditIcon.setText("🖌");
+                btnEditIcon.setBackground(getRounded("#303134", 14f));
+                btnEditIcon.setTextColor(Color.WHITE);
+                btnEditIcon.setPadding(16, 8, 16, 8);
+                btnEditIcon.setOnClickListener(v -> showIconPickerDialog("bubble_node_icon_override_" + type + "_" + item[1], () -> refreshHolder[0].run()));
+                row.addView(btnEditIcon);
+
+                TextView tv = new TextView(MainActivity.this);
+                tv.setText(item[0]); tv.setTextColor(Color.WHITE);
+                tv.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+                tv.setPadding(20, 0, 0, 0);
+                row.addView(tv);
+
+                row.setOnClickListener(v -> {
+                    if (selectedOrder.contains(item[1])) selectedOrder.remove(item[1]);
+                    else {
+                        if (selectedOrder.size() >= 9) Toast.makeText(MainActivity.this, "Chỉ được chọn tối đa 9 mục!", Toast.LENGTH_SHORT).show();
+                        else selectedOrder.add(item[1]);
+                    }
+                    refreshHolder[0].run();
+                });
+                return row;
+            }
+        };
+        lv.setAdapter(adapter);
+        root.addView(lv);
+        
+        refreshHolder[0] = () -> {
+            shown.clear();
+            String q = etSearch.getText().toString().trim().toLowerCase();
+            for (String key : selectedOrder) {
+                for (String[] it : allItems) if (it[1].equals(key)) shown.add(it);
+            }
+            for (String[] it : allItems) {
+                if (!selectedOrder.contains(it[1]) && (q.isEmpty() || it[0].toLowerCase().contains(q))) shown.add(it);
+            }
+            adapter.notifyDataSetChanged();
+        };
+        refreshHolder[0].run();
+        etSearch.addTextChangedListener(new android.text.TextWatcher() {
+            public void afterTextChanged(android.text.Editable s) { refreshHolder[0].run(); }
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            public void onTextChanged(CharSequence s, int a, int b, int c) {}
+        });
+
+        LinearLayout footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0,20,0,0);
+        Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY"));
+        bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE);
+        bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+        Button bSave = new Button(this); bSave.setText(T("SAVE","LƯU"));
+        bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0);
+        bSave.setLayoutParams(slp);
+        footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
+
+        bCancel.setOnClickListener(v -> d.dismiss());
+        bSave.setOnClickListener(v -> {
+            prefs.edit().putString(prefKey, TextUtils.join(",", selectedOrder)).apply();
+            sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
+            d.dismiss();
+        });
+        d.setContentView(root); d.show();
+    }
 private LinearLayout buildPanelSelectionToolbar(List<String> ids) {
     LinearLayout bar = new LinearLayout(this);
     bar.setOrientation(LinearLayout.HORIZONTAL);
