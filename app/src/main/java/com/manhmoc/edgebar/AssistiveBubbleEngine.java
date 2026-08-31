@@ -24,9 +24,6 @@ public class AssistiveBubbleEngine {
     private final FrameLayout[] nodeButtons = new FrameLayout[8];
     private Integer selectedIdx = null;
     private static final String[] DEFAULT_ORDER = {"APP","SHORTCUT","SYSTEM","INTENT","MACRO","PANEL","UTILITY","TRIGGER"};
-    
-    private int restoreBubbleX = -1, restoreBubbleY = -1;
-    private ValueAnimator jumpAnim;
 
     private GestureDetector gestureDetector;
     private float sx, sy, lastX, lastY;
@@ -81,7 +78,7 @@ public class AssistiveBubbleEngine {
     private void attachDragTouch() {
         final float[] downRaw = new float[2];
         final boolean[] isDragging = {false};
-        final int MARGIN = 30; // Cách 4 viền
+        final int MARGIN = 30; 
         
         gestureDetector = new GestureDetector(ctx, new GestureDetector.SimpleOnGestureListener() {
             @Override
@@ -112,12 +109,13 @@ public class AssistiveBubbleEngine {
                     isDragging[0] = false;
                     
                     // Phóng to nhẹ khi chạm vào (mượt)
-                    bubbleView.animate().scaleX(1.1f).scaleY(1.1f).setDuration(150).start();
+                    bubbleView.animate().scaleX(1.05f).scaleY(1.05f).setDuration(150).start();
                     return true;
                 case MotionEvent.ACTION_MOVE:
                     float newX = e.getRawX() - downRaw[0];
                     float newY = e.getRawY() - downRaw[1];
-                    if (!isDragging[0] && (Math.abs(newX - bubbleLp.x) > 15 || Math.abs(newY - bubbleLp.y) > 15)) {
+                    // Giảm slop xuống 8px để kéo siêu nhạy, dính tay ngay lập tức như Mes
+                    if (!isDragging[0] && (Math.abs(newX - bubbleLp.x) > 8 || Math.abs(newY - bubbleLp.y) > 8)) {
                         isDragging[0] = true;
                     }
                     if (isDragging[0]) {
@@ -134,13 +132,13 @@ public class AssistiveBubbleEngine {
                         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
                         int bSize = prefs.getInt("bubble_size", 120);
                         
-                        // Kẹp toạ độ để luôn cách 4 viền 1 khoảng MARGIN
-                        int targetX = Math.max(MARGIN, Math.min(bubbleLp.x, dm.widthPixels - bSize - MARGIN));
+                        // YÊU CẦU: Tự hút về sát cạnh trái/phải màn hình, cách lề MARGIN
+                        int targetX = (bubbleLp.x + bSize / 2 < dm.widthPixels / 2) ? MARGIN : dm.widthPixels - bSize - MARGIN;
                         int targetY = Math.max(MARGIN, Math.min(bubbleLp.y, dm.heightPixels - bSize - MARGIN));
                         
                         ValueAnimator snapAnim = ValueAnimator.ofFloat(0f, 1f);
-                        snapAnim.setDuration(250);
-                        snapAnim.setInterpolator(new DecelerateInterpolator(1.5f));
+                        snapAnim.setDuration(400); // Mượt và có độ nảy
+                        snapAnim.setInterpolator(new OvershootInterpolator(0.85f)); // Hiệu ứng lò xo (Spring-like)
                         int startX = bubbleLp.x; int startY = bubbleLp.y;
                         snapAnim.addUpdateListener(a -> {
                             float val = (float) a.getAnimatedValue();
@@ -161,52 +159,16 @@ public class AssistiveBubbleEngine {
         });
     }
 
-    private void fireAction(String baseKey) {
-        String act = prefs.getString(baseKey + "_acts", "NONE");
-        if (act.isEmpty() || act.equals("NONE")) return;
-        
-        if (prefs.getBoolean("bubble_vib", true)) {
-            try {
-                Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
-                if (Build.VERSION.SDK_INT >= 26) v.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE));
-                else v.vibrate(30);
-            } catch (Exception ignored) {}
-        }
-        if (prefs.getBoolean("bubble_anim", true)) {
-            Intent anim = new Intent("com.manhmoc.edgebar.TEST_ANIM");
-            anim.setPackage(ctx.getPackageName()); ctx.sendBroadcast(anim);
-        }
-        if (prefs.getBoolean("bubble_jump_on", true)) {
-            int jumpDist = 120;
-            ValueAnimator jump = ValueAnimator.ofFloat(0f, 1f, 0f);
-            jump.setDuration(400);
-            int startY = bubbleLp.y;
-            jump.addUpdateListener(a -> {
-                bubbleLp.y = startY - (int) ((float) a.getAnimatedValue() * jumpDist);
-                try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
-            });
-            jump.start();
-        }
-
-        Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-        if (act.equals("LAUNCH_APP")) {
-            ipc.putExtra("act", "LAUNCH_APP");
-            ipc.putExtra("launch_pkg", prefs.getString(baseKey + "_launch_pkg", ""));
-        } else if (act.equals("RUN_SHORTCUT")) {
-            ipc.putExtra("act", "RUN_SHORTCUT_" + prefs.getString(baseKey + "_shortcut_id", ""));
-        } else ipc.putExtra("act", act);
-        ctx.sendBroadcast(ipc);
-    }
-
     private void moveToCenterAndOpenMenu() {
         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
         int bSize = prefs.getInt("bubble_size", 120);
         int targetX = dm.widthPixels / 2 - bSize / 2; // Đường chia 2 nửa
         
-        ValueAnimator centerAnim = ValueAnimator.ofFloat(0f, 1f);
-        centerAnim.setDuration(250);
-        centerAnim.setInterpolator(new OvershootInterpolator(1.0f));
         int startX = bubbleLp.x;
+        
+        ValueAnimator centerAnim = ValueAnimator.ofFloat(0f, 1f);
+        centerAnim.setDuration(300); // Trượt êm, không giật
+        centerAnim.setInterpolator(new DecelerateInterpolator(1.5f)); 
         centerAnim.addUpdateListener(a -> {
             float val = (float) a.getAnimatedValue();
             bubbleLp.x = (int) (startX + (targetX - startX) * val);
@@ -214,31 +176,31 @@ public class AssistiveBubbleEngine {
         });
         centerAnim.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
-                prefs.edit().putInt("bubble_x", bubbleLp.x).apply();
-                openMenu();
+                openMenu(); // Mở panel
             }
         });
         centerAnim.start();
     }
-
-    private void destroyAll() {
-        closeMenu();
-        if (bubbleView != null) { try { wm.removeView(bubbleView); } catch (Exception ignored) {} bubbleView = null; }
-    }
-
-    private void toggleMenu() { if (menuOverlay != null) closeMenu(); else openMenu(); }
 
     private void openMenu() {
         if (menuOverlay != null) return;
         selectedIdx = null;
         restoreBubbleX = bubbleLp.x; restoreBubbleY = bubbleLp.y;
 
-        FrameLayout overlay = new FrameLayout(ctx);
+        FrameLayout overlay = new FrameLayout(ctx) {
+            @Override
+            public boolean dispatchKeyEvent(KeyEvent event) {
+                if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
+                    closeMenu(); return true;
+                }
+                return super.dispatchKeyEvent(event);
+            }
+        };
         int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         
         menuLp = new WindowManager.LayoutParams(
             prefs.getInt("bubble_bg_w", 800), WindowManager.LayoutParams.WRAP_CONTENT, wmType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
             | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
             PixelFormat.TRANSLUCENT);
@@ -246,16 +208,18 @@ public class AssistiveBubbleEngine {
         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
         int bSize = prefs.getInt("bubble_size", 120);
         int pw = menuLp.width;
+        int ph = prefs.getInt("bubble_bg_h", 800); 
         int margin = 40; 
+        int gap = 35; // YÊU CẦU 1: Cân đối lại khoảng cách (nhích ra xa thêm xíu)
 
-        // Panel luôn cân giữa X nếu Bubble đang ở giữa
+        // Panel luôn cân giữa X
         menuLp.x = dm.widthPixels / 2 - pw / 2; 
         
-        // Ngay bên dưới bong bóng chat
-        int targetY = bubbleLp.y + bSize + 15;
-        // Nếu cắn viền dưới thì đẩy Panel lên trên bong bóng
-        if (targetY + 700 > dm.heightPixels - margin) { 
-            targetY = bubbleLp.y - 700 - 15;
+        // YÊU CẦU: Căn Y, Panel luôn ưu tiên mở bên DƯỚI bong bóng
+        int targetY = bubbleLp.y + bSize + gap;
+        // Nếu mở bên dưới bị cắn viền đáy thì đổi hướng mở LÊN TRÊN bong bóng
+        if (targetY + ph > dm.heightPixels - margin) { 
+            targetY = bubbleLp.y - ph - gap;
         }
         menuLp.y = Math.max(margin, targetY);
         menuLp.gravity = Gravity.TOP | Gravity.LEFT;
@@ -266,7 +230,7 @@ public class AssistiveBubbleEngine {
         });
 
         panelCard = buildPanelCard();
-        panelCard.setOnClickListener(v -> {}); // Chặn chạm xuyên
+        panelCard.setOnClickListener(v -> {}); 
         
         panelCard.setAlpha(0f);
         panelCard.setScaleX(0.85f);
@@ -282,10 +246,12 @@ public class AssistiveBubbleEngine {
         if (menuOverlay != null) { try { wm.removeView(menuOverlay); } catch (Exception ignored) {} menuOverlay = null; }
         selectedIdx = null;
         
+        // YÊU CẦU: Tự động chạy về vị trí cũ ở sát viền sau khi Panel được đóng
         if (jumpAnim != null) jumpAnim.cancel();
         if (restoreBubbleX != -1 && restoreBubbleY != -1) {
             jumpAnim = ValueAnimator.ofFloat(0f, 1f);
-            jumpAnim.setDuration(200);
+            jumpAnim.setDuration(350);
+            jumpAnim.setInterpolator(new OvershootInterpolator(0.85f));
             int currentX = bubbleLp.x; int currentY = bubbleLp.y;
             jumpAnim.addUpdateListener(a -> {
                 float val = (float) a.getAnimatedValue();
@@ -296,7 +262,6 @@ public class AssistiveBubbleEngine {
             jumpAnim.start();
         }
     }
-
     private List<String> getOrder() {
         String csv = prefs.getString("bubble_node_order", "");
         List<String> out = new ArrayList<>();
@@ -317,13 +282,21 @@ public class AssistiveBubbleEngine {
         card.addView(buildNodeRow(0, 1, 2));
         card.addView(buildNodeRow(3, 4, 5));
         
+        // Hàng 3: Gom chung thành Fab Bar
         LinearLayout row3 = new LinearLayout(ctx);
         row3.setOrientation(LinearLayout.HORIZONTAL);
-        row3.setWeightSum(4f); 
+        row3.setGravity(Gravity.CENTER_VERTICAL);
+        GradientDrawable fabBg = new GradientDrawable();
+        fabBg.setColor(Color.parseColor("#33000000"));
+        fabBg.setCornerRadius(100f);
+        row3.setBackground(fabBg);
+        LinearLayout.LayoutParams r3Lp = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
+        r3Lp.setMargins(15, 15, 15, 15);
+        row3.setLayoutParams(r3Lp);
         
-        row3.addView(buildNodeButton(6, 1f));
-        row3.addView(buildSearchBar(2f));
-        row3.addView(buildNodeButton(7, 1f));
+        row3.addView(buildNodeButton(6, false, 0));
+        row3.addView(buildSearchBar(1f));
+        row3.addView(buildNodeButton(7, false, 0));
         card.addView(row3);
         
         return card;
@@ -333,14 +306,17 @@ public class AssistiveBubbleEngine {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setWeightSum(idxs.length);
-        for (int idx : idxs) row.addView(buildNodeButton(idx, 1f));
+        for (int idx : idxs) row.addView(buildNodeButton(idx, true, 1f));
         return row;
     }
 
-    private FrameLayout buildNodeButton(int idx, float weight) {
+    private FrameLayout buildNodeButton(int idx, boolean forceBg, float weight) {
         FrameLayout box = new FrameLayout(ctx);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, weight);
-        lp.setMargins(15, 15, 15, 15);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            weight == 0 ? LinearLayout.LayoutParams.WRAP_CONTENT : 0, 
+            LinearLayout.LayoutParams.WRAP_CONTENT, weight);
+        if (forceBg) lp.setMargins(15, 15, 15, 15);
+        else lp.setMargins(10, 10, 10, 10);
         box.setLayoutParams(lp);
 
         String type = getOrder().get(idx);
@@ -358,7 +334,7 @@ public class AssistiveBubbleEngine {
             else if (type.equals("SHORTCUT")) d = ctx.getDrawable(android.R.drawable.ic_menu_send);
             else if (type.equals("TRIGGER")) d = ctx.getDrawable(android.R.drawable.ic_menu_directions);
             else if (type.equals("INTENT")) d = ctx.getDrawable(android.R.drawable.ic_menu_compass);
-            else d = ctx.getDrawable(android.R.drawable.ic_menu_view);
+            else d = ctx.getDrawable(android.R.drawable.ic_menu_view); 
             
             if (d != null) {
                 d = d.mutate(); d.setTint(Color.WHITE);
@@ -368,10 +344,12 @@ public class AssistiveBubbleEngine {
             }
         } catch (Exception ignored) {}
 
-        GradientDrawable boxBg = new GradientDrawable();
-        boxBg.setCornerRadius(36f); // System App Icon Shape
-        boxBg.setColor(selectedIdx != null && selectedIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#33000000"));
-        box.setBackground(boxBg);
+        if (forceBg || (selectedIdx != null && selectedIdx == idx)) {
+            GradientDrawable boxBg = new GradientDrawable();
+            boxBg.setCornerRadius(40f); // Bo khung hình vuông hệ thống
+            boxBg.setColor(selectedIdx != null && selectedIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#33000000"));
+            box.setBackground(boxBg);
+        }
         
         box.addView(iv);
         nodeButtons[idx] = box;
@@ -388,10 +366,18 @@ public class AssistiveBubbleEngine {
             panelCard.addView(buildNodeRow(3, 4, 5));
             LinearLayout row3 = new LinearLayout(ctx);
             row3.setOrientation(LinearLayout.HORIZONTAL);
-            row3.setWeightSum(4f);
-            row3.addView(buildNodeButton(6, 1f));
-            row3.addView(buildSearchBar(2f));
-            row3.addView(buildNodeButton(7, 1f));
+            row3.setGravity(Gravity.CENTER_VERTICAL);
+            GradientDrawable fabBg = new GradientDrawable();
+            fabBg.setColor(Color.parseColor("#33000000"));
+            fabBg.setCornerRadius(100f);
+            row3.setBackground(fabBg);
+            LinearLayout.LayoutParams r3Lp = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
+            r3Lp.setMargins(15, 15, 15, 15);
+            row3.setLayoutParams(r3Lp);
+            
+            row3.addView(buildNodeButton(6, false, 0));
+            row3.addView(buildSearchBar(1f));
+            row3.addView(buildNodeButton(7, false, 0));
             panelCard.addView(row3);
         }
     }
@@ -412,18 +398,15 @@ public class AssistiveBubbleEngine {
 
     private EditText buildSearchBar(float weight) {
         EditText et = new EditText(ctx);
-        et.setHint("Search…");
+        et.setHint("🔍 Tìm kiếm...");
         et.setHintTextColor(Color.parseColor("#9AA0A6"));
         et.setTextColor(Color.WHITE);
         et.setSingleLine(true);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor("#33000000"));
-        bg.setCornerRadius(100f);
-        et.setBackground(bg);
-        et.setPadding(28, 14, 28, 14);
+        et.setBackgroundColor(Color.TRANSPARENT);
+        et.setPadding(20, 14, 20, 14);
         
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, weight);
-        lp.setMargins(15, 15, 15, 15);
+        lp.setMargins(0, 5, 0, 5);
         et.setLayoutParams(lp);
         
         et.addTextChangedListener(new android.text.TextWatcher() {
@@ -443,6 +426,10 @@ public class AssistiveBubbleEngine {
         
         LinearLayout searchRow = new LinearLayout(ctx);
         searchRow.setOrientation(LinearLayout.HORIZONTAL);
+        GradientDrawable fabBg = new GradientDrawable();
+        fabBg.setColor(Color.parseColor("#33000000"));
+        fabBg.setCornerRadius(100f);
+        searchRow.setBackground(fabBg);
         searchRow.addView(buildSearchBar(1f));
         panelCard.addView(searchRow);
 
@@ -464,6 +451,7 @@ public class AssistiveBubbleEngine {
             list.addView(empty);
         }
         
+        PackageManager pm = ctx.getPackageManager();
         for (String[] item : shown) {
             LinearLayout row = new LinearLayout(ctx);
             row.setOrientation(LinearLayout.HORIZONTAL);
@@ -477,8 +465,15 @@ public class AssistiveBubbleEngine {
             iv.setLayoutParams(ilp);
             
             if (item[1].startsWith("app:")) {
-                try { iv.setImageDrawable(ctx.getPackageManager().getApplicationIcon(item[1].substring(4))); }
+                try { iv.setImageDrawable(pm.getApplicationIcon(item[1].substring(4))); }
                 catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
+            } else if (item[1].startsWith("act:CREATE_SHORTCUT_")) {
+                try {
+                    // YÊU CẦU 3: Load chuẩn xác icon shortcut từ hệ thống
+                    String[] split = item[1].substring(20).split("/");
+                    Drawable d = pm.getActivityIcon(new ComponentName(split[0], split[1]));
+                    iv.setImageDrawable(d);
+                } catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
             } else if (item[1].startsWith("act:RUN_SHORTCUT_")) {
                 String scId = item[1].substring("act:RUN_SHORTCUT_".length());
                 String path = prefs.getString("shortcut_" + scId + "_icon_path", "");
