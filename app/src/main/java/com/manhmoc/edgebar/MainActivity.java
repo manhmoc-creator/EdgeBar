@@ -129,7 +129,7 @@ private Runnable currentLevelBackAction = null;
     // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "🌚 19.12.3.6.43";
+    private final String CURRENT_VERSION = "🕸️ 19.12.3.6.43";
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
     private Button btnWriteSettings; // MỚI
@@ -6226,62 +6226,61 @@ ids.sort((idA, idB) -> naturalCompareName(
         }
     }
 private void renderBubbleSettings() {
-    designSliderContainer.addView(createSectionTitle("💬 BONG BÓNG CHAT (ASSISTIVE TOUCH)"));
+        designSliderContainer.addView(createSectionTitle("💬 BONG BÓNG CHAT (ASSISTIVE TOUCH)"));
 
-    LinearLayout row = new LinearLayout(this);
-    row.setOrientation(LinearLayout.HORIZONTAL);
-    row.setGravity(Gravity.CENTER_VERTICAL);
-    row.setPadding(0, 10, 0, 20);
-    TextView tvOn = new TextView(this);
-    tvOn.setText(T("Enable bubble", "Bật bong bóng chat"));
-    tvOn.setTextColor(Color.WHITE);
-    tvOn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    Switch swOn = new Switch(this);
-    swOn.setChecked(prefs.getBoolean("bubble_en", false));
-    swOn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("bubble_en", c).apply());
-    row.addView(tvOn); row.addView(swOn);
-    designSliderContainer.addView(row);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, 10, 0, 20);
+        TextView tvOn = new TextView(this);
+        tvOn.setText(T("Enable bubble", "Bật bong bóng chat"));
+        tvOn.setTextColor(Color.WHITE);
+        tvOn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        Switch swOn = new Switch(this);
+        swOn.setChecked(prefs.getBoolean("bubble_en", false));
+        swOn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("bubble_en", c).apply());
+        row.addView(tvOn); row.addView(swOn);
+        designSliderContainer.addView(row);
 
-    // Thêm thanh kéo kích thước bong bóng và kích thước icon (Yêu cầu 1 & 9)
-    designSliderContainer.addView(createSlider(T("Bubble Size", "Kích thước bong bóng"), "bubble_size", 300, 120));
-    designSliderContainer.addView(createSlider(T("Icon Size in Panel", "Độ to nhỏ của 8 nút trong Panel"), "bubble_icon_size", 200, 100));
-    
-    designSliderContainer.addView(createSlider(T("Panel Width", "Chiều rộng bảng"), "bubble_bg_w", 1500, 800));
-    designSliderContainer.addView(createSlider(T("Panel Opacity", "Độ đậm mờ bảng"), "bubble_bg_alpha", 255, 160));
-    designSliderContainer.addView(createSlider(T("Panel Corner Radius", "Độ bo góc bảng"), "bubble_bg_radius", 100, 40));
+        designSliderContainer.addView(createSlider(T("Bubble Size", "Kích thước bong bóng"), "bubble_size", 300, 120));
+        designSliderContainer.addView(createSlider(T("Icon Size in Panel", "Độ to nhỏ của 8 nút trong Panel"), "bubble_icon_size", 200, 100));
+        
+        designSliderContainer.addView(createSlider(T("Panel Width", "Chiều rộng bảng"), "bubble_bg_w", 1500, 800));
+        designSliderContainer.addView(createSlider(T("Panel Max Height", "Chiều cao tối đa (List)"), "bubble_bg_h", 1500, 800));
+        designSliderContainer.addView(createSlider(T("Panel Opacity", "Độ đậm mờ bảng"), "bubble_bg_alpha", 255, 160));
+        designSliderContainer.addView(createSlider(T("Panel Corner Radius", "Độ bo góc bảng"), "bubble_bg_radius", 100, 40));
 
-    // Nút cấu hình 2Tap và Long Press cho Bong bóng (Yêu cầu 6)
-    LinearLayout btnRow = new LinearLayout(this);
-    btnRow.setOrientation(LinearLayout.HORIZONTAL);
-    btnRow.setPadding(0, 20, 0, 0);
-    
-    Button btnDtap = new Button(this);
-    btnDtap.setText("⚙️ CẤU HÌNH 2 CHẠM");
-    btnDtap.setBackground(getRounded("#00E5FF", 20f));
-    btnDtap.setTextColor(Color.BLACK);
-    btnDtap.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    btnDtap.setOnClickListener(v -> openRuleBuilderDialogNoComp(prefs.getString("bubble_dtap_acts", ""))); // Tái sử dụng RuleEditor
-    
-    Button btnLong = new Button(this);
-    btnLong.setText("⚙️ CẤU HÌNH NHẤN GIỮ");
-    btnLong.setBackground(getRounded("#FFC107", 20f));
-    btnLong.setTextColor(Color.BLACK);
-    LinearLayout.LayoutParams lllp = new LinearLayout.LayoutParams(0, -2, 1f);
-    lllp.setMargins(20, 0, 0, 0);
-    btnLong.setLayoutParams(lllp);
-    btnLong.setOnClickListener(v -> openRuleBuilderDialogNoComp(prefs.getString("bubble_long_acts", "")));
-    
-    btnRow.addView(btnDtap); btnRow.addView(btnLong);
-    designSliderContainer.addView(btnRow);
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setPadding(0, 20, 0, 0);
+        
+        Button btnDtap = new Button(this);
+        btnDtap.setText("⚙️ CẤU HÌNH 2 CHẠM");
+        btnDtap.setBackground(getRounded("#00E5FF", 20f));
+        btnDtap.setTextColor(Color.BLACK);
+        btnDtap.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        btnDtap.setOnClickListener(v -> openBubbleGestureEditor());
+        
+        Button btnLong = new Button(this);
+        btnLong.setText("⚙️ CẤU HÌNH NHẤN GIỮ");
+        btnLong.setBackground(getRounded("#FFC107", 20f));
+        btnLong.setTextColor(Color.BLACK);
+        LinearLayout.LayoutParams lllp = new LinearLayout.LayoutParams(0, -2, 1f);
+        lllp.setMargins(20, 0, 0, 0);
+        btnLong.setLayoutParams(lllp);
+        btnLong.setOnClickListener(v -> openBubbleGestureEditor());
+        
+        btnRow.addView(btnDtap); btnRow.addView(btnLong);
+        designSliderContainer.addView(btnRow);
 
-    TextView tvNote = new TextView(this);
-    tvNote.setText(T("1 Tap always opens the panel. Long-press a panel node to select, tap another to swap positions.",
-        "1 Chạm luôn mở bảng. Nhấn giữ 1 nút trên bảng để chọn, chạm nút khác để hoán đổi vị trí."));
-    tvNote.setTextColor(Color.parseColor("#9AA0A6"));
-    tvNote.setTextSize(12f);
-    tvNote.setPadding(0, 20, 0, 0);
-    designSliderContainer.addView(tvNote);
-}
+        TextView tvNote = new TextView(this);
+        tvNote.setText(T("1 Tap always opens the panel. Long-press a panel node to select, tap another to swap positions.",
+            "1 Chạm luôn mở bảng. Nhấn giữ 1 nút trên bảng để chọn, chạm nút khác để hoán đổi vị trí."));
+        tvNote.setTextColor(Color.parseColor("#9AA0A6"));
+        tvNote.setTextSize(12f);
+        tvNote.setPadding(0, 20, 0, 0);
+        designSliderContainer.addView(tvNote);
+    }
 
 private LinearLayout buildPanelSelectionToolbar(List<String> ids) {
     LinearLayout bar = new LinearLayout(this);
@@ -6738,98 +6737,93 @@ private void openEmptyPillDialog() {
     d.setContentView(root); d.show();
 }
 private void openBubbleGestureEditor() {
-    reloadActionLabels();
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
-    LinearLayout root = new LinearLayout(this);
-    root.setOrientation(LinearLayout.VERTICAL);
-    root.setBackgroundColor(Color.parseColor("#121212"));
-    root.setPadding(30, 80, 30, 30);
+        reloadActionLabels();
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.parseColor("#121212"));
+        root.setPadding(30, 80, 30, 30);
 
-    TextView title = new TextView(this);
-    title.setText("⚙️ CỬ CHỈ BONG BÓNG CHAT");
-    title.setTextColor(Color.parseColor("#00E5FF"));
-    title.setTextSize(18f); title.setPadding(0, 0, 0, 20);
-    root.addView(title);
+        TextView title = new TextView(this);
+        title.setText("⚙️ CỬ CHỈ BONG BÓNG CHAT");
+        title.setTextColor(Color.parseColor("#00E5FF"));
+        title.setTextSize(18f); title.setPadding(0, 0, 0, 20);
+        root.addView(title);
 
-    ScrollView scroll = new ScrollView(this);
-    scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-    LinearLayout content = new LinearLayout(this);
-    content.setOrientation(LinearLayout.VERTICAL);
-    scroll.addView(content);
-    root.addView(scroll);
+        ScrollView scroll = new ScrollView(this);
+        scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(content);
+        root.addView(scroll);
 
-    // Lưu trữ tạm thời trạng thái
-    final String[] dtapAct = { prefs.getString("bubble_dtap_acts", "NONE") };
-    final String[] longAct = { prefs.getString("bubble_long_acts", "NONE") };
-    
-    Runnable refreshUI = new Runnable() {
-        @Override public void run() {
-            content.removeAllViews();
-            
-            // TÙY CHỌN CHUNG (3 Options đầu theo Yêu cầu 3)
-            LinearLayout optBox = new LinearLayout(MainActivity.this);
-            optBox.setOrientation(LinearLayout.VERTICAL);
-            CheckBox cbJump = new CheckBox(MainActivity.this);
-            cbJump.setText("Icon Jump (Nhảy lên đỉnh Panel)");
-            cbJump.setTextColor(Color.WHITE);
-            cbJump.setChecked(prefs.getBoolean("bubble_jump_on", true));
-            cbJump.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("bubble_jump_on", c).apply());
-            
-            CheckBox cbVib = new CheckBox(MainActivity.this);
-            cbVib.setText("Bật Rung (Haptic Feedback)");
-            cbVib.setTextColor(Color.WHITE);
-            cbVib.setChecked(prefs.getBoolean("bubble_vib", true));
-            cbVib.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("bubble_vib", c).apply());
-            
-            CheckBox cbAnim = new CheckBox(MainActivity.this);
-            cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)");
-            cbAnim.setTextColor(Color.WHITE);
-            cbAnim.setChecked(prefs.getBoolean("bubble_anim", true));
-            cbAnim.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("bubble_anim", c).apply());
-            
-            optBox.addView(cbJump); optBox.addView(cbVib); optBox.addView(cbAnim);
-            content.addView(createDrawer("TÙY CHỌN CỬ CHỈ", optBox));
+        final String[] dtapAct = { prefs.getString("bubble_dtap_acts", "NONE") };
+        final String[] longAct = { prefs.getString("bubble_long_acts", "NONE") };
+        
+        Runnable refreshUI = new Runnable() {
+            @Override public void run() {
+                content.removeAllViews();
+                
+                LinearLayout optBox = new LinearLayout(MainActivity.this);
+                optBox.setOrientation(LinearLayout.VERTICAL);
+                CheckBox cbJump = new CheckBox(MainActivity.this);
+                cbJump.setText("Icon Jump (Nhảy lên đỉnh Panel)");
+                cbJump.setTextColor(Color.WHITE);
+                cbJump.setChecked(prefs.getBoolean("bubble_jump_on", true));
+                cbJump.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("bubble_jump_on", c).apply());
+                
+                CheckBox cbVib = new CheckBox(MainActivity.this);
+                cbVib.setText("Bật Rung (Haptic Feedback)");
+                cbVib.setTextColor(Color.WHITE);
+                cbVib.setChecked(prefs.getBoolean("bubble_vib", true));
+                cbVib.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("bubble_vib", c).apply());
+                
+                CheckBox cbAnim = new CheckBox(MainActivity.this);
+                cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)");
+                cbAnim.setTextColor(Color.WHITE);
+                cbAnim.setChecked(prefs.getBoolean("bubble_anim", true));
+                cbAnim.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("bubble_anim", c).apply());
+                
+                optBox.addView(cbJump); optBox.addView(cbVib); optBox.addView(cbAnim);
+                content.addView(createDrawer("TÙY CHỌN CỬ CHỈ", optBox));
 
-            // DANH SÁCH ACTIONS TỔNG HỢP
-            List<String[]> ALL_ITEMS = new ArrayList<>();
-            ALL_ITEMS.addAll(buildItemsForKeys(new String[]{"BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME","SCREENSHOT","CAMERA","NOTIFICATIONS","QUICK_SETTINGS","SPLIT_SCREEN","SCREEN_RECORD","AUTO_ROTATE_TOGGLE"}, ACT_KEYS, ACT_LABS));
-            ALL_ITEMS.addAll(buildItemsForKeys(new String[]{"TOGGLE_OVERLAY","TOGGLE_RECORD","PAUSE_RECORD","YTDL_DOWNLOAD","TOGGLE_WORK_PROFILE","OPEN_STORAGE_SCAN","SCAN_QR","PLAY_MY_PLAYLIST"}, ACT_KEYS, ACT_LABS));
-            ALL_ITEMS.addAll(buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent"));
-            ALL_ITEMS.addAll(buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro"));
-            ALL_ITEMS.addAll(buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel"));
+                List<String[]> ALL_ITEMS = new ArrayList<>();
+                ALL_ITEMS.addAll(buildItemsForKeys(new String[]{"BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME","SCREENSHOT","CAMERA","NOTIFICATIONS","QUICK_SETTINGS","SPLIT_SCREEN","SCREEN_RECORD","AUTO_ROTATE_TOGGLE"}, ACT_KEYS, ACT_LABS));
+                ALL_ITEMS.addAll(buildItemsForKeys(new String[]{"TOGGLE_OVERLAY","TOGGLE_RECORD","PAUSE_RECORD","YTDL_DOWNLOAD","TOGGLE_WORK_PROFILE","OPEN_STORAGE_SCAN","SCAN_QR","PLAY_MY_PLAYLIST"}, ACT_KEYS, ACT_LABS));
+                ALL_ITEMS.addAll(buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent"));
+                ALL_ITEMS.addAll(buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro"));
+                ALL_ITEMS.addAll(buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel"));
 
-            // 2 CHẠM
-            TextView tvDtap = new TextView(MainActivity.this);
-            tvDtap.setText("Đang chọn: " + resolveTileActionLabel(dtapAct[0], prefs.getString("bubble_dtap_launch_pkg", ""), prefs.getString("bubble_dtap_shortcut_id", "")));
-            tvDtap.setTextColor(Color.parseColor("#FFC107")); tvDtap.setPadding(0, 10, 0, 10);
-            content.addView(createSectionTitle("✌️ CỬ CHỈ 2 CHẠM (DOUBLE TAP)"));
-            Button btnDtap = singleActionCategoryBtn("CHỌN HÀNH ĐỘNG", "#4CAF50", ALL_ITEMS, dtapAct, new String[]{prefs.getString("bubble_dtap_launch_pkg", "")}, new String[]{prefs.getString("bubble_dtap_shortcut_id", "")}, this);
-            content.addView(btnDtap); content.addView(tvDtap);
+                TextView tvDtap = new TextView(MainActivity.this);
+                tvDtap.setText("Đang chọn: " + resolveTileActionLabel(dtapAct[0], prefs.getString("bubble_dtap_launch_pkg", ""), prefs.getString("bubble_dtap_shortcut_id", "")));
+                tvDtap.setTextColor(Color.parseColor("#FFC107")); tvDtap.setPadding(0, 10, 0, 20);
+                content.addView(createSectionTitle("✌️ CỬ CHỈ 2 CHẠM (DOUBLE TAP)"));
+                Button btnDtap = singleActionCategoryBtn("CHỌN HÀNH ĐỘNG", "#4CAF50", ALL_ITEMS, dtapAct, new String[]{prefs.getString("bubble_dtap_launch_pkg", "")}, new String[]{prefs.getString("bubble_dtap_shortcut_id", "")}, this);
+                content.addView(btnDtap); content.addView(tvDtap);
 
-            // NHẤN GIỮ
-            TextView tvLong = new TextView(MainActivity.this);
-            tvLong.setText("Đang chọn: " + resolveTileActionLabel(longAct[0], prefs.getString("bubble_long_launch_pkg", ""), prefs.getString("bubble_long_shortcut_id", "")));
-            tvLong.setTextColor(Color.parseColor("#FFC107")); tvLong.setPadding(0, 10, 0, 10);
-            content.addView(createSectionTitle("👆 CỬ CHỈ NHẤN GIỮ (LONG PRESS)"));
-            Button btnLong = singleActionCategoryBtn("CHỌN HÀNH ĐỘNG", "#2196F3", ALL_ITEMS, longAct, new String[]{prefs.getString("bubble_long_launch_pkg", "")}, new String[]{prefs.getString("bubble_long_shortcut_id", "")}, this);
-            content.addView(btnLong); content.addView(tvLong);
-        }
-    };
-    refreshUI.run();
+                TextView tvLong = new TextView(MainActivity.this);
+                tvLong.setText("Đang chọn: " + resolveTileActionLabel(longAct[0], prefs.getString("bubble_long_launch_pkg", ""), prefs.getString("bubble_long_shortcut_id", "")));
+                tvLong.setTextColor(Color.parseColor("#FFC107")); tvLong.setPadding(0, 10, 0, 20);
+                content.addView(createSectionTitle("👆 CỬ CHỈ NHẤN GIỮ (LONG PRESS)"));
+                Button btnLong = singleActionCategoryBtn("CHỌN HÀNH ĐỘNG", "#2196F3", ALL_ITEMS, longAct, new String[]{prefs.getString("bubble_long_launch_pkg", "")}, new String[]{prefs.getString("bubble_long_shortcut_id", "")}, this);
+                content.addView(btnLong); content.addView(tvLong);
+            }
+        };
+        refreshUI.run();
 
-    Button bClose = new Button(this); bClose.setText("ĐÓNG & LƯU");
-    bClose.setBackground(getRounded("#333333", 20f)); bClose.setTextColor(Color.WHITE);
-    bClose.setOnClickListener(v -> {
-        prefs.edit()
-            .putString("bubble_dtap_acts", dtapAct[0])
-            .putString("bubble_long_acts", longAct[0])
-            .apply();
-        d.dismiss();
-    });
-    root.addView(bClose);
+        Button bClose = new Button(this); bClose.setText("ĐÓNG & LƯU");
+        bClose.setBackground(getRounded("#333333", 20f)); bClose.setTextColor(Color.WHITE);
+        bClose.setOnClickListener(v -> {
+            prefs.edit()
+                .putString("bubble_dtap_acts", dtapAct[0])
+                .putString("bubble_long_acts", longAct[0])
+                .apply();
+            d.dismiss();
+        });
+        root.addView(bClose);
 
-    d.setContentView(root); d.show();
-}
+        d.setContentView(root); d.show();
+    }
 private void stylePanelTabs(Button b1, Button b2, Button b3) {
 // --- [KẾT THÚC CODE MỚI] ---
     b1.setBackground(getRounded(currentPanelIdx==1?"#00E5FF":"#222222",15f)); b1.setTextColor(currentPanelIdx==1?Color.BLACK:Color.WHITE);
