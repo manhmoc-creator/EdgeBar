@@ -133,6 +133,7 @@ private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
     private Button btnWriteSettings; // MỚI
+    private Button btnOverlay, btnDnd, btnBattery, btnUsage, btnCamera, btnAudio;
     private Button btnNotifListener; // MỚI — quyền Notification Access cho PLAY_LAST_MUSIC
     private static final int REQ_UNINSTALL_CONFIRM = 9930;
     private int ecoType = 0;
@@ -315,13 +316,12 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
         String flat = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
         return flat != null && flat.contains(getPackageName());
     }
-        @Override protected void onResume() {
+    @Override protected void onResume() {
         super.onResume();
         refreshPreview();
         checkPendingStorageScan();
         if (btnWriteSettings != null) {
-
-btnWriteSettings.setVisibility(android.provider.Settings.System.canWrite(this) ? View.GONE : View.VISIBLE);
+            btnWriteSettings.setVisibility(android.provider.Settings.System.canWrite(this) ? View.GONE : View.VISIBLE);
         }
         if (btnDeviceAdmin != null) {
             android.app.admin.DevicePolicyManager dpmR =
@@ -332,6 +332,38 @@ btnWriteSettings.setVisibility(android.provider.Settings.System.canWrite(this) ?
         }
         if (btnNotifListener != null) {
             btnNotifListener.setVisibility(isNotifListenerEnabled() ? View.GONE : View.VISIBLE);
+        }
+        // [FIX] Recheck các quyền còn lại — trước đây các nút này chỉ được set
+        // visibility 1 lần lúc onCreate() nên không tự ẩn sau khi user cấp quyền.
+        if (btnOverlay != null) {
+            btnOverlay.setVisibility(Settings.canDrawOverlays(this) ? View.GONE : View.VISIBLE);
+        }
+        if (btnDnd != null) {
+            NotificationManager nmR = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            btnDnd.setVisibility(Build.VERSION.SDK_INT >= 23 && !nmR.isNotificationPolicyAccessGranted()
+                ? View.VISIBLE : View.GONE);
+        }
+        if (btnBattery != null) {
+            android.os.PowerManager pmR = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+            btnBattery.setVisibility(Build.VERSION.SDK_INT >= 23 && pmR != null
+                && !pmR.isIgnoringBatteryOptimizations(getPackageName()) ? View.VISIBLE : View.GONE);
+        }
+        if (btnUsage != null) {
+            android.app.AppOpsManager aomR = (android.app.AppOpsManager) getSystemService(APP_OPS_SERVICE);
+            int modeR = aomR.checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+                android.os.Process.myUid(), getPackageName());
+            btnUsage.setVisibility(modeR != android.app.AppOpsManager.MODE_ALLOWED ? View.VISIBLE : View.GONE);
+        }
+        if (btnCamera != null) {
+            btnCamera.setVisibility(checkSelfPermission(android.Manifest.permission.CAMERA)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED ? View.VISIBLE : View.GONE);
+        }
+        if (btnAudio != null) {
+            String audioPermR = Build.VERSION.SDK_INT >= 33
+                ? android.Manifest.permission.READ_MEDIA_AUDIO
+                : android.Manifest.permission.READ_EXTERNAL_STORAGE;
+            btnAudio.setVisibility(checkSelfPermission(audioPermR)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED ? View.VISIBLE : View.GONE);
         }
     }
     @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
@@ -895,25 +927,30 @@ rightCol.addView(btnUpdateTop);
 headerRow.addView(leftCol); headerRow.addView(rightCol);
 main.addView(headerRow);
 reloadActionLabels();
-        if (!Settings.canDrawOverlays(this)) { Button btnReq = new Button(this); btnReq.setText(T("⚠️ GRANT OVERLAY", "⚠️ CẤP QUYỀN LỚP PHỦ")); btnReq.setBackground(getRounded("#D32F2F", 25f)); btnReq.setTextColor(Color.WHITE); btnReq.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))); main.addView(btnReq); }
+        btnOverlay = new Button(this);
+btnOverlay.setText(T("⚠️ GRANT OVERLAY", "⚠️ CẤP QUYỀN LỚP PHỦ"));
+btnOverlay.setBackground(getRounded("#D32F2F", 25f));
+btnOverlay.setTextColor(Color.WHITE);
+btnOverlay.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))));
+btnOverlay.setVisibility(Settings.canDrawOverlays(this) ? View.GONE : View.VISIBLE);
+main.addView(btnOverlay);
 
 // --- DO NOT DISTURB (DND) --- Xin quyền ghi đè âm lượng (Volume Mapper)
 android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-if (android.os.Build.VERSION.SDK_INT >= 23 && !nm.isNotificationPolicyAccessGranted()) {
-    Button btnDnd = new Button(this);
-    btnDnd.setText("⚠️ CẤP QUYỀN KHÔNG LÀM PHIỀN (DND)\nĐể gọi Screen Off/On bằng phím Âm lượng");
+btnDnd = new Button(this);
+btnDnd.setText("⚠️ CẤP QUYỀN KHÔNG LÀM PHIỀN (DND)\nĐể gọi Screen Off/On bằng phím Âm lượng");
     btnDnd.setBackground(getRounded("#FF9800", 25f));
     btnDnd.setTextColor(Color.WHITE);
     LinearLayout.LayoutParams dndLp = new LinearLayout.LayoutParams(-1, -2);
     dndLp.setMargins(0, 10, 0, 0);
     btnDnd.setLayoutParams(dndLp);
     btnDnd.setOnClickListener(v -> startActivity(new Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)));
-    main.addView(btnDnd);
-}
+btnDnd.setVisibility(android.os.Build.VERSION.SDK_INT >= 23 && !nm.isNotificationPolicyAccessGranted() ? View.VISIBLE : View.GONE);
+main.addView(btnDnd);
+
+
     android.os.PowerManager pmCheck = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
-if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
-        && !pmCheck.isIgnoringBatteryOptimizations(getPackageName())) {
-    Button btnBattery = new Button(this);
+    btnBattery = new Button(this);
     btnBattery.setText("⚠️ TẮT TỐI ƯU HÓA PIN\nGiúp Phím Âm Lượng ổn định hơn khi tắt màn hình");
     btnBattery.setBackground(getRounded("#FF5722", 25f));
     btnBattery.setTextColor(Color.WHITE);
@@ -929,8 +966,9 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
             startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
         }
     });
+    btnBattery.setVisibility(Build.VERSION.SDK_INT >= 23 && pmCheck != null
+        && !pmCheck.isIgnoringBatteryOptimizations(getPackageName()) ? View.VISIBLE : View.GONE);
     main.addView(btnBattery);
-}
         // --- USAGE STATS ---
         try {
             android.app.AppOpsManager aom =
@@ -939,7 +977,7 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
                 android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
                 android.os.Process.myUid(), getPackageName());
             if (mode != android.app.AppOpsManager.MODE_ALLOWED) {
-                Button btnUsage = new Button(this);
+                btnUsage = new Button(this);
                 btnUsage.setText("⚠️ CẤP QUYỀN TRUY CẬP DỮ LIỆU SỬ DỤNG");
                 btnUsage.setBackground(getRounded("#D32F2F", 25f));
                 btnUsage.setTextColor(Color.WHITE);
@@ -954,7 +992,7 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
         // --- CAMERA (để dùng Scan QR) ---
         if (checkSelfPermission(android.Manifest.permission.CAMERA)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            Button btnCamera = new Button(this);
+            btnCamera = new Button(this);
             btnCamera.setText("⚠️ CẤP QUYỀN CAMERA (Quét QR)");
             btnCamera.setBackground(getRounded("#009688", 25f));
             btnCamera.setTextColor(Color.WHITE);
@@ -970,7 +1008,7 @@ if (Build.VERSION.SDK_INT >= 23 && pmCheck != null
             ? android.Manifest.permission.READ_MEDIA_AUDIO
             : android.Manifest.permission.READ_EXTERNAL_STORAGE;
         if (checkSelfPermission(audioPerm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            Button btnAudio = new Button(this);
+            btnAudio = new Button(this);
             btnAudio.setText("⚠️ CẤP QUYỀN NHẠC (Phát My Playlist)");
             btnAudio.setBackground(getRounded("#8BC34A", 25f));
             btnAudio.setTextColor(Color.WHITE);
@@ -5864,12 +5902,17 @@ private void openTileEditorV2(String id) {
         T("Floating Panel Data Packs", "Bảng nút nổi (Data Pack)"),
         () -> openDesignSubSpace(5, "LENAP"));
 
+    LinearLayout btnEditBubble = createSettingsRow("bubble_chart_24px", "BUBBLE",
+        T("Assistive Touch Bubble", "Bong bóng chat trợ năng"),
+        () -> openDesignSubSpace(6, "BUBBLE"));
+
     LinearLayout btnEditLang = createSettingsRow("translate_24px", "LANGUAGE",
         T("US-English / Tiếng Việt", "US-English / Tiếng Việt"),
         this::showLanguagePicker);
 
     designSpaceMenu.addView(btnEditAnim);
     designSpaceMenu.addView(btnEditPanel);
+    designSpaceMenu.addView(btnEditBubble);
     designSpaceMenu.addView(btnEditLang);
     pageDesign.addView(designSpaceMenu);
     pageDesign.addView(designBackRow);
@@ -5909,6 +5952,7 @@ private void showLanguagePicker() {
 private void renderSliders() {
 designSliderContainer.removeAllViews();
 if (designTabState == 5) { renderPanelDesign(); return; }
+if (designTabState == 6) { renderBubbleSettings(); return; }
     if (designTabState == 3) {
     // DRAWER 1: HIỆU ỨNG CHUNG
     LinearLayout dEffect = new LinearLayout(this);
@@ -6182,6 +6226,36 @@ ids.sort((idA, idB) -> naturalCompareName(
             currentRow.addView(dummy);
         }
     }
+private void renderBubbleSettings() {
+    designSliderContainer.addView(createSectionTitle("💬 BONG BÓNG CHAT (ASSISTIVE TOUCH)"));
+
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setGravity(Gravity.CENTER_VERTICAL);
+    row.setPadding(0, 10, 0, 20);
+    TextView tvOn = new TextView(this);
+    tvOn.setText(T("Enable bubble", "Bật bong bóng chat"));
+    tvOn.setTextColor(Color.WHITE);
+    tvOn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Switch swOn = new Switch(this);
+    swOn.setChecked(prefs.getBoolean("bubble_en", false));
+    swOn.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("bubble_en", c).apply());
+    row.addView(tvOn); row.addView(swOn);
+    designSliderContainer.addView(row);
+
+    designSliderContainer.addView(createSlider(T("Panel Width", "Chiều rộng bảng"), "bubble_bg_w", 1000, 500));
+    designSliderContainer.addView(createSlider(T("Panel Height", "Chiều cao bảng"), "bubble_bg_h", 1400, 700));
+    designSliderContainer.addView(createSlider(T("Panel Opacity", "Độ đậm mờ bảng"), "bubble_bg_alpha", 255, 160));
+    designSliderContainer.addView(createSlider(T("Panel Corner Radius", "Độ bo góc bảng"), "bubble_bg_radius", 100, 40));
+
+    TextView tvNote = new TextView(this);
+    tvNote.setText(T("Long-press a node to select, tap another to swap positions.",
+        "Nhấn giữ 1 nút để chọn, chạm nút khác để hoán đổi vị trí."));
+    tvNote.setTextColor(Color.parseColor("#9AA0A6"));
+    tvNote.setTextSize(12f);
+    tvNote.setPadding(0, 20, 0, 0);
+    designSliderContainer.addView(tvNote);
+}
 private LinearLayout buildPanelSelectionToolbar(List<String> ids) {
     LinearLayout bar = new LinearLayout(this);
     bar.setOrientation(LinearLayout.HORIZONTAL);

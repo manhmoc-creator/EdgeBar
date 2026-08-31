@@ -22,24 +22,26 @@ public class AccessibleHomeService extends Service {
         // Ngoài ra, nếu KHÔNG phải Foreground Service thật, Android sẽ tự dừng service
         // này sau một khoảng chạy nền (Background Execution Limits) — đây chính là
         // nguyên nhân Homacc "biến mất tự nhiên" dù không có thao tác gì.
-        String cid = "eb_acc_home_engine";
-        NotificationChannel c = new NotificationChannel(cid, "Homacc Engine", NotificationManager.IMPORTANCE_MIN);
-        c.setSound(null, null);
-        c.enableLights(false);
-        c.enableVibration(false);
-        c.setShowBadge(false);
-        getSystemService(NotificationManager.class).createNotificationChannel(c);
-        Notification n = new Notification.Builder(this, cid)
-                .setContentTitle("Homacc")
-                .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
-                .setOngoing(true)
-                .setPriority(Notification.PRIORITY_MIN)
-                .build();
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(98, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-        } else {
-            startForeground(98, n);
-        }
+// [FIX] Dùng CHUNG id 99 + channel "eb_lacck_status" với EdgeBarService —
+// hệ thống chỉ giữ 1 notification duy nhất cho cùng (pkg, id), nên "Homacc" không
+// còn hiện thành dòng riêng, chỉ còn "EB Lacck" như trước.
+String cid = "eb_lacck_status";
+NotificationManager nmAcc = getSystemService(NotificationManager.class);
+if (nmAcc.getNotificationChannel(cid) == null) {
+    NotificationChannel c = new NotificationChannel(cid, "EB Lacck Status", NotificationManager.IMPORTANCE_LOW);
+    c.setShowBadge(false);
+    nmAcc.createNotificationChannel(c);
+}
+Notification n = new Notification.Builder(this, cid)
+        .setContentTitle("EB Lacck")
+        .setSmallIcon(android.R.drawable.stat_notify_voicemail)
+        .setOngoing(true)
+        .build();
+if (Build.VERSION.SDK_INT >= 34) {
+    startForeground(99, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+} else {
+    startForeground(99, n);
+}
 scheduleWatchdog();
     }
     private void scheduleWatchdog() {

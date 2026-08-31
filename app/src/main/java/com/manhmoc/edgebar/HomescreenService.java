@@ -128,6 +128,7 @@ private boolean recIndicatorTestPaused = false;
     private KeyguardManager km;
     private Vibrator vibrator;
     private PanelEngine panelEngine;
+    private AssistiveBubbleEngine bubbleEngine;
     private int lastKbdHeight = 0;
     // [FIX] Bổ sung các biến này vì SidebarTouchListener bên dưới có gọi tới,
     // nhưng HomescreenService trước đây chưa khai báo (khác với EdgeBarService).
@@ -1074,6 +1075,8 @@ for (int i = 0; i < cornerCount; i++) {
         // CODE MỚI — thêm dòng này:
 panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ false); // HomescreenService = IAO
         panelEngine.rebuildAll();
+        bubbleEngine = new AssistiveBubbleEngine(this, wm, prefs, /* isAnyMode = */ false);
+        bubbleEngine.rebuild();
         updateVisibility();
         sendSyncState();
         startAppLockPolling(); // [MỚI] Homeb không có Accessibility -> phải poll UsageStats
@@ -1095,13 +1098,17 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     boolean isOurKey = false;
     String[] ourPrefixes =
     {"lock_","home_","homacc_","anim_","vib_","hold_",
-     "pack_panel_","lenap_",
+     "pack_panel_","lenap_","bubble_",
      "blacklist","locklist","avoid_kbd","shortcut_","preview_","lang_","ytdl_",
      "intent_","tile_","macro_","i1_","i2_","i3_","i4_","i5_","i6_","i7_",
      "i8_","i9_","i10_","i11_","i12_","i13_","i14_","i15_"};
     for (String prefix : ourPrefixes)
         if (k.startsWith(prefix) || k.equals(prefix)) { isOurKey = true; break; }
     if (!isOurKey) return;
+    if (k.startsWith("bubble_")) {
+        if (bubbleEngine != null) bubbleEngine.onPrefChanged(k);
+        return;
+    }
     if (k.startsWith("anim_")) {
         if (fV != null) fV.updateStyle();
         if (k.startsWith("anim_rec_")) liveUpdateRecIndicatorPosition();
@@ -2215,6 +2222,7 @@ PixelFormat.TRANSLUCENT);
    public void onDestroy() {
     super.onDestroy();
     isRunning = false;
+    if (bubbleEngine != null) bubbleEngine.destroy();
     appLockPollHandler.removeCallbacksAndMessages(null); // [MỚI] dừng poll, tránh leak Handler
     try { unregisterReceiver(syncReceiver); } catch (Exception e) {}
     prefs.unregisterOnSharedPreferenceChangeListener(prefListener);

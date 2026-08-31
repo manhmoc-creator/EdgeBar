@@ -121,6 +121,7 @@ private static final String[] KEYGUARD_BOUNCER_IDS = {
     private SharedPreferences prefs;
     private Vibrator vibrator;
     private PanelEngine panelEngine;
+    private AssistiveBubbleEngine bubbleEngine;
     private final String[] BARS = {"b_c", "r", "l", "r_u", "r_c", "r_d", "t_c", "t_r", "t_l", "l_u", "l_c", "l_d"};
     private final int[] GRAV = {
         Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT,
@@ -378,7 +379,7 @@ private static final java.util.Set<String> EB_KEY_PREFIXES =
         // [FIX] Khóa thật của Panel là "pack_panel_<id>_..." — không phải "panel".
         // Thiếu tiền tố đúng khiến isOurKey() chặn TOÀN BỘ thay đổi live của Panel
         // (Preview Handle, Enable, slider...) ngay từ vòng lọc whitelist.
-        "pack_panel_","lenap_",
+        "pack_panel_","lenap_","bubble_",
         "i1_","i2_","i3_","i4_","i5_","i6_","i7_","i8_",
         "i9_","i10_","i11_","i12_","i13_","i14_","i15_"
     ));
@@ -401,6 +402,11 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     // TẦNG 1: Whitelist tuyệt đối — bỏ qua mọi key không thuộc EdgeBar
     if (!isOurKey(k)) return;
 
+    // TẦNG 1.5: bubble_ → Bong bóng chat AssistiveTouch, xử lý riêng
+    if (k != null && k.startsWith("bubble_")) {
+        if (bubbleEngine != null) bubbleEngine.onPrefChanged(k);
+        return;
+    }
     // TẦNG 2: anim_ → update ngay, user đang xem preview live
     if (k != null && k.startsWith("anim_")) {
         if (fV != null) fV.updateStyle();
@@ -1185,6 +1191,8 @@ createFloatingBars();
 checkAndKickBlacklistOnAccEnable(); // [MỚI] tự thoát app Blacklist nếu đang mở lúc bật Acc
         panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ true);
 panelEngine.rebuildAll();
+bubbleEngine = new AssistiveBubbleEngine(this, wm, prefs, /* isAnyMode = */ true);
+bubbleEngine.rebuild();
 // V19.12.3.6.13: Set tường minh flag — một số ROM không parse đúng
 // canRequestFingerprintGestures từ XML, gây fpController không bao giờ
 // nhận gesture dù đăng ký callback "thành công".
