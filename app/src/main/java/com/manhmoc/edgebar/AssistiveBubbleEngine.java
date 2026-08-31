@@ -6,6 +6,7 @@ import android.graphics.*;
 import android.graphics.drawable.*;
 import android.os.*;
 import android.text.TextUtils;
+import android.util.DisplayMetrics;
 import android.view.*;
 import android.widget.*;
 import java.util.*;
