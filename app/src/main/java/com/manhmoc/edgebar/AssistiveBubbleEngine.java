@@ -413,7 +413,22 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
 
         try { wm.updateViewLayout(menuOverlay, menuLp); } catch (Exception ignored) {}
     }
-
+    private void executeAction(String actionStr) {
+        if (actionStr == null || actionStr.equals("NONE") || actionStr.isEmpty()) return;
+        String[] acts = actionStr.split(",");
+        for (String a : acts) {
+            String at = a.trim();
+            if (at.isEmpty()) continue;
+            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            if (at.startsWith("RUN_SHORTCUT_")) {
+                ipc.putExtra("act", "RUN_SHORTCUT");
+                ipc.putExtra("shortcut_id", at.substring(13));
+            } else {
+                ipc.putExtra("act", at);
+            }
+            ctx.sendBroadcast(ipc);
+        }
+    }
     private void closeMenu() {
         if (menuOverlay != null) { try { wm.removeView(menuOverlay); } catch (Exception ignored) {} menuOverlay = null; }
         selectedMainIdx = null; selectedSubIdx = null; currentSubmenu = null;
