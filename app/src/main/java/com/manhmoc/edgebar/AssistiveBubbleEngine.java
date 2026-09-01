@@ -492,9 +492,11 @@ public class AssistiveBubbleEngine {
         LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
         iconBox.setLayoutParams(ibLp);
         
+        // MÀU NỀN ĐỘNG DỰA VÀO ĐỘ ĐẬM MỜ
+        int bgAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
         GradientDrawable boxBg = new GradientDrawable();
         boxBg.setCornerRadius(100f); 
-        boxBg.setColor(selectedMainIdx != null && selectedMainIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#333333"));
+        boxBg.setColor(selectedMainIdx != null && selectedMainIdx == idx ? Color.parseColor("#8AB4F8") : Color.argb(bgAlpha, 51, 51, 51));
         iconBox.setBackground(boxBg);
 
         ImageView iv = new ImageView(ctx);
@@ -589,9 +591,10 @@ public class AssistiveBubbleEngine {
         LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
         iconBox.setLayoutParams(ibLp);
         
+        int bgAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
         GradientDrawable boxBg = new GradientDrawable();
         boxBg.setCornerRadius(100f); 
-        boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#333333")); // MÀU XÁM ĐẬM
+        boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx ? Color.parseColor("#8AB4F8") : Color.argb(bgAlpha, 51, 51, 51));
         iconBox.setBackground(boxBg);
 
         if (!ref.isEmpty()) {
@@ -616,8 +619,10 @@ public class AssistiveBubbleEngine {
             }
             
             if (d != null) {
+                // TĂNG KÍCH THƯỚC BUNG LƯỚI CHO APP LÊN 1.0f ĐỂ KHÔNG BỊ BÉ
                 if (!ref.startsWith("app:")) { d = d.mutate(); d.setTint(Color.WHITE); }
-                Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
+                float scale = ref.startsWith("app:") ? 1.0f : 0.77f;
+                Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, scale);
                 if (norm != null) iv.setImageBitmap(norm);
                 else iv.setImageDrawable(d);
             }
@@ -739,16 +744,18 @@ public class AssistiveBubbleEngine {
         }
         
         PackageManager pm = ctx.getPackageManager();
-        for (String[] item : shown) {
+        for (int p = 0; p < shown.size(); p++) {
+            String[] item = shown.get(p);
             LinearLayout row = new LinearLayout(ctx);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(10, 16, 10, 16);
             
             ImageView iv = new ImageView(ctx);
-            int isize = 75;
+            // PHÓNG TO ICON TRONG LIST TÌM KIẾM
+            int isize = 90;
             LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(isize, isize);
-            ilp.setMargins(0, 0, 26, 0);
+            ilp.setMargins(10, 0, 26, 0);
             iv.setLayoutParams(ilp);
             
             Drawable customOvr = getCustomIcon(prefs.getString("bubble_node_icon_override_" + type + "_" + item[1], ""));

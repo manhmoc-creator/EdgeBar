@@ -6613,11 +6613,23 @@ private void renderBubbleSettings() {
 
         designSliderContainer.addView(createSlider(T("Bubble Size", "Kích thước bong bóng"), "bubble_size", 300, 120));
         designSliderContainer.addView(createSlider(T("Icon Size in Panel", "Độ to nhỏ của 9 nút trong Panel"), "bubble_icon_size", 200, 100));
+        // THÊM THANH KÉO ĐỘ ĐẬM MỜ NỀN NÚT
+        designSliderContainer.addView(createSlider(T("Node Background Opacity", "Độ đậm mờ nền 9 nút (Xám)"), "bubble_node_bg_alpha", 255, 255));
+        
         designSliderContainer.addView(createSlider(T("Panel Width", "Chiều rộng bảng"), "bubble_bg_w", 1500, 800));
         designSliderContainer.addView(createSlider(T("Panel Max Height", "Chiều cao tối đa (List)"), "bubble_bg_h", 1500, 800));
         designSliderContainer.addView(createSlider(T("Panel Opacity", "Độ đậm mờ bảng"), "bubble_bg_alpha", 255, 160));
 
-        // --- CẤU HÌNH CUSTOM ICON CHO 9 NÚT ---
+        Button btnGestures = new Button(this);
+        btnGestures.setText("⚙️ CẤU HÌNH CỬ CHỈ (2 CHẠM & NHẤN GIỮ)");
+        btnGestures.setBackground(getRounded("#00E5FF", 20f));
+        btnGestures.setTextColor(Color.BLACK);
+        LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(-1, -2);
+        glp.setMargins(0, 20, 0, 20);
+        btnGestures.setLayoutParams(glp);
+        btnGestures.setOnClickListener(v -> openBubbleGestureSpace());
+        designSliderContainer.addView(btnGestures);
+
         designSliderContainer.addView(createSectionTitle("🎨 CẤU HÌNH & ICON 9 NÚT TRÊN BẢNG"));
         LinearLayout iconGrid = new LinearLayout(this);
         iconGrid.setOrientation(LinearLayout.VERTICAL);
@@ -6747,7 +6759,8 @@ private void renderBubbleSettings() {
                 
                 if (type.equals("APP") || type.equals("SHORTCUT")) {
                     ImageView iv = new ImageView(MainActivity.this);
-                    LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(70, 70);
+                    // TĂNG KÍCH THƯỚC TỪ 70 LÊN 95 CHO ICON TO HƠN
+                    LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(95, 95);
                     ilp.setMargins(0, 0, 20, 0);
                     iv.setLayoutParams(ilp);
                     
@@ -6769,7 +6782,8 @@ private void renderBubbleSettings() {
                 if (!type.equals("APP") && !type.equals("SHORTCUT")) tv.setPadding(20, 0, 0, 0);
                 row.addView(tv);
 
-                if (selectedOrder.contains(item[1]) && !type.equals("APP") && !type.equals("SHORTCUT")) {
+                // CHO PHÉP SHORTCUT CŨNG CHỈNH ĐƯỢC ICON (Chỉ loại trừ APP)
+                if (selectedOrder.contains(item[1]) && !type.equals("APP")) {
                     Button btnEditIcon = new Button(MainActivity.this);
                     btnEditIcon.setText("🖌");
                     btnEditIcon.setBackground(getRounded("#303134", 14f));
