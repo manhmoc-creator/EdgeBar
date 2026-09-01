@@ -1085,36 +1085,49 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
     box.setOnClickListener(onClick);
     return box;
 }
-private final Map<String, String> selectedForSwap = new HashMap<>(); // panelId -> ref đang được chọn để hoán đổi
+private static String currentSwapPanelId = null;
+    private static String currentSwapRefKey = null;
 
 private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnable originalAction) {
-    cell.setOnLongClickListener(v -> {
-        selectedForSwap.put(panelId, refKey);
-        cell.setBackground(getSwapHighlightBg(cell.getBackground()));
-        try {
-            Vibrator vib = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
-            if (vib != null) vib.vibrate(android.os.VibrationEffect.createOneShot(20, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
-        } catch (Exception ignored) {}
-        return true;
-    });
-    cell.setOnClickListener(v -> {
-        String sel = selectedForSwap.get(panelId);
-        if (sel != null) {
-            selectedForSwap.remove(panelId);
-            if (!sel.equals(refKey)) {
-                String px = "pack_panel_" + panelId + "_";
-                List<String> order = csvToList(prefs.getString(px + "order", ""));
-                int i1 = order.indexOf(sel), i2 = order.indexOf(refKey);
-                if (i1 >= 0 && i2 >= 0) Collections.swap(order, i1, i2);
-                prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
+        cell.setOnLongClickListener(v -> {
+            currentSwapPanelId = panelId;
+            currentSwapRefKey = refKey;
+            cell.setBackground(getSwapHighlightBg(cell.getBackground()));
+            try {
+                Vibrator vib = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+                if (vib != null) vib.vibrate(android.os.VibrationEffect.createOneShot(20, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+            } catch (Exception ignored) {}
+            return true;
+        });
+        cell.setOnClickListener(v -> {
+            // Nếu đang trong trạng thái hoán đổi (đã nhấn giữ trước đó)
+            if (panelId.equals(currentSwapPanelId) && currentSwapRefKey != null) {
+                String sel = currentSwapRefKey;
+                // Reset trạng thái ngay lập tức để đưa các nút về bình thường
+                currentSwapPanelId = null;
+                currentSwapRefKey = null;
+                
+                // Nếu click vào nút KHÁC với nút đang nhấn giữ thì mới hoán đổi
+                if (!sel.equals(refKey)) {
+                    String px = "pack_panel_" + panelId + "_";
+                    List<String> order = csvToList(prefs.getString(px + "order", ""));
+                    int i1 = order.indexOf(sel), i2 = order.indexOf(refKey);
+                    if (i1 >= 0 && i2 >= 0) Collections.swap(order, i1, i2);
+                    prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
+                }
+                renderPanelGrid(panelId); // Vẽ lại lưới -> vòng tròn xanh biến mất
+                return; // DỪNG LẠI TẠI ĐÂY, KHÔNG MỞ APP/ACTION
             }
-            renderPanelGrid(panelId); // vẽ lại -> vòng tròn xanh biến mất
-            return;
-        }
-        originalAction.run();
-    });
-    return cell;
-}
+            
+            // Xóa rác nếu click nhầm
+            currentSwapPanelId = null;
+            currentSwapRefKey = null;
+            
+            // Nếu không có trạng thái hoán đổi, mở app/shortcut bình thường
+            originalAction.run();
+        });
+        return cell;
+    }
 
 private Drawable getSwapHighlightBg(Drawable orig) {
     // Viền tròn ôm quanh ô, nền trong suốt để icon vẫn hiện rõ trong lúc chọn
@@ -1267,15 +1280,20 @@ private Drawable getSwapHighlightBg(Drawable orig) {
         }
     }
 private void closePanel(String id) {
-    LinearLayout panel = panels.get(id);
-    Boolean open = panelOpen.get(id);
-    if (panel == null || open == null || !open) return;
-    panelOpen.put(id, false);
-    panel.setVisibility(View.GONE);
-    View handle = handles.get(id);
-    if (handle != null) handle.setVisibility(View.VISIBLE);
-    selectedForSwap.remove(id); // [MỚI] tránh sót trạng thái đang chọn hoán đổi khi mở lại
-}
+        LinearLayout panel = panels.get(id);
+        Boolean open = panelOpen.get(id);
+        if (panel == null || open == null || !open) return;
+        panelOpen.put(id, false);
+        panel.setVisibility(View.GONE);
+        View handle = handles.get(id);
+        if (handle != null) handle.setVisibility(View.VISIBLE);
+        
+        // [MỚI] Tránh sót trạng thái đang chọn hoán đổi khi mở lại panel
+        if (id.equals(currentSwapPanelId)) {
+            currentSwapPanelId = null;
+            currentSwapRefKey = null;
+        }
+    }
 
     private void closeAllPanels() { for (String id : new java.util.ArrayList<>(panels.keySet())) closePanel(id); }
     private void removeHandle(String id) {
