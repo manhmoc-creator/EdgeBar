@@ -1095,17 +1095,14 @@ private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnabl
         cell.setBackground(getSwapHighlightBg(cell.getBackground()));
         try {
             Vibrator vib = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
-            if (vib != null) vib.vibrate(android.os.VibrationEffect.createOneShot(20, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+            if (vib != null) vib.vibrate(android.os.VibrationEffect.createOneShot(30, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
         } catch (Exception ignored) {}
-        return true;
+        return true; 
     });
 
     cell.setOnClickListener(v -> {
-        // Kiểm tra an toàn, nếu đang ở chế độ hoán đổi thì swap và DỪNG LẠI
         if (currentSwapPanelId != null && currentSwapPanelId.equals(panelId) && currentSwapRefKey != null) {
             String sel = currentSwapRefKey;
-            
-            // Trả trạng thái về 0 ngay lập tức
             currentSwapPanelId = null;
             currentSwapRefKey = null;
 
@@ -1113,19 +1110,56 @@ private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnabl
                 String px = "pack_panel_" + panelId + "_";
                 List<String> order = csvToList(prefs.getString(px + "order", ""));
                 int i1 = order.indexOf(sel), i2 = order.indexOf(refKey);
-                if (i1 >= 0 && i2 >= 0) Collections.swap(order, i1, i2);
-                prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
+                if (i1 >= 0 && i2 >= 0) {
+                    Collections.swap(order, i1, i2);
+                    prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
+                }
             }
-            renderPanelGrid(panelId); // Vẽ lại để xoá viền xanh
-            return; // QUAN TRỌNG: Cắt luồng tại đây để KHÔNG chạy lệnh mở App/Action
+            // Gọi hàm render đồng bộ cực nhanh
+            fastRenderPanelGrid(panelId); 
+            return; 
         }
 
-        // Nếu không hoán đổi, dọn rác và chạy lệnh mở App bình thường
         currentSwapPanelId = null;
         currentSwapRefKey = null;
         originalAction.run();
     });
     return cell;
+}
+
+private void fastRenderPanelGrid(String id) {
+    String px = "pack_panel_" + id + "_";
+    LinearLayout panel = panels.get(id);
+    if (panel == null || panel.getChildCount() == 0) return;
+
+    int cols = Math.max(1, prefs.getInt(px+"cols", 4));
+    int iconSize = prefs.getInt(px+"icon_size", 110);
+    int cellSize = iconSize + CELL_INNER_PAD;
+
+    LinearLayout gridContainer = (LinearLayout) panel.getChildAt(0); 
+    gridContainer.removeAllViews();
+
+    List<String> order = csvToList(prefs.getString(px + "order", ""));
+    LinearLayout row = null;
+
+    for (int i = 0; i < order.size(); i++) {
+        if (i % cols == 0) {
+            row = new LinearLayout(ctx);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_HORIZONTAL);
+            gridContainer.addView(row);
+        }
+        String ref = order.get(i);
+        String type = ref.startsWith("SC:") ? "SC" : (ref.contains(".") ? "APP" : "ACT");
+        String cleanRef = ref.startsWith("SC:") ? ref.substring(3) : ref;
+
+        Drawable icon = getCachedIcon(cleanRef); 
+        View cell = buildCell(px, type, icon, cleanRef);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(cellSize, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(8, 8, 8, 8);
+        cell.setLayoutParams(lp);
+        row.addView(cell);
+    }
 }
 
 private Drawable getSwapHighlightBg(Drawable orig) {
@@ -1147,9 +1181,12 @@ private Drawable getSwapHighlightBg(Drawable orig) {
         String cellCacheKey = overrideIcon != null ? (ref + "_ov_" + ovrVal) : ref;
         View cell = wrapAppIconCell(px, finalIcon, cellCacheKey, v -> {
             launchAppRef(ref);
-            closeAllPanels();
+            new Handler(Looper.getMainLooper()).post(() -> closeAllPanels());
         }, getCachedAppLabel(ref));
-        return wrapWithSwapLogic(panelId, ref, cell, () -> { launchAppRef(ref); closeAllPanels(); });
+        return wrapWithSwapLogic(panelId, ref, cell, () -> { 
+            launchAppRef(ref); 
+            new Handler(Looper.getMainLooper()).post(() -> closeAllPanels()); 
+        });
     } else if (ref.startsWith("RUN_SHORTCUT_")) {
         String scId = ref.substring("RUN_SHORTCUT_".length());
         Drawable icon = getCachedShortcutIcon(scId);
@@ -1163,8 +1200,9 @@ private Drawable getSwapHighlightBg(Drawable orig) {
                     ctx.startActivity(scIntent);
                 }
             } catch (Exception ignored) {}
-            closeAllPanels();
+            new Handler(Looper.getMainLooper()).post(() -> closeAllPanels());
         };
+
         View cell = wrapIconCell(px, icon, icon == null ? "🔗" : null, "sc_" + scId, v -> scAction.run(), label);
         // Khoá order key khớp đúng với "SC:" + id đã lưu lúc khởi tạo order trong renderPanelGrid()
         return wrapWithSwapLogic(panelId, "SC:" + scId, cell, scAction);
@@ -1185,8 +1223,9 @@ private Drawable getSwapHighlightBg(Drawable orig) {
             Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             ipc.putExtra("act", ref);
             ctx.sendBroadcast(ipc);
-            closeAllPanels();
+            new Handler(Looper.getMainLooper()).post(() -> closeAllPanels());
         };
+
         View cell = wrapIconCell(px, sysIcon, sysIcon == null ? actEmoji(ref) : null, "act_" + panelId + "_" + ref, v -> actAction.run(), label);
         return wrapWithSwapLogic(panelId, ref, cell, actAction);
     }
