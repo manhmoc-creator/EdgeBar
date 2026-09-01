@@ -400,7 +400,8 @@ public class AssistiveBubbleEngine {
         String csv = prefs.getString("bubble_node_items_" + type, "");
         List<String> out = new ArrayList<>();
         if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
-        return out; // Khong add empty stringsữa, chỉ duyệt đúng số lượng
+        while (out.size() < 9) out.add(""); 
+        return out;
     }
 
     private String getLabelForType(String type) {
@@ -410,6 +411,40 @@ public class AssistiveBubbleEngine {
             case "MACRO": return "Macro"; case "PANEL": return "Panel"; case "SEARCH": return "Search";
             default: return "Node";
         }
+    }
+
+    private String getActionLabelForSubNode(String ref) {
+        if (ref.startsWith("app:")) {
+            try { return ctx.getPackageManager().getApplicationLabel(ctx.getPackageManager().getApplicationInfo(ref.substring(4),0)).toString(); }
+            catch (Exception e) { return "App"; }
+        } else if (ref.startsWith("act:RUN_SHORTCUT_")) {
+            return prefs.getString("shortcut_" + ref.substring(17) + "_name", "Shortcut");
+        } else if (ref.startsWith("act:INTENT_")) {
+            return prefs.getString("intent_" + ref.substring(11) + "_name", "Intent");
+        } else if (ref.startsWith("act:MACRO_")) {
+            return prefs.getString("macro_" + ref.substring(10) + "_name", "Macro");
+        } else if (ref.startsWith("act:PANEL_")) {
+            return prefs.getString("pack_panel_" + ref.substring(10) + "_name", "Panel");
+        } else if (ref.startsWith("act:")) {
+            String actKey = ref.substring(4);
+            if (actKey.equals("BACK")) return "Quay lại"; if (actKey.equals("HOME")) return "Màn chính";
+            if (actKey.equals("RECENTS")) return "Đa nhiệm"; if (actKey.equals("SCREEN_OFF")) return "Tắt màn hình";
+            if (actKey.equals("FLASH")) return "Đèn pin"; if (actKey.equals("SCREENSHOT")) return "Chụp màn hình";
+            if (actKey.equals("CAMERA")) return "Camera"; if (actKey.equals("VOLUME")) return "Âm lượng";
+            if (actKey.equals("POWER_DIALOG")) return "Menu nguồn"; if (actKey.equals("NOTIFICATIONS")) return "Thông báo";
+            if (actKey.equals("QUICK_SETTINGS")) return "Cài đặt nhanh"; if (actKey.equals("SPLIT_SCREEN")) return "Chia đôi màn hình";
+            if (actKey.equals("SCREEN_RECORD")) return "Quay màn hình"; if (actKey.equals("AUTO_ROTATE_TOGGLE")) return "Tự động xoay";
+            if (actKey.equals("TOGGLE_OVERLAY")) return "Bật/tắt Trợ năng"; if (actKey.equals("TOGGLE_RECORD")) return "Bật/tắt Ghi âm";
+            if (actKey.equals("PAUSE_RECORD")) return "Dừng/Tiếp Ghi âm"; if (actKey.equals("YTDL_DOWNLOAD")) return "Tải YTDLnis";
+            if (actKey.equals("TOGGLE_WORK_PROFILE")) return "Bật/tắt Hồ sơ CV"; if (actKey.equals("OPEN_STORAGE_SCAN")) return "Quét Dung Lượng";
+            if (actKey.equals("SCAN_QR")) return "Quét QR"; if (actKey.equals("PLAY_MY_PLAYLIST")) return "Phát My Playlist";
+            if (actKey.equals("TRIGGER_TAP")) return "Tap"; if (actKey.equals("TRIGGER_DTAP")) return "Double Tap";
+            if (actKey.equals("TRIGGER_LONG")) return "Long Press"; if (actKey.equals("TRIGGER_UP")) return "Vuốt Lên";
+            if (actKey.equals("TRIGGER_DOWN")) return "Vuốt Xuống"; if (actKey.equals("TRIGGER_LEFT")) return "Vuốt Trái";
+            if (actKey.equals("TRIGGER_RIGHT")) return "Vuốt Phải"; if (actKey.equals("TRIGGER_ACC_MENU_2F")) return "Giả lập 2 ngón";
+            return actKey;
+        }
+        return "Action";
     }
 
     private LinearLayout buildPanelCard() {
@@ -423,7 +458,7 @@ public class AssistiveBubbleEngine {
 
         if (currentSubmenu != null) {
             if (currentSubmenu.equals("SEARCH")) buildSearchMenu(card);
-            else buildSubmenuListOnly(card, currentSubmenu); // Thay grid bằng list ko search
+            else buildSubmenuGrid(card, currentSubmenu);
         } else {
             for (int i = 0; i < 3; i++) {
                 LinearLayout row = new LinearLayout(ctx);
@@ -515,7 +550,7 @@ public class AssistiveBubbleEngine {
         return box;
     }
 
-    private void buildSubmenuListOnly(LinearLayout card, String type) {
+    private void buildSubmenuGrid(LinearLayout card, String type) {
         TextView tvHeader = new TextView(ctx);
         tvHeader.setText(getLabelForType(type));
         tvHeader.setTextColor(Color.parseColor("#00E5FF"));
@@ -524,18 +559,95 @@ public class AssistiveBubbleEngine {
         tvHeader.setPadding(0, 0, 0, 20);
         card.addView(tvHeader);
 
-        ScrollView scroll = new ScrollView(ctx);
-        scroll.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
-        LinearLayout listContainer = new LinearLayout(ctx);
-        listContainer.setOrientation(LinearLayout.VERTICAL);
-        listContainer.setTag("LIST_CONTAINER"); 
-        scroll.addView(listContainer);
-        
-        int maxHeight = prefs.getInt("bubble_bg_h", 800);
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, maxHeight);
-        card.addView(scroll, slp);
+        List<String> items = getSubItems(type);
+        for (int i = 0; i < 3; i++) {
+            LinearLayout row = new LinearLayout(ctx);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setWeightSum(3);
+            for (int j = 0; j < 3; j++) {
+                int idx = i * 3 + j;
+                row.addView(buildSubNodeButton(type, idx, items.get(idx)));
+            }
+            card.addView(row);
+        }
+    }
 
-        showGridListOnly(type, ""); 
+    private FrameLayout buildSubNodeButton(String type, int idx, String ref) {
+        FrameLayout box = new FrameLayout(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        lp.setMargins(10, 15, 10, 15);
+        box.setLayoutParams(lp);
+
+        LinearLayout content = new LinearLayout(ctx);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setGravity(Gravity.CENTER);
+        
+        FrameLayout iconBox = new FrameLayout(ctx);
+        int iconSize = prefs.getInt("bubble_icon_size", 100);
+        LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
+        iconBox.setLayoutParams(ibLp);
+        
+        GradientDrawable boxBg = new GradientDrawable();
+        boxBg.setCornerRadius(100f); 
+        boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#33000000"));
+        iconBox.setBackground(boxBg);
+
+        if (!ref.isEmpty()) {
+            ImageView iv = new ImageView(ctx);
+            FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
+            iv.setLayoutParams(ivLp);
+            
+            Drawable d = getCustomIcon(prefs.getString("bubble_node_icon_override_" + type + "_" + ref, ""));
+            PackageManager pm = ctx.getPackageManager();
+            if (d == null) {
+                if (ref.startsWith("app:")) {
+                    try { d = pm.getApplicationIcon(ref.substring(4)); } catch(Exception ignored) {}
+                } else if (ref.startsWith("act:RUN_SHORTCUT_")) {
+                    try {
+                        String scId = ref.substring(17);
+                        Intent scIntent = Intent.parseUri(prefs.getString("shortcut_" + scId + "_intent_uri", ""), 0);
+                        ComponentName cn = scIntent.getComponent();
+                        if (cn != null) d = pm.getActivityIcon(cn);
+                    } catch (Exception ignored) {}
+                }
+                if (d == null) d = ctx.getDrawable(android.R.drawable.sym_def_app_icon);
+            }
+            
+            if (d != null) {
+                if (!ref.startsWith("app:")) { d = d.mutate(); d.setTint(Color.WHITE); }
+                Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
+                if (norm != null) iv.setImageBitmap(norm);
+                else iv.setImageDrawable(d);
+            }
+            iconBox.addView(iv);
+        }
+        
+        TextView tv = new TextView(ctx);
+        tv.setText(getActionLabelForSubNode(ref));
+        tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.WHITE);
+        tv.setTextSize(11f);
+        tv.setSingleLine(true);
+        tv.setGravity(Gravity.CENTER);
+        tv.setPadding(0, 10, 0, 0);
+
+        content.addView(iconBox); content.addView(tv);
+        box.addView(content);
+        
+        box.setOnLongClickListener(v -> { selectedSubIdx = idx; refreshPanelCard(); return true; });
+        box.setOnClickListener(v -> {
+            if (selectedSubIdx != null) {
+                if (selectedSubIdx != idx) {
+                    List<String> list = getSubItems(type);
+                    Collections.swap(list, selectedSubIdx, idx);
+                    prefs.edit().putString("bubble_node_items_" + type, TextUtils.join(",", list)).apply();
+                }
+                selectedSubIdx = null;
+                refreshPanelCard();
+            } else {
+                if (!ref.isEmpty()) { runItem(ref); closeMenu(); }
+            }
+        });
+        return box;
     }
 
     private void buildSearchMenu(LinearLayout card) {
@@ -649,21 +761,9 @@ public class AssistiveBubbleEngine {
                         ComponentName cn = scIntent.getComponent();
                         if (cn != null) iv.setImageDrawable(pm.getActivityIcon(cn));
                         else iv.setImageResource(android.R.drawable.ic_menu_send);
-                    } catch (Exception e) {
-                        iv.setImageResource(android.R.drawable.ic_menu_send);
-                    }
+                    } catch (Exception e) { iv.setImageResource(android.R.drawable.ic_menu_send); }
                 } else {
-                    int defaultIconRes = android.R.drawable.ic_menu_view;
-                    if (item[1].equals("act:BACK")) defaultIconRes = android.R.drawable.ic_media_rew;
-                    else if (item[1].equals("act:HOME")) defaultIconRes = android.R.drawable.ic_menu_compass;
-                    else if (item[1].equals("act:RECENTS")) defaultIconRes = android.R.drawable.ic_menu_recent_history;
-                    else if (item[1].equals("act:SCREEN_OFF")) defaultIconRes = android.R.drawable.ic_lock_lock;
-                    else if (item[1].equals("act:POWER_DIALOG")) defaultIconRes = android.R.drawable.ic_lock_power_off;
-                    else if (item[1].equals("act:SCREENSHOT") || item[1].equals("act:CAMERA")) defaultIconRes = android.R.drawable.ic_menu_camera;
-                    else if (item[1].equals("act:NOTIFICATIONS")) defaultIconRes = android.R.drawable.ic_dialog_email;
-                    else if (item[1].equals("act:VOICE_RECORD") || item[1].equals("act:TOGGLE_RECORD")) defaultIconRes = android.R.drawable.ic_btn_speak_now;
-                    
-                    iv.setImageResource(defaultIconRes);
+                    iv.setImageResource(android.R.drawable.ic_menu_view);
                     iv.setColorFilter(Color.WHITE);
                 }
             }
@@ -737,7 +837,7 @@ public class AssistiveBubbleEngine {
             panelCard.removeAllViews();
             if (currentSubmenu != null) {
                 if (currentSubmenu.equals("SEARCH")) buildSearchMenu(panelCard);
-                else buildSubmenuListOnly(panelCard, currentSubmenu);
+                else buildSubmenuGrid(panelCard, currentSubmenu);
             } else {
                 for (int i = 0; i < 3; i++) {
                     LinearLayout row = new LinearLayout(ctx);
@@ -772,7 +872,6 @@ public class AssistiveBubbleEngine {
                 break;
             }
             case "SHORTCUT": {
-                // Gọi Shortcut trực tiếp từ hệ thống, Không quét qua Shortcut do EdgeBar tự lưu
                 for (ResolveInfo ri : ShortcutScanner.getProviders(ctx)) {
                     out.add(new String[]{ri.loadLabel(ctx.getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
                 }
