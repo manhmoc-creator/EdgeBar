@@ -4,6 +4,7 @@ import android.graphics.drawable.Drawable; import android.graphics.drawable.Adap
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.BitmapDrawable; // [MỚI] để nạp icon Shortcut từ file PNG
 import android.os.*; import android.view.*; import android.view.animation.*; import android.widget.*;
+import android.text.TextUtils; 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 public class PanelEngine {
@@ -572,25 +573,23 @@ new Thread(() -> {
         for (String act : acts) { PanelItemObj o = new PanelItemObj(); o.type = "ACT"; o.ref = act; o.originalIndex = seq++; allItems.add(o); }
         for (String sc : shortcuts) { PanelItemObj o = new PanelItemObj(); o.type = "SC"; o.ref = sc; o.originalIndex = seq++; allItems.add(o); }
 
-        List<String> letterList = Arrays.asList("-", "A", "B", "C", "D", "E", "F", "G", "H", "I");
-        List<String> romanList = Arrays.asList("-", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX");
-
-                for (PanelItemObj obj : allItems) {
-            String pos = prefs.getString(px + "posmap_" + obj.ref, "-,-");
-            String[] parts = pos.split(",");
-            if (parts.length == 2 && !parts[0].equals("-") && !parts[1].equals("-")) {
-                int lVal = letterList.indexOf(parts[0]); // trục X (cột) - chữ, trái→phải
-                int rVal = romanList.indexOf(parts[1]);  // trục Y (hàng) - số, trên→dưới
-                // [FIX] Lưới vẽ theo HÀNG trước (row-major): phải ưu tiên số (hàng) trước
-                // rồi mới tới chữ (cột), khớp đúng cách renderPanelGrid() đổ item theo "cols"
-                obj.sortScore = (rVal * 10) + lVal;
-            } else {
-                obj.sortScore = 9999; // Mục không set tọa độ sẽ rớt xuống cuối
+                // Đọc thứ tự đã lưu trong "order"; nếu chưa có (data cũ hoặc lần đầu) thì
+        // khởi tạo bằng đúng thứ tự apps+acts+shortcuts hiện có.
+        List<String> order = csvToList(prefs.getString(px + "order", ""));
+        if (order.isEmpty()) {
+            for (PanelItemObj obj : allItems) {
+                order.add(obj.type.equals("SC") ? "SC:" + obj.ref : obj.ref);
             }
+            prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
         }
+        final List<String> finalOrder = order;
         Collections.sort(allItems, (a, b) -> {
-            if (a.sortScore != b.sortScore) return Integer.compare(a.sortScore, b.sortScore);
-            return Integer.compare(a.originalIndex, b.originalIndex); // Fallback thuật toán tuần tự hiện tại
+            String keyA = a.type.equals("SC") ? "SC:" + a.ref : a.ref;
+            String keyB = b.type.equals("SC") ? "SC:" + b.ref : b.ref;
+            int ia = finalOrder.indexOf(keyA), ib = finalOrder.indexOf(keyB);
+            if (ia == -1) ia = 9999; if (ib == -1) ib = 9999;
+            if (ia != ib) return Integer.compare(ia, ib);
+            return Integer.compare(a.originalIndex, b.originalIndex);
         });
 
         List<Object[]> loaded = new ArrayList<>();
@@ -1084,6 +1083,39 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
     box.setOnClickListener(onClick);
     return box;
 }
+private final Map<String, String> selectedForSwap = new HashMap<>(); // panelId -> ref đang được chọn để hoán đổi
+
+private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnable originalAction) {
+    cell.setOnLongClickListener(v -> {
+        selectedForSwap.put(panelId, refKey);
+        cell.setBackground(getSwapHighlightBg(cell.getBackground()));
+        return true;
+    });
+    cell.setOnClickListener(v -> {
+        String sel = selectedForSwap.get(panelId);
+        if (sel != null) {
+            selectedForSwap.remove(panelId);
+            if (!sel.equals(refKey)) {
+                String px = "pack_panel_" + panelId + "_";
+                List<String> order = csvToList(prefs.getString(px + "order", ""));
+                int i1 = order.indexOf(sel), i2 = order.indexOf(refKey);
+                if (i1 >= 0 && i2 >= 0) Collections.swap(order, i1, i2);
+                prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
+            }
+            renderPanelGrid(panelId);
+            return;
+        }
+        originalAction.run();
+    });
+    return cell;
+}
+
+private Drawable getSwapHighlightBg(Drawable orig) {
+    GradientDrawable g = new GradientDrawable();
+    g.setColor(Color.parseColor("#8AB4F8"));
+    g.setCornerRadius(20f);
+    return g;
+}
     private View buildCell(String px, String type, Object payload, String ref) {
     String panelId = px.startsWith("pack_panel_") ? px.substring("pack_panel_".length(), px.length()-1) : "";
     if (type.equals("APP")) {
@@ -1092,10 +1124,11 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
         Drawable overrideIcon = ovrVal.isEmpty() ? null : getIconOverride(panelId, ref);
         Drawable finalIcon = overrideIcon != null ? overrideIcon : (Drawable) payload;
         String cellCacheKey = overrideIcon != null ? (ref + "_ov_" + ovrVal) : ref;
-        return wrapAppIconCell(px, finalIcon, cellCacheKey, v -> {
+        View cell = wrapAppIconCell(px, finalIcon, cellCacheKey, v -> {
             launchAppRef(ref);
             closeAllPanels();
         }, getCachedAppLabel(ref));
+        return wrapWithSwapLogic(panelId, ref, cell, () -> { launchAppRef(ref); closeAllPanels(); });
     } else if (ref.startsWith("RUN_SHORTCUT_")) {
         String scId = ref.substring("RUN_SHORTCUT_".length());
         Drawable icon = getCachedShortcutIcon(scId);

@@ -3881,28 +3881,7 @@ private List<String> csvToList(String csv) {
     for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
     return out;
 }
-private void swapOrSetPanelPosition(String panelId, String ref, String newLetter, String newRoman) {
-    String posPrefix = "pack_panel_" + panelId + "_posmap_";
-    String oldPos = prefs.getString(posPrefix + ref, "-,-");
-    String newPos = newLetter + "," + newRoman;
-    if (oldPos.equals(newPos)) return;
 
-    if (!newLetter.equals("-") && !newRoman.equals("-")) {
-        List<String> allRefs = new ArrayList<>();
-        allRefs.addAll(csvToList(prefs.getString("pack_panel_" + panelId + "_apps", "")));
-        allRefs.addAll(csvToList(prefs.getString("pack_panel_" + panelId + "_acts", "")));
-        allRefs.addAll(csvToList(prefs.getString("pack_panel_" + panelId + "_shortcuts", "")));
-        for (String otherRef : allRefs) {
-            if (otherRef.equals(ref)) continue;
-            String otherPos = prefs.getString(posPrefix + otherRef, "-,-");
-            if (otherPos.equals(newPos)) {
-                prefs.edit().putString(posPrefix + otherRef, oldPos).apply(); // hoán đổi
-                break;
-            }
-        }
-    }
-    prefs.edit().putString(posPrefix + ref, newPos).apply();
-}
 private static final java.util.regex.Pattern NUM_CHUNK_PACK =
     java.util.regex.Pattern.compile("\\d+|\\D+");
 
@@ -6263,10 +6242,65 @@ private void renderBubbleSettings() {
         designSliderContainer.addView(createSlider(T("Panel Width", "Chiều rộng bảng"), "bubble_bg_w", 1500, 800));
         designSliderContainer.addView(createSlider(T("Panel Max Height", "Chiều cao tối đa (List)"), "bubble_bg_h", 1500, 800));
         designSliderContainer.addView(createSlider(T("Panel Opacity", "Độ đậm mờ bảng"), "bubble_bg_alpha", 255, 160));
+        designSliderContainer.addView(createSlider(T("Node Background Opacity", "Độ đậm mờ nền 9 nút"), "bubble_node_bg_alpha", 255, 255));
 
-        // Nút thừa đã bị loại bỏ hoàn toàn khỏi đây.
+        // --- YÊU CẦU 1: HIỂN THỊ 2 DATA PACK CỬ CHỈ TRÊN CÙNG 1 DÒNG ---
+        designSliderContainer.addView(createSectionTitle("⚙️ CỬ CHỈ BONG BÓNG CHAT"));
+        List<String> rules = getDynamicIds("bubble_pack_rules");
+        if (rules.isEmpty()) {
+            String r1 = java.util.UUID.randomUUID().toString().substring(0, 8);
+            String r2 = java.util.UUID.randomUUID().toString().substring(0, 8);
+            rules.add(r1); rules.add(r2);
+            prefs.edit()
+                .putString("bubble_pack_rules", r1 + "," + r2)
+                .putString("prule_" + r1 + "_gestures", "dtap")
+                .putString("prule_" + r2 + "_gestures", "long")
+                .apply();
+        }
+        
+        LinearLayout ruleRow = new LinearLayout(this);
+        ruleRow.setOrientation(LinearLayout.HORIZONTAL);
+        ruleRow.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        
+        for (String rId : rules) {
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setBackground(getRounded("#202124", 24f));
+            card.setPadding(20, 24, 20, 24);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+            lp.setMargins(6, 6, 6, 6);
+            card.setLayoutParams(lp);
 
-        // --- CẤU HÌNH CUSTOM ICON CHO 9 NÚT ---
+            TextView tGest = new TextView(this);
+            String g = prefs.getString("prule_" + rId + "_gestures", "");
+            tGest.setText(g.replace("dtap", "2 Chạm").replace("long", "Nhấn Giữ"));
+            tGest.setTextColor(Color.parseColor("#9AA0A6"));
+            tGest.setTextSize(12); tGest.setPadding(0, 0, 0, 5);
+
+            TextView tAct = new TextView(this);
+            tAct.setText(formatPruleActionLabel(rId));
+            tAct.setTextColor(Color.parseColor("#8AB4F8"));
+            tAct.setTextSize(15f);
+            tAct.setMaxLines(1); tAct.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+            LinearLayout bottomCtrl = new LinearLayout(this);
+            bottomCtrl.setOrientation(LinearLayout.HORIZONTAL);
+            bottomCtrl.setGravity(Gravity.CENTER_VERTICAL);
+            bottomCtrl.setPadding(0, 15, 0, 0);
+            
+            Switch swOn = new Switch(this);
+            swOn.setChecked(prefs.getBoolean("prule_" + rId + "_en", true));
+            swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean("prule_" + rId + "_en", chk).apply());
+            swOn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            
+            bottomCtrl.addView(swOn);
+            card.addView(tGest); card.addView(tAct); card.addView(bottomCtrl);
+            card.setOnClickListener(v -> openBubbleRuleEditor(rId, this::renderSliders));
+            ruleRow.addView(card);
+        }
+        designSliderContainer.addView(ruleRow);
+
+        // --- CẤU HÌNH CUSTOM ICON CHO 9 NÚT TRÊN BẢNG ---
         designSliderContainer.addView(createSectionTitle("🎨 CẤU HÌNH & ICON 9 NÚT TRÊN BẢNG"));
         LinearLayout iconGrid = new LinearLayout(this);
         iconGrid.setOrientation(LinearLayout.VERTICAL);
@@ -6312,13 +6346,12 @@ private void renderBubbleSettings() {
 
         TextView tvNote = new TextView(this);
         tvNote.setText(T("1 Tap bubble to open panel. Tap again to close/go back. Tap nodes to config up to 9 actions. Long-press node to change icon.",
-            "Chạm bong bóng để mở Panel. Chạm lại để đóng/quay lại. Chạm 8 nút trên để gán tối đa 9 hành động. Nhấn giữ để đổi Icon. Cử chỉ 2 Chạm & Nhấn Giữ cấu hình ở thanh FAB."));
+            "Chạm bong bóng để mở Panel. Chạm lại để đóng/quay lại. Chạm 8 nút trên để gán tối đa 9 hành động. Nhấn giữ để đổi Icon."));
         tvNote.setTextColor(Color.parseColor("#9AA0A6"));
         tvNote.setTextSize(12f);
         tvNote.setPadding(0, 20, 0, 0);
         designSliderContainer.addView(tvNote);
     }
-
     private void showBubbleNodePicker(String type) {
         String prefKey = "bubble_node_items_" + type;
         // Đọc danh sách đã lưu (loại bỏ ô trống)
@@ -6524,10 +6557,11 @@ private void renderBubbleSettings() {
         
         bCancel.setOnClickListener(v -> d.dismiss());
         bSave.setOnClickListener(v -> {
-            // YÊU CẦU 6: Tự động sắp xếp điền ngoài viền trước, tâm cuối cùng (ưu tiên trái dưới)
+            // YÊU CẦU 5: Tự động sắp xếp điền ngoài viền trước, tâm cuối cùng (ưu tiên GÓC DƯỚI PHẢI)
             String[] arranged = new String[9];
             Arrays.fill(arranged, "");
-            int[] PREF_ORDER = {6, 7, 8, 3, 5, 0, 1, 2, 4};
+            // Mảng ưu tiên: Góc dưới phải (8), Đáy giữa (7), Cạnh phải (5), Góc dưới trái (6), Đỉnh phải (2), Cạnh trái (3), Đỉnh giữa (1), Đỉnh trái (0), Tâm (4)
+            int[] PREF_ORDER = {8, 7, 5, 6, 2, 3, 1, 0, 4};
             for(int i = 0; i < selectedOrder.size() && i < 9; i++) {
                 arranged[PREF_ORDER[i]] = selectedOrder.get(i);
             }
@@ -7886,9 +7920,6 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
     final boolean[] actDrawers = {false, false, false}; // Trạng thái mở của 3 ngăn kéo Action (Mặc định đóng)
     final List<String[]> shownList = new ArrayList<>();
     
-    final String[] LETTERS = {"-", "A", "B", "C", "D", "E", "F", "G", "H", "I"};
-    final String[] ROMANS = {"-", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"};
-
     Runnable refreshList = () -> {
         shownList.clear();
         String q = etSearch.getText().toString().trim().toLowerCase();
@@ -8044,62 +8075,8 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                 LinearLayout controls = new LinearLayout(MainActivity.this);
                 controls.setOrientation(LinearLayout.HORIZONTAL);
 
-                String posKey = prefPrefix + "posmap_" + ref;
-                String[] savedPos = prefs.getString(posKey, "-,-").split(",");
-                String curLetter = savedPos[0];
-                String curRoman = savedPos.length > 1 ? savedPos[1] : "-";
-
                 // Hàm tạo nút to 130x130
                 java.util.function.Function<String, Button> makeMiniBtn = (text) -> {
-                    Button b = new Button(MainActivity.this);
-                    b.setText(text); b.setTextColor(Color.WHITE); b.setTextSize(16f); // Font chữ to
-                    b.setPadding(0, 0, 0, 0); b.setBackground(getRounded("#303134", 20f)); // Bo góc mạnh hơn
-                    LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(130, 130); // Kích thước nút to
-                    blp.setMargins(10, 0, 10, 0); b.setLayoutParams(blp);
-                    return b;
-                };
-
-                // Nút Thùng Rác ĐƯỢC CHUYỂN LÊN ĐÂY (Chỉ có ở Shortcut, sẽ được add vào BÊN TRÁI nút Letter)
-                if (currentTab[0] == 2) { 
-                    Button btnTrashSc = makeMiniBtn.apply("🗑");
-                    btnTrashSc.setBackground(getRounded("#D32F2F", 20f));
-                    btnTrashSc.setOnClickListener(v -> {
-                        new android.app.AlertDialog.Builder(MainActivity.this)
-                            .setTitle("Xóa shortcut này?")
-                            .setMessage("Shortcut này sẽ bị xoá khỏi danh sách hệ thống và chuyển vào Kho Cũ.")
-                            .setPositiveButton("XÓA", (dlg, w) -> {
-                                moveDataPackToTrash("shortcut_" + ref);
-                                currentSelList.remove(ref);
-                                for (int k = allScs.size() - 1; k >= 0; k--) {
-                                    if (allScs.get(k)[1].equals(ref)) allScs.remove(k);
-                                }
-                                refreshList.run();
-                            }).setNegativeButton("HỦY", null).show();
-                    });
-                    controls.addView(btnTrashSc);
-                }
-
-                // Phím chọn vị trí chữ
-                                Button btnLetter = makeMiniBtn.apply(curLetter);
-                btnLetter.setTextColor(Color.parseColor("#FFC107"));
-                btnLetter.setOnClickListener(v -> {
-                    new android.app.AlertDialog.Builder(MainActivity.this).setItems(LETTERS, (dlg, which) -> {
-                        swapOrSetPanelPosition(panelId, ref, LETTERS[which], curRoman); // [FIX] hoán đổi thay vì đè
-                        refreshList.run();
-                    }).show();
-                });
-                controls.addView(btnLetter);
-
-                // Phím chọn vị trí số
-                Button btnRoman = makeMiniBtn.apply(curRoman);
-                btnRoman.setTextColor(Color.parseColor("#4CAF50"));
-                btnRoman.setOnClickListener(v -> {
-                    new android.app.AlertDialog.Builder(MainActivity.this).setItems(ROMANS, (dlg, which) -> {
-                        swapOrSetPanelPosition(panelId, ref, curLetter, ROMANS[which]); // [FIX] hoán đổi thay vì đè
-                        refreshList.run();
-                    }).show();
-                });
-                controls.addView(btnRoman);
                 // Nút Chổi Cọ (Brush Override Icon)
                 if (currentTab[0] == 0 || currentTab[0] == 1) { // APP & ACTION
                     Button btnIcon = makeMiniBtn.apply("🖌");

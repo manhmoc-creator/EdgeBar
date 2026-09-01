@@ -82,7 +82,7 @@ public class AssistiveBubbleEngine {
         if (isApp) {
             iv.setImageDrawable(d);
             iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            iv.setPadding(0, 0, 0, 0); // YÊU CẦU 4: Điền đầy khung nền, bỏ padding thừa
+            iv.setPadding(0, 0, 0, 0); 
         } else {
             d = d.mutate(); d.setTint(Color.WHITE);
             Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
@@ -268,9 +268,16 @@ public class AssistiveBubbleEngine {
                 if (!acts.isEmpty() && !acts.equals("NONE")) {
                     Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
                     
-                    // YÊU CẦU 6: Truyền toạ độ bắt đầu
-                    ipc.putExtra("startX", bubbleLp.x);
-                    ipc.putExtra("startY", bubbleLp.y);
+                    // YÊU CẦU 6: Định tuyến vị trí truyền đi (Tâm Bubble hay Tâm Nav Bar)
+                    int startX = bubbleLp.x + prefs.getInt("bubble_size", 120) / 2;
+                    int startY = bubbleLp.y + prefs.getInt("bubble_size", 120) / 2;
+                    if (acts.contains("TRIGGER_ACC_MENU_2F")) {
+                        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+                        startX = dm.widthPixels / 2;
+                        startY = dm.heightPixels - 10;
+                    }
+                    ipc.putExtra("startX", startX);
+                    ipc.putExtra("startY", startY);
                     
                     for (String act : acts.split(",")) {
                         String at = act.trim();
@@ -430,7 +437,6 @@ public class AssistiveBubbleEngine {
         }
     }
 
-    // YÊU CẦU 1: ĐỌC LABEL ĐÚNG, KHÔNG HIỆN CHỮ "ACTION" CHẾT
     private String getActionLabelForSubNode(String ref) {
         if (ref == null || ref.isEmpty()) return "Trống";
         if (ref.startsWith("app:")) {
@@ -737,7 +743,20 @@ public class AssistiveBubbleEngine {
         if (listContainer == null) return;
         listContainer.removeAllViews();
 
-        List<String[]> items = buildItems("ALL"); 
+        List<String[]> items;
+        if (type.equals("SEARCH")) {
+            items = buildItems("ALL"); 
+        } else {
+            items = new ArrayList<>();
+            List<String> selectedRefs = getSubItems(type);
+            List<String[]> allOfType = buildItems(type); 
+            for (String ref : selectedRefs) {
+                if (ref.isEmpty()) continue;
+                for (String[] it : allOfType) {
+                    if (it[1].equals(ref)) { items.add(it); break; }
+                }
+            }
+        }
 
         String q = query.toLowerCase(Locale.ROOT);
         List<String[]> shown = new ArrayList<>();
@@ -785,8 +804,9 @@ public class AssistiveBubbleEngine {
                     try {
                         String scId = item[1].substring(17);
                         String path = prefs.getString("shortcut_" + scId + "_icon_path", "");
-                        if (!path.isEmpty()) iv.setImageBitmap(BitmapFactory.decodeFile(path));
-                        else {
+                        if (!path.isEmpty()) {
+                            iv.setImageBitmap(BitmapFactory.decodeFile(path));
+                        } else {
                             Intent scIntent = Intent.parseUri(prefs.getString("shortcut_" + scId + "_intent_uri", ""), 0);
                             ComponentName cn = scIntent.getComponent();
                             if (cn != null) iv.setImageDrawable(pm.getActivityIcon(cn));
@@ -873,20 +893,26 @@ public class AssistiveBubbleEngine {
         }
         switch (type) {
             case "APP": {
-                PackageManager pm = ctx.getPackageManager();
-                Intent i = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
-                for (ResolveInfo ri : pm.queryIntentActivities(i, 0))
-                    out.add(new String[]{ri.loadLabel(pm).toString(), "app:" + ri.activityInfo.packageName});
+                // YÊU CẦU 3: Quét cả ứng dụng trong không gian riêng (Island) bằng LauncherApps
+                android.os.UserManager um = (android.os.UserManager) ctx.getSystemService(Context.USER_SERVICE);
+                android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE);
+                try {
+                    for (android.os.UserHandle profile : um.getUserProfiles()) {
+                        boolean island = !profile.equals(android.os.Process.myUserHandle());
+                        for (android.content.pm.LauncherActivityInfo info : la.getActivityList(null, profile)) {
+                            out.add(new String[]{info.getLabel().toString() + (island ? " [Island]" : ""), "app:" + info.getApplicationInfo().packageName});
+                        }
+                    }
+                } catch (Exception ignored) {}
                 out.sort((a, b) -> a[0].compareToIgnoreCase(b[0]));
                 break;
             }
             case "SHORTCUT": {
                 for (ResolveInfo ri : ShortcutScanner.getProviders(ctx)) {
-                    if (ri.activityInfo.packageName.equals(ctx.getPackageName())) continue; // YÊU CẦU 3: Bỏ qua shortcut EdgeBar
+                    if (ri.activityInfo.packageName.equals(ctx.getPackageName())) continue; 
                     out.add(new String[]{ri.loadLabel(ctx.getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
                 }
-                for (String id : csvToList(prefs.getString("shortcut_ids", "")))
-                    out.add(new String[]{"(Đã lưu) " + prefs.getString("shortcut_" + id + "_name", "Shortcut"), "act:RUN_SHORTCUT_" + id});
+                // YÊU CẦU 3: Đã gỡ bỏ vòng lặp quét shortcut do EdgeBar tự tạo (RUN_SHORTCUT)
                 break;
             }
             case "SYSTEM": {
@@ -947,9 +973,18 @@ public class AssistiveBubbleEngine {
         } else if (ref.startsWith("act:")) {
             Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             ipc.putExtra("act", ref.substring(4));
-            // YÊU CẦU 6: Truyền vị trí cho Giả lập cử chỉ
-            ipc.putExtra("startX", bubbleLp.x);
-            ipc.putExtra("startY", bubbleLp.y);
+            
+            // YÊU CẦU 6: Định tuyến vị trí điểm neo khi Cử chỉ Giả lập gọi từ Bảng điều khiển
+            int startX = bubbleLp.x + prefs.getInt("bubble_size", 120) / 2;
+            int startY = bubbleLp.y + prefs.getInt("bubble_size", 120) / 2;
+            if (ref.contains("TRIGGER_ACC_MENU_2F")) {
+                DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+                startX = dm.widthPixels / 2;
+                startY = dm.heightPixels - 10;
+            }
+            ipc.putExtra("startX", startX);
+            ipc.putExtra("startY", startY);
+            
             ctx.sendBroadcast(ipc);
         }
     }
