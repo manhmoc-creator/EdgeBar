@@ -808,6 +808,81 @@ private void refreshPanelCard() {
             recalculateMenuPosition();
         }
     }
+private FrameLayout buildMainButton(int idx) {
+        FrameLayout box = new FrameLayout(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        lp.setMargins(10, 15, 10, 15);
+        box.setLayoutParams(lp);
+
+        String type = getMainOrder().get(idx);
+        LinearLayout content = new LinearLayout(ctx);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setGravity(Gravity.CENTER);
+        
+        FrameLayout iconBox = new FrameLayout(ctx);
+        int iconSize = prefs.getInt("bubble_icon_size", 100);
+        LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
+        iconBox.setLayoutParams(ibLp);
+        
+        GradientDrawable boxBg = new GradientDrawable();
+        boxBg.setCornerRadius(100f); 
+        boxBg.setColor(selectedMainIdx != null && selectedMainIdx == idx ? Color.parseColor("#8AB4F8") : Color.parseColor("#333333"));
+        iconBox.setBackground(boxBg);
+
+        ImageView iv = new ImageView(ctx);
+        FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
+        iv.setLayoutParams(ivLp);
+        
+        Drawable d = getCustomIcon(prefs.getString("bubble_node_icon_" + type, ""));
+        if (d == null) {
+            try {
+                if (type.equals("SYSTEM")) d = ctx.getDrawable(android.R.drawable.ic_menu_preferences);
+                else if (type.equals("UTILITY")) d = ctx.getDrawable(android.R.drawable.ic_menu_manage);
+                else if (type.equals("APP")) d = ctx.getDrawable(android.R.drawable.sym_def_app_icon);
+                else if (type.equals("SHORTCUT")) d = ctx.getDrawable(android.R.drawable.ic_menu_send);
+                else if (type.equals("TRIGGER")) d = ctx.getDrawable(android.R.drawable.ic_menu_directions);
+                else if (type.equals("INTENT")) d = ctx.getDrawable(android.R.drawable.ic_menu_compass);
+                else if (type.equals("SEARCH")) d = ctx.getDrawable(android.R.drawable.ic_menu_search);
+                else d = ctx.getDrawable(android.R.drawable.ic_menu_view); 
+            } catch (Exception ignored) {}
+        }
+        if (d != null) {
+            d = d.mutate(); d.setTint(Color.WHITE);
+            Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
+            if (norm != null) iv.setImageBitmap(norm);
+            else iv.setImageDrawable(d);
+        }
+        iconBox.addView(iv);
+        
+        TextView tv = new TextView(ctx);
+        tv.setText(getLabelForType(type));
+        tv.setTextColor(Color.WHITE);
+        tv.setTextSize(12f);
+        tv.setSingleLine(true);
+        tv.setGravity(Gravity.CENTER);
+        tv.setPadding(0, 10, 0, 0);
+
+        content.addView(iconBox); content.addView(tv);
+        box.addView(content);
+        nodeButtons[idx] = box;
+        
+        box.setOnLongClickListener(v -> { selectedMainIdx = idx; refreshPanelCard(); return true; });
+        box.setOnClickListener(v -> {
+            if (selectedMainIdx != null) {
+                if (selectedMainIdx != idx) {
+                    List<String> order = new ArrayList<>(getMainOrder());
+                    Collections.swap(order, selectedMainIdx, idx);
+                    prefs.edit().putString("bubble_node_order", TextUtils.join(",", order)).apply();
+                }
+                selectedMainIdx = null;
+                refreshPanelCard();
+            } else {
+                currentSubmenu = type;
+                refreshPanelCard();
+            }
+        });
+        return box;
+    }
     private List<String[]> buildItems(String type) {
         List<String[]> out = new ArrayList<>();
         if (type.equals("SEARCH") || type.equals("ALL")) {
