@@ -17,7 +17,12 @@ import android.view.animation.OvershootInterpolator;
 import android.widget.*;
 import java.util.*;
 import java.util.function.Supplier; 
-
+private DisplayMetrics getRealMetrics() {
+    DisplayMetrics dm = new DisplayMetrics();
+    try { wm.getDefaultDisplay().getRealMetrics(dm); }
+    catch (Exception e) { dm = ctx.getResources().getDisplayMetrics(); }
+    return dm;
+}
 public class AssistiveBubbleEngine {
     private Context ctx; private WindowManager wm; private SharedPreferences prefs; private boolean isAnyMode;
     private View bubbleView; private WindowManager.LayoutParams bubbleLp;
@@ -28,6 +33,8 @@ public class AssistiveBubbleEngine {
     private Integer selectedMainIdx = null;
     private Integer selectedSubIdx = null;
     private String currentSubmenu = null; 
+private static final java.util.concurrent.ExecutorService bubbleIconExecutor =
+    java.util.concurrent.Executors.newFixedThreadPool(4);
     private static final int BUBBLE_ICON_CACHE_LIMIT = 60;
 private static final LinkedHashMap<String, Drawable> bubbleIconCache =
     new LinkedHashMap<String, Drawable>(16, 0.75f, true) {
@@ -41,7 +48,7 @@ private void loadIconAsync(String cacheKey, java.util.function.Supplier<Drawable
         if (cached != null) { applyIconToImageView(iv, cached, iconSize, isAppHint); return; }
     }
     iv.setTag(cacheKey);
-    new Thread(() -> {
+    bubbleIconExecutor.execute(() -> {
         Drawable d = loader.get();
         if (d != null) synchronized (bubbleIconCache) { bubbleIconCache.put(cacheKey, d); }
         bubbleIconHandler.post(() -> {
@@ -80,7 +87,6 @@ private Drawable resolveSubNodeIcon(String customOverride, String ref) {
     private int restoreBubbleX = -1, restoreBubbleY = -1;
     private ValueAnimator jumpAnim;
     private ComponentCallbacks configCallbacks;
-    private GestureDetector gestureDetector;
     private float sx, sy, lastX, lastY;
     private VelocityTracker velocityTracker;
 
@@ -141,30 +147,46 @@ private void unregisterRotationWatcher() {
 
 private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, max)); }
 
-private void handleOrientationChange(int orientation) {
+    private static final int BUBBLE_EDGE_MARGIN = 30;
+
+    private void handleOrientationChange(int orientation) {
     if (bubbleView == null || bubbleLp == null) return;
-    if (menuOverlay != null) closeMenu(); // đóng bảng cũ, tránh lệch theo hướng vừa xoay
+    if (menuOverlay != null) closeMenu();
 
-    DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-    int bSize = prefs.getInt("bubble_size", 120);
-    boolean isLandscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
+    // [FIX] Đợi 180ms để Resources/WindowManager ổn định hẳn sau khi xoay,
+    // tránh đọc DisplayMetrics còn dở dang (nguyên nhân bong bóng "rơi vào giữa").
+    bubbleIconHandler.postDelayed(() -> {
+        if (bubbleView == null || bubbleLp == null) return;
+        DisplayMetrics dm = getRealMetrics();
+        int bSize = prefs.getInt("bubble_size", 120);
+        boolean isLandscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
 
-    if (isLandscape) {
-        prefs.edit().putInt("bubble_x_portrait", bubbleLp.x).putInt("bubble_y_portrait", bubbleLp.y).apply();
-        // [YÊU CẦU] Ngang -> về giữa màn hình cho cân đối 4 cạnh
-        int targetX = dm.widthPixels / 2 - bSize / 2;
-        int targetY = dm.heightPixels / 2 - bSize / 2;
-        bubbleLp.x = clampPx(targetX, 0, dm.widthPixels - bSize);
-        bubbleLp.y = clampPx(targetY, 0, dm.heightPixels - bSize);
-    } else {
-        prefs.edit().putInt("bubble_x_landscape", bubbleLp.x).putInt("bubble_y_landscape", bubbleLp.y).apply();
-        int targetX = prefs.getInt("bubble_x_portrait", prefs.getInt("bubble_x", 40));
-        int targetY = prefs.getInt("bubble_y_portrait", prefs.getInt("bubble_y", 600));
-        bubbleLp.x = clampPx(targetX, 0, dm.widthPixels - bSize);
-        bubbleLp.y = clampPx(targetY, 0, dm.heightPixels - bSize);
-    }
-    try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
-    prefs.edit().putInt("bubble_x", bubbleLp.x).putInt("bubble_y", bubbleLp.y).apply();
+        if (isLandscape) {
+            prefs.edit().putInt("bubble_x_portrait", bubbleLp.x).putInt("bubble_y_portrait", bubbleLp.y).apply();
+            int savedX = prefs.getInt("bubble_x_landscape", Integer.MIN_VALUE);
+            int savedY = prefs.getInt("bubble_y_landscape", Integer.MIN_VALUE);
+            int targetX, targetY;
+            if (savedX != Integer.MIN_VALUE) {
+                targetX = savedX; targetY = savedY;
+            } else {
+                boolean wasNearLeft = bubbleLp.x < (dm.heightPixels / 2);
+                targetX = wasNearLeft ? BUBBLE_EDGE_MARGIN : dm.widthPixels - bSize - BUBBLE_EDGE_MARGIN;
+                targetY = bubbleLp.y;
+            }
+            bubbleLp.x = clampPx(targetX, 0, dm.widthPixels - bSize);
+            bubbleLp.y = clampPx(targetY, BUBBLE_EDGE_MARGIN, dm.heightPixels - bSize - BUBBLE_EDGE_MARGIN);
+        } else {
+            prefs.edit().putInt("bubble_x_landscape", bubbleLp.x).putInt("bubble_y_landscape", bubbleLp.y).apply();
+            int rawX = prefs.getInt("bubble_x_portrait", prefs.getInt("bubble_x", 40));
+            int targetY = prefs.getInt("bubble_y_portrait", prefs.getInt("bubble_y", 600));
+            boolean nearLeft = rawX + bSize / 2 < dm.widthPixels / 2;
+            int targetX = nearLeft ? BUBBLE_EDGE_MARGIN : dm.widthPixels - bSize - BUBBLE_EDGE_MARGIN;
+            bubbleLp.x = clampPx(targetX, 0, dm.widthPixels - bSize);
+            bubbleLp.y = clampPx(targetY, BUBBLE_EDGE_MARGIN, dm.heightPixels - bSize - BUBBLE_EDGE_MARGIN);
+        }
+        try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
+        prefs.edit().putInt("bubble_x", bubbleLp.x).putInt("bubble_y", bubbleLp.y).apply();
+    }, 180);
 }
     private Drawable getCustomIcon(String ref) {
         if (ref == null || ref.isEmpty()) return null;
@@ -244,42 +266,23 @@ private void handleOrientationChange(int orientation) {
         final boolean[] isDragging = {false};
         final int MARGIN = 30; 
         
-        gestureDetector = new GestureDetector(ctx, new GestureDetector.SimpleOnGestureListener() {
-            @Override
-            public boolean onSingleTapConfirmed(MotionEvent e) {
-    if (menuOverlay != null) {
-        if (currentSubmenu != null) {
-            currentSubmenu = null; 
-            selectedSubIdx = null;  // [FIX] hủy trạng thái "đang chờ hoán đổi" khi thoát submenu
-            selectedMainIdx = null;
-            refreshPanelCard();
-        } else {
-            closeMenu(); 
-        }
-    } else {
-        moveToCenterAndOpenMenu(); 
-    }
-    return true;
-}
-
-            @Override
-            public boolean onDoubleTap(MotionEvent e) {
-                fireGestureAction("dtap");
-                return true;
-            }
-
-            @Override
-            public void onLongPress(MotionEvent e) {
-                fireGestureAction("long");
-            }
-        });
+                final long[] lastTapUpMs = {0};
+        final boolean[] longFiredFlag = {false};
+        final Runnable[] pendingSingleTap = {null};
+        final Handler tapHandler = new Handler(Looper.getMainLooper());
+        final Runnable longPressCheck = () -> {
+            longFiredFlag[0] = true;
+            fireGestureAction("long");
+        };
+        final int DTAP_WINDOW_MS = 220; // ngắn hơn hẳn timeout mặc định của hệ thống (~300-400ms)
 
         bubbleView.setOnTouchListener((v, e) -> {
-            if (gestureDetector.onTouchEvent(e)) return true;
-            
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    longFiredFlag[0] = false;
+                    tapHandler.postDelayed(longPressCheck, 500);
                     if (velocityTracker == null) velocityTracker = VelocityTracker.obtain();
+
                     else velocityTracker.clear();
                     velocityTracker.addMovement(e);
 
@@ -306,6 +309,28 @@ private void handleOrientationChange(int orientation) {
 
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
+                    tapHandler.removeCallbacks(longPressCheck);
+                    if (!isDragging[0] && !longFiredFlag[0] && e.getActionMasked() == MotionEvent.ACTION_UP) {
+                        long now = System.currentTimeMillis();
+                        if (pendingSingleTap[0] != null) {
+                            tapHandler.removeCallbacks(pendingSingleTap[0]);
+                            pendingSingleTap[0] = null;
+                            lastTapUpMs[0] = 0;
+                            fireGestureAction("dtap"); // chạm lần 2 trong cửa sổ ngắn -> double tap
+                        } else {
+                            lastTapUpMs[0] = now;
+                            pendingSingleTap[0] = () -> {
+                                pendingSingleTap[0] = null;
+                                if (menuOverlay != null) {
+                                    if (currentSubmenu != null) {
+                                        currentSubmenu = null; selectedSubIdx = null; selectedMainIdx = null;
+                                        refreshPanelCard();
+                                    } else closeMenu();
+                                } else moveToCenterAndOpenMenu();
+                            };
+                            tapHandler.postDelayed(pendingSingleTap[0], DTAP_WINDOW_MS);
+                        }
+                    }
                     if (isDragging[0]) {
                         float vX = 0, vY = 0;
                         if (velocityTracker != null) {
@@ -317,7 +342,7 @@ private void handleOrientationChange(int orientation) {
                             velocityTracker = null;
                         }
 
-                        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+                        DisplayMetrics dm = getRealMetrics();
                         int bSize = prefs.getInt("bubble_size", 120);
                         
                         int targetX;
@@ -434,7 +459,7 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
     }
 
     private void moveToCenterAndOpenMenu() {
-        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        DisplayMetrics dm = getRealMetrics();
         int bSize = prefs.getInt("bubble_size", 120);
         int targetX = dm.widthPixels / 2 - bSize / 2; 
         
@@ -480,7 +505,7 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
             | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
             PixelFormat.TRANSLUCENT);
         
-        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        DisplayMetrics dm = getRealMetrics(); 
         menuLp.x = dm.widthPixels / 2 - menuLp.width / 2; 
         menuLp.gravity = Gravity.TOP | Gravity.LEFT;
 
@@ -522,7 +547,8 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
         
         final int finalTargetY = Math.max(margin, calculatedTargetY);
         menuLp.y = finalTargetY;
-        
+        menuLp.x = dm.widthPixels / 2 - menuLp.width / 2; // [FIX] luôn ép lại giữa màn, không kế thừa X cũ
+
         if (menuOverlay != null && menuOverlay.isAttachedToWindow()) {
             try { wm.updateViewLayout(menuOverlay, menuLp); } catch (Exception ignored) {}
         }
@@ -533,7 +559,7 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
      *  hiệu ứng bong bóng tự nhảy vào giữa lúc mới mở Panel) — không được đụng vào. */
     private void followMenuDuringDrag() {
         if (panelCard == null || menuLp == null || menuOverlay == null) return;
-        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        DisplayMetrics dm = getRealMetrics();
         int bSize = prefs.getInt("bubble_size", 120);
         int margin = 40;
         int gap = 45;

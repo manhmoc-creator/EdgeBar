@@ -209,10 +209,14 @@ private boolean barNeedsAutoColor(View[] arr, String prefix) {
 /** Gọi từ mọi nơi cần yêu cầu lấy mẫu lại màu (đổi app, cuộn nội dung...). Rẻ tới mức
  *  gọi liên tục cũng không sao — tự dồn về tối đa 1 lần thực thi/ICON_COLOR_MIN_INTERVAL_MS. */
 private void requestIconColorSample() {
+    android.os.PowerManager pmCheck = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+    if (pmCheck != null && !pmCheck.isInteractive()) return; // [FIX] màn tắt -> không ai thấy màu icon, bỏ qua hoàn toàn
     doSampleIconColors(false);
 }
 private void doSampleIconColors(boolean isFollowUp) {
     if (Build.VERSION.SDK_INT < 30) return;
+    android.os.PowerManager pmCheck2 = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+    if (pmCheck2 != null && !pmCheck2.isInteractive()) return; // [FIX] chặn tuyệt đối khi màn tắt
     final boolean needLock = barNeedsAutoColor(bars, "lock_");
     final boolean needHomacc = barNeedsAutoColor(accHomeBars, "homacc_");
     if (!needLock && !needHomacc) return;
@@ -592,7 +596,8 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
                         scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         startActivity(scIntent);
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ex) {
+    Toast.makeText(this, "Shortcut lỗi: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
                 return;
             }
             exec(act);

@@ -639,12 +639,14 @@ private void fireTestAction(String actKey, String launchPkg, String shortcutId) 
 
 // 1 Rule có thể gán nhiều Action -> thử lần lượt, cách nhau 120ms (Zero Thread mới)
 private void fireTestActions(java.util.Collection<String> acts, String launchPkg, String shortcutId) {
-    if (acts == null || acts.isEmpty()) {
+    java.util.List<String> real = new java.util.ArrayList<>();
+    if (acts != null) for (String a : acts) if (a != null && !a.trim().isEmpty() && !a.trim().equals("NONE")) real.add(a.trim());
+    if (real.isEmpty()) {
         Toast.makeText(this, T("Select at least 1 Action!", "Hãy chọn ít nhất 1 hành động!"), Toast.LENGTH_SHORT).show();
         return;
     }
     int delay = 0;
-    for (String a : acts) {
+    for (String a : real) {
         final String fa = a;
         new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> fireTestAction(fa, launchPkg, shortcutId), delay);
         delay += 120;
@@ -4017,6 +4019,7 @@ private void moveDataPackToTrash(String itemKey) {
     switch (type) {
         case "panel":
             removeDynamicId("pack_panel_ids", id);
+            scrubActionTokenEverywhere("PANEL_" + id); // [MỚI] xoá sạch mọi tham chiếu PANEL_<id>
             break;
         case "bar":
         case "corner":
@@ -4030,6 +4033,7 @@ private void moveDataPackToTrash(String itemKey) {
             break;
         case "intent":
             removeDynamicId("intent_ids", id);
+            scrubActionTokenEverywhere("INTENT_" + id); // [MỚI]
             break;
         case "tilev2":
             removeDynamicId("tile_ids_v2", id);
@@ -4043,6 +4047,7 @@ private void moveDataPackToTrash(String itemKey) {
             break;
         case "macro":
             removeDynamicId("macro_ids", id);
+            scrubActionTokenEverywhere("MACRO_" + id); // [MỚI]
             break;
         case "myplaylist":
             removeDynamicId("myplaylist_ids", id);
@@ -4060,6 +4065,43 @@ private void moveDataPackToTrash(String itemKey) {
         .putLong("trash_" + itemKey + "_ts", System.currentTimeMillis()) // MỚI: mốc giờ để tính hạn 15 ngày
         .apply();
     sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
+}
+// [MỚI] Quét TOÀN BỘ SharedPreferences, xoá đúng 1 token action khỏi mọi CSV
+// đang lưu action (rule component_gesture, prule_*_acts...). Chỉ chạy lúc xoá
+// Pack (event-driven), không polling nên không tốn pin.
+private void scrubActionTokenEverywhere(String token) {
+    java.util.Map<String, ?> all = prefs.getAll();
+    SharedPreferences.Editor ed = prefs.edit();
+    boolean changed = false;
+    for (java.util.Map.Entry<String, ?> e : all.entrySet()) {
+        String key = e.getKey();
+        Object v = e.getValue();
+        if (!(v instanceof String)) continue;
+        boolean isPruleActs = key.startsWith("prule_") && key.endsWith("_acts");
+        boolean isDirectRule = !key.endsWith("_en") && !key.endsWith("_vib") && !key.endsWith("_anim")
+            && !key.endsWith("_os") && !key.endsWith("_launch_pkg") && !key.endsWith("_shortcut_id")
+            && !key.endsWith("_jump_on") && !key.endsWith("_hide_targets") && !key.endsWith("_manual_hide")
+            && (key.startsWith("lock_") || key.startsWith("home_") || key.startsWith("homacc_") || key.startsWith("volkey_"));
+        if (!isPruleActs && !isDirectRule) continue;
+
+        String csv = (String) v;
+        if (!("," + csv + ",").contains("," + token + ",")) continue;
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        for (String p : csv.split(",")) if (!p.trim().isEmpty() && !p.trim().equals(token)) parts.add(p.trim());
+        String newVal = TextUtils.join(",", parts);
+        if (newVal.isEmpty()) {
+            // [FIX] Rỗng thì LUÔN chuẩn hoá về "NONE" (kể cả prule) + tắt hẳn rule
+            // đó, để nút TEST không còn cơ hội bắn ra "hành động ma" nữa.
+            newVal = "NONE";
+            if (isPruleActs) {
+                String ruleId = key.substring("prule_".length(), key.length() - "_acts".length());
+                ed.putBoolean("prule_" + ruleId + "_en", false);
+            }
+        }
+        ed.putString(key, newVal);
+        changed = true;
+    }
+    if (changed) ed.apply();
 }
 private void restoreDataPackFromTrash(String itemKey) {
     java.util.List<String> trash = getDynamicIds("trash_pack_ids");

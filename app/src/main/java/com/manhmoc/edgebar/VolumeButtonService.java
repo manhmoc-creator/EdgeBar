@@ -104,9 +104,11 @@ private long pendingWindowMs = 0;
         mediaSession.setPlaybackToRemote(provider);
         mediaSession.setPlaybackState(new PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f).build());	
         
-        android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-        boolean screenOffNow = pm != null && !pm.isInteractive();
-        mediaSession.setActive(screenOffNow);
+android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+boolean screenOffNow = pm != null && !pm.isInteractive();
+// [FIX] Không active nếu MyPlaylist đang thực sự phát — tránh 2 MediaSession
+// tranh nhau audio focus/volume routing gây bất ổn khi màn tắt.
+mediaSession.setActive(screenOffNow && !MyPlaylistService.isRunning);
         isRunning = true;
     }
         private boolean isRuleSet(String key) {

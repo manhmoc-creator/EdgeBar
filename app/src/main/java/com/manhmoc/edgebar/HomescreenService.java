@@ -948,7 +948,8 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
                             scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             startActivity(scIntent);
                         }
-                    } catch (Exception ignored) {}
+                    } catch (Exception ex) {
+    Toast.makeText(this, "Shortcut lỗi: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
                     return;
                 }
                 exec(act);
