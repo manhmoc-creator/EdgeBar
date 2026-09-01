@@ -73,6 +73,7 @@ private boolean fpRegistered = false;
     private Runnable syntheticGuardResetRunnable;
     // [MỚI] Lưu toạ độ chạm thực tế để giả lập cử chỉ đích xác
     private float globalTouchStartX = -1f, globalTouchStartY = -1f, globalTouchEndX = -1f, globalTouchEndY = -1f;
+    private float ipcTouchOverrideX = -1f, ipcTouchOverrideY = -1f;
     private WindowManager wm;
     private View[] bars = new View[12];
     private View[] corners = new View[4];
@@ -550,6 +551,12 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     public void onReceive(Context c, Intent i) {
         if ("com.manhmoc.edgebar.IPC_ACTION".equals(i.getAction())) {
             String act = i.getStringExtra("act");
+            if (i.hasExtra("startX") && i.hasExtra("startY")) {
+                ipcTouchOverrideX = i.getIntExtra("startX", -1);
+                ipcTouchOverrideY = i.getIntExtra("startY", -1);
+            } else {
+                ipcTouchOverrideX = -1f; ipcTouchOverrideY = -1f;
+            }
             if ("LAUNCH_APP".equals(act)) {
                 String pkg = i.getStringExtra("launch_pkg");
                 if (pkg != null && !pkg.isEmpty()) {
@@ -1873,10 +1880,12 @@ private void fireIntentById(String id) {
         android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
         final float cx = dm.widthPixels / 2f;
         final float cy = dm.heightPixels / 2f;
-        final float ox = globalTouchStartX >= 0 ? globalTouchStartX : cx;
-        final float oy = globalTouchStartY >= 0 ? globalTouchStartY : cy;
-        final float ex = globalTouchEndX >= 0 ? globalTouchEndX : ox;
-        final float ey = globalTouchEndY >= 0 ? globalTouchEndY : oy;
+        final boolean hasIpcOverride = (ipcTouchOverrideX >= 0 && ipcTouchOverrideY >= 0);
+        final float ox = hasIpcOverride ? ipcTouchOverrideX : (globalTouchStartX >= 0 ? globalTouchStartX : cx);
+        final float oy = hasIpcOverride ? ipcTouchOverrideY : (globalTouchStartY >= 0 ? globalTouchStartY : cy);
+        final float ex = hasIpcOverride ? ox : (globalTouchEndX >= 0 ? globalTouchEndX : ox);
+        final float ey = hasIpcOverride ? oy : (globalTouchEndY >= 0 ? globalTouchEndY : oy);
+        ipcTouchOverrideX = -1f; ipcTouchOverrideY = -1f; // dùng 1 lần rồi xoá, tránh dính sang lệnh IPC kế tiếp
         final float actualDist = (float) Math.hypot(ex - ox, ey - oy);
 
         // [MỚI] Đọc từ thanh trượt General Options — riêng TAP/DTAP dùng độ trễ

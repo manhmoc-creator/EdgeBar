@@ -1133,7 +1133,7 @@ private Drawable getSwapHighlightBg(Drawable orig) {
         String scId = ref.substring("RUN_SHORTCUT_".length());
         Drawable icon = getCachedShortcutIcon(scId);
         String label = prefs.getString("shortcut_" + scId + "_name", "Shortcut");
-        return wrapIconCell(px, icon, icon == null ? "🔗" : null, "sc_" + scId, v -> {
+        Runnable scAction = () -> {
             try {
                 String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
                 if (!uri.isEmpty()) {
@@ -1143,7 +1143,10 @@ private Drawable getSwapHighlightBg(Drawable orig) {
                 }
             } catch (Exception ignored) {}
             closeAllPanels();
-        }, label);
+        };
+        View cell = wrapIconCell(px, icon, icon == null ? "🔗" : null, "sc_" + scId, v -> scAction.run(), label);
+        // Khoá order key khớp đúng với "SC:" + id đã lưu lúc khởi tạo order trong renderPanelGrid()
+        return wrapWithSwapLogic(panelId, "SC:" + scId, cell, scAction);
     } else {
         String label = getActionLabelForPanel(ref);
         String overrideKey = "pack_panel_" + panelId + "_icon_override_" + ref;
@@ -1152,20 +1155,19 @@ private Drawable getSwapHighlightBg(Drawable orig) {
         Integer resId = ACT_ICON_RES.get(ref);
         Drawable sysIcon = overrideIcon != null ? overrideIcon
             : (resId != null ? ctx.getDrawable(resId) : null);
-        // [FIX] Chỉ giữ màu gốc khi override là icon APP thật (đã có màu riêng).
-        // Icon hệ thống — dù mặc định hay do người dùng tự chọn — luôn tint trắng
-        // để đồng nhất, tránh "cùng 1 icon lúc đen lúc trắng".
         boolean isAppOverride = overrideVal.startsWith("app:");
         if (sysIcon != null && !isAppOverride) {
             sysIcon = sysIcon.mutate();
             sysIcon.setTint(Color.WHITE);
         }
-        return wrapIconCell(px, sysIcon, sysIcon == null ? actEmoji(ref) : null, "act_" + panelId + "_" + ref, v -> {
+        Runnable actAction = () -> {
             Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             ipc.putExtra("act", ref);
             ctx.sendBroadcast(ipc);
             closeAllPanels();
-        }, label);
+        };
+        View cell = wrapIconCell(px, sysIcon, sysIcon == null ? actEmoji(ref) : null, "act_" + panelId + "_" + ref, v -> actAction.run(), label);
+        return wrapWithSwapLogic(panelId, ref, cell, actAction);
     }
 }
     private String actEmoji(String key) {
