@@ -6242,7 +6242,6 @@ private void renderBubbleSettings() {
         row.addView(tvOn); row.addView(swOn);
         designSliderContainer.addView(row);
 
-        // Nút đổi Icon chính cho Bong bóng chat
         Button btnMainIcon = new Button(this);
         btnMainIcon.setText("🎨 ĐỔI ICON BONG BÓNG CHAT");
         btnMainIcon.setBackground(getRounded("#FFC107", 20f));
@@ -6264,7 +6263,16 @@ private void renderBubbleSettings() {
         designSliderContainer.addView(createSlider(T("Panel Max Height", "Chiều cao tối đa (List)"), "bubble_bg_h", 1500, 800));
         designSliderContainer.addView(createSlider(T("Panel Opacity", "Độ đậm mờ bảng"), "bubble_bg_alpha", 255, 160));
 
-        // --- CẤU HÌNH CUSTOM ICON CHO 9 NÚT (BUỘC THEO TYPE) ---
+        Button btnGestures = new Button(this);
+        btnGestures.setText("⚙️ CẤU HÌNH CỬ CHỈ (2 CHẠM & NHẤN GIỮ)");
+        btnGestures.setBackground(getRounded("#00E5FF", 20f));
+        btnGestures.setTextColor(Color.BLACK);
+        LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(-1, -2);
+        glp.setMargins(0, 20, 0, 20);
+        btnGestures.setLayoutParams(glp);
+        btnGestures.setOnClickListener(v -> openBubbleGestureSpace());
+        designSliderContainer.addView(btnGestures);
+
         designSliderContainer.addView(createSectionTitle("🎨 CẤU HÌNH & ICON 9 NÚT TRÊN BẢNG"));
         LinearLayout iconGrid = new LinearLayout(this);
         iconGrid.setOrientation(LinearLayout.VERTICAL);
@@ -6307,16 +6315,9 @@ private void renderBubbleSettings() {
             iconGrid.addView(rowIcon);
         }
         designSliderContainer.addView(iconGrid);
-
-        TextView tvNote = new TextView(this);
-        tvNote.setText(T("1 Tap bubble to open panel. Tap again to close/go back. Tap nodes to config up to 9 actions. Long-press node to change icon.",
-            "Chạm bong bóng để mở Panel. Chạm lại để đóng/quay lại. Chạm 8 nút trên để gán tối đa 9 hành động. Nhấn giữ để đổi Icon."));
-        tvNote.setTextColor(Color.parseColor("#9AA0A6"));
-        tvNote.setTextSize(12f);
-        tvNote.setPadding(0, 20, 0, 0);
-        designSliderContainer.addView(tvNote);
     }
-private void showBubbleNodePicker(String type) {
+
+    private void showBubbleNodePicker(String type) {
         String prefKey = "bubble_node_items_" + type;
         List<String> selectedOrder = csvToList(prefs.getString(prefKey, ""));
         
@@ -6344,8 +6345,28 @@ private void showBubbleNodePicker(String type) {
             for (String[] app : getAppListCached()) allItems.add(new String[]{app[0], "app:" + app[1]});
         }
         else if (type.equals("SHORTCUT")) {
-            for (ResolveInfo ri : ShortcutScanner.getProviders(this)) {
-                allItems.add(new String[]{ri.loadLabel(getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
+            Button btnNewShortcut = new Button(this);
+            btnNewShortcut.setText("➕ TẠO SHORTCUT MỚI");
+            btnNewShortcut.setBackground(getRounded("#7C4DFF", 20f));
+            btnNewShortcut.setTextColor(Color.WHITE);
+            LinearLayout.LayoutParams nsLp = new LinearLayout.LayoutParams(-1, -2);
+            nsLp.setMargins(0, 0, 0, 20);
+            btnNewShortcut.setLayoutParams(nsLp);
+            btnNewShortcut.setOnClickListener(v -> {
+                prefs.edit().putBoolean("is_panel_shortcut_pending", true).apply();
+                showShortcutPickerDialog((newId, newName) -> {
+                    String ref = "act:RUN_SHORTCUT_" + newId;
+                    boolean already = false;
+                    for (String[] it : allItems) if (it[1].equals(ref)) { already = true; break; }
+                    if (!already) allItems.add(new String[]{"(Mới) " + newName, ref});
+                    selectedOrder.add(ref);
+                    etSearch.setText(" "); etSearch.setText(""); 
+                });
+            });
+            root.addView(btnNewShortcut, 2);
+
+            for (String id : csvToList(prefs.getString("shortcut_ids", ""))) {
+                allItems.add(new String[]{"(Đã lưu) " + prefs.getString("shortcut_" + id + "_name", "Shortcut"), "act:RUN_SHORTCUT_" + id});
             }
         }
         else if (type.equals("SYSTEM")) {
@@ -6363,6 +6384,15 @@ private void showBubbleNodePicker(String type) {
         else if (type.equals("INTENT")) allItems.addAll(buildDynamicPackItems("intent_ids", "intent_", "act:INTENT_", "Intent"));
         else if (type.equals("MACRO")) allItems.addAll(buildDynamicPackItems("macro_ids", "macro_", "act:MACRO_", "Macro"));
         else if (type.equals("PANEL")) allItems.addAll(buildDynamicPackItems("pack_panel_ids", "pack_panel_", "act:PANEL_", "Panel"));
+
+        // Lưới an toàn: Ép các mục đã chọn phải có mặt trong allItems (tránh lỗi App bị xoá k kẹt không bỏ tích dc)
+        List<String> validRefs = new ArrayList<>();
+        for (String[] it : allItems) validRefs.add(it[1]);
+        for (String selRef : selectedOrder) {
+            if (!validRefs.contains(selRef)) {
+                allItems.add(new String[]{"(Không tìm thấy) " + selRef, selRef});
+            }
+        }
 
         final List<String[]> shown = new ArrayList<>();
         final Runnable[] refreshHolder = new Runnable[1];
@@ -6383,21 +6413,24 @@ private void showBubbleNodePicker(String type) {
                 cb.setClickable(false);
                 row.addView(cb);
                 
-                // HIỂN THỊ ICON CHO APP VÀ SHORTCUT ĐỂ DỄ NHẬN DIỆN
                 if (type.equals("APP") || type.equals("SHORTCUT")) {
                     ImageView iv = new ImageView(MainActivity.this);
                     LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(70, 70);
                     ilp.setMargins(0, 0, 20, 0);
                     iv.setLayoutParams(ilp);
-                    
                     if (item[1].startsWith("app:")) {
                         loadAppIconInto(item[1].substring(4), iv);
-                    } else if (item[1].startsWith("act:CREATE_SHORTCUT_")) {
+                    } else if (item[1].startsWith("act:RUN_SHORTCUT_")) {
                         try {
-                            String[] split = item[1].substring(20).split("/");
-                            android.graphics.drawable.Drawable d = getPackageManager().getActivityIcon(new ComponentName(split[0], split[1]));
-                            iv.setImageDrawable(d);
-                        } catch (Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
+                            String scId = item[1].substring(17);
+                            String uriStr = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+                            Intent scIntent = Intent.parseUri(uriStr, 0);
+                            ComponentName cn = scIntent.getComponent();
+                            if (cn != null) iv.setImageDrawable(getPackageManager().getActivityIcon(cn));
+                            else iv.setImageResource(android.R.drawable.ic_menu_send);
+                        } catch (Exception e) { iv.setImageResource(android.R.drawable.ic_menu_send); }
+                    } else {
+                        iv.setImageResource(android.R.drawable.ic_menu_help);
                     }
                     row.addView(iv);
                 }
@@ -6408,7 +6441,6 @@ private void showBubbleNodePicker(String type) {
                 if (!type.equals("APP") && !type.equals("SHORTCUT")) tv.setPadding(20, 0, 0, 0);
                 row.addView(tv);
 
-                // CHỈ HIỆN NÚT ĐỔI ICON KHI ACTION ĐÃ ĐƯỢC CHỌN (Trừ APP và SHORTCUT vì đã có sẵn Icon)
                 if (selectedOrder.contains(item[1]) && !type.equals("APP") && !type.equals("SHORTCUT")) {
                     Button btnEditIcon = new Button(MainActivity.this);
                     btnEditIcon.setText("🖌");
@@ -6471,7 +6503,6 @@ private void showBubbleNodePicker(String type) {
         d.setContentView(root); d.show();
     }
 
-    // YÊU CẦU 3: BẤM FAB Ở BUBBLE MỞ RA KHO CỬ CHỈ GIỐNG FRONTIER
     private void openBubbleGestureSpace() {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this);
@@ -6587,7 +6618,13 @@ private void showBubbleNodePicker(String type) {
         
         ImageButton fabNew = createIconCircleBtn(customIconRes("bubble_chart_24px"), "#333333");
         fabNew.setPadding(22, 22, 22, 22);
-        fabNew.setOnClickListener(v -> openBubbleRuleEditor(null, renderRules[0]));
+        fabNew.setOnClickListener(v -> {
+            if (getDynamicIds("bubble_pack_rules").size() >= 2) {
+                Toast.makeText(this, "Chỉ được tạo tối đa 2 Rule cho Bong Bóng!", Toast.LENGTH_SHORT).show();
+            } else {
+                openBubbleRuleEditor(null, renderRules[0]);
+            }
+        });
         
         bottomBar.addView(btnBack); bottomBar.addView(spacer); bottomBar.addView(fabNew);
         root.addView(bottomBar);
