@@ -6669,7 +6669,230 @@ private void renderBubbleSettings() {
         
         d.setContentView(root); d.show();
     }
+private void openBubbleRuleEditor(String editId, Runnable onRefresh) {
+        reloadActionLabels();
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.parseColor("#121212"));
+        root.setPadding(30, 120, 30, 30);
+        
+        LinearLayout tabs = new LinearLayout(this);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        Button bTrig = createTabBtn("TRIGGER"); Button bAct = createTabBtn("ACTION");
+        LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        tabLp.setMargins(10, 0, 10, 0);
+        bTrig.setLayoutParams(tabLp); bAct.setLayoutParams(tabLp);
+        tabs.addView(bTrig); tabs.addView(bAct); root.addView(tabs);
+        
+        ScrollView scroll = new ScrollView(this);
+        scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(0, 40, 0, 0);
+        scroll.addView(content);
+        root.addView(scroll);
+        
+        LinearLayout vTrig = new LinearLayout(this);
+        vTrig.setOrientation(LinearLayout.VERTICAL);
+        
+        ArrayList<CheckBox> gestureBoxes = new ArrayList<>();
+        ArrayList<String> gestureKeys = new ArrayList<>();
+        String savedGestures = editId != null ? prefs.getString("prule_" + editId + "_gestures", "") : "";
+        
+        LinearLayout gestureContainer = new LinearLayout(this);
+        gestureContainer.setOrientation(LinearLayout.VERTICAL);
+        gestureContainer.setPadding(20, 10, 20, 20);
+        
+        String[] actGests = {"dtap", "long"};
+        String[] actGestNames = {"2 Chạm (Double Tap)", "Nhấn Giữ (Long Press)"};
+        
+        for (int i = 0; i < 2; i++) {
+            CheckBox cb = new CheckBox(this);
+            cb.setText(actGestNames[i]);
+            cb.setTextColor(Color.WHITE);
+            cb.setPadding(0, 20, 0, 20);
+            cb.setChecked(("," + savedGestures + ",").contains("," + actGests[i] + ","));
+            gestureBoxes.add(cb);
+            gestureKeys.add(actGests[i]);
+            gestureContainer.addView(cb);
+        }
+        vTrig.addView(createDrawer("1. CHỌN CỬ CHỈ BONG BÓNG", gestureContainer));
+        
+        TextView tvOpt = new TextView(this);
+        tvOpt.setText(T("2. CHOOSE OPTIONS", "2. CHỌN TÙY CHỌN"));
+        tvOpt.setTextColor(Color.parseColor("#E91E63"));
+        tvOpt.setPadding(30, 30, 30, 30);
+        tvOpt.setTextSize(16);
+        tvOpt.setBackground(getRounded("#222222", 20f));
+        LinearLayout.LayoutParams optLp = new LinearLayout.LayoutParams(-1, -2);
+        optLp.setMargins(0, 20, 0, 10);
+        tvOpt.setLayoutParams(optLp);
+        vTrig.addView(tvOpt);
+        
+        CheckBox cbJump = new CheckBox(this);
+        cbJump.setText("Icon Jump (Icon nhảy lên đỉnh Panel)");
+        cbJump.setTextColor(Color.WHITE);
+        cbJump.setChecked(editId == null || prefs.getBoolean("prule_" + editId + "_jump_on", true));
+        vTrig.addView(cbJump);
 
+        CheckBox cbVib = new CheckBox(this);
+        cbVib.setText("Bật Rung (Haptic Feedback)");
+        cbVib.setTextColor(Color.WHITE);
+        cbVib.setChecked(editId == null || prefs.getBoolean("prule_" + editId + "_vib", true));
+        vTrig.addView(cbVib);
+
+        CheckBox cbAnim = new CheckBox(this);
+        cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)");
+        cbAnim.setTextColor(Color.WHITE);
+        cbAnim.setChecked(editId == null || prefs.getBoolean("prule_" + editId + "_anim", true));
+        vTrig.addView(cbAnim);
+        
+        LinearLayout vAct = new LinearLayout(this);
+        vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
+        TextView tvA = new TextView(this); tvA.setText(T("CHOOSE ACTIONS (Multi-select)", "CHỌN HÀNH ĐỘNG THỰC THI (Được chọn nhiều)")); tvA.setTextColor(Color.parseColor("#00E5FF")); tvA.setPadding(0,0,0,20); vAct.addView(tvA);
+        
+        String savedActs = editId != null ? prefs.getString("prule_" + editId + "_acts", "") : "";
+        final java.util.LinkedHashSet<String> selectedActs = new java.util.LinkedHashSet<>();
+        for (String sa : savedActs.split(",")) if (!sa.trim().isEmpty()) selectedActs.add(sa.trim());
+
+        final boolean[] launchAppSelected = { editId != null && selectedActs.contains("LAUNCH_APP") };
+        final String[] launchAppPkg = { editId != null ? prefs.getString("prule_" + editId + "_launch_pkg", "") : "" };
+        final boolean[] shortcutSelected = { editId != null && selectedActs.contains("RUN_SHORTCUT") };
+        final String[] shortcutId = { editId != null ? prefs.getString("prule_" + editId + "_shortcut_id", "") : "" };
+
+        selectedActs.remove("LAUNCH_APP");
+        selectedActs.remove("RUN_SHORTCUT");
+
+        LinearLayout rowApp = new LinearLayout(this);
+        rowApp.setOrientation(LinearLayout.HORIZONTAL);
+        rowApp.setGravity(Gravity.CENTER_VERTICAL);
+        rowApp.setPadding(0, 0, 0, 20);
+        Switch swApp = new Switch(this);
+        swApp.setChecked(launchAppSelected[0]);
+        swApp.setOnCheckedChangeListener((b,c) -> launchAppSelected[0] = c);
+        swApp.setPadding(0, 0, 20, 0);
+        Button btnPickApp = new Button(this);
+        btnPickApp.setBackground(getRounded("#00E5FF", 20f));
+        btnPickApp.setTextColor(Color.BLACK);
+        btnPickApp.setTextSize(13.5f);
+        btnPickApp.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        btnPickApp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        Runnable updateApp = () -> btnPickApp.setText("📱 MỞ APP: " + (launchAppPkg[0].isEmpty() ? "CHƯA CHỌN" : getAppLabelCached(launchAppPkg[0])));
+        updateApp.run();
+        btnPickApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> { launchAppPkg[0] = pkg; swApp.setChecked(true); updateApp.run(); }));
+        rowApp.addView(swApp); rowApp.addView(btnPickApp);
+        vAct.addView(rowApp);
+
+        LinearLayout rowSc = new LinearLayout(this);
+        rowSc.setOrientation(LinearLayout.HORIZONTAL);
+        rowSc.setGravity(Gravity.CENTER_VERTICAL);
+        rowSc.setPadding(0, 0, 0, 20);
+        Switch swSc = new Switch(this);
+        swSc.setChecked(shortcutSelected[0]);
+        swSc.setOnCheckedChangeListener((b,c) -> shortcutSelected[0] = c);
+        swSc.setPadding(0, 0, 20, 0);
+        Button btnPickSc = new Button(this);
+        btnPickSc.setBackground(getRounded("#7C4DFF", 20f));
+        btnPickSc.setTextColor(Color.WHITE);
+        btnPickSc.setTextSize(13.5f);
+        btnPickSc.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        btnPickSc.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        Runnable updateSc = () -> btnPickSc.setText("🔗 SHORTCUT: " + (shortcutId[0].isEmpty() ? "CHƯA CHỌN" : prefs.getString("shortcut_" + shortcutId[0] + "_name", "?")));
+        updateSc.run();
+        btnPickSc.setOnClickListener(v -> showShortcutPickerDialog((idSc, name) -> { shortcutId[0] = idSc; swSc.setChecked(true); updateSc.run(); }));
+        rowSc.addView(swSc); rowSc.addView(btnPickSc);
+        vAct.addView(rowSc);
+
+        List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME","SCREENSHOT","CAMERA","NOTIFICATIONS","QUICK_SETTINGS","SPLIT_SCREEN","SCREEN_RECORD","AUTO_ROTATE_TOGGLE","TRIGGER_ACC_MENU_2F"}, ACT_KEYS, ACT_LABS);
+        List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"HIDE_SOME_OVERLAY","SHOW_ALL_OVERLAY","TOGGLE_OVERLAY","TOGGLE_RECORD","PAUSE_RECORD","YTDL_DOWNLOAD","TOGGLE_WORK_PROFILE","OPEN_STORAGE_SCAN","SCAN_QR","PLAY_MY_PLAYLIST"}, ACT_KEYS, ACT_LABS);
+        List<String[]> TRIGGER_ITEMS = buildItemsForKeys(new String[]{"TRIGGER_TAP","TRIGGER_DTAP","TRIGGER_LONG","TRIGGER_UP","TRIGGER_DOWN","TRIGGER_LEFT","TRIGGER_RIGHT","TRIGGER_DIAG","TRIGGER_UP_DOWN","TRIGGER_DOWN_UP","TRIGGER_LEFT_RIGHT","TRIGGER_RIGHT_LEFT","TRIGGER_UP_HOLD","TRIGGER_DOWN_HOLD","TRIGGER_LEFT_HOLD","TRIGGER_RIGHT_HOLD","TRIGGER_DIAG_HOLD"}, ACT_KEYS, ACT_LABS);
+        List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
+        List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
+        List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
+
+        vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
+        vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
+        vAct.addView(buildActionCategoryButton("GESTURES", "🌀", TRIGGER_ITEMS, selectedActs, "#009688"));
+        vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0", true));
+        vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
+        vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
+
+        content.addView(vTrig); content.addView(vAct);
+        
+        View.OnClickListener tabClick = v -> {
+            bTrig.setBackground(getRounded(v==bTrig?"#00E5FF":"#222222", 15f));
+            bTrig.setTextColor(v==bTrig?Color.BLACK:Color.WHITE);
+            bAct.setBackground(getRounded(v==bAct?"#00E5FF":"#222222", 15f));
+            bAct.setTextColor(v==bAct?Color.BLACK:Color.WHITE);
+            vTrig.setVisibility(v==bTrig?View.VISIBLE:View.GONE);
+            vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE);
+        };
+        bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick);
+        bTrig.performClick();
+
+        LinearLayout footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.HORIZONTAL);
+        footer.setPadding(0, 20, 0, 0);
+
+        Button bCancel = new Button(this);
+        bCancel.setText("HỦY");
+        bCancel.setBackground(getRounded("#333333", 20f));
+        bCancel.setTextColor(Color.WHITE);
+        bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+        Button bSave = new Button(this);
+        bSave.setText("SAVE RULE");
+        bSave.setBackground(getRounded("#4CAF50", 20f));
+        bSave.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f);
+        slp.setMargins(20, 0, 0, 0);
+        bSave.setLayoutParams(slp);
+
+        footer.addView(bCancel);
+        footer.addView(bSave);
+        root.addView(footer);
+
+        bCancel.setOnClickListener(v -> d.dismiss());
+        bSave.setOnClickListener(v -> {
+            ArrayList<String> acts = new ArrayList<>(selectedActs);
+            if (launchAppSelected[0]) {
+                if (launchAppPkg[0].isEmpty()) { Toast.makeText(this, "Chọn app trước!", Toast.LENGTH_SHORT).show(); return; }
+                acts.add("LAUNCH_APP");
+            }
+            if (shortcutSelected[0]) {
+                if (shortcutId[0].isEmpty()) { Toast.makeText(this, "Chọn shortcut trước!", Toast.LENGTH_SHORT).show(); return; }
+                acts.add("RUN_SHORTCUT");
+            }
+            if (acts.isEmpty()) { Toast.makeText(this, "Hãy chọn ít nhất 1 Hành động!", Toast.LENGTH_SHORT).show(); return; }
+
+            ArrayList<String> gestures = new ArrayList<>();
+            for (int i = 0; i < gestureBoxes.size(); i++) if (gestureBoxes.get(i).isChecked()) gestures.add(gestureKeys.get(i));
+            if (gestures.isEmpty()) { Toast.makeText(this, "Hãy chọn ít nhất 1 Cử chỉ!", Toast.LENGTH_SHORT).show(); return; }
+
+            String targetId = editId != null ? editId : java.util.UUID.randomUUID().toString().substring(0, 8);
+            if (editId == null) {
+                List<String> curRules = getDynamicIds("bubble_pack_rules");
+                curRules.add(targetId);
+                prefs.edit().putString("bubble_pack_rules", android.text.TextUtils.join(",", curRules)).apply();
+            }
+            
+            prefs.edit()
+                .putString("prule_" + targetId + "_gestures", android.text.TextUtils.join(",", gestures))
+                .putString("prule_" + targetId + "_acts", android.text.TextUtils.join(",", acts))
+                .putString("prule_" + targetId + "_launch_pkg", launchAppPkg[0])
+                .putString("prule_" + targetId + "_shortcut_id", shortcutId[0])
+                .putBoolean("prule_" + targetId + "_jump_on", cbJump.isChecked())
+                .putBoolean("prule_" + targetId + "_vib", cbVib.isChecked())
+                .putBoolean("prule_" + targetId + "_anim", cbAnim.isChecked())
+                .putBoolean("prule_" + targetId + "_en", true)
+                .apply();
+            
+            if (onRefresh != null) onRefresh.run();
+            d.dismiss();
+        });
+        d.setContentView(root); d.show();
+    }
 private LinearLayout buildPanelSelectionToolbar(List<String> ids) {
     LinearLayout bar = new LinearLayout(this);
     bar.setOrientation(LinearLayout.HORIZONTAL);
