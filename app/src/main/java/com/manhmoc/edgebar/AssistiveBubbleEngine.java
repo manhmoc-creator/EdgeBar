@@ -53,7 +53,20 @@ public class AssistiveBubbleEngine {
         }
     }
 
-    public void destroy() { destroyAll(); }
+public void destroy() { destroyAll(); }
+
+// [MỚI] Cho phép EdgeBarService tạm "xuyên thấu" bong bóng trong lúc bắn
+// cử chỉ giả lập (TRIGGER_*) — nếu không, chính cửa sổ overlay của bong bóng
+// sẽ chặn cú chạm giả lập ngay tại toạ độ xuất phát, không bao giờ lọt
+// xuống app phía dưới được.
+public void setBubbleTouchable(boolean touchable) {
+    if (bubbleView == null || bubbleLp == null) return;
+    try {
+        if (touchable) bubbleLp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        else bubbleLp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        wm.updateViewLayout(bubbleView, bubbleLp);
+    } catch (Exception ignored) {}
+}
 
     private void destroyAll() {
         closeMenu();

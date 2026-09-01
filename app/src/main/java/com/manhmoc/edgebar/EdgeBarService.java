@@ -1831,27 +1831,32 @@ private void fireIntentById(String id) {
     }
     // 1. Thêm hàm này để xử lý xuyên thấu cảm ứng
     private void setTransientUntouchable(boolean untouchable) {
-        try {
-            for (View[] arr : new View[][]{bars, corners, accHomeBars, accHomeCorners}) {
-                for (int i = 0; i < arr.length; i++) {
-                    View v = arr[i];
-                    if (v == null || v.getWindowToken() == null || v.getVisibility() != View.VISIBLE || v.getLayoutParams() == null) continue;
-                    WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
-                    if (untouchable) {
-                        p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                    } else {
-                        int priMode = 0;
-                        if (arr == bars) priMode = prefs.getInt("lock_" + BARS[i] + "_pri_mode", 0);
-                        else if (arr == corners) priMode = prefs.getInt("lock_corner_" + CORNERS[i] + "_pri_mode", 0);
-                        else if (arr == accHomeBars) priMode = prefs.getInt("homacc_" + BARS[i] + "_pri_mode", 0);
-                        else if (arr == accHomeCorners) priMode = prefs.getInt("homacc_corner_" + CORNERS[i] + "_pri_mode", 0);
-                        if (priMode == 0) p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                    }
-                    updateLayoutIfChanged(v, p); // <--- ĐÃ SỬA THÀNH HÀM CÓ CACHE
+    try {
+        // [MỚI] Bong bóng chat là overlay RIÊNG (AssistiveBubbleEngine), không nằm
+        // trong bars/corners bên dưới -> phải xử lý touchable riêng, nếu không nó
+        // sẽ chặn cú chạm giả lập ngay tại toạ độ xuất phát (tâm bong bóng).
+        if (bubbleEngine != null) bubbleEngine.setBubbleTouchable(!untouchable);
+
+        for (View[] arr : new View[][]{bars, corners, accHomeBars, accHomeCorners}) {
+            for (int i = 0; i < arr.length; i++) {
+                View v = arr[i];
+                if (v == null || v.getWindowToken() == null || v.getVisibility() != View.VISIBLE || v.getLayoutParams() == null) continue;
+                WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
+                if (untouchable) {
+                    p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                } else {
+                    int priMode = 0;
+                    if (arr == bars) priMode = prefs.getInt("lock_" + BARS[i] + "_pri_mode", 0);
+                    else if (arr == corners) priMode = prefs.getInt("lock_corner_" + CORNERS[i] + "_pri_mode", 0);
+                    else if (arr == accHomeBars) priMode = prefs.getInt("homacc_" + BARS[i] + "_pri_mode", 0);
+                    else if (arr == accHomeCorners) priMode = prefs.getInt("homacc_corner_" + CORNERS[i] + "_pri_mode", 0);
+                    if (priMode == 0) p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
                 }
+                updateLayoutIfChanged(v, p);
             }
-        } catch (Exception ignored) {}
-    }
+        }
+    } catch (Exception ignored) {}
+}
 // 2. Bắn cử chỉ đích xác dựa trên tọa độ điểm chạm thực tế của ngón tay
     private void dispatchRealScreenGesture(String trigger) {
         if (Build.VERSION.SDK_INT < 24) return;
