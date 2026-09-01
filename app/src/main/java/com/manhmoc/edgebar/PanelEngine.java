@@ -1111,11 +1111,14 @@ private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnabl
 }
 
 private Drawable getSwapHighlightBg(Drawable orig) {
+    // Viền tròn ôm quanh ô, nền trong suốt để icon vẫn hiện rõ trong lúc chọn
     GradientDrawable g = new GradientDrawable();
-    g.setColor(Color.parseColor("#8AB4F8"));
-    g.setCornerRadius(20f);
+    g.setColor(Color.TRANSPARENT);
+    g.setStroke(6, Color.parseColor("#8AB4F8"));
+    g.setCornerRadius(100f);
     return g;
 }
+
     private View buildCell(String px, String type, Object payload, String ref) {
     String panelId = px.startsWith("pack_panel_") ? px.substring("pack_panel_".length(), px.length()-1) : "";
     if (type.equals("APP")) {
@@ -1257,15 +1260,17 @@ private Drawable getSwapHighlightBg(Drawable orig) {
             } catch (Exception ignored) {}
         }
     }
-    private void closePanel(String id) {
-        LinearLayout panel = panels.get(id);
-        Boolean open = panelOpen.get(id);
-        if (panel == null || open == null || !open) return;
-        panelOpen.put(id, false);
-        panel.setVisibility(View.GONE);
-        View handle = handles.get(id);
-        if (handle != null) handle.setVisibility(View.VISIBLE);
-    }
+private void closePanel(String id) {
+    LinearLayout panel = panels.get(id);
+    Boolean open = panelOpen.get(id);
+    if (panel == null || open == null || !open) return;
+    panelOpen.put(id, false);
+    panel.setVisibility(View.GONE);
+    View handle = handles.get(id);
+    if (handle != null) handle.setVisibility(View.VISIBLE);
+    selectedForSwap.remove(id); // [MỚI] tránh sót trạng thái đang chọn hoán đổi khi mở lại
+}
+
     private void closeAllPanels() { for (String id : new java.util.ArrayList<>(panels.keySet())) closePanel(id); }
     private void removeHandle(String id) {
     View handle = handles.get(id);

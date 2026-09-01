@@ -211,10 +211,14 @@ public class AssistiveBubbleEngine {
                         final int finalTargetYDrag = Math.max(MARGIN, Math.min(calculatedTargetY, dm.heightPixels - bSize - MARGIN));
                         final int finalTargetXDrag = targetX;
                         
-                        ValueAnimator snapAnim = ValueAnimator.ofFloat(0f, 1f);
-                        snapAnim.setDuration(400); 
-                        snapAnim.setInterpolator(new OvershootInterpolator(0.9f)); 
-                        int startX = bubbleLp.x; int startY = bubbleLp.y;
+ValueAnimator snapAnim = ValueAnimator.ofFloat(0f, 1f);
+snapAnim.setDuration(320); 
+// [FIX] OvershootInterpolator khiến giá trị vọt vượt quá 1.0 rồi tụt lại
+// -> đây chính là cảm giác "bật lại như quả bóng" khi gần đường tâm.
+// Đổi sang DecelerateInterpolator: mượt, giảm tốc dần về đích, không overshoot,
+// đường đi luôn là 1 đường thẳng liên tục từ vị trí thả tay tới điểm neo cạnh.
+snapAnim.setInterpolator(new DecelerateInterpolator(1.8f)); 
+int startX = bubbleLp.x; int startY = bubbleLp.y;
                         snapAnim.addUpdateListener(a -> {
                             float val = (float) a.getAnimatedValue();
                             bubbleLp.x = (int) (startX + (finalTargetXDrag - startX) * val);
@@ -264,21 +268,29 @@ public class AssistiveBubbleEngine {
                     jump.start();
                 }
 
-                String acts = prefs.getString("prule_" + rId + "_acts", "");
-                if (!acts.isEmpty() && !acts.equals("NONE")) {
-                    Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-                    
-                    // YÊU CẦU 6: Định tuyến vị trí truyền đi (Tâm Bubble hay Tâm Nav Bar)
-                    int startX = bubbleLp.x + prefs.getInt("bubble_size", 120) / 2;
-                    int startY = bubbleLp.y + prefs.getInt("bubble_size", 120) / 2;
-                    if (acts.contains("TRIGGER_ACC_MENU_2F")) {
-                        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-                        startX = dm.widthPixels / 2;
-                        startY = dm.heightPixels - 10;
-                    }
-                    ipc.putExtra("startX", startX);
-                    ipc.putExtra("startY", startY);
-                    
+String acts = prefs.getString("prule_" + rId + "_acts", "");
+if (!acts.isEmpty() && !acts.equals("NONE")) {
+    Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+
+    int startX = bubbleLp.x + prefs.getInt("bubble_size", 120) / 2;
+    int startY = bubbleLp.y + prefs.getInt("bubble_size", 120) / 2;
+    if (acts.contains("TRIGGER_ACC_MENU_2F")) {
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        startX = dm.widthPixels / 2;
+        startY = dm.heightPixels - 10;
+    } else if (acts.contains("TRIGGER_")) {
+        // [MỚI] Kẹp biên: bong bóng bắn cử chỉ trực tiếp (dtap/long) khi CHƯA
+        // nhảy ra giữa màn hình -> đảm bảo còn đủ khoảng trống cho quãng vuốt
+        // giả lập (sim_swipe_dist_pct), tránh dính sát mép gây "gãy"/hụt cử chỉ.
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        int margin = (int) (Math.min(dm.widthPixels, dm.heightPixels)
+            * (prefs.getInt("sim_swipe_dist_pct", 80) / 100f)) + 60;
+        startX = Math.max(margin, Math.min(dm.widthPixels - margin, startX));
+        startY = Math.max(margin, Math.min(dm.heightPixels - margin, startY));
+    }
+    ipc.putExtra("startX", startX);
+    ipc.putExtra("startY", startY);
+
                     for (String act : acts.split(",")) {
                         String at = act.trim();
                         if (at.isEmpty()) continue;
@@ -399,8 +411,8 @@ public class AssistiveBubbleEngine {
         if (jumpAnim != null) jumpAnim.cancel();
         if (restoreBubbleX != -1 && restoreBubbleY != -1) {
             jumpAnim = ValueAnimator.ofFloat(0f, 1f);
-            jumpAnim.setDuration(250);
-            jumpAnim.setInterpolator(new OvershootInterpolator(0.85f));
+jumpAnim.setDuration(250);
+jumpAnim.setInterpolator(new DecelerateInterpolator(1.6f)); // đồng bộ, không overshoot
             int currentX = bubbleLp.x; int currentY = bubbleLp.y;
             jumpAnim.addUpdateListener(a -> {
                 float val = (float) a.getAnimatedValue();
@@ -420,13 +432,19 @@ public class AssistiveBubbleEngine {
         return out;
     }
 
-    private List<String> getSubItems(String type) {
-        String csv = prefs.getString("bubble_node_items_" + type, "");
-        List<String> out = new ArrayList<>();
-        if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
-        while (out.size() < 9) out.add(""); 
-        return out;
+private List<String> getSubItems(String type) {
+    String csv = prefs.getString("bubble_node_items_" + type, "");
+    List<String> out = new ArrayList<>();
+    if (!csv.isEmpty()) {
+        // split(",", -1) GIỮ NGUYÊN vị trí các ô rỗng đã được sắp xếp sẵn theo
+        // PREF_ORDER (góc phải-dưới -> ... -> tâm) khi lưu ở showBubbleNodePicker().
+        // Không được lọc bỏ chuỗi rỗng ở đây, nếu không thứ tự ưu tiên sẽ bị phá.
+        for (String s : csv.split(",", -1)) out.add(s.trim());
     }
+    while (out.size() < 9) out.add("");
+    if (out.size() > 9) out = new ArrayList<>(out.subList(0, 9));
+    return out;
+}
 
     private String getLabelForType(String type) {
         switch (type) {
