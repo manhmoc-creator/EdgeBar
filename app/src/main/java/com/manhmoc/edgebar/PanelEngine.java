@@ -1084,41 +1084,68 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
     return box;
 }
 private final Map<String, String> selectedForSwap = new HashMap<>(); // panelId -> ref đang được chọn để hoán đổi
+private final Handler swapLongPressHandler = new Handler(Looper.getMainLooper());
 
-/** [FIX] Dùng ĐÚNG setOnLongClickListener + setOnClickListener chuẩn của Android
- *  — y hệt cách AssistiveBubbleEngine đang làm và chạy đúng — thay vì OnTouchListener
- *  tự viết đếm thời gian giữ. Android tự quản lý nội bộ việc long-click đã fire hay
- *  chưa, nên click sẽ KHÔNG BAO GIỜ tự chạy thêm ngay sau khi long-click vừa xảy ra
- *  trên đúng lần nhấn đó — đây chính là điều bản OnTouchListener cũ không đảm bảo được.
- *  - Giữ đủ lâu (long-click) -> vào chế độ chọn hoán đổi, tô viền xanh quanh ô.
- *  - Chạm (click) kế tiếp trên bất kỳ ô nào của panel đó, trong khi đang có 1 ô chờ
- *    hoán đổi -> CHỈ hoán đổi vị trí, không bao giờ chạy action.
- *  - Không có ô nào đang chờ hoán đổi -> click chạy action như bình thường. */
+/** [FIX] Tự viết state machine bằng OnTouchListener thay vì mix OnLongClickListener +
+ *  OnClickListener — cặp listener đó phụ thuộc cơ chế phân xử nội bộ của Android
+ *  (mHasPerformedLongPress) vốn KHÔNG đảm bảo đồng bộ giữa 2 lần chạm liên tiếp trên
+ *  2 View khác nhau, gây ra hiện tượng long-press xong tap icon khác vẫn chạy thẳng
+ *  action thay vì hoán đổi. Cách này tự quản lý toàn bộ vòng đời chạm, giống hệt
+ *  nguyên lý GestureDetector mà AssistiveBubbleEngine đang dùng cho bong bóng chat. */
 private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnable originalAction) {
-    cell.setOnLongClickListener(v -> {
-        selectedForSwap.put(panelId, refKey);
-        cell.setBackground(getSwapHighlightBg(cell.getBackground()));
-        try {
-            Vibrator vib = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
-            if (vib != null) vib.vibrate(android.os.VibrationEffect.createOneShot(20, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
-        } catch (Exception ignored) {}
-        return true;
-    });
-    cell.setOnClickListener(v -> {
-        String sel = selectedForSwap.get(panelId);
-        if (sel != null) {
-            selectedForSwap.remove(panelId);
-            if (!sel.equals(refKey)) {
-                String px = "pack_panel_" + panelId + "_";
-                List<String> order = csvToList(prefs.getString(px + "order", ""));
-                int i1 = order.indexOf(sel), i2 = order.indexOf(refKey);
-                if (i1 >= 0 && i2 >= 0) Collections.swap(order, i1, i2);
-                prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
-            }
-            renderPanelGrid(panelId); // vẽ lại -> vòng tròn xanh biến mất
-            return;
+    final boolean[] longPressFired = {false};
+    final Runnable[] pendingLongPress = {null};
+    final float[] downXY = new float[2];
+    final int touchSlop = ViewConfiguration.get(ctx).getScaledTouchSlop();
+
+    cell.setOnTouchListener((v, e) -> {
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                longPressFired[0] = false;
+                downXY[0] = e.getRawX(); downXY[1] = e.getRawY();
+                pendingLongPress[0] = () -> {
+                    longPressFired[0] = true;
+                    selectedForSwap.put(panelId, refKey);
+                    cell.setBackground(getSwapHighlightBg(cell.getBackground()));
+                    try {
+                        Vibrator vib = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+                        if (vib != null) vib.vibrate(android.os.VibrationEffect.createOneShot(20, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+                    } catch (Exception ignored) {}
+                };
+                swapLongPressHandler.postDelayed(pendingLongPress[0], ViewConfiguration.getLongPressTimeout());
+                return true;
+
+            case MotionEvent.ACTION_MOVE:
+                if (Math.abs(e.getRawX() - downXY[0]) > touchSlop || Math.abs(e.getRawY() - downXY[1]) > touchSlop) {
+                    swapLongPressHandler.removeCallbacks(pendingLongPress[0]);
+                }
+                return true;
+
+            case MotionEvent.ACTION_UP:
+                swapLongPressHandler.removeCallbacks(pendingLongPress[0]);
+                if (longPressFired[0]) return true; // vừa long-press xong -> KHÔNG chạy click cho lần chạm này
+
+                String sel = selectedForSwap.get(panelId);
+                if (sel != null) {
+                    selectedForSwap.remove(panelId);
+                    if (!sel.equals(refKey)) {
+                        String px = "pack_panel_" + panelId + "_";
+                        List<String> order = csvToList(prefs.getString(px + "order", ""));
+                        int i1 = order.indexOf(sel), i2 = order.indexOf(refKey);
+                        if (i1 >= 0 && i2 >= 0) Collections.swap(order, i1, i2);
+                        prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
+                    }
+                    renderPanelGrid(panelId); // vẽ lại -> vòng tròn xanh biến mất, KHÔNG chạy action
+                } else {
+                    originalAction.run();
+                }
+                return true;
+
+            case MotionEvent.ACTION_CANCEL:
+                if (pendingLongPress[0] != null) swapLongPressHandler.removeCallbacks(pendingLongPress[0]);
+                return true;
         }
-        originalAction.run();
+        return false;
     });
     return cell;
 }
