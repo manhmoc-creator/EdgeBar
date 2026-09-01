@@ -4,6 +4,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.*;
+import android.content.res.Configuration;
 import android.content.pm.*;
 import android.graphics.*;
 import android.graphics.drawable.*;
@@ -15,6 +16,7 @@ import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.*;
 import java.util.*;
+import java.util.function.Supplier; 
 
 public class AssistiveBubbleEngine {
     private Context ctx; private WindowManager wm; private SharedPreferences prefs; private boolean isAnyMode;
@@ -26,12 +28,58 @@ public class AssistiveBubbleEngine {
     private Integer selectedMainIdx = null;
     private Integer selectedSubIdx = null;
     private String currentSubmenu = null; 
-    
+    private static final int BUBBLE_ICON_CACHE_LIMIT = 60;
+private static final LinkedHashMap<String, Drawable> bubbleIconCache =
+    new LinkedHashMap<String, Drawable>(16, 0.75f, true) {
+        protected boolean removeEldestEntry(Map.Entry<String, Drawable> e) { return size() > BUBBLE_ICON_CACHE_LIMIT; }
+    };
+private final Handler bubbleIconHandler = new Handler(Looper.getMainLooper());
+
+private void loadIconAsync(String cacheKey, java.util.function.Supplier<Drawable> loader, ImageView iv, int iconSize, boolean isAppHint) {
+    synchronized (bubbleIconCache) {
+        Drawable cached = bubbleIconCache.get(cacheKey);
+        if (cached != null) { applyIconToImageView(iv, cached, iconSize, isAppHint); return; }
+    }
+    iv.setTag(cacheKey);
+    new Thread(() -> {
+        Drawable d = loader.get();
+        if (d != null) synchronized (bubbleIconCache) { bubbleIconCache.put(cacheKey, d); }
+        bubbleIconHandler.post(() -> {
+            if (d != null && cacheKey.equals(iv.getTag())) applyIconToImageView(iv, d, iconSize, isAppHint);
+        });
+    }).start();
+}
+
+private Drawable resolveSubNodeIcon(String customOverride, String ref) {
+    Drawable d = getCustomIcon(customOverride);
+    if (d != null) return d;
+    PackageManager pm = ctx.getPackageManager();
+    try {
+        if (ref.startsWith("app:")) return pm.getApplicationIcon(ref.substring(4));
+        if (ref.startsWith("act:CREATE_SHORTCUT_")) {
+            String[] split = ref.substring(20).split("/");
+            return pm.getActivityIcon(new ComponentName(split[0], split[1]));
+        }
+        if (ref.startsWith("act:RUN_SHORTCUT_")) {
+            String scId = ref.substring(17);
+            String path = prefs.getString("shortcut_" + scId + "_icon_path", "");
+            if (!path.isEmpty()) {
+                Bitmap bmp = BitmapFactory.decodeFile(path);
+                if (bmp != null) return new BitmapDrawable(ctx.getResources(), bmp);
+            } else {
+                Intent scIntent = Intent.parseUri(prefs.getString("shortcut_" + scId + "_intent_uri", ""), 0);
+                ComponentName cn = scIntent.getComponent();
+                if (cn != null) return pm.getActivityIcon(cn);
+            }
+        }
+    } catch (Exception ignored) {}
+    return null;
+}
     private static final String[] DEFAULT_ORDER = {"APP","SHORTCUT","SYSTEM","INTENT","MACRO","PANEL","UTILITY","TRIGGER","SEARCH"};
     
     private int restoreBubbleX = -1, restoreBubbleY = -1;
     private ValueAnimator jumpAnim;
-
+    private ComponentCallbacks configCallbacks;
     private GestureDetector gestureDetector;
     private float sx, sy, lastX, lastY;
     private VelocityTracker velocityTracker;
@@ -68,11 +116,56 @@ public void setBubbleTouchable(boolean touchable) {
     } catch (Exception ignored) {}
 }
 
-    private void destroyAll() {
+        private void destroyAll() {
         closeMenu();
+        unregisterRotationWatcher(); // [FIX] hủy đăng ký để tránh leak khi service dừng
         if (bubbleView != null) { try { wm.removeView(bubbleView); } catch (Exception ignored) {} bubbleView = null; }
     }
+    private void registerRotationWatcher() {
+    if (configCallbacks != null) return;
+    configCallbacks = new ComponentCallbacks() {
+        @Override public void onConfigurationChanged(Configuration newConfig) {
+            handleOrientationChange(newConfig.orientation);
+        }
+        @Override public void onLowMemory() {}
+    };
+    try { ctx.registerComponentCallbacks(configCallbacks); } catch (Exception ignored) {}
+}
 
+private void unregisterRotationWatcher() {
+    if (configCallbacks != null) {
+        try { ctx.unregisterComponentCallbacks(configCallbacks); } catch (Exception ignored) {}
+        configCallbacks = null;
+    }
+}
+
+private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, max)); }
+
+private void handleOrientationChange(int orientation) {
+    if (bubbleView == null || bubbleLp == null) return;
+    if (menuOverlay != null) closeMenu(); // đóng bảng cũ, tránh lệch theo hướng vừa xoay
+
+    DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+    int bSize = prefs.getInt("bubble_size", 120);
+    boolean isLandscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
+
+    if (isLandscape) {
+        prefs.edit().putInt("bubble_x_portrait", bubbleLp.x).putInt("bubble_y_portrait", bubbleLp.y).apply();
+        // [YÊU CẦU] Ngang -> về giữa màn hình cho cân đối 4 cạnh
+        int targetX = dm.widthPixels / 2 - bSize / 2;
+        int targetY = dm.heightPixels / 2 - bSize / 2;
+        bubbleLp.x = clampPx(targetX, 0, dm.widthPixels - bSize);
+        bubbleLp.y = clampPx(targetY, 0, dm.heightPixels - bSize);
+    } else {
+        prefs.edit().putInt("bubble_x_landscape", bubbleLp.x).putInt("bubble_y_landscape", bubbleLp.y).apply();
+        int targetX = prefs.getInt("bubble_x_portrait", prefs.getInt("bubble_x", 40));
+        int targetY = prefs.getInt("bubble_y_portrait", prefs.getInt("bubble_y", 600));
+        bubbleLp.x = clampPx(targetX, 0, dm.widthPixels - bSize);
+        bubbleLp.y = clampPx(targetY, 0, dm.heightPixels - bSize);
+    }
+    try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
+    prefs.edit().putInt("bubble_x", bubbleLp.x).putInt("bubble_y", bubbleLp.y).apply();
+}
     private Drawable getCustomIcon(String ref) {
         if (ref == null || ref.isEmpty()) return null;
         try {
@@ -133,100 +226,141 @@ public void setBubbleTouchable(boolean touchable) {
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
         
         int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-        bubbleLp = new WindowManager.LayoutParams(
-    WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
-    isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE 
-    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN 
-    | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS 
-    | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, // Cờ sinh tồn khi xem phim
-    PixelFormat.TRANSLUCENT);
+        bubbleLp = new WindowManager.LayoutParams(size, size, wmType,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+            PixelFormat.TRANSLUCENT);
+        bubbleLp.gravity = Gravity.TOP | Gravity.LEFT;
+        DisplayMetrics dmInit = ctx.getResources().getDisplayMetrics();
+        bubbleLp.x = clampPx(prefs.getInt("bubble_x", 40), 0, dmInit.widthPixels - size);
+        bubbleLp.y = clampPx(prefs.getInt("bubble_y", 600), 0, dmInit.heightPixels - size);
+        try { wm.addView(iv, bubbleLp); bubbleView = iv; } catch (Exception e) { return; }
+        attachDragTouch();
+        registerRotationWatcher(); // [FIX] tự canh lại vị trí mỗi khi xoay màn, không còn "biến mất"
+    }
 
-bubbleLp.gravity = Gravity.TOP | Gravity.LEFT;
-bubbleLp.x = prefs.getInt("bubble_last_x", 0);
-bubbleLp.y = prefs.getInt("bubble_last_y", 500);
-
-bubbleView = iv;
-try {
-    wm.addView(bubbleView, bubbleLp);
-} catch (Exception e) {
-    bubbleView = null;
-    return;
-}
-
-bubbleView.setOnTouchListener(new View.OnTouchListener() {
-    private int initialX, initialY;
-    private float initialTouchX, initialTouchY;
-    private long touchDownTime;
-    private boolean isMoving = false;
-    private Handler tapHandler = new Handler(Looper.getMainLooper());
-    private Runnable tapRunnable;
-
-    @Override
-    public boolean onTouch(View v, MotionEvent event) {
-        switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN:
-                isMoving = false;
-                initialX = bubbleLp.x;
-                initialY = bubbleLp.y;
-                initialTouchX = event.getRawX();
-                initialTouchY = event.getRawY();
-                touchDownTime = System.currentTimeMillis();
-                if (tapRunnable != null) tapHandler.removeCallbacks(tapRunnable);
-                bubbleView.setAlpha(1.0f); // Hiện rõ khi chạm
-                return true;
-
-            case MotionEvent.ACTION_MOVE:
-                float dx = event.getRawX() - initialTouchX;
-                float dy = event.getRawY() - initialTouchY;
-                if (Math.abs(dx) > 15 || Math.abs(dy) > 15) isMoving = true;
-                if (isMoving) {
-                    bubbleLp.x = initialX + (int) dx;
-                    bubbleLp.y = initialY + (int) dy;
-                    try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
-                }
-                return true;
-
-            case MotionEvent.ACTION_UP:
-                long duration = System.currentTimeMillis() - touchDownTime;
-                
-                if (!isMoving && duration < 200) {
-                    String dtapAct = prefs.getString("bubble_dtap_acts", "NONE");
-                    if (dtapAct.equals("NONE")) {
-                        openMenu(); // Đổi toggleMenu() thành openMenu()
-                    } else {
-                        tapRunnable = () -> openMenu(); // Đổi toggleMenu() thành openMenu()
-                        tapHandler.postDelayed(tapRunnable, 220);
-                    }
-                } else if (!isMoving && duration >= 200) {
-                    String longAct = prefs.getString("bubble_long_acts", "NONE");
-                    if (!longAct.equals("NONE")) executeAction(longAct);
-                } else if (isMoving) {
-                    // TÍNH TOÁN ĐỘNG: Không dùng hằng số widthPixels nữa, lấy trực tiếp từ DisplayMetrics hiện tại
-                    DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-                    int screenWidth = dm.widthPixels;
-                    int bubbleWidth = bubbleView.getWidth() > 0 ? bubbleView.getWidth() : 120;
-                    
-                    int targetX = (bubbleLp.x + (bubbleWidth / 2) < screenWidth / 2) ? 0 : screenWidth - bubbleWidth;
-                    
-                    ValueAnimator snapAnim = ValueAnimator.ofInt(bubbleLp.x, targetX);
-                    snapAnim.setDuration(250);
-                    snapAnim.setInterpolator(new android.view.animation.DecelerateInterpolator());
-                    snapAnim.addUpdateListener(anim -> {
-                        bubbleLp.x = (int) anim.getAnimatedValue();
-                        try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
-                    });
-                    snapAnim.start();
-                    
-                    prefs.edit().putInt("bubble_last_x", targetX).putInt("bubble_last_y", bubbleLp.y).apply();
-                }
-                bubbleView.setAlpha(0.6f); // Trả về độ mờ khi nhả tay
-                return true;
+    private void attachDragTouch() {
+        final float[] downRaw = new float[2];
+        final boolean[] isDragging = {false};
+        final int MARGIN = 30; 
+        
+        gestureDetector = new GestureDetector(ctx, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onSingleTapConfirmed(MotionEvent e) {
+    if (menuOverlay != null) {
+        if (currentSubmenu != null) {
+            currentSubmenu = null; 
+            selectedSubIdx = null;  // [FIX] hủy trạng thái "đang chờ hoán đổi" khi thoát submenu
+            selectedMainIdx = null;
+            refreshPanelCard();
+        } else {
+            closeMenu(); 
         }
-        return false;
-       }
-   });
+    } else {
+        moveToCenterAndOpenMenu(); 
+    }
+    return true;
 }
+
+            @Override
+            public boolean onDoubleTap(MotionEvent e) {
+                fireGestureAction("dtap");
+                return true;
+            }
+
+            @Override
+            public void onLongPress(MotionEvent e) {
+                fireGestureAction("long");
+            }
+        });
+
+        bubbleView.setOnTouchListener((v, e) -> {
+            if (gestureDetector.onTouchEvent(e)) return true;
+            
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    if (velocityTracker == null) velocityTracker = VelocityTracker.obtain();
+                    else velocityTracker.clear();
+                    velocityTracker.addMovement(e);
+
+                    downRaw[0] = e.getRawX() - bubbleLp.x; 
+                    downRaw[1] = e.getRawY() - bubbleLp.y;
+                    isDragging[0] = false;
+                    return true;
+                    
+                case MotionEvent.ACTION_MOVE:
+                    if (velocityTracker != null) velocityTracker.addMovement(e);
+                    
+                    float newX = e.getRawX() - downRaw[0];
+                    float newY = e.getRawY() - downRaw[1];
+                    if (!isDragging[0] && (Math.abs(newX - bubbleLp.x) > 8 || Math.abs(newY - bubbleLp.y) > 8)) {
+                        isDragging[0] = true;
+                    }
+                    if (isDragging[0]) {
+                        bubbleLp.x = (int) newX;
+                        bubbleLp.y = (int) newY;
+                        try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
+                        if (menuOverlay != null) followMenuDuringDrag(); // [MỚI] Panel đi theo bong bóng
+                    }
+                    return true;
+
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (isDragging[0]) {
+                        float vX = 0, vY = 0;
+                        if (velocityTracker != null) {
+                            velocityTracker.addMovement(e);
+                            velocityTracker.computeCurrentVelocity(1000);
+                            vX = velocityTracker.getXVelocity();
+                            vY = velocityTracker.getYVelocity();
+                            velocityTracker.recycle();
+                            velocityTracker = null;
+                        }
+
+                        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+                        int bSize = prefs.getInt("bubble_size", 120);
+                        
+                        int targetX;
+                        if (vX > 1500) targetX = dm.widthPixels - bSize - MARGIN; 
+                        else if (vX < -1500) targetX = MARGIN; 
+                        else targetX = (bubbleLp.x + bSize / 2 < dm.widthPixels / 2) ? MARGIN : dm.widthPixels - bSize - MARGIN;
+                        
+                        int calculatedTargetY = bubbleLp.y + (int) (vY * 0.12f);
+                        final int finalTargetYDrag = Math.max(MARGIN, Math.min(calculatedTargetY, dm.heightPixels - bSize - MARGIN));
+                        final int finalTargetXDrag = targetX;
+                        
+ValueAnimator snapAnim = ValueAnimator.ofFloat(0f, 1f);
+snapAnim.setDuration(320); 
+// [FIX] OvershootInterpolator khiến giá trị vọt vượt quá 1.0 rồi tụt lại
+// -> đây chính là cảm giác "bật lại như quả bóng" khi gần đường tâm.
+// Đổi sang DecelerateInterpolator: mượt, giảm tốc dần về đích, không overshoot,
+// đường đi luôn là 1 đường thẳng liên tục từ vị trí thả tay tới điểm neo cạnh.
+snapAnim.setInterpolator(new DecelerateInterpolator(1.8f)); 
+int startX = bubbleLp.x; int startY = bubbleLp.y;
+                        snapAnim.addUpdateListener(a -> {
+                            float val = (float) a.getAnimatedValue();
+                            bubbleLp.x = (int) (startX + (finalTargetXDrag - startX) * val);
+                            bubbleLp.y = (int) (startY + (finalTargetYDrag - startY) * val);
+                            try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
+                            if (menuOverlay != null) followMenuDuringDrag(); // [MỚI] Panel đi theo lúc tự trượt về mép
+                        });
+                        snapAnim.addListener(new AnimatorListenerAdapter() {
+                            @Override public void onAnimationEnd(Animator animation) {
+                                prefs.edit().putInt("bubble_x", bubbleLp.x).putInt("bubble_y", bubbleLp.y).apply();
+                                // [MỚI] Sau khi kéo xong trong lúc Panel đang mở, chốt lại vị trí này làm
+                                // "điểm phục hồi" — tránh việc tap để đóng Panel làm bong bóng nhảy ngược
+                                // về đúng vị trí TRƯỚC KHI mở Panel (đè mất thao tác kéo vừa làm).
+                                if (menuOverlay != null) { restoreBubbleX = bubbleLp.x; restoreBubbleY = bubbleLp.y; }
+                            }
+                        });
+                        snapAnim.start();
+
+                    }
+                    return true;
+            }
+            return false;
+        });
+    }
 
     private void fireGestureAction(String gesture) {
         String rulesCsv = prefs.getString("bubble_pack_rules", "");
@@ -421,22 +555,7 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
 
         try { wm.updateViewLayout(menuOverlay, menuLp); } catch (Exception ignored) {}
     }
-    private void executeAction(String actionStr) {
-        if (actionStr == null || actionStr.equals("NONE") || actionStr.isEmpty()) return;
-        String[] acts = actionStr.split(",");
-        for (String a : acts) {
-            String at = a.trim();
-            if (at.isEmpty()) continue;
-            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-            if (at.startsWith("RUN_SHORTCUT_")) {
-                ipc.putExtra("act", "RUN_SHORTCUT");
-                ipc.putExtra("shortcut_id", at.substring(13));
-            } else {
-                ipc.putExtra("act", at);
-            }
-            ctx.sendBroadcast(ipc);
-        }
-    }
+
     private void closeMenu() {
         if (menuOverlay != null) { try { wm.removeView(menuOverlay); } catch (Exception ignored) {} menuOverlay = null; }
         selectedMainIdx = null; selectedSubIdx = null; currentSubmenu = null;
@@ -568,26 +687,25 @@ private List<String> getSubItems(String type) {
         FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
         iv.setLayoutParams(ivLp);
         
-        String customOverride = prefs.getString("bubble_node_icon_" + type, "");
-        Drawable d = getCustomIcon(customOverride);
-        boolean isAppIcon = false;
-        
-        if (d == null) {
-            try {
-                if (type.equals("SYSTEM")) d = ctx.getDrawable(android.R.drawable.ic_menu_preferences);
-                else if (type.equals("UTILITY")) d = ctx.getDrawable(android.R.drawable.ic_menu_manage);
-                else if (type.equals("APP")) d = ctx.getDrawable(android.R.drawable.sym_def_app_icon);
-                else if (type.equals("SHORTCUT")) d = ctx.getDrawable(android.R.drawable.ic_menu_send);
-                else if (type.equals("TRIGGER")) d = ctx.getDrawable(android.R.drawable.ic_menu_directions);
-                else if (type.equals("INTENT")) d = ctx.getDrawable(android.R.drawable.ic_menu_compass);
-                else if (type.equals("SEARCH")) d = ctx.getDrawable(android.R.drawable.ic_menu_search);
-                else d = ctx.getDrawable(android.R.drawable.ic_menu_view); 
-            } catch (Exception ignored) {}
-        } else {
-            isAppIcon = customOverride.startsWith("app:");
+                String customOverride = prefs.getString("bubble_node_icon_" + type, "");
+        boolean isAppIcon = customOverride.startsWith("app:");
+
+        int fallbackRes;
+        switch (type) {
+            case "SYSTEM": fallbackRes = android.R.drawable.ic_menu_preferences; break;
+            case "UTILITY": fallbackRes = android.R.drawable.ic_menu_manage; break;
+            case "APP": fallbackRes = android.R.drawable.sym_def_app_icon; break;
+            case "SHORTCUT": fallbackRes = android.R.drawable.ic_menu_send; break;
+            case "TRIGGER": fallbackRes = android.R.drawable.ic_menu_directions; break;
+            case "INTENT": fallbackRes = android.R.drawable.ic_menu_compass; break;
+            case "SEARCH": fallbackRes = android.R.drawable.ic_menu_search; break;
+            default: fallbackRes = android.R.drawable.ic_menu_view;
         }
-        
-        applyIconToImageView(iv, d, iconSize, isAppIcon);
+        try { applyIconToImageView(iv, ctx.getDrawable(fallbackRes), iconSize, false); } catch (Exception ignored) {}
+
+        if (!customOverride.isEmpty()) {
+            loadIconAsync("main_" + type + "_" + customOverride, () -> getCustomIcon(customOverride), iv, iconSize, isAppIcon);
+        }
         iconBox.addView(iv);
         
         TextView tv = new TextView(ctx);
@@ -613,6 +731,7 @@ private List<String> getSubItems(String type) {
                 selectedMainIdx = null;
                 refreshPanelCard();
             } else {
+                selectedSubIdx = null; // [FIX] đảm bảo submenu mới mở luôn sạch, không dính lựa chọn cũ 
                 currentSubmenu = type;
                 refreshPanelCard();
             }
@@ -663,58 +782,32 @@ private List<String> getSubItems(String type) {
         boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 51, 51, 51));
         iconBox.setBackground(boxBg);
 
-        if (!ref.isEmpty()) {
+                if (!ref.isEmpty()) {
             ImageView iv = new ImageView(ctx);
             FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
             iv.setLayoutParams(ivLp);
-            
-            String customOverride = prefs.getString("bubble_node_icon_override_" + type + "_" + ref, "");
-            Drawable d = getCustomIcon(customOverride);
-            PackageManager pm = ctx.getPackageManager();
-            boolean isAppIcon = false;
 
-            if (d == null) {
-                if (ref.startsWith("app:")) {
-                    try { d = pm.getApplicationIcon(ref.substring(4)); isAppIcon = true; } catch(Exception ignored) {}
-                } else if (ref.startsWith("act:CREATE_SHORTCUT_")) {
-                    try {
-                        String[] split = ref.substring(20).split("/");
-                        d = pm.getActivityIcon(new ComponentName(split[0], split[1]));
-                        isAppIcon = true;
-                    } catch(Exception ignored) {}
-                } else if (ref.startsWith("act:RUN_SHORTCUT_")) {
-                    try {
-                        String scId = ref.substring(17);
-                        String path = prefs.getString("shortcut_" + scId + "_icon_path", "");
-                        if (!path.isEmpty()) {
-                            Bitmap bmp = BitmapFactory.decodeFile(path);
-                            if (bmp != null) { d = new BitmapDrawable(ctx.getResources(), bmp); isAppIcon = true; }
-                        } else {
-                            Intent scIntent = Intent.parseUri(prefs.getString("shortcut_" + scId + "_intent_uri", ""), 0);
-                            ComponentName cn = scIntent.getComponent();
-                            if (cn != null) { d = pm.getActivityIcon(cn); isAppIcon = true; }
-                        }
-                    } catch (Exception ignored) {}
-                }
-                if (d == null) {
-                    int defaultIconRes = android.R.drawable.ic_menu_view;
-                    if (ref.equals("act:BACK")) defaultIconRes = android.R.drawable.ic_media_rew;
-                    else if (ref.equals("act:HOME")) defaultIconRes = android.R.drawable.ic_menu_compass;
-                    else if (ref.equals("act:RECENTS")) defaultIconRes = android.R.drawable.ic_menu_recent_history;
-                    else if (ref.equals("act:SCREEN_OFF")) defaultIconRes = android.R.drawable.ic_lock_lock;
-                    else if (ref.equals("act:POWER_DIALOG")) defaultIconRes = android.R.drawable.ic_lock_power_off;
-                    else if (ref.equals("act:SCREENSHOT") || ref.equals("act:CAMERA")) defaultIconRes = android.R.drawable.ic_menu_camera;
-                    else if (ref.equals("act:NOTIFICATIONS")) defaultIconRes = android.R.drawable.ic_dialog_email;
-                    else if (ref.equals("act:VOICE_RECORD") || ref.equals("act:TOGGLE_RECORD")) defaultIconRes = android.R.drawable.ic_btn_speak_now;
-                    d = ctx.getDrawable(defaultIconRes);
-                }
-            } else {
-                isAppIcon = customOverride.startsWith("app:");
-            }
-            
-            applyIconToImageView(iv, d, iconSize, isAppIcon);
+            String customOverride = prefs.getString("bubble_node_icon_override_" + type + "_" + ref, "");
+
+            int defaultIconRes = android.R.drawable.ic_menu_view;
+            if (ref.equals("act:BACK")) defaultIconRes = android.R.drawable.ic_media_rew;
+            else if (ref.equals("act:HOME")) defaultIconRes = android.R.drawable.ic_menu_compass;
+            else if (ref.equals("act:RECENTS")) defaultIconRes = android.R.drawable.ic_menu_recent_history;
+            else if (ref.equals("act:SCREEN_OFF")) defaultIconRes = android.R.drawable.ic_lock_lock;
+            else if (ref.equals("act:POWER_DIALOG")) defaultIconRes = android.R.drawable.ic_lock_power_off;
+            else if (ref.equals("act:SCREENSHOT") || ref.equals("act:CAMERA")) defaultIconRes = android.R.drawable.ic_menu_camera;
+            else if (ref.equals("act:NOTIFICATIONS")) defaultIconRes = android.R.drawable.ic_dialog_email;
+            else if (ref.equals("act:VOICE_RECORD") || ref.equals("act:TOGGLE_RECORD")) defaultIconRes = android.R.drawable.ic_btn_speak_now;
+            try { applyIconToImageView(iv, ctx.getDrawable(defaultIconRes), iconSize, false); } catch (Exception ignored) {}
+
+            boolean isAppIconFinal = customOverride.startsWith("app:") || ref.startsWith("app:")
+                || ref.startsWith("act:CREATE_SHORTCUT_") || ref.startsWith("act:RUN_SHORTCUT_");
+            loadIconAsync("sub_" + type + "_" + ref + "_" + customOverride,
+                () -> resolveSubNodeIcon(customOverride, ref), iv, iconSize, isAppIconFinal);
+
             iconBox.addView(iv);
         }
+
         
         TextView tv = new TextView(ctx);
         tv.setText(getActionLabelForSubNode(ref));

@@ -1086,7 +1086,7 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
     return box;
 }
 private static String currentSwapPanelId = null;
-private static String currentSwapRefKey = null;
+    private static String currentSwapRefKey = null;
 
 private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnable originalAction) {
     cell.setOnLongClickListener(v -> {
@@ -1097,7 +1097,6 @@ private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnabl
             Vibrator vib = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
             if (vib != null) vib.vibrate(android.os.VibrationEffect.createOneShot(30, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
         } catch (Exception ignored) {}
-        Toast.makeText(ctx, "Chế độ Đổi vị trí: Chọn mục khác để hoán đổi", Toast.LENGTH_SHORT).show();
         return true; 
     });
 
@@ -1116,6 +1115,7 @@ private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnabl
                     prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
                 }
             }
+            // Gọi hàm render đồng bộ cực nhanh
             fastRenderPanelGrid(panelId); 
             return; 
         }
@@ -1179,36 +1179,32 @@ private Drawable getSwapHighlightBg(Drawable orig) {
         Drawable overrideIcon = ovrVal.isEmpty() ? null : getIconOverride(panelId, ref);
         Drawable finalIcon = overrideIcon != null ? overrideIcon : (Drawable) payload;
         String cellCacheKey = overrideIcon != null ? (ref + "_ov_" + ovrVal) : ref;
-        
         View cell = wrapAppIconCell(px, finalIcon, cellCacheKey, v -> {
-            closeAllPanels();
-            new Handler(Looper.getMainLooper()).postDelayed(() -> launchAppRef(ref), 150);
+            launchAppRef(ref);
+            new Handler(Looper.getMainLooper()).post(() -> closeAllPanels());
         }, getCachedAppLabel(ref));
-        
         return wrapWithSwapLogic(panelId, ref, cell, () -> { 
-            closeAllPanels();
-            new Handler(Looper.getMainLooper()).postDelayed(() -> launchAppRef(ref), 150);
+            launchAppRef(ref); 
+            new Handler(Looper.getMainLooper()).post(() -> closeAllPanels()); 
         });
     } else if (ref.startsWith("RUN_SHORTCUT_")) {
         String scId = ref.substring("RUN_SHORTCUT_".length());
         Drawable icon = getCachedShortcutIcon(scId);
         String label = prefs.getString("shortcut_" + scId + "_name", "Shortcut");
-        
         Runnable scAction = () -> {
-            closeAllPanels();
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                try {
-                    String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
-                    if (!uri.isEmpty()) {
-                        Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
-                        scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        ctx.startActivity(scIntent);
-                    }
-                } catch (Exception ignored) {}
-            }, 150);
+            try {
+                String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+                if (!uri.isEmpty()) {
+                    Intent scIntent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME);
+                    scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    ctx.startActivity(scIntent);
+                }
+            } catch (Exception ignored) {}
+            new Handler(Looper.getMainLooper()).post(() -> closeAllPanels());
         };
 
         View cell = wrapIconCell(px, icon, icon == null ? "🔗" : null, "sc_" + scId, v -> scAction.run(), label);
+        // Khoá order key khớp đúng với "SC:" + id đã lưu lúc khởi tạo order trong renderPanelGrid()
         return wrapWithSwapLogic(panelId, "SC:" + scId, cell, scAction);
     } else {
         String label = getActionLabelForPanel(ref);
@@ -1216,20 +1212,18 @@ private Drawable getSwapHighlightBg(Drawable orig) {
         String overrideVal = prefs.getString(overrideKey, "");
         Drawable overrideIcon = overrideVal.isEmpty() ? null : getIconOverride(panelId, ref);
         Integer resId = ACT_ICON_RES.get(ref);
-        Drawable sysIcon = overrideIcon != null ? overrideIcon : (resId != null ? ctx.getDrawable(resId) : null);
-        
-        if (sysIcon != null && !overrideVal.startsWith("app:")) {
+        Drawable sysIcon = overrideIcon != null ? overrideIcon
+            : (resId != null ? ctx.getDrawable(resId) : null);
+        boolean isAppOverride = overrideVal.startsWith("app:");
+        if (sysIcon != null && !isAppOverride) {
             sysIcon = sysIcon.mutate();
             sysIcon.setTint(Color.WHITE);
         }
-        
         Runnable actAction = () -> {
-            closeAllPanels();
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-                ipc.putExtra("act", ref);
-                ctx.sendBroadcast(ipc);
-            }, 150);
+            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            ipc.putExtra("act", ref);
+            ctx.sendBroadcast(ipc);
+            new Handler(Looper.getMainLooper()).post(() -> closeAllPanels());
         };
 
         View cell = wrapIconCell(px, sysIcon, sysIcon == null ? actEmoji(ref) : null, "act_" + panelId + "_" + ref, v -> actAction.run(), label);
