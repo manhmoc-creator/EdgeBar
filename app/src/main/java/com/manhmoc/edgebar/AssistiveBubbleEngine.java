@@ -77,19 +77,18 @@ public class AssistiveBubbleEngine {
         return null;
     }
 
-    // Tinh chỉnh hiển thị để làm to App Icon
     private void applyIconToImageView(ImageView iv, Drawable d, int iconSize, boolean isApp) {
         if (d == null) return;
         if (isApp) {
             iv.setImageDrawable(d);
             iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            int pad = (int)(iconSize * 0.08f); 
-            iv.setPadding(pad, pad, pad, pad);
+            iv.setPadding(0, 0, 0, 0); // YÊU CẦU 4: Điền đầy khung nền, bỏ padding thừa
         } else {
             d = d.mutate(); d.setTint(Color.WHITE);
             Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
             if (norm != null) iv.setImageBitmap(norm);
             else iv.setImageDrawable(d);
+            iv.setPadding(0, 0, 0, 0);
         }
     }
 
@@ -268,6 +267,11 @@ public class AssistiveBubbleEngine {
                 String acts = prefs.getString("prule_" + rId + "_acts", "");
                 if (!acts.isEmpty() && !acts.equals("NONE")) {
                     Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+                    
+                    // YÊU CẦU 6: Truyền toạ độ bắt đầu
+                    ipc.putExtra("startX", bubbleLp.x);
+                    ipc.putExtra("startY", bubbleLp.y);
+                    
                     for (String act : acts.split(",")) {
                         String at = act.trim();
                         if (at.isEmpty()) continue;
@@ -426,10 +430,17 @@ public class AssistiveBubbleEngine {
         }
     }
 
+    // YÊU CẦU 1: ĐỌC LABEL ĐÚNG, KHÔNG HIỆN CHỮ "ACTION" CHẾT
     private String getActionLabelForSubNode(String ref) {
+        if (ref == null || ref.isEmpty()) return "Trống";
         if (ref.startsWith("app:")) {
             try { return ctx.getPackageManager().getApplicationLabel(ctx.getPackageManager().getApplicationInfo(ref.substring(4),0)).toString(); }
             catch (Exception e) { return "App"; }
+        } else if (ref.startsWith("act:CREATE_SHORTCUT_")) {
+            try {
+                String[] split = ref.substring(20).split("/");
+                return ctx.getPackageManager().getActivityInfo(new ComponentName(split[0], split[1]), 0).loadLabel(ctx.getPackageManager()).toString();
+            } catch (Exception e) { return "Shortcut"; }
         } else if (ref.startsWith("act:RUN_SHORTCUT_")) {
             return prefs.getString("shortcut_" + ref.substring(17) + "_name", "Shortcut");
         } else if (ref.startsWith("act:INTENT_")) {
@@ -439,23 +450,10 @@ public class AssistiveBubbleEngine {
         } else if (ref.startsWith("act:PANEL_")) {
             return prefs.getString("pack_panel_" + ref.substring(10) + "_name", "Panel");
         } else if (ref.startsWith("act:")) {
-            String actKey = ref.substring(4);
-            if (actKey.equals("BACK")) return "Quay lại"; if (actKey.equals("HOME")) return "Màn chính";
-            if (actKey.equals("RECENTS")) return "Đa nhiệm"; if (actKey.equals("SCREEN_OFF")) return "Tắt màn hình";
-            if (actKey.equals("FLASH")) return "Đèn pin"; if (actKey.equals("SCREENSHOT")) return "Chụp màn hình";
-            if (actKey.equals("CAMERA")) return "Camera"; if (actKey.equals("VOLUME")) return "Âm lượng";
-            if (actKey.equals("POWER_DIALOG")) return "Menu nguồn"; if (actKey.equals("NOTIFICATIONS")) return "Thông báo";
-            if (actKey.equals("QUICK_SETTINGS")) return "Cài đặt nhanh"; if (actKey.equals("SPLIT_SCREEN")) return "Chia đôi màn hình";
-            if (actKey.equals("SCREEN_RECORD")) return "Quay màn hình"; if (actKey.equals("AUTO_ROTATE_TOGGLE")) return "Tự động xoay";
-            if (actKey.equals("TOGGLE_OVERLAY")) return "Bật/tắt Trợ năng"; if (actKey.equals("TOGGLE_RECORD")) return "Bật/tắt Ghi âm";
-            if (actKey.equals("PAUSE_RECORD")) return "Dừng/Tiếp Ghi âm"; if (actKey.equals("YTDL_DOWNLOAD")) return "Tải YTDLnis";
-            if (actKey.equals("TOGGLE_WORK_PROFILE")) return "Bật/tắt Hồ sơ CV"; if (actKey.equals("OPEN_STORAGE_SCAN")) return "Quét Dung Lượng";
-            if (actKey.equals("SCAN_QR")) return "Quét QR"; if (actKey.equals("PLAY_MY_PLAYLIST")) return "Phát My Playlist";
-            if (actKey.equals("TRIGGER_TAP")) return "Tap"; if (actKey.equals("TRIGGER_DTAP")) return "Double Tap";
-            if (actKey.equals("TRIGGER_LONG")) return "Long Press"; if (actKey.equals("TRIGGER_UP")) return "Vuốt Lên";
-            if (actKey.equals("TRIGGER_DOWN")) return "Vuốt Xuống"; if (actKey.equals("TRIGGER_LEFT")) return "Vuốt Trái";
-            if (actKey.equals("TRIGGER_RIGHT")) return "Vuốt Phải"; if (actKey.equals("TRIGGER_ACC_MENU_2F")) return "Giả lập 2 ngón";
-            return actKey;
+            List<String[]> allItems = buildItems("ALL");
+            for (String[] it : allItems) {
+                if (it[1].equals(ref)) return it[0];
+            }
         }
         return "Action";
     }
@@ -621,6 +619,12 @@ public class AssistiveBubbleEngine {
             if (d == null) {
                 if (ref.startsWith("app:")) {
                     try { d = pm.getApplicationIcon(ref.substring(4)); isAppIcon = true; } catch(Exception ignored) {}
+                } else if (ref.startsWith("act:CREATE_SHORTCUT_")) {
+                    try {
+                        String[] split = ref.substring(20).split("/");
+                        d = pm.getActivityIcon(new ComponentName(split[0], split[1]));
+                        isAppIcon = true;
+                    } catch(Exception ignored) {}
                 } else if (ref.startsWith("act:RUN_SHORTCUT_")) {
                     try {
                         String scId = ref.substring(17);
@@ -635,7 +639,18 @@ public class AssistiveBubbleEngine {
                         }
                     } catch (Exception ignored) {}
                 }
-                if (d == null) d = ctx.getDrawable(android.R.drawable.sym_def_app_icon);
+                if (d == null) {
+                    int defaultIconRes = android.R.drawable.ic_menu_view;
+                    if (ref.equals("act:BACK")) defaultIconRes = android.R.drawable.ic_media_rew;
+                    else if (ref.equals("act:HOME")) defaultIconRes = android.R.drawable.ic_menu_compass;
+                    else if (ref.equals("act:RECENTS")) defaultIconRes = android.R.drawable.ic_menu_recent_history;
+                    else if (ref.equals("act:SCREEN_OFF")) defaultIconRes = android.R.drawable.ic_lock_lock;
+                    else if (ref.equals("act:POWER_DIALOG")) defaultIconRes = android.R.drawable.ic_lock_power_off;
+                    else if (ref.equals("act:SCREENSHOT") || ref.equals("act:CAMERA")) defaultIconRes = android.R.drawable.ic_menu_camera;
+                    else if (ref.equals("act:NOTIFICATIONS")) defaultIconRes = android.R.drawable.ic_dialog_email;
+                    else if (ref.equals("act:VOICE_RECORD") || ref.equals("act:TOGGLE_RECORD")) defaultIconRes = android.R.drawable.ic_btn_speak_now;
+                    d = ctx.getDrawable(defaultIconRes);
+                }
             } else {
                 isAppIcon = customOverride.startsWith("app:");
             }
@@ -645,18 +660,7 @@ public class AssistiveBubbleEngine {
         }
         
         TextView tv = new TextView(ctx);
-        String label = "Trống";
-        if (!ref.isEmpty()) {
-            if (ref.startsWith("app:")) {
-                try { label = ctx.getPackageManager().getApplicationLabel(ctx.getPackageManager().getApplicationInfo(ref.substring(4),0)).toString(); }
-                catch (Exception e) { label = "App"; }
-            } else if (ref.startsWith("act:RUN_SHORTCUT_")) {
-                label = prefs.getString("shortcut_" + ref.substring(17) + "_name", "Shortcut");
-            } else {
-                label = "Action";
-            }
-        }
-        tv.setText(label);
+        tv.setText(getActionLabelForSubNode(ref));
         tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.WHITE);
         tv.setTextSize(11f);
         tv.setSingleLine(true);
@@ -733,20 +737,7 @@ public class AssistiveBubbleEngine {
         if (listContainer == null) return;
         listContainer.removeAllViews();
 
-        List<String[]> items;
-        if (type.equals("SEARCH")) {
-            items = buildItems("ALL"); 
-        } else {
-            items = new ArrayList<>();
-            List<String> selectedRefs = getSubItems(type);
-            List<String[]> allOfType = buildItems(type); 
-            for (String ref : selectedRefs) {
-                if (ref.isEmpty()) continue;
-                for (String[] it : allOfType) {
-                    if (it[1].equals(ref)) { items.add(it); break; }
-                }
-            }
-        }
+        List<String[]> items = buildItems("ALL"); 
 
         String q = query.toLowerCase(Locale.ROOT);
         List<String[]> shown = new ArrayList<>();
@@ -784,6 +775,12 @@ public class AssistiveBubbleEngine {
                 if (item[1].startsWith("app:")) {
                     try { iv.setImageDrawable(pm.getApplicationIcon(item[1].substring(4))); }
                     catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
+                } else if (item[1].startsWith("act:CREATE_SHORTCUT_")) {
+                    try {
+                        String[] split = item[1].substring(20).split("/");
+                        Drawable d = pm.getActivityIcon(new ComponentName(split[0], split[1]));
+                        iv.setImageDrawable(d);
+                    } catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
                 } else if (item[1].startsWith("act:RUN_SHORTCUT_")) {
                     try {
                         String scId = item[1].substring(17);
@@ -817,43 +814,11 @@ public class AssistiveBubbleEngine {
             tvLabel.setText(item[0]); tvLabel.setTextColor(Color.WHITE); tvLabel.setTextSize(14f);
             row.addView(tvLabel);
 
-            if (selectedSubIdx != null && selectedSubIdx == p) {
-                GradientDrawable rowBg = new GradientDrawable();
-                rowBg.setColor(Color.parseColor("#8AB4F8"));
-                rowBg.setCornerRadius(20f);
-                row.setBackground(rowBg);
-            } else {
-                row.setBackgroundColor(Color.TRANSPARENT);
-            }
-
             final String ref = item[1];
-            final int finalP = p;
             
             row.setOnClickListener(v -> {
-                if (selectedSubIdx != null) {
-                    if (selectedSubIdx != finalP && !type.equals("SEARCH") && !type.equals("ALL")) {
-                        List<String> order = new ArrayList<>(getSubItems(type));
-                        int idx1 = order.indexOf(shown.get(selectedSubIdx)[1]);
-                        int idx2 = order.indexOf(ref);
-                        if (idx1 >= 0 && idx2 >= 0) {
-                            Collections.swap(order, idx1, idx2);
-                            prefs.edit().putString("bubble_node_items_" + type, TextUtils.join(",", order)).apply();
-                        }
-                    }
-                    selectedSubIdx = null;
-                    showGridListOnly(type, query); 
-                } else {
-                    runItem(ref); 
-                    closeMenu();
-                }
-            });
-
-            row.setOnLongClickListener(v -> {
-                if (!type.equals("SEARCH") && !type.equals("ALL")) {
-                    selectedSubIdx = finalP;
-                    showGridListOnly(type, query);
-                }
-                return true;
+                runItem(ref); 
+                closeMenu();
             });
 
             listContainer.addView(row);
@@ -917,6 +882,7 @@ public class AssistiveBubbleEngine {
             }
             case "SHORTCUT": {
                 for (ResolveInfo ri : ShortcutScanner.getProviders(ctx)) {
+                    if (ri.activityInfo.packageName.equals(ctx.getPackageName())) continue; // YÊU CẦU 3: Bỏ qua shortcut EdgeBar
                     out.add(new String[]{ri.loadLabel(ctx.getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
                 }
                 for (String id : csvToList(prefs.getString("shortcut_ids", "")))
@@ -981,6 +947,9 @@ public class AssistiveBubbleEngine {
         } else if (ref.startsWith("act:")) {
             Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             ipc.putExtra("act", ref.substring(4));
+            // YÊU CẦU 6: Truyền vị trí cho Giả lập cử chỉ
+            ipc.putExtra("startX", bubbleLp.x);
+            ipc.putExtra("startY", bubbleLp.y);
             ctx.sendBroadcast(ipc);
         }
     }
