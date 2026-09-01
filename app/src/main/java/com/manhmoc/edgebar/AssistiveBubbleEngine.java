@@ -196,9 +196,10 @@ public void setBubbleTouchable(boolean touchable) {
                         bubbleLp.x = (int) newX;
                         bubbleLp.y = (int) newY;
                         try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
+                        if (menuOverlay != null) followMenuDuringDrag(); // [MỚI] Panel đi theo bong bóng
                     }
                     return true;
-                    
+
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     if (isDragging[0]) {
@@ -237,13 +238,19 @@ int startX = bubbleLp.x; int startY = bubbleLp.y;
                             bubbleLp.x = (int) (startX + (finalTargetXDrag - startX) * val);
                             bubbleLp.y = (int) (startY + (finalTargetYDrag - startY) * val);
                             try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
+                            if (menuOverlay != null) followMenuDuringDrag(); // [MỚI] Panel đi theo lúc tự trượt về mép
                         });
                         snapAnim.addListener(new AnimatorListenerAdapter() {
                             @Override public void onAnimationEnd(Animator animation) {
                                 prefs.edit().putInt("bubble_x", bubbleLp.x).putInt("bubble_y", bubbleLp.y).apply();
+                                // [MỚI] Sau khi kéo xong trong lúc Panel đang mở, chốt lại vị trí này làm
+                                // "điểm phục hồi" — tránh việc tap để đóng Panel làm bong bóng nhảy ngược
+                                // về đúng vị trí TRƯỚC KHI mở Panel (đè mất thao tác kéo vừa làm).
+                                if (menuOverlay != null) { restoreBubbleX = bubbleLp.x; restoreBubbleY = bubbleLp.y; }
                             }
                         });
                         snapAnim.start();
+
                     }
                     return true;
             }
@@ -415,6 +422,34 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
         if (menuOverlay != null && menuOverlay.isAttachedToWindow()) {
             try { wm.updateViewLayout(menuOverlay, menuLp); } catch (Exception ignored) {}
         }
+    }
+    /** [MỚI] Bám theo bong bóng khi user đang KÉO trong lúc Panel đang mở — đổi cả
+     *  X lẫn Y theo đúng vị trí tâm bong bóng hiện tại, kẹp trong màn hình. Tách riêng
+     *  khỏi recalculateMenuPosition() vì hàm đó cố định X = giữa màn hình (phục vụ
+     *  hiệu ứng bong bóng tự nhảy vào giữa lúc mới mở Panel) — không được đụng vào. */
+    private void followMenuDuringDrag() {
+        if (panelCard == null || menuLp == null || menuOverlay == null) return;
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        int bSize = prefs.getInt("bubble_size", 120);
+        int margin = 40;
+        int gap = 45;
+
+        panelCard.measure(
+            View.MeasureSpec.makeMeasureSpec(menuLp.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(dm.heightPixels, View.MeasureSpec.AT_MOST)
+        );
+        int actualPh = panelCard.getMeasuredHeight();
+
+        int calculatedTargetY = bubbleLp.y + bSize + gap;
+        if (calculatedTargetY + actualPh > dm.heightPixels - margin) {
+            calculatedTargetY = bubbleLp.y - actualPh - gap;
+        }
+        menuLp.y = Math.max(margin, calculatedTargetY);
+
+        int targetX = bubbleLp.x + bSize / 2 - menuLp.width / 2;
+        menuLp.x = Math.max(margin, Math.min(targetX, dm.widthPixels - menuLp.width - margin));
+
+        try { wm.updateViewLayout(menuOverlay, menuLp); } catch (Exception ignored) {}
     }
 
     private void closeMenu() {
