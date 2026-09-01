@@ -44,15 +44,14 @@ private void loadIconAsync(String cacheKey, java.util.function.Supplier<Drawable
         if (cached != null) { applyIconToImageView(iv, cached, iconSize, isAppHint); return; }
     }
         iv.setTag(cacheKey);
-    bubbleIconExecutor.execute(() -> {
+        bubbleIconExecutor.execute(() -> {
         Drawable d = loader.get();
         if (d != null) synchronized (bubbleIconCache) { bubbleIconCache.put(cacheKey, d); }
         bubbleIconHandler.post(() -> {
             if (d != null && cacheKey.equals(iv.getTag())) applyIconToImageView(iv, d, iconSize, isAppHint);
         });
-    }).start();
+    });
 }
-
 private Drawable resolveSubNodeIcon(String customOverride, String ref) {
     Drawable d = getCustomIcon(customOverride);
     if (d != null) return d;

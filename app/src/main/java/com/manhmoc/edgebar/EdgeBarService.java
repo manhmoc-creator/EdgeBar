@@ -592,8 +592,8 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
                         scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         startActivity(scIntent);
                     }
-                } catch (Exception ex) {
-                    Toast.makeText(this, "Shortcut lỗi: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
+               } catch (Exception ex) {
+                    Toast.makeText(c, "Shortcut lỗi: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
                 }
                 return; // [FIX] luôn return, không rơi xuống exec() -> tránh gọi Shortcut 2 lần
             }
