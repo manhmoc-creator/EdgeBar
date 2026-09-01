@@ -8077,6 +8077,18 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
 
                 // Hàm tạo nút to 130x130
                 java.util.function.Function<String, Button> makeMiniBtn = (text) -> {
+                    Button b = new Button(MainActivity.this);
+                    b.setText(text);
+                    b.setBackground(getRounded("#303134", 14f));
+                    b.setTextColor(Color.WHITE);
+                    b.setTextSize(14f);
+                    b.setPadding(20, 10, 20, 10);
+                    LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(-2, -2);
+                    mlp.setMargins(8, 0, 0, 0);
+                    b.setLayoutParams(mlp);
+                    return b;
+                };
+
                 // Nút Chổi Cọ (Brush Override Icon)
                 if (currentTab[0] == 0 || currentTab[0] == 1) { // APP & ACTION
                     Button btnIcon = makeMiniBtn.apply("🖌");
@@ -8087,10 +8099,9 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                     btnIcon.setOnClickListener(v -> showIconPickerDialog("shortcut_" + ref + "_icon_override", refreshList));
                     controls.addView(btnIcon);
                 }
-                
+
                 row.addView(controls);
             }
-
             // CheckBox chọn mục, thế chỗ Thùng rác (ĐƯA XUỐNG CUỐI CÙNG BÊN PHẢI)
             CheckBox cb = new CheckBox(MainActivity.this);
             cb.setChecked(isSelected);
