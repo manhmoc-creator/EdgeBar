@@ -787,7 +787,27 @@ public class AssistiveBubbleEngine {
         }
         recalculateMenuPosition();
     }
-
+private void refreshPanelCard() {
+        if (panelCard != null) {
+            panelCard.removeAllViews();
+            if (currentSubmenu != null) {
+                if (currentSubmenu.equals("SEARCH")) buildSearchMenu(panelCard);
+                else buildSubmenuGrid(panelCard, currentSubmenu);
+            } else {
+                for (int i = 0; i < 3; i++) {
+                    LinearLayout row = new LinearLayout(ctx);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    row.setWeightSum(3);
+                    for (int j = 0; j < 3; j++) {
+                        int idx = i * 3 + j;
+                        row.addView(buildMainButton(idx));
+                    }
+                    panelCard.addView(row);
+                }
+            }
+            recalculateMenuPosition();
+        }
+    }
     private List<String[]> buildItems(String type) {
         List<String[]> out = new ArrayList<>();
         if (type.equals("SEARCH") || type.equals("ALL")) {
