@@ -18,16 +18,6 @@ import android.widget.*;
 import java.util.*;
 import java.util.function.Supplier; 
 public class AssistiveBubbleEngine {
-    private Context ctx; private WindowManager wm; private SharedPreferences prefs; private boolean isAnyMode;
-    private View bubbleView; private WindowManager.LayoutParams bubbleLp;
-    private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
-    private LinearLayout panelCard;
-    private final java.util.concurrent.atomic.AtomicInteger iconLoadGen = new java.util.concurrent.atomic.AtomicInteger(0);
-    private final FrameLayout[] nodeButtons = new FrameLayout[9];
-    private Integer selectedMainIdx = null;
-    private Integer selectedSubIdx = null;
-    private String currentSubmenu = null;
-
     private DisplayMetrics getRealMetrics() {
         DisplayMetrics dm = new DisplayMetrics();
         try { wm.getDefaultDisplay().getRealMetrics(dm); }
@@ -112,10 +102,6 @@ public AssistiveBubbleEngine(Context ctx, WindowManager wm, SharedPreferences pr
 public AssistiveBubbleEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode, ActionExecutor executor) {
     this.ctx = ctx; this.wm = wm; this.prefs = prefs; this.isAnyMode = isAnyMode; this.executor = executor;
 }
-    public AssistiveBubbleEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode) {
-        this.ctx = ctx; this.wm = wm; this.prefs = prefs; this.isAnyMode = isAnyMode;
-    }
-
     public void rebuild() {
         boolean want = prefs.getBoolean("bubble_en", false);
         if (want && bubbleView == null) buildBubble();
