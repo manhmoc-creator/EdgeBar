@@ -133,137 +133,92 @@ public void setBubbleTouchable(boolean touchable) {
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
         
         int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-        bubbleLp = new WindowManager.LayoutParams(size, size, wmType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
-            PixelFormat.TRANSLUCENT);
-        bubbleLp.gravity = Gravity.TOP | Gravity.LEFT;
-        bubbleLp.x = prefs.getInt("bubble_x", 40);
-        bubbleLp.y = prefs.getInt("bubble_y", 600);
-        try { wm.addView(iv, bubbleLp); bubbleView = iv; } catch (Exception e) { return; }
-        attachDragTouch();
-    }
+        bubbleLp = new WindowManager.LayoutParams(
+    WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+    isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE 
+    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN 
+    | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS 
+    | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, // Cờ sinh tồn khi xem phim
+    PixelFormat.TRANSLUCENT);
 
-    private void attachDragTouch() {
-        final float[] downRaw = new float[2];
-        final boolean[] isDragging = {false};
-        final int MARGIN = 30; 
-        
-        gestureDetector = new GestureDetector(ctx, new GestureDetector.SimpleOnGestureListener() {
-            @Override
-            public boolean onSingleTapConfirmed(MotionEvent e) {
-                if (menuOverlay != null) {
-                    if (currentSubmenu != null) {
-                        currentSubmenu = null; 
-                        refreshPanelCard();
-                    } else {
-                        closeMenu(); 
-                    }
-                } else {
-                    moveToCenterAndOpenMenu(); 
+bubbleLp.gravity = Gravity.TOP | Gravity.LEFT;
+bubbleLp.x = prefs.getInt("bubble_last_x", 0);
+bubbleLp.y = prefs.getInt("bubble_last_y", 500);
+
+bubbleView.setOnTouchListener(new View.OnTouchListener() {
+    private int initialX, initialY;
+    private float initialTouchX, initialTouchY;
+    private long touchDownTime;
+    private boolean isMoving = false;
+    private Handler tapHandler = new Handler(Looper.getMainLooper());
+    private Runnable tapRunnable;
+
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                isMoving = false;
+                initialX = bubbleLp.x;
+                initialY = bubbleLp.y;
+                initialTouchX = event.getRawX();
+                initialTouchY = event.getRawY();
+                touchDownTime = System.currentTimeMillis();
+                if (tapRunnable != null) tapHandler.removeCallbacks(tapRunnable);
+                bubbleView.setAlpha(1.0f); // Hiện rõ khi chạm
+                return true;
+
+            case MotionEvent.ACTION_MOVE:
+                float dx = event.getRawX() - initialTouchX;
+                float dy = event.getRawY() - initialTouchY;
+                if (Math.abs(dx) > 15 || Math.abs(dy) > 15) isMoving = true;
+                if (isMoving) {
+                    bubbleLp.x = initialX + (int) dx;
+                    bubbleLp.y = initialY + (int) dy;
+                    try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
                 }
                 return true;
-            }
 
-            @Override
-            public boolean onDoubleTap(MotionEvent e) {
-                fireGestureAction("dtap");
-                return true;
-            }
-
-            @Override
-            public void onLongPress(MotionEvent e) {
-                fireGestureAction("long");
-            }
-        });
-
-        bubbleView.setOnTouchListener((v, e) -> {
-            if (gestureDetector.onTouchEvent(e)) return true;
-            
-            switch (e.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    if (velocityTracker == null) velocityTracker = VelocityTracker.obtain();
-                    else velocityTracker.clear();
-                    velocityTracker.addMovement(e);
-
-                    downRaw[0] = e.getRawX() - bubbleLp.x; 
-                    downRaw[1] = e.getRawY() - bubbleLp.y;
-                    isDragging[0] = false;
-                    return true;
-                    
-                case MotionEvent.ACTION_MOVE:
-                    if (velocityTracker != null) velocityTracker.addMovement(e);
-                    
-                    float newX = e.getRawX() - downRaw[0];
-                    float newY = e.getRawY() - downRaw[1];
-                    if (!isDragging[0] && (Math.abs(newX - bubbleLp.x) > 8 || Math.abs(newY - bubbleLp.y) > 8)) {
-                        isDragging[0] = true;
+            case MotionEvent.ACTION_UP:
+                long duration = System.currentTimeMillis() - touchDownTime;
+                
+                if (!isMoving && duration < 200) {
+                    String dtapAct = prefs.getString("bubble_dtap_acts", "NONE");
+                    if (dtapAct.equals("NONE")) {
+                        toggleMenu(); 
+                    } else {
+                        tapRunnable = () -> toggleMenu();
+                        tapHandler.postDelayed(tapRunnable, 220); // Chờ 2 chạm
                     }
-                    if (isDragging[0]) {
-                        bubbleLp.x = (int) newX;
-                        bubbleLp.y = (int) newY;
+                } else if (!isMoving && duration >= 200) {
+                    String longAct = prefs.getString("bubble_long_acts", "NONE");
+                    if (!longAct.equals("NONE")) executeAction(longAct);
+                } else if (isMoving) {
+                    // TÍNH TOÁN ĐỘNG: Không dùng hằng số widthPixels nữa, lấy trực tiếp từ DisplayMetrics hiện tại
+                    DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+                    int screenWidth = dm.widthPixels;
+                    int bubbleWidth = bubbleView.getWidth() > 0 ? bubbleView.getWidth() : 120;
+                    
+                    int targetX = (bubbleLp.x + (bubbleWidth / 2) < screenWidth / 2) ? 0 : screenWidth - bubbleWidth;
+                    
+                    ValueAnimator snapAnim = ValueAnimator.ofInt(bubbleLp.x, targetX);
+                    snapAnim.setDuration(250);
+                    snapAnim.setInterpolator(new android.view.animation.DecelerateInterpolator());
+                    snapAnim.addUpdateListener(anim -> {
+                        bubbleLp.x = (int) anim.getAnimatedValue();
                         try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
-                        if (menuOverlay != null) followMenuDuringDrag(); // [MỚI] Panel đi theo bong bóng
-                    }
-                    return true;
-
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    if (isDragging[0]) {
-                        float vX = 0, vY = 0;
-                        if (velocityTracker != null) {
-                            velocityTracker.addMovement(e);
-                            velocityTracker.computeCurrentVelocity(1000);
-                            vX = velocityTracker.getXVelocity();
-                            vY = velocityTracker.getYVelocity();
-                            velocityTracker.recycle();
-                            velocityTracker = null;
-                        }
-
-                        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-                        int bSize = prefs.getInt("bubble_size", 120);
-                        
-                        int targetX;
-                        if (vX > 1500) targetX = dm.widthPixels - bSize - MARGIN; 
-                        else if (vX < -1500) targetX = MARGIN; 
-                        else targetX = (bubbleLp.x + bSize / 2 < dm.widthPixels / 2) ? MARGIN : dm.widthPixels - bSize - MARGIN;
-                        
-                        int calculatedTargetY = bubbleLp.y + (int) (vY * 0.12f);
-                        final int finalTargetYDrag = Math.max(MARGIN, Math.min(calculatedTargetY, dm.heightPixels - bSize - MARGIN));
-                        final int finalTargetXDrag = targetX;
-                        
-ValueAnimator snapAnim = ValueAnimator.ofFloat(0f, 1f);
-snapAnim.setDuration(320); 
-// [FIX] OvershootInterpolator khiến giá trị vọt vượt quá 1.0 rồi tụt lại
-// -> đây chính là cảm giác "bật lại như quả bóng" khi gần đường tâm.
-// Đổi sang DecelerateInterpolator: mượt, giảm tốc dần về đích, không overshoot,
-// đường đi luôn là 1 đường thẳng liên tục từ vị trí thả tay tới điểm neo cạnh.
-snapAnim.setInterpolator(new DecelerateInterpolator(1.8f)); 
-int startX = bubbleLp.x; int startY = bubbleLp.y;
-                        snapAnim.addUpdateListener(a -> {
-                            float val = (float) a.getAnimatedValue();
-                            bubbleLp.x = (int) (startX + (finalTargetXDrag - startX) * val);
-                            bubbleLp.y = (int) (startY + (finalTargetYDrag - startY) * val);
-                            try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
-                            if (menuOverlay != null) followMenuDuringDrag(); // [MỚI] Panel đi theo lúc tự trượt về mép
-                        });
-                        snapAnim.addListener(new AnimatorListenerAdapter() {
-                            @Override public void onAnimationEnd(Animator animation) {
-                                prefs.edit().putInt("bubble_x", bubbleLp.x).putInt("bubble_y", bubbleLp.y).apply();
-                                // [MỚI] Sau khi kéo xong trong lúc Panel đang mở, chốt lại vị trí này làm
-                                // "điểm phục hồi" — tránh việc tap để đóng Panel làm bong bóng nhảy ngược
-                                // về đúng vị trí TRƯỚC KHI mở Panel (đè mất thao tác kéo vừa làm).
-                                if (menuOverlay != null) { restoreBubbleX = bubbleLp.x; restoreBubbleY = bubbleLp.y; }
-                            }
-                        });
-                        snapAnim.start();
-
-                    }
-                    return true;
-            }
-            return false;
-        });
-    }
+                    });
+                    snapAnim.start();
+                    
+                    prefs.edit().putInt("bubble_last_x", targetX).putInt("bubble_last_y", bubbleLp.y).apply();
+                }
+                bubbleView.setAlpha(0.6f); // Trả về độ mờ khi nhả tay
+                return true;
+        }
+        return false;
+       }
+   });
+}
 
     private void fireGestureAction(String gesture) {
         String rulesCsv = prefs.getString("bubble_pack_rules", "");

@@ -6557,18 +6557,40 @@ private void renderBubbleSettings() {
         
         bCancel.setOnClickListener(v -> d.dismiss());
         bSave.setOnClickListener(v -> {
-            // YÊU CẦU 5: Tự động sắp xếp điền ngoài viền trước, tâm cuối cùng (ưu tiên GÓC DƯỚI PHẢI)
-            String[] arranged = new String[9];
-            Arrays.fill(arranged, "");
-            // Mảng ưu tiên: Góc dưới phải (8), Đáy giữa (7), Cạnh phải (5), Góc dưới trái (6), Đỉnh phải (2), Cạnh trái (3), Đỉnh giữa (1), Đỉnh trái (0), Tâm (4)
-            int[] PREF_ORDER = {8, 7, 5, 6, 2, 3, 1, 0, 4};
-            for(int i = 0; i < selectedOrder.size() && i < 9; i++) {
-                arranged[PREF_ORDER[i]] = selectedOrder.get(i);
+    // SỬA LỖI LOẠN VỊ TRÍ: Giữ nguyên index tĩnh của các item đã chọn
+    // Bỏ cơ chế dồn mảng (shift index) gây xáo trộn khi uncheck
+    String[] arranged = new String[9];
+    Arrays.fill(arranged, "");
+    int[] PREF_ORDER = {8, 7, 5, 6, 2, 3, 1, 0, 4};
+    
+    // Đọc mảng cũ đang lưu để giữ đúng slot của các mục không bị thay đổi
+    String[] currentSaved = prefs.getString(prefKey, "").split(",");
+    java.util.List<String> currentSavedList = new java.util.ArrayList<>(java.util.Arrays.asList(currentSaved));
+    while(currentSavedList.size() < 9) currentSavedList.add("");
+
+    int orderIdx = 0;
+    for (String item : selectedOrder) {
+        if (orderIdx >= 9) break;
+        // Nếu item đã có vị trí cũ, cố gắng giữ nguyên. Nếu là item mới, đưa vào slot trống theo PREF_ORDER
+        int existingIndex = currentSavedList.indexOf(item);
+        if (existingIndex >= 0 && arranged[existingIndex].isEmpty()) {
+            arranged[existingIndex] = item;
+        } else {
+            // Tìm slot trống ưu tiên
+            for (int p : PREF_ORDER) {
+                if (arranged[p].isEmpty()) {
+                    arranged[p] = item;
+                    break;
+                }
             }
-            prefs.edit().putString(prefKey, TextUtils.join(",", arranged)).apply();
-            sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
-            d.dismiss();
-        });
+        }
+        orderIdx++;
+    }
+    
+    prefs.edit().putString(prefKey, android.text.TextUtils.join(",", arranged)).apply();
+    sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
+    d.dismiss(); 
+});
         d.setContentView(root); d.show();
     }
 
