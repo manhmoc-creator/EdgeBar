@@ -393,17 +393,21 @@ private String computeSignature(String id) {
         + (forceTest != null && forceTest);
 }
 // PANEL BODY: luôn theo đúng vòng đời Lock/Home, KHÔNG phụ thuộc vis nữa
-// MỚI
 private boolean shouldPanelBodyExistNow(String id) {
     String px = "pack_panel_" + id + "_";
+    // [FIX] Nút TEST phải bỏ qua điều kiện Enable/Lock — cho phép xem trước
+    // ngay cả khi Pack đang tắt hoặc đứng sai không gian.
     Boolean forceTest = forceTestOn.get(id);
     if (forceTest != null && forceTest) return true;
 
     if (!prefs.getBoolean(px+"en", false)) return false;
 
-    // [FIX] Panel giờ sống trong CoreFeaturesService — độc lập với Lock/Homacc/Homeb,
-    // phải LUÔN tồn tại một khi đã Enable. Bỏ hẳn nhánh "if (locked) return false;"
-    // vốn khiến Panel biến mất mỗi khi khoá máy.
+    boolean locked = km != null && km.isKeyguardLocked();
+    if (isAnyMode) {
+        if (!locked && !AccessibleHomeService.isRunning) return false;
+    } else {
+        if (locked) return false;
+    }
     return true;
 }
 // HANDLE: Cục Bộ chỉ hiện trong Design; Toàn Cục hiện như panel
@@ -464,8 +468,7 @@ public void setForceTest(String id, boolean on) {
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        // MỚI
-        | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, // [FIX] luôn thêm để hiện được ở màn Lock
+        | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
         PixelFormat.TRANSLUCENT);
     hp.gravity = gravity;
     try { wm.addView(handle, hp); handles.put(id, handle); } catch (Exception e) { return; }
@@ -520,9 +523,8 @@ int itemCount = csvToList(prefs.getString(px+"apps","")).size() +
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        // MỚI
         | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-        | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, // [FIX] luôn thêm để hiện được ở màn Lock
+        | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
         PixelFormat.TRANSLUCENT);
     pp.gravity = edge.equals("left") ? (Gravity.LEFT|Gravity.CENTER_VERTICAL)
                : edge.equals("right") ? (Gravity.RIGHT|Gravity.CENTER_VERTICAL)

@@ -121,6 +121,8 @@ private static final String[] KEYGUARD_BOUNCER_IDS = {
 };
     private SharedPreferences prefs;
     private Vibrator vibrator;
+    private PanelEngine panelEngine;
+    private AssistiveBubbleEngine bubbleEngine;
     private final String[] BARS = {"b_c", "r", "l", "r_u", "r_c", "r_d", "t_c", "t_r", "t_l", "l_u", "l_c", "l_d"};
     private final int[] GRAV = {
         Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT,
@@ -207,14 +209,10 @@ private boolean barNeedsAutoColor(View[] arr, String prefix) {
 /** Gọi từ mọi nơi cần yêu cầu lấy mẫu lại màu (đổi app, cuộn nội dung...). Rẻ tới mức
  *  gọi liên tục cũng không sao — tự dồn về tối đa 1 lần thực thi/ICON_COLOR_MIN_INTERVAL_MS. */
 private void requestIconColorSample() {
-    android.os.PowerManager pmCheck = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-    if (pmCheck != null && !pmCheck.isInteractive()) return; // [FIX] màn tắt -> không ai thấy màu icon, bỏ qua hoàn toàn
     doSampleIconColors(false);
 }
 private void doSampleIconColors(boolean isFollowUp) {
     if (Build.VERSION.SDK_INT < 30) return;
-    android.os.PowerManager pmCheck2 = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-    if (pmCheck2 != null && !pmCheck2.isInteractive()) return; // [FIX] chặn tuyệt đối khi màn tắt
     final boolean needLock = barNeedsAutoColor(bars, "lock_");
     final boolean needHomacc = barNeedsAutoColor(accHomeBars, "homacc_");
     if (!needLock && !needHomacc) return;
@@ -256,6 +254,36 @@ private void doSampleIconColors(boolean isFollowUp) {
             });
     } catch (Exception ignored) {}
 }
+private void doSampleIconColors() {
+    if (Build.VERSION.SDK_INT < 30) return;
+    final boolean needLock = barNeedsAutoColor(bars, "lock_");
+    final boolean needHomacc = barNeedsAutoColor(accHomeBars, "homacc_");
+    if (!needLock && !needHomacc) return;
+    try {
+        takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
+            new AccessibilityService.TakeScreenshotCallback() {
+@Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
+    try {
+        // [FIX] Chỉ tô màu khi overlay Homacc THẬT SỰ đang tồn tại — tránh trường
+        // hợp hiếm gặp: overlay vừa bị gỡ (do khoá máy/tắt Trợ năng) trong lúc
+        // screenshot đang xử lý bất đồng bộ, khiến việc set tint gây tác dụng phụ
+        // không mong muốn lên vòng đời View.
+        Bitmap hw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
+        if (hw != null) {
+            if (needLock) applyAutoColorsFromScreenshot(hw, bars, "lock_");
+            if (needHomacc && isHomaccDrawn) applyAutoColorsFromScreenshot(hw, accHomeBars, "homacc_");
+        }
+    } catch (Exception ignored) {
+                    } finally {
+                        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+                        if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
+                    }
+                }
+                @Override public void onFailure(int errorCode) {}
+            });
+    } catch (Exception ignored) {}
+}
+
 private void applyAutoColorsFromScreenshot(Bitmap screenHw, View[] arr, String prefix) {
     if (arr == null) return;
     int[] loc = new int[2];
@@ -374,6 +402,12 @@ private static final long LOCK_DEBOUNCE_MS = 400;
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     // TẦNG 1: Whitelist tuyệt đối — bỏ qua mọi key không thuộc EdgeBar
     if (!isOurKey(k)) return;
+
+    // TẦNG 1.5: bubble_ → Bong bóng chat AssistiveTouch, xử lý riêng
+    if (k != null && k.startsWith("bubble_")) {
+        if (bubbleEngine != null) bubbleEngine.onPrefChanged(k);
+        return;
+    }
     // TẦNG 2: anim_ → update ngay, user đang xem preview live
     if (k != null && k.startsWith("anim_")) {
         if (fV != null) fV.updateStyle();
@@ -385,6 +419,24 @@ if (k != null && k.contains("fingerprint_")) {
     refreshFingerprintRegistration();
     return;
 }
+    // TẦNG 2.8: panel_ → debounce ngắn 120ms, update TẠI CHỖ, không removeView/addView
+    // [FIX] Khớp đúng tiền tố khóa thật "pack_panel_" thay vì "panel"
+if (k != null && k.startsWith("pack_panel_")) {
+        if (panelEngine == null) return;
+        final String key = k;
+        if (panelDebounceRunnable != null) panelDebounceHandler.removeCallbacks(panelDebounceRunnable);
+        panelDebounceRunnable = () -> panelEngine.onPrefChanged(key);
+        panelDebounceHandler.postDelayed(panelDebounceRunnable, PANEL_DEBOUNCE_MS);
+        return;
+    }
+if (k != null && k.startsWith("shortcut_") && k.endsWith("_icon_override")) {
+        if (panelEngine == null) return;
+        final String key = k;
+        if (panelDebounceRunnable != null) panelDebounceHandler.removeCallbacks(panelDebounceRunnable);
+        panelDebounceRunnable = () -> panelEngine.onPrefChanged(key);
+        panelDebounceHandler.postDelayed(panelDebounceRunnable, PANEL_DEBOUNCE_MS);
+        return;
+    }
     // TẦNG 3: homacc_ → debounce DÀI 1000ms, chỉ gọi updateHomaccLive() sau khi dừng
     // Guard kép: isRunning + isHomaccDrawn tránh IPC vô nghĩa
     if (k != null && k.startsWith("homacc_")) {
@@ -462,6 +514,14 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             
             updateVisibility();
 // CODE MỚI — thay bằng:
+} else if ("com.manhmoc.edgebar.OPEN_PANEL_REQUEST".equals(act)) {
+    String panelId = i.getStringExtra("panel_id");
+    if (panelEngine != null && panelId != null) panelEngine.togglePanel(panelId);
+} else if ("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED".equals(act)) {
+    if (panelEngine != null) panelEngine.rebuildAll();
+} else if ("com.manhmoc.edgebar.PANEL_TEST_TOGGLE".equals(act)) {
+    String panelId = i.getStringExtra("panel_id");
+    if (panelEngine != null && panelId != null) panelEngine.setForceTest(panelId, i.getBooleanExtra("on", false));
 } else if ("com.manhmoc.edgebar.PAUSE_WM_OPS".equals(act)) {
     for (int j=0;j<12;j++) if (bars[j]!=null) bars[j].setVisibility(View.GONE);
     for (int j=0;j<4;j++) if (corners[j]!=null) corners[j].setVisibility(View.GONE);
@@ -532,8 +592,8 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
                         scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         startActivity(scIntent);
                     }
-                                } catch (Exception ex) {
-                    Toast.makeText(c, "Shortcut lỗi: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
+                } catch (Exception ex) {
+                    Toast.makeText(this, "Shortcut lỗi: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
                 }
                 return; // [FIX] luôn return, không rơi xuống exec() -> tránh gọi Shortcut 2 lần
             }
@@ -1138,10 +1198,10 @@ if (HomescreenService.isRunning) {
 prefs.edit().putBoolean("shortcut_home_on", false).apply();
 createFloatingBars();
 checkAndKickBlacklistOnAccEnable(); // [MỚI] tự thoát app Blacklist nếu đang mở lúc bật Acc
-                if (!CoreFeaturesService.isRunning) {
-            Intent core = new Intent(this, CoreFeaturesService.class);
-            if (Build.VERSION.SDK_INT >= 26) startForegroundService(core); else startService(core);
-        }
+        panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ true);
+panelEngine.rebuildAll();
+bubbleEngine = new AssistiveBubbleEngine(this, wm, prefs, /* isAnyMode = */ true);
+bubbleEngine.rebuild();
 // V19.12.3.6.13: Set tường minh flag — một số ROM không parse đúng
 // canRequestFingerprintGestures từ XML, gây fpController không bao giờ
 // nhận gesture dù đăng ký callback "thành công".
@@ -1772,13 +1832,12 @@ private void fireIntentById(String id) {
         set.start();
     }
     // 1. Thêm hàm này để xử lý xuyên thấu cảm ứng
-        private void setTransientUntouchable(boolean untouchable) {
+    private void setTransientUntouchable(boolean untouchable) {
     try {
-        // [FIX] bubbleEngine giờ sống trong CoreFeaturesService (process/service khác),
-        // không còn gọi thẳng được -> bắn broadcast cho CoreFeaturesService tự xử lý.
-        Intent bubbleTouch = new Intent("com.manhmoc.edgebar.BUBBLE_SET_TOUCHABLE");
-        bubbleTouch.putExtra("touchable", !untouchable);
-        sendBroadcast(bubbleTouch);
+        // [MỚI] Bong bóng chat là overlay RIÊNG (AssistiveBubbleEngine), không nằm
+        // trong bars/corners bên dưới -> phải xử lý touchable riêng, nếu không nó
+        // sẽ chặn cú chạm giả lập ngay tại toạ độ xuất phát (tâm bong bóng).
+        if (bubbleEngine != null) bubbleEngine.setBubbleTouchable(!untouchable);
 
         for (View[] arr : new View[][]{bars, corners, accHomeBars, accHomeCorners}) {
             for (int i = 0; i < arr.length; i++) {
@@ -2362,7 +2421,10 @@ p.x = prefs.getInt(ck+"x",0); p.y = prefs.getInt(ck+"y",0) + pushY;
                 if (priMode==0) applyAntiTapjacking(corners[i], p.width, p.height);
             }
         }
-        // [FIX BUG LOGIC] Luôn đồng bộ cả Homacc khi có lệnh cập nhật hiển thị chung,
+// CODE MỚI — thêm ngay trước dấu } đóng hàm:
+if (panelEngine != null) panelEngine.rebuildAll();
+
+        // [FIX BUG LOGIC] Luôn đồng bộ cả Homacc khi có lệnh cập nhật hiển thị chung, 
         // phòng trường hợp trạng thái Lock thay đổi khiến Homacc cần được ẩn/hiện.
         updateHomaccLive();
     }

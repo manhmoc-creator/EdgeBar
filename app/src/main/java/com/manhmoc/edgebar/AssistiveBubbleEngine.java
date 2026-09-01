@@ -17,25 +17,20 @@ import android.view.animation.OvershootInterpolator;
 import android.widget.*;
 import java.util.*;
 import java.util.function.Supplier; 
+
 public class AssistiveBubbleEngine {
-    private DisplayMetrics getRealMetrics() {
-        DisplayMetrics dm = new DisplayMetrics();
-        try { wm.getDefaultDisplay().getRealMetrics(dm); }
-        catch (Exception e) { dm = ctx.getResources().getDisplayMetrics(); }
-        return dm;
-    }
     private Context ctx; private WindowManager wm; private SharedPreferences prefs; private boolean isAnyMode;
     private View bubbleView; private WindowManager.LayoutParams bubbleLp;
     private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
     private LinearLayout panelCard;
-    private final java.util.concurrent.atomic.AtomicInteger iconLoadGen = new java.util.concurrent.atomic.AtomicInteger(0);
+    
     private final FrameLayout[] nodeButtons = new FrameLayout[9];
     private Integer selectedMainIdx = null;
     private Integer selectedSubIdx = null;
-    private String currentSubmenu = null; 
-private static final java.util.concurrent.ExecutorService bubbleIconExecutor =
+    private String currentSubmenu = null;
+    private static final java.util.concurrent.ExecutorService bubbleIconExecutor =
     new java.util.concurrent.ThreadPoolExecutor(2, 6, 30, java.util.concurrent.TimeUnit.SECONDS,
-        new java.util.concurrent.LinkedBlockingDeque<>());
+        new java.util.concurrent.LinkedBlockingDeque<>()); // tăng từ fixed(4) lên 2-6 co giãn
     private static final int BUBBLE_ICON_CACHE_LIMIT = 60;
 private static final LinkedHashMap<String, Drawable> bubbleIconCache =
     new LinkedHashMap<String, Drawable>(16, 0.75f, true) {
@@ -48,17 +43,14 @@ private void loadIconAsync(String cacheKey, java.util.function.Supplier<Drawable
         Drawable cached = bubbleIconCache.get(cacheKey);
         if (cached != null) { applyIconToImageView(iv, cached, iconSize, isAppHint); return; }
     }
-    iv.setTag(cacheKey);
-    final int myGen = iconLoadGen.get();
+        iv.setTag(cacheKey);
     bubbleIconExecutor.execute(() -> {
-        if (iconLoadGen.get() != myGen) return; // submenu đã đổi -> hủy, khỏi tốn công vẽ
         Drawable d = loader.get();
         if (d != null) synchronized (bubbleIconCache) { bubbleIconCache.put(cacheKey, d); }
         bubbleIconHandler.post(() -> {
-            if (iconLoadGen.get() != myGen) return;
             if (d != null && cacheKey.equals(iv.getTag())) applyIconToImageView(iv, d, iconSize, isAppHint);
         });
-    });
+    }).start();
 }
 
 private Drawable resolveSubNodeIcon(String customOverride, String ref) {
@@ -93,15 +85,16 @@ private Drawable resolveSubNodeIcon(String customOverride, String ref) {
     private ComponentCallbacks configCallbacks;
     private float sx, sy, lastX, lastY;
     private VelocityTracker velocityTracker;
-    public interface ActionExecutor { void exec(String action); }
-private ActionExecutor executor; // có thể null nếu không truyền
+    private DisplayMetrics getRealMetrics() {
+    DisplayMetrics dm = new DisplayMetrics();
+    try { wm.getDefaultDisplay().getRealMetrics(dm); }
+    catch (Exception e) { dm = ctx.getResources().getDisplayMetrics(); }
+    return dm;
+}
+    public AssistiveBubbleEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode) {
+        this.ctx = ctx; this.wm = wm; this.prefs = prefs; this.isAnyMode = isAnyMode;
+    }
 
-public AssistiveBubbleEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode) {
-    this(ctx, wm, prefs, isAnyMode, null);
-}
-public AssistiveBubbleEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode, ActionExecutor executor) {
-    this.ctx = ctx; this.wm = wm; this.prefs = prefs; this.isAnyMode = isAnyMode; this.executor = executor;
-}
     public void rebuild() {
         boolean want = prefs.getBoolean("bubble_en", false);
         if (want && bubbleView == null) buildBubble();
@@ -258,7 +251,7 @@ private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, 
         int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         bubbleLp = new WindowManager.LayoutParams(size, size, wmType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, // [FIX] luôn thêm để hiện được ở màn Lock 
+            | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
             PixelFormat.TRANSLUCENT);
         bubbleLp.gravity = Gravity.TOP | Gravity.LEFT;
         DisplayMetrics dmInit = ctx.getResources().getDisplayMetrics();
@@ -290,7 +283,6 @@ private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, 
                     longFiredFlag[0] = false;
                     tapHandler.postDelayed(longPressCheck, 500);
                     if (velocityTracker == null) velocityTracker = VelocityTracker.obtain();
-
                     else velocityTracker.clear();
                     velocityTracker.addMovement(e);
 
@@ -315,7 +307,7 @@ private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, 
                     }
                     return true;
 
-                case MotionEvent.ACTION_UP:
+                                case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     tapHandler.removeCallbacks(longPressCheck);
                     if (!isDragging[0] && !longFiredFlag[0] && e.getActionMasked() == MotionEvent.ACTION_UP) {
@@ -509,12 +501,11 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
         menuLp = new WindowManager.LayoutParams(
             prefs.getInt("bubble_bg_w", 800), WindowManager.LayoutParams.WRAP_CONTENT, wmType,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, // [FIX] luôn thêm để hiện được ở màn Lock
-
+            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
             PixelFormat.TRANSLUCENT);
         
-        DisplayMetrics dm = getRealMetrics(); 
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
         menuLp.x = dm.widthPixels / 2 - menuLp.width / 2; 
         menuLp.gravity = Gravity.TOP | Gravity.LEFT;
 
@@ -554,7 +545,7 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
             calculatedTargetY = bubbleLp.y - actualPh - gap;
         }
         
-        final int finalTargetY = Math.max(margin, calculatedTargetY);
+                final int finalTargetY = Math.max(margin, calculatedTargetY);
         menuLp.y = finalTargetY;
         menuLp.x = dm.widthPixels / 2 - menuLp.width / 2; // [FIX] luôn ép lại giữa màn, không kế thừa X cũ
 
@@ -1041,8 +1032,7 @@ private List<String> getSubItems(String type) {
     }
 
     private void refreshPanelCard() {
-    iconLoadGen.incrementAndGet(); // hủy mọi icon-load đang chờ của lượt render trước
-    if (panelCard != null) {
+        if (panelCard != null) {
             panelCard.removeAllViews();
             if (currentSubmenu != null) {
                 if (currentSubmenu.equals("SEARCH")) buildSearchMenu(panelCard);
@@ -1150,32 +1140,22 @@ private List<String> getSubItems(String type) {
                 createIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 try { ctx.startActivity(createIntent); } catch (Exception ignored) {}
             }
-        // MỚI
-} else if (ref.startsWith("act:")) {
-    Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-    ipc.putExtra("act", ref.substring(4));
-    
-    // YÊU CẦU 6: Định tuyến vị trí điểm neo khi Cử chỉ Giả lập gọi từ Bảng điều khiển
-    int startX = bubbleLp.x + prefs.getInt("bubble_size", 120) / 2;
-    int startY = bubbleLp.y + prefs.getInt("bubble_size", 120) / 2;
-    if (ref.contains("TRIGGER_ACC_MENU_2F")) {
-        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        startX = dm.widthPixels / 2;
-        startY = dm.heightPixels - 10;
-    } else if (ref.contains("TRIGGER_")) {
-        // [FIX] Kẹp biên GIỐNG fireGestureAction() — bong bóng thường neo sát mép
-        // trước khi trượt ra giữa mở Panel, nếu không kẹp thì quãng vuốt giả lập
-        // dễ bị hụt/cắt cụt ở mép màn hình.
-        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        int margin = (int) (Math.min(dm.widthPixels, dm.heightPixels)
-            * (prefs.getInt("sim_swipe_dist_pct", 80) / 100f)) + 60;
-        startX = Math.max(margin, Math.min(dm.widthPixels - margin, startX));
-        startY = Math.max(margin, Math.min(dm.heightPixels - margin, startY));
-    }
-    ipc.putExtra("startX", startX);
-    ipc.putExtra("startY", startY);
-    
-    ctx.sendBroadcast(ipc);
-       }
+        } else if (ref.startsWith("act:")) {
+            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            ipc.putExtra("act", ref.substring(4));
+            
+            // YÊU CẦU 6: Định tuyến vị trí điểm neo khi Cử chỉ Giả lập gọi từ Bảng điều khiển
+            int startX = bubbleLp.x + prefs.getInt("bubble_size", 120) / 2;
+            int startY = bubbleLp.y + prefs.getInt("bubble_size", 120) / 2;
+            if (ref.contains("TRIGGER_ACC_MENU_2F")) {
+                DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+                startX = dm.widthPixels / 2;
+                startY = dm.heightPixels - 10;
+            }
+            ipc.putExtra("startX", startX);
+            ipc.putExtra("startY", startY);
+            
+            ctx.sendBroadcast(ipc);
+        }
     }
 }

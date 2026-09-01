@@ -127,6 +127,8 @@ private boolean recIndicatorTestPaused = false;
     private SharedPreferences prefs;
     private KeyguardManager km;
     private Vibrator vibrator;
+    private PanelEngine panelEngine;
+    private AssistiveBubbleEngine bubbleEngine;
     private int lastKbdHeight = 0;
     // [FIX] Bổ sung các biến này vì SidebarTouchListener bên dưới có gọi tới,
     // nhưng HomescreenService trước đây chưa khai báo (khác với EdgeBarService).
@@ -896,7 +898,15 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
                     accCheckTimestamp = 0;
                 }
                 updateVisibility();
-                        } else if (VoiceRecorderService.TICK_ACTION.equals(action)) {
+            } else if ("com.manhmoc.edgebar.OPEN_PANEL_REQUEST".equals(action)) {
+                String panelId = i.getStringExtra("panel_id");
+                if (panelEngine != null && panelId != null) panelEngine.togglePanel(panelId);
+            } else if ("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED".equals(action)) {
+                if (panelEngine != null) panelEngine.rebuildAll();
+            } else if ("com.manhmoc.edgebar.PANEL_TEST_TOGGLE".equals(action)) {
+                String panelId = i.getStringExtra("panel_id");
+                if (panelEngine != null && panelId != null) panelEngine.setForceTest(panelId, i.getBooleanExtra("on", false));
+            } else if (VoiceRecorderService.TICK_ACTION.equals(action)) {
                 String state = i.getStringExtra("state");
                 long sec = i.getLongExtra("elapsed_sec", 0);
                 updateRecIndicator(state, sec);
@@ -929,7 +939,7 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
                     }
                     return;
                 }
-                if (act.startsWith("RUN_SHORTCUT_")) {
+                                if (act.startsWith("RUN_SHORTCUT_")) {
                     String scId = act.substring("RUN_SHORTCUT_".length());
                     try {
                         String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
@@ -938,8 +948,8 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
                             scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             startActivity(scIntent);
                         }
-                                        } catch (Exception ex) {
-                        Toast.makeText(c, "Shortcut lỗi: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
+                    } catch (Exception ex) {
+                        Toast.makeText(this, "Shortcut lỗi: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
                     }
                     return;
                 }
@@ -1065,10 +1075,10 @@ for (int i = 0; i < cornerCount; i++) {
         // Tiết kiệm pin tối đa: KHÔNG polling, KHÔNG query mỗi frame
         // Chỉ cập nhật type overlay khi user thực sự bật/tắt Accessibility
         // CODE MỚI — thêm dòng này:
-        if (!CoreFeaturesService.isRunning) {
-            Intent core = new Intent(this, CoreFeaturesService.class);
-            if (Build.VERSION.SDK_INT >= 26) startForegroundService(core); else startService(core);
-        }
+panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ false); // HomescreenService = IAO
+        panelEngine.rebuildAll();
+        bubbleEngine = new AssistiveBubbleEngine(this, wm, prefs, /* isAnyMode = */ false);
+        bubbleEngine.rebuild();
         updateVisibility();
         sendSyncState();
         startAppLockPolling(); // [MỚI] Homeb không có Accessibility -> phải poll UsageStats
@@ -1097,9 +1107,28 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     for (String prefix : ourPrefixes)
         if (k.startsWith(prefix) || k.equals(prefix)) { isOurKey = true; break; }
     if (!isOurKey) return;
-        if (k.startsWith("anim_")) {
+    if (k.startsWith("bubble_")) {
+        if (bubbleEngine != null) bubbleEngine.onPrefChanged(k);
+        return;
+    }
+    if (k.startsWith("anim_")) {
         if (fV != null) fV.updateStyle();
         if (k.startsWith("anim_rec_")) liveUpdateRecIndicatorPosition();
+        return;
+    }
+    if (k.startsWith("pack_panel_")) {
+        if (panelEngine == null) return;
+        if (panelDebounceRunnable != null) panelDebounceHandler.removeCallbacks(panelDebounceRunnable);
+        panelDebounceRunnable = () -> panelEngine.onPrefChanged(k);
+        panelDebounceHandler.postDelayed(panelDebounceRunnable, 120);
+        return;
+    }
+    if (k.startsWith("shortcut_") && k.endsWith("_icon_override")) {
+        if (panelEngine == null) return;
+        final String key = k;
+        if (panelDebounceRunnable != null) panelDebounceHandler.removeCallbacks(panelDebounceRunnable);
+        panelDebounceRunnable = () -> panelEngine.onPrefChanged(key);
+        panelDebounceHandler.postDelayed(panelDebounceRunnable, 120);
         return;
     }
 
@@ -1120,7 +1149,9 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
      *  chính là nguyên nhân nền đen biến mất trước, bar/corner biến mất trễ hoặc
      *  thấp thoáng hiện lại trên Home). Zero RAM thêm: chỉ lặp lại View đã có sẵn.
      */
-        private void updateVisibility() {
+    private void updateVisibility() {
+        if (panelEngine != null) panelEngine.rebuildAll();
+
         boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hideNormal = isBl;
@@ -2190,9 +2221,10 @@ PixelFormat.TRANSLUCENT);
         }
     }
     @Override
-      public void onDestroy() {
+   public void onDestroy() {
     super.onDestroy();
     isRunning = false;
+    if (bubbleEngine != null) bubbleEngine.destroy();
     appLockPollHandler.removeCallbacksAndMessages(null); // [MỚI] dừng poll, tránh leak Handler
     try { unregisterReceiver(syncReceiver); } catch (Exception e) {}
     prefs.unregisterOnSharedPreferenceChangeListener(prefListener);

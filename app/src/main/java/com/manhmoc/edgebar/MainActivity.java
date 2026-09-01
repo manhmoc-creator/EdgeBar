@@ -4013,59 +4013,6 @@ private void cleanExpiredTrash() {
     }
     for (String itemKey : expired) permanentlyDeleteDataPack(itemKey);
 }
-private void moveDataPackToTrash(String itemKey) {
-    String type = trashType(itemKey);
-    String id = trashId(itemKey);
-    switch (type) {
-        case "panel":
-            removeDynamicId("pack_panel_ids", id);
-            scrubActionTokenEverywhere("PANEL_" + id); // [MỚI] xoá sạch mọi tham chiếu PANEL_<id>
-            break;
-        case "bar":
-        case "corner":
-            removeDynamicId(type.equals("bar") ? "pack_bar_ids" : "pack_corner_ids", id);
-            for (String px : new String[]{"lock_", "home_", "homacc_"}) {
-                if (type.equals("bar")) disableBarPackFromSpace(id, px); else disableCornerPackFromSpace(id, px);
-                java.util.List<String> ap = getDynamicIds(px + "applied_packs");
-                ap.remove(itemKey);
-                prefs.edit().putString(px + "applied_packs", TextUtils.join(",", ap)).apply();
-            }
-            break;
-        case "intent":
-            removeDynamicId("intent_ids", id);
-            scrubActionTokenEverywhere("INTENT_" + id); // [MỚI]
-            break;
-        case "tilev2":
-            removeDynamicId("tile_ids_v2", id);
-            // Gỡ khỏi QS Slot đang gán (nếu có) — tránh Tile "ma" vẫn ghim trên thanh QS
-            for (int s = 1; s <= 30; s++) {
-                if (prefs.getString("tile_slot_" + s + "_id", "").equals(id)) {
-                    prefs.edit().remove("tile_slot_" + s + "_id").apply();
-                    setTileComponentEnabled(s, false);
-                }
-            }
-            break;
-        case "macro":
-            removeDynamicId("macro_ids", id);
-            scrubActionTokenEverywhere("MACRO_" + id); // [MỚI]
-            break;
-        case "myplaylist":
-            removeDynamicId("myplaylist_ids", id);
-            break;
-        case "shortcut":
-            removeDynamicId("shortcut_ids", id);
-            removeDynamicId("panel_shortcut_ids", id);
-            break;
-        default: return;
-    }
-    java.util.List<String> trash = getDynamicIds("trash_pack_ids");
-    if (!trash.contains(itemKey)) trash.add(itemKey);
-    prefs.edit()
-        .putString("trash_pack_ids", TextUtils.join(",", trash))
-        .putLong("trash_" + itemKey + "_ts", System.currentTimeMillis()) // MỚI: mốc giờ để tính hạn 15 ngày
-        .apply();
-    sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
-}
 // [MỚI] Quét TOÀN BỘ SharedPreferences, xoá đúng 1 token action khỏi mọi CSV
 // đang lưu action (rule component_gesture, prule_*_acts...). Chỉ chạy lúc xoá
 // Pack (event-driven), không polling nên không tốn pin.
@@ -4102,6 +4049,59 @@ private void scrubActionTokenEverywhere(String token) {
         changed = true;
     }
     if (changed) ed.apply();
+}
+private void moveDataPackToTrash(String itemKey) {
+    String type = trashType(itemKey);
+    String id = trashId(itemKey);
+        switch (type) {
+        case "panel":
+            removeDynamicId("pack_panel_ids", id);
+            scrubActionTokenEverywhere("PANEL_" + id); // [MỚI] xoá sạch mọi tham chiếu PANEL_<id>
+            break;
+        case "bar":
+        case "corner":
+            removeDynamicId(type.equals("bar") ? "pack_bar_ids" : "pack_corner_ids", id);
+            for (String px : new String[]{"lock_", "home_", "homacc_"}) {
+                if (type.equals("bar")) disableBarPackFromSpace(id, px); else disableCornerPackFromSpace(id, px);
+                java.util.List<String> ap = getDynamicIds(px + "applied_packs");
+                ap.remove(itemKey);
+                prefs.edit().putString(px + "applied_packs", TextUtils.join(",", ap)).apply();
+            }
+            break;
+                case "intent":
+            removeDynamicId("intent_ids", id);
+            scrubActionTokenEverywhere("INTENT_" + id); // [MỚI]
+            break;
+        case "tilev2":
+            removeDynamicId("tile_ids_v2", id);
+            // Gỡ khỏi QS Slot đang gán (nếu có) — tránh Tile "ma" vẫn ghim trên thanh QS
+            for (int s = 1; s <= 30; s++) {
+                if (prefs.getString("tile_slot_" + s + "_id", "").equals(id)) {
+                    prefs.edit().remove("tile_slot_" + s + "_id").apply();
+                    setTileComponentEnabled(s, false);
+                }
+            }
+            break;
+                case "macro":
+            removeDynamicId("macro_ids", id);
+            scrubActionTokenEverywhere("MACRO_" + id); // [MỚI]
+            break;
+        case "myplaylist":
+            removeDynamicId("myplaylist_ids", id);
+            break;
+        case "shortcut":
+            removeDynamicId("shortcut_ids", id);
+            removeDynamicId("panel_shortcut_ids", id);
+            break;
+        default: return;
+    }
+    java.util.List<String> trash = getDynamicIds("trash_pack_ids");
+    if (!trash.contains(itemKey)) trash.add(itemKey);
+    prefs.edit()
+        .putString("trash_pack_ids", TextUtils.join(",", trash))
+        .putLong("trash_" + itemKey + "_ts", System.currentTimeMillis()) // MỚI: mốc giờ để tính hạn 15 ngày
+        .apply();
+    sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
 }
 private void restoreDataPackFromTrash(String itemKey) {
     java.util.List<String> trash = getDynamicIds("trash_pack_ids");

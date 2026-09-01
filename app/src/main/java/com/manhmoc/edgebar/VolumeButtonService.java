@@ -29,10 +29,9 @@ public class VolumeButtonService extends Service {
     private final Handler h = new Handler(Looper.getMainLooper());
     
     // --- THUẬT TOÁN ĐIỀU KHIỂN VOLKEY SIÊU NHẠY ---
-    // MỚI
-private static final long DEBOUNCE_MS = 60; // Lọc nhiễu cơ học của nút cứng
-private static final long MAX_WAIT_MS = 650; // Chờ nhịp 2 tối đa — đủ thời gian bấm 2 phím vật lý khác nhau
-
+    private static final long DEBOUNCE_MS = 60; // Lọc nhiễu cơ học của nút cứng
+    private static final long MAX_WAIT_MS = 480; // Chờ nhịp 2 tối đa
+    
     private int pendingKey = 0; // 0: rảnh, 1: up, -1: down
     private long lastPhysicalEventMs = 0;
     private Runnable actionRunnable = null;
