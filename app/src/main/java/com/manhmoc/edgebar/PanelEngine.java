@@ -1084,28 +1084,80 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
     return box;
 }
 private final Map<String, String> selectedForSwap = new HashMap<>(); // panelId -> ref đang được chọn để hoán đổi
+private final Handler swapLongPressHandler = new Handler(Looper.getMainLooper());
 
+/** [FIX] Không còn dựa vào setOnClickListener/setOnLongClickListener mặc định của
+ *  Android (không đảm bảo chắc chắn trên mọi OEM). Dùng OnTouchListener thủ công,
+ *  tự đếm thời gian giữ (giống pattern lpHandler đã dùng cho Bar/Corner) để:
+ *  - Giữ đủ lâu -> vào chế độ chọn hoán đổi, KHÔNG bao giờ fire action dù nhả tay ngay sau đó.
+ *  - Đang ở chế độ chọn hoán đổi (selectedForSwap có giá trị cho panelId này) -> MỌI
+ *    chạm (kể cả chạm nhanh) trên bất kỳ ô nào của panel đó CHỈ hoán đổi, không bao giờ
+ *    chạy action, cho tới khi hoán đổi xong (map được clear).
+ *  - Chỉ khi selectedForSwap rỗng VÀ là 1 cú chạm ngắn thật sự mới chạy action. */
 private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnable originalAction) {
-    cell.setOnLongClickListener(v -> {
-        selectedForSwap.put(panelId, refKey);
-        cell.setBackground(getSwapHighlightBg(cell.getBackground()));
-        return true;
-    });
-    cell.setOnClickListener(v -> {
-        String sel = selectedForSwap.get(panelId);
-        if (sel != null) {
-            selectedForSwap.remove(panelId);
-            if (!sel.equals(refKey)) {
-                String px = "pack_panel_" + panelId + "_";
-                List<String> order = csvToList(prefs.getString(px + "order", ""));
-                int i1 = order.indexOf(sel), i2 = order.indexOf(refKey);
-                if (i1 >= 0 && i2 >= 0) Collections.swap(order, i1, i2);
-                prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
-            }
-            renderPanelGrid(panelId);
-            return;
+    final long LONG_PRESS_MS = 400;
+    final float[] downXY = new float[2];
+    final boolean[] longFired = {false};
+    final Runnable[] longRunnable = {null};
+
+    cell.setOnTouchListener((v, e) -> {
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                longFired[0] = false;
+                downXY[0] = e.getRawX(); downXY[1] = e.getRawY();
+                longRunnable[0] = () -> {
+                    longFired[0] = true;
+                    selectedForSwap.put(panelId, refKey);
+                    cell.setBackground(getSwapHighlightBg(cell.getBackground()));
+                    try {
+                        Vibrator vib = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+                        if (vib != null) vib.vibrate(android.os.VibrationEffect.createOneShot(20, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+                    } catch (Exception ignored) {}
+                };
+                swapLongPressHandler.postDelayed(longRunnable[0], LONG_PRESS_MS);
+                return true;
+
+            case MotionEvent.ACTION_MOVE:
+                // Ngón tay trôi quá xa -> huỷ long-press đang chờ, coi như thao tác không hợp lệ
+                float dx = e.getRawX() - downXY[0], dy = e.getRawY() - downXY[1];
+                if (Math.abs(dx) > 40 || Math.abs(dy) > 40) {
+                    if (longRunnable[0] != null) swapLongPressHandler.removeCallbacks(longRunnable[0]);
+                }
+                return true;
+
+            case MotionEvent.ACTION_CANCEL:
+                if (longRunnable[0] != null) swapLongPressHandler.removeCallbacks(longRunnable[0]);
+                return true;
+
+            case MotionEvent.ACTION_UP:
+                if (longRunnable[0] != null) swapLongPressHandler.removeCallbacks(longRunnable[0]);
+
+                // Nếu VỪA fire long-press ở đúng lần nhả tay này -> đây là bước "chọn ô đầu",
+                // TUYỆT ĐỐI không coi là click, không chạy gì thêm.
+                if (longFired[0]) return true;
+
+                // [CHỐT QUAN TRỌNG] Bất kể ô này đã bị long-press hay chưa, hễ Panel đang
+                // ở chế độ chọn hoán đổi (đã có 1 ô khác được giữ trước đó) thì MỌI chạm
+                // (kể cả chạm rất nhanh) đều chỉ để hoán đổi — không bao giờ lọt xuống action.
+                String sel = selectedForSwap.get(panelId);
+                if (sel != null) {
+                    selectedForSwap.remove(panelId);
+                    if (!sel.equals(refKey)) {
+                        String px = "pack_panel_" + panelId + "_";
+                        List<String> order = csvToList(prefs.getString(px + "order", ""));
+                        int i1 = order.indexOf(sel), i2 = order.indexOf(refKey);
+                        if (i1 >= 0 && i2 >= 0) Collections.swap(order, i1, i2);
+                        prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
+                    }
+                    renderPanelGrid(panelId); // vẽ lại -> vòng tròn xanh biến mất
+                    return true;
+                }
+
+                // Không có gì đang chờ hoán đổi, không phải long-press -> đây mới là 1-tap thật
+                originalAction.run();
+                return true;
         }
-        originalAction.run();
+        return false;
     });
     return cell;
 }
