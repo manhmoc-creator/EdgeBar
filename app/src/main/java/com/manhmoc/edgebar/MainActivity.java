@@ -6288,12 +6288,12 @@ private void renderBubbleSettings() {
             bottomCtrl.setGravity(Gravity.CENTER_VERTICAL);
             bottomCtrl.setPadding(0, 15, 0, 0);
             
-            Switch swOn = new Switch(this);
-            swOn.setChecked(prefs.getBoolean("prule_" + rId + "_en", true));
-            swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean("prule_" + rId + "_en", chk).apply());
-            swOn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            Switch swRuleOn = new Switch(this);
+            swRuleOn.setChecked(prefs.getBoolean("prule_" + rId + "_en", true));
+            swRuleOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean("prule_" + rId + "_en", chk).apply());
+            swRuleOn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
             
-            bottomCtrl.addView(swOn);
+            bottomCtrl.addView(swRuleOn);
             card.addView(tGest); card.addView(tAct); card.addView(bottomCtrl);
             card.setOnClickListener(v -> openBubbleRuleEditor(rId, this::renderSliders));
             ruleRow.addView(card);
