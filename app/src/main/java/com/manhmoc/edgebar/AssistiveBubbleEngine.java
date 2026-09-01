@@ -17,13 +17,23 @@ import android.view.animation.OvershootInterpolator;
 import android.widget.*;
 import java.util.*;
 import java.util.function.Supplier; 
-private DisplayMetrics getRealMetrics() {
-    DisplayMetrics dm = new DisplayMetrics();
-    try { wm.getDefaultDisplay().getRealMetrics(dm); }
-    catch (Exception e) { dm = ctx.getResources().getDisplayMetrics(); }
-    return dm;
-}
 public class AssistiveBubbleEngine {
+    private Context ctx; private WindowManager wm; private SharedPreferences prefs; private boolean isAnyMode;
+    private View bubbleView; private WindowManager.LayoutParams bubbleLp;
+    private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
+    private LinearLayout panelCard;
+    private final java.util.concurrent.atomic.AtomicInteger iconLoadGen = new java.util.concurrent.atomic.AtomicInteger(0);
+    private final FrameLayout[] nodeButtons = new FrameLayout[9];
+    private Integer selectedMainIdx = null;
+    private Integer selectedSubIdx = null;
+    private String currentSubmenu = null;
+
+    private DisplayMetrics getRealMetrics() {
+        DisplayMetrics dm = new DisplayMetrics();
+        try { wm.getDefaultDisplay().getRealMetrics(dm); }
+        catch (Exception e) { dm = ctx.getResources().getDisplayMetrics(); }
+        return dm;
+    }
     private Context ctx; private WindowManager wm; private SharedPreferences prefs; private boolean isAnyMode;
     private View bubbleView; private WindowManager.LayoutParams bubbleLp;
     private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
