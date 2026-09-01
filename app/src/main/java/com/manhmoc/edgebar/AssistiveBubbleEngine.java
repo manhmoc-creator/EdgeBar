@@ -258,7 +258,7 @@ private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, 
         int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         bubbleLp = new WindowManager.LayoutParams(size, size, wmType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+            | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, // [FIX] luôn thêm để hiện được ở màn Lock 
             PixelFormat.TRANSLUCENT);
         bubbleLp.gravity = Gravity.TOP | Gravity.LEFT;
         DisplayMetrics dmInit = ctx.getResources().getDisplayMetrics();
@@ -509,8 +509,9 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
         menuLp = new WindowManager.LayoutParams(
             prefs.getInt("bubble_bg_w", 800), WindowManager.LayoutParams.WRAP_CONTENT, wmType,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED, // [FIX] luôn thêm để hiện được ở màn Lock
+
             PixelFormat.TRANSLUCENT);
         
         DisplayMetrics dm = getRealMetrics(); 
@@ -1149,22 +1150,32 @@ private List<String> getSubItems(String type) {
                 createIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 try { ctx.startActivity(createIntent); } catch (Exception ignored) {}
             }
-        } else if (ref.startsWith("act:")) {
-            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-            ipc.putExtra("act", ref.substring(4));
-            
-            // YÊU CẦU 6: Định tuyến vị trí điểm neo khi Cử chỉ Giả lập gọi từ Bảng điều khiển
-            int startX = bubbleLp.x + prefs.getInt("bubble_size", 120) / 2;
-            int startY = bubbleLp.y + prefs.getInt("bubble_size", 120) / 2;
-            if (ref.contains("TRIGGER_ACC_MENU_2F")) {
-                DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-                startX = dm.widthPixels / 2;
-                startY = dm.heightPixels - 10;
-            }
-            ipc.putExtra("startX", startX);
-            ipc.putExtra("startY", startY);
-            
-            ctx.sendBroadcast(ipc);
-        }
+        // MỚI
+} else if (ref.startsWith("act:")) {
+    Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+    ipc.putExtra("act", ref.substring(4));
+    
+    // YÊU CẦU 6: Định tuyến vị trí điểm neo khi Cử chỉ Giả lập gọi từ Bảng điều khiển
+    int startX = bubbleLp.x + prefs.getInt("bubble_size", 120) / 2;
+    int startY = bubbleLp.y + prefs.getInt("bubble_size", 120) / 2;
+    if (ref.contains("TRIGGER_ACC_MENU_2F")) {
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        startX = dm.widthPixels / 2;
+        startY = dm.heightPixels - 10;
+    } else if (ref.contains("TRIGGER_")) {
+        // [FIX] Kẹp biên GIỐNG fireGestureAction() — bong bóng thường neo sát mép
+        // trước khi trượt ra giữa mở Panel, nếu không kẹp thì quãng vuốt giả lập
+        // dễ bị hụt/cắt cụt ở mép màn hình.
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        int margin = (int) (Math.min(dm.widthPixels, dm.heightPixels)
+            * (prefs.getInt("sim_swipe_dist_pct", 80) / 100f)) + 60;
+        startX = Math.max(margin, Math.min(dm.widthPixels - margin, startX));
+        startY = Math.max(margin, Math.min(dm.heightPixels - margin, startY));
+    }
+    ipc.putExtra("startX", startX);
+    ipc.putExtra("startY", startY);
+    
+    ctx.sendBroadcast(ipc);
+       }
     }
 }
