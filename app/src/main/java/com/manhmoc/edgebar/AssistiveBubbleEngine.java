@@ -185,10 +185,10 @@ bubbleView.setOnTouchListener(new View.OnTouchListener() {
                 if (!isMoving && duration < 200) {
                     String dtapAct = prefs.getString("bubble_dtap_acts", "NONE");
                     if (dtapAct.equals("NONE")) {
-                        toggleMenu(); 
+                        openMenu(); // Đổi toggleMenu() thành openMenu()
                     } else {
-                        tapRunnable = () -> toggleMenu();
-                        tapHandler.postDelayed(tapRunnable, 220); // Chờ 2 chạm
+                        tapRunnable = () -> openMenu(); // Đổi toggleMenu() thành openMenu()
+                        tapHandler.postDelayed(tapRunnable, 220);
                     }
                 } else if (!isMoving && duration >= 200) {
                     String longAct = prefs.getString("bubble_long_acts", "NONE");
@@ -1028,6 +1028,22 @@ private List<String> getSubItems(String type) {
             ipc.putExtra("startX", startX);
             ipc.putExtra("startY", startY);
             
+            ctx.sendBroadcast(ipc);
+        }
+    }
+private void executeAction(String actionStr) {
+        if (actionStr == null || actionStr.equals("NONE") || actionStr.isEmpty()) return;
+        String[] acts = actionStr.split(",");
+        for (String a : acts) {
+            String at = a.trim();
+            if (at.isEmpty()) continue;
+            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            if (at.startsWith("RUN_SHORTCUT_")) {
+                ipc.putExtra("act", "RUN_SHORTCUT");
+                ipc.putExtra("shortcut_id", at.substring(13));
+            } else {
+                ipc.putExtra("act", at);
+            }
             ctx.sendBroadcast(ipc);
         }
     }
