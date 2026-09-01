@@ -22,12 +22,10 @@ public class AssistiveBubbleEngine {
     private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
     private LinearLayout panelCard;
     
-    // ĐÂY LÀ BIẾN BỊ THIẾU GÂY RA LỖI BUILD CỦA BẠN:
     private final FrameLayout[] nodeButtons = new FrameLayout[9];
-    
     private Integer selectedMainIdx = null;
     private Integer selectedSubIdx = null;
-    private String currentSubmenu = null; // Null = Màn chính 9 nút, khác Null = Màn lưới con
+    private String currentSubmenu = null; 
     
     private static final String[] DEFAULT_ORDER = {"APP","SHORTCUT","SYSTEM","INTENT","MACRO","PANEL","UTILITY","TRIGGER","SEARCH"};
     
@@ -50,7 +48,7 @@ public class AssistiveBubbleEngine {
 
     public void onPrefChanged(String key) {
         if (key == null) return;
-        if (key.equals("bubble_en") || key.equals("bubble_size") || key.equals("bubble_icon_size") || key.equals("bubble_main_icon")) { 
+        if (key.equals("bubble_en") || key.equals("bubble_size") || key.equals("bubble_icon_size") || key.equals("bubble_main_icon") || key.equals("bubble_node_bg_alpha")) { 
             destroyAll(); rebuild(); 
         }
     }
@@ -79,17 +77,30 @@ public class AssistiveBubbleEngine {
         return null;
     }
 
+    // Tinh chỉnh hiển thị để làm to App Icon
+    private void applyIconToImageView(ImageView iv, Drawable d, int iconSize, boolean isApp) {
+        if (d == null) return;
+        if (isApp) {
+            iv.setImageDrawable(d);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            int pad = (int)(iconSize * 0.08f); 
+            iv.setPadding(pad, pad, pad, pad);
+        } else {
+            d = d.mutate(); d.setTint(Color.WHITE);
+            Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
+            if (norm != null) iv.setImageBitmap(norm);
+            else iv.setImageDrawable(d);
+        }
+    }
+
     private void buildBubble() {
         if (bubbleView != null) return;
         ImageView iv = new ImageView(ctx);
         int size = prefs.getInt("bubble_size", 120);
         
         Drawable customIcon = getCustomIcon(prefs.getString("bubble_main_icon", ""));
-        if (customIcon != null) {
-            Bitmap norm = PanelEngine.normalizeIconBitmap(customIcon.mutate(), size, 0.7f);
-            if (norm != null) iv.setImageBitmap(norm);
-            else iv.setImageDrawable(customIcon);
-        } else {
+        applyIconToImageView(iv, customIcon, size, customIcon != null && prefs.getString("bubble_main_icon", "").startsWith("app:"));
+        if (customIcon == null) {
             try { iv.setImageDrawable(ctx.getPackageManager().getApplicationIcon(ctx.getPackageName())); }
             catch (Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
         }
@@ -124,10 +135,10 @@ public class AssistiveBubbleEngine {
             public boolean onSingleTapConfirmed(MotionEvent e) {
                 if (menuOverlay != null) {
                     if (currentSubmenu != null) {
-                        currentSubmenu = null; // Đang ở Menu Con -> Tap để Back ra 9 nút chính
+                        currentSubmenu = null; 
                         refreshPanelCard();
                     } else {
-                        closeMenu(); // Đang ở 9 nút chính -> Tap để Đóng Panel
+                        closeMenu(); 
                     }
                 } else {
                     moveToCenterAndOpenMenu(); 
@@ -492,18 +503,20 @@ public class AssistiveBubbleEngine {
         LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
         iconBox.setLayoutParams(ibLp);
         
-        // MÀU NỀN ĐỘNG DỰA VÀO ĐỘ ĐẬM MỜ
-        int bgAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
+        int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
         GradientDrawable boxBg = new GradientDrawable();
         boxBg.setCornerRadius(100f); 
-        boxBg.setColor(selectedMainIdx != null && selectedMainIdx == idx ? Color.parseColor("#8AB4F8") : Color.argb(bgAlpha, 51, 51, 51));
+        boxBg.setColor(selectedMainIdx != null && selectedMainIdx == idx ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 51, 51, 51));
         iconBox.setBackground(boxBg);
 
         ImageView iv = new ImageView(ctx);
         FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
         iv.setLayoutParams(ivLp);
         
-        Drawable d = getCustomIcon(prefs.getString("bubble_node_icon_" + type, ""));
+        String customOverride = prefs.getString("bubble_node_icon_" + type, "");
+        Drawable d = getCustomIcon(customOverride);
+        boolean isAppIcon = false;
+        
         if (d == null) {
             try {
                 if (type.equals("SYSTEM")) d = ctx.getDrawable(android.R.drawable.ic_menu_preferences);
@@ -515,13 +528,11 @@ public class AssistiveBubbleEngine {
                 else if (type.equals("SEARCH")) d = ctx.getDrawable(android.R.drawable.ic_menu_search);
                 else d = ctx.getDrawable(android.R.drawable.ic_menu_view); 
             } catch (Exception ignored) {}
+        } else {
+            isAppIcon = customOverride.startsWith("app:");
         }
-        if (d != null) {
-            d = d.mutate(); d.setTint(Color.WHITE);
-            Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
-            if (norm != null) iv.setImageBitmap(norm);
-            else iv.setImageDrawable(d);
-        }
+        
+        applyIconToImageView(iv, d, iconSize, isAppIcon);
         iconBox.addView(iv);
         
         TextView tv = new TextView(ctx);
@@ -591,10 +602,10 @@ public class AssistiveBubbleEngine {
         LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
         iconBox.setLayoutParams(ibLp);
         
-        int bgAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
+        int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
         GradientDrawable boxBg = new GradientDrawable();
         boxBg.setCornerRadius(100f); 
-        boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx ? Color.parseColor("#8AB4F8") : Color.argb(bgAlpha, 51, 51, 51));
+        boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 51, 51, 51));
         iconBox.setBackground(boxBg);
 
         if (!ref.isEmpty()) {
@@ -602,30 +613,34 @@ public class AssistiveBubbleEngine {
             FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
             iv.setLayoutParams(ivLp);
             
-            Drawable d = getCustomIcon(prefs.getString("bubble_node_icon_override_" + type + "_" + ref, ""));
+            String customOverride = prefs.getString("bubble_node_icon_override_" + type + "_" + ref, "");
+            Drawable d = getCustomIcon(customOverride);
             PackageManager pm = ctx.getPackageManager();
+            boolean isAppIcon = false;
+
             if (d == null) {
                 if (ref.startsWith("app:")) {
-                    try { d = pm.getApplicationIcon(ref.substring(4)); } catch(Exception ignored) {}
+                    try { d = pm.getApplicationIcon(ref.substring(4)); isAppIcon = true; } catch(Exception ignored) {}
                 } else if (ref.startsWith("act:RUN_SHORTCUT_")) {
                     try {
                         String scId = ref.substring(17);
-                        Intent scIntent = Intent.parseUri(prefs.getString("shortcut_" + scId + "_intent_uri", ""), 0);
-                        ComponentName cn = scIntent.getComponent();
-                        if (cn != null) d = pm.getActivityIcon(cn);
+                        String path = prefs.getString("shortcut_" + scId + "_icon_path", "");
+                        if (!path.isEmpty()) {
+                            Bitmap bmp = BitmapFactory.decodeFile(path);
+                            if (bmp != null) { d = new BitmapDrawable(ctx.getResources(), bmp); isAppIcon = true; }
+                        } else {
+                            Intent scIntent = Intent.parseUri(prefs.getString("shortcut_" + scId + "_intent_uri", ""), 0);
+                            ComponentName cn = scIntent.getComponent();
+                            if (cn != null) { d = pm.getActivityIcon(cn); isAppIcon = true; }
+                        }
                     } catch (Exception ignored) {}
                 }
                 if (d == null) d = ctx.getDrawable(android.R.drawable.sym_def_app_icon);
+            } else {
+                isAppIcon = customOverride.startsWith("app:");
             }
             
-            if (d != null) {
-                // TĂNG KÍCH THƯỚC BUNG LƯỚI CHO APP LÊN 1.0f ĐỂ KHÔNG BỊ BÉ
-                if (!ref.startsWith("app:")) { d = d.mutate(); d.setTint(Color.WHITE); }
-                float scale = ref.startsWith("app:") ? 1.0f : 0.77f;
-                Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, scale);
-                if (norm != null) iv.setImageBitmap(norm);
-                else iv.setImageDrawable(d);
-            }
+            applyIconToImageView(iv, d, iconSize, isAppIcon);
             iconBox.addView(iv);
         }
         
@@ -674,8 +689,9 @@ public class AssistiveBubbleEngine {
         et.setHintTextColor(Color.parseColor("#9AA0A6"));
         et.setTextColor(Color.WHITE);
         et.setSingleLine(true);
+        int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor("#333333"));
+        bg.setColor(Color.argb(nodeAlpha, 51, 51, 51));
         bg.setCornerRadius(100f);
         et.setBackground(bg);
         et.setPadding(28, 20, 28, 20);
@@ -752,37 +768,34 @@ public class AssistiveBubbleEngine {
             row.setPadding(10, 16, 10, 16);
             
             ImageView iv = new ImageView(ctx);
-            // PHÓNG TO ICON TRONG LIST TÌM KIẾM
-            int isize = 90;
+            int isize = 75;
             LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(isize, isize);
-            ilp.setMargins(10, 0, 26, 0);
+            ilp.setMargins(0, 0, 26, 0);
             iv.setLayoutParams(ilp);
             
             Drawable customOvr = getCustomIcon(prefs.getString("bubble_node_icon_override_" + type + "_" + item[1], ""));
+            boolean isCustomApp = prefs.getString("bubble_node_icon_override_" + type + "_" + item[1], "").startsWith("app:");
+            
             if (customOvr != null) {
-                customOvr = customOvr.mutate(); customOvr.setTint(Color.WHITE);
+                if (!isCustomApp) { customOvr = customOvr.mutate(); customOvr.setTint(Color.WHITE); }
                 iv.setImageDrawable(customOvr);
+                iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
             } else {
                 if (item[1].startsWith("app:")) {
                     try { iv.setImageDrawable(pm.getApplicationIcon(item[1].substring(4))); }
                     catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
-                } else if (item[1].startsWith("act:CREATE_SHORTCUT_")) {
-                    try {
-                        String[] split = item[1].substring(20).split("/");
-                        Drawable d = pm.getActivityIcon(new ComponentName(split[0], split[1]));
-                        iv.setImageDrawable(d);
-                    } catch(Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
                 } else if (item[1].startsWith("act:RUN_SHORTCUT_")) {
                     try {
                         String scId = item[1].substring(17);
-                        String uriStr = prefs.getString("shortcut_" + scId + "_intent_uri", "");
-                        Intent scIntent = Intent.parseUri(uriStr, 0);
-                        ComponentName cn = scIntent.getComponent();
-                        if (cn != null) iv.setImageDrawable(pm.getActivityIcon(cn));
-                        else iv.setImageResource(android.R.drawable.ic_menu_send);
-                    } catch (Exception e) {
-                        iv.setImageResource(android.R.drawable.ic_menu_send);
-                    }
+                        String path = prefs.getString("shortcut_" + scId + "_icon_path", "");
+                        if (!path.isEmpty()) iv.setImageBitmap(BitmapFactory.decodeFile(path));
+                        else {
+                            Intent scIntent = Intent.parseUri(prefs.getString("shortcut_" + scId + "_intent_uri", ""), 0);
+                            ComponentName cn = scIntent.getComponent();
+                            if (cn != null) iv.setImageDrawable(pm.getActivityIcon(cn));
+                            else iv.setImageResource(android.R.drawable.ic_menu_send);
+                        }
+                    } catch (Exception e) { iv.setImageResource(android.R.drawable.ic_menu_send); }
                 } else {
                     int defaultIconRes = android.R.drawable.ic_menu_view;
                     if (item[1].equals("act:BACK")) defaultIconRes = android.R.drawable.ic_media_rew;
@@ -804,7 +817,7 @@ public class AssistiveBubbleEngine {
             tvLabel.setText(item[0]); tvLabel.setTextColor(Color.WHITE); tvLabel.setTextSize(14f);
             row.addView(tvLabel);
 
-            if (selectedSubIdx != null && selectedSubIdx == shown.indexOf(item)) {
+            if (selectedSubIdx != null && selectedSubIdx == p) {
                 GradientDrawable rowBg = new GradientDrawable();
                 rowBg.setColor(Color.parseColor("#8AB4F8"));
                 rowBg.setCornerRadius(20f);
@@ -814,7 +827,7 @@ public class AssistiveBubbleEngine {
             }
 
             final String ref = item[1];
-            final int finalP = shown.indexOf(item);
+            final int finalP = p;
             
             row.setOnClickListener(v -> {
                 if (selectedSubIdx != null) {
@@ -906,6 +919,8 @@ public class AssistiveBubbleEngine {
                 for (ResolveInfo ri : ShortcutScanner.getProviders(ctx)) {
                     out.add(new String[]{ri.loadLabel(ctx.getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
                 }
+                for (String id : csvToList(prefs.getString("shortcut_ids", "")))
+                    out.add(new String[]{"(Đã lưu) " + prefs.getString("shortcut_" + id + "_name", "Shortcut"), "act:RUN_SHORTCUT_" + id});
                 break;
             }
             case "SYSTEM": {

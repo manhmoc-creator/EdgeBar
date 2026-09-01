@@ -6613,12 +6613,12 @@ private void renderBubbleSettings() {
 
         designSliderContainer.addView(createSlider(T("Bubble Size", "Kích thước bong bóng"), "bubble_size", 300, 120));
         designSliderContainer.addView(createSlider(T("Icon Size in Panel", "Độ to nhỏ của 9 nút trong Panel"), "bubble_icon_size", 200, 100));
-        // THÊM THANH KÉO ĐỘ ĐẬM MỜ NỀN NÚT
-        designSliderContainer.addView(createSlider(T("Node Background Opacity", "Độ đậm mờ nền 9 nút (Xám)"), "bubble_node_bg_alpha", 255, 255));
-        
         designSliderContainer.addView(createSlider(T("Panel Width", "Chiều rộng bảng"), "bubble_bg_w", 1500, 800));
         designSliderContainer.addView(createSlider(T("Panel Max Height", "Chiều cao tối đa (List)"), "bubble_bg_h", 1500, 800));
         designSliderContainer.addView(createSlider(T("Panel Opacity", "Độ đậm mờ bảng"), "bubble_bg_alpha", 255, 160));
+        
+        // THANH KÉO MỚI CHO ĐỘ ĐẬM MỜ NỀN NÚT XÁM
+        designSliderContainer.addView(createSlider(T("Node Background Opacity", "Độ đậm mờ nền 9 nút"), "bubble_node_bg_alpha", 255, 255));
 
         Button btnGestures = new Button(this);
         btnGestures.setText("⚙️ CẤU HÌNH CỬ CHỈ (2 CHẠM & NHẤN GIỮ)");
@@ -6710,8 +6710,28 @@ private void renderBubbleSettings() {
             for (String[] app : getAppListCached()) allItems.add(new String[]{app[0], "app:" + app[1]});
         }
         else if (type.equals("SHORTCUT")) {
-            for (ResolveInfo ri : ShortcutScanner.getProviders(this)) {
-                allItems.add(new String[]{ri.loadLabel(getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
+            Button btnNewShortcut = new Button(this);
+            btnNewShortcut.setText("➕ TẠO SHORTCUT MỚI");
+            btnNewShortcut.setBackground(getRounded("#7C4DFF", 20f));
+            btnNewShortcut.setTextColor(Color.WHITE);
+            LinearLayout.LayoutParams nsLp = new LinearLayout.LayoutParams(-1, -2);
+            nsLp.setMargins(0, 0, 0, 20);
+            btnNewShortcut.setLayoutParams(nsLp);
+            btnNewShortcut.setOnClickListener(v -> {
+                prefs.edit().putBoolean("is_panel_shortcut_pending", true).apply();
+                showShortcutPickerDialog((newId, newName) -> {
+                    String ref = "act:RUN_SHORTCUT_" + newId;
+                    boolean already = false;
+                    for (String[] it : allItems) if (it[1].equals(ref)) { already = true; break; }
+                    if (!already) allItems.add(new String[]{"(Mới) " + newName, ref});
+                    selectedOrder.add(ref);
+                    etSearch.setText(" "); etSearch.setText(""); 
+                });
+            });
+            root.addView(btnNewShortcut, 2);
+
+            for (String id : csvToList(prefs.getString("shortcut_ids", ""))) {
+                allItems.add(new String[]{"(Đã lưu) " + prefs.getString("shortcut_" + id + "_name", "Shortcut"), "act:RUN_SHORTCUT_" + id});
             }
         }
         else if (type.equals("SYSTEM")) {
@@ -6759,8 +6779,7 @@ private void renderBubbleSettings() {
                 
                 if (type.equals("APP") || type.equals("SHORTCUT")) {
                     ImageView iv = new ImageView(MainActivity.this);
-                    // TĂNG KÍCH THƯỚC TỪ 70 LÊN 95 CHO ICON TO HƠN
-                    LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(95, 95);
+                    LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(70, 70);
                     ilp.setMargins(0, 0, 20, 0);
                     iv.setLayoutParams(ilp);
                     
@@ -6772,6 +6791,17 @@ private void renderBubbleSettings() {
                             android.graphics.drawable.Drawable d = getPackageManager().getActivityIcon(new ComponentName(split[0], split[1]));
                             iv.setImageDrawable(d);
                         } catch (Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
+                    } else if (item[1].startsWith("act:RUN_SHORTCUT_")) {
+                        try {
+                            String scId = item[1].substring(17);
+                            String uriStr = prefs.getString("shortcut_" + scId + "_intent_uri", "");
+                            Intent scIntent = Intent.parseUri(uriStr, 0);
+                            ComponentName cn = scIntent.getComponent();
+                            if (cn != null) iv.setImageDrawable(getPackageManager().getActivityIcon(cn));
+                            else iv.setImageResource(android.R.drawable.ic_menu_send);
+                        } catch (Exception e) { iv.setImageResource(android.R.drawable.ic_menu_send); }
+                    } else {
+                        iv.setImageResource(android.R.drawable.ic_menu_help);
                     }
                     row.addView(iv);
                 }
@@ -6782,7 +6812,7 @@ private void renderBubbleSettings() {
                 if (!type.equals("APP") && !type.equals("SHORTCUT")) tv.setPadding(20, 0, 0, 0);
                 row.addView(tv);
 
-                // CHO PHÉP SHORTCUT CŨNG CHỈNH ĐƯỢC ICON (Chỉ loại trừ APP)
+                // HIỆN NÚT CẤU HÌNH ICON CHO TẤT CẢ NGOẠI TRỪ APP
                 if (selectedOrder.contains(item[1]) && !type.equals("APP")) {
                     Button btnEditIcon = new Button(MainActivity.this);
                     btnEditIcon.setText("🖌");
@@ -6832,7 +6862,6 @@ private void renderBubbleSettings() {
         bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE);
         bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
         
-        // NÚT RESET
         Button bReset = new Button(this); bReset.setText("RESET");
         bReset.setBackground(getRounded("#FFC107",20f)); bReset.setTextColor(Color.BLACK);
         LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(0,-2,1f); rLp.setMargins(10, 0, 10, 0);
