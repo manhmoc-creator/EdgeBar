@@ -146,6 +146,14 @@ bubbleLp.gravity = Gravity.TOP | Gravity.LEFT;
 bubbleLp.x = prefs.getInt("bubble_last_x", 0);
 bubbleLp.y = prefs.getInt("bubble_last_y", 500);
 
+bubbleView = iv;
+try {
+    wm.addView(bubbleView, bubbleLp);
+} catch (Exception e) {
+    bubbleView = null;
+    return;
+}
+
 bubbleView.setOnTouchListener(new View.OnTouchListener() {
     private int initialX, initialY;
     private float initialTouchX, initialTouchY;
