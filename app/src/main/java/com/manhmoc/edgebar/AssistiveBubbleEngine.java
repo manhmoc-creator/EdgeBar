@@ -28,13 +28,14 @@ public class AssistiveBubbleEngine {
     private View bubbleView; private WindowManager.LayoutParams bubbleLp;
     private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
     private LinearLayout panelCard;
-    
+    private final java.util.concurrent.atomic.AtomicInteger iconLoadGen = new java.util.concurrent.atomic.AtomicInteger(0);
     private final FrameLayout[] nodeButtons = new FrameLayout[9];
     private Integer selectedMainIdx = null;
     private Integer selectedSubIdx = null;
     private String currentSubmenu = null; 
 private static final java.util.concurrent.ExecutorService bubbleIconExecutor =
-    java.util.concurrent.Executors.newFixedThreadPool(4);
+    new java.util.concurrent.ThreadPoolExecutor(2, 6, 30, java.util.concurrent.TimeUnit.SECONDS,
+        new java.util.concurrent.LinkedBlockingDeque<>());
     private static final int BUBBLE_ICON_CACHE_LIMIT = 60;
 private static final LinkedHashMap<String, Drawable> bubbleIconCache =
     new LinkedHashMap<String, Drawable>(16, 0.75f, true) {
@@ -48,13 +49,16 @@ private void loadIconAsync(String cacheKey, java.util.function.Supplier<Drawable
         if (cached != null) { applyIconToImageView(iv, cached, iconSize, isAppHint); return; }
     }
     iv.setTag(cacheKey);
+    final int myGen = iconLoadGen.get();
     bubbleIconExecutor.execute(() -> {
+        if (iconLoadGen.get() != myGen) return; // submenu đã đổi -> hủy, khỏi tốn công vẽ
         Drawable d = loader.get();
         if (d != null) synchronized (bubbleIconCache) { bubbleIconCache.put(cacheKey, d); }
         bubbleIconHandler.post(() -> {
+            if (iconLoadGen.get() != myGen) return;
             if (d != null && cacheKey.equals(iv.getTag())) applyIconToImageView(iv, d, iconSize, isAppHint);
         });
-    }).start();
+    });
 }
 
 private Drawable resolveSubNodeIcon(String customOverride, String ref) {
@@ -89,7 +93,15 @@ private Drawable resolveSubNodeIcon(String customOverride, String ref) {
     private ComponentCallbacks configCallbacks;
     private float sx, sy, lastX, lastY;
     private VelocityTracker velocityTracker;
+    public interface ActionExecutor { void exec(String action); }
+private ActionExecutor executor; // có thể null nếu không truyền
 
+public AssistiveBubbleEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode) {
+    this(ctx, wm, prefs, isAnyMode, null);
+}
+public AssistiveBubbleEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode, ActionExecutor executor) {
+    this.ctx = ctx; this.wm = wm; this.prefs = prefs; this.isAnyMode = isAnyMode; this.executor = executor;
+}
     public AssistiveBubbleEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode) {
         this.ctx = ctx; this.wm = wm; this.prefs = prefs; this.isAnyMode = isAnyMode;
     }
@@ -1032,7 +1044,8 @@ private List<String> getSubItems(String type) {
     }
 
     private void refreshPanelCard() {
-        if (panelCard != null) {
+    iconLoadGen.incrementAndGet(); // hủy mọi icon-load đang chờ của lượt render trước
+    if (panelCard != null) {
             panelCard.removeAllViews();
             if (currentSubmenu != null) {
                 if (currentSubmenu.equals("SEARCH")) buildSearchMenu(panelCard);

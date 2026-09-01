@@ -28,17 +28,13 @@ public class VolumeButtonService extends Service {
     private BroadcastReceiver screenReceiver;
     private final Handler h = new Handler(Looper.getMainLooper());
     
-    // Thuật toán Combo mới: Lưu phím chờ và số lần bấm liên tiếp
-    private Runnable volCheckRunnable;
-    private int pendingKey = 0; // 0=none, 1=up, -1=down
-    private int burstCount = 0;
-private long lastKeyEventMs = 0;
-private int lastKeyPressed = 0; // RAW key gần nhất - bất kể đã fire hay đang chờ combo/dtap
-private static final long MIN_GAP_SAME_KEY_MS = 70;
-
-    private static final long DTAP_WINDOW_MS = 240;  // Chờ ngắn — cùng 1 ngón tap 2 lần
-private static final long COMBO_WINDOW_MS = 660; // Chờ dài hơn — đổi phím, cần thời gian di chuyển ngón (1 tay)
-private long pendingWindowMs = 0;
+    // --- THUẬT TOÁN ĐIỀU KHIỂN VOLKEY SIÊU NHẠY ---
+    private static final long DEBOUNCE_MS = 60; // Lọc nhiễu cơ học của nút cứng
+    private static final long MAX_WAIT_MS = 280; // Chờ nhịp 2 tối đa
+    
+    private int pendingKey = 0; // 0: rảnh, 1: up, -1: down
+    private long lastPhysicalEventMs = 0;
+    private Runnable actionRunnable = null;
     
     private final Handler keepAliveHandler = new Handler();
     private Runnable keepAliveRunnable;
@@ -93,104 +89,85 @@ private long pendingWindowMs = 0;
         mediaSession.setCallback(new MediaSession.Callback() {});
         mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
         
-                        VolumeProvider provider = new VolumeProvider(VolumeProvider.VOLUME_CONTROL_ABSOLUTE, 10, 5) {
-    @Override public void onAdjustVolume(int direction) {
-        setCurrentVolume(5);
-        if (direction > 0) handleSide(true);
-        else if (direction < 0) handleSide(false);
-    }
-};
+        VolumeProvider provider = new VolumeProvider(VolumeProvider.VOLUME_CONTROL_ABSOLUTE, 10, 5) {
+            @Override public void onAdjustVolume(int direction) {
+                setCurrentVolume(5);
+                if (direction > 0) handleSide(true);
+                else if (direction < 0) handleSide(false);
+            }
+        };
 
         mediaSession.setPlaybackToRemote(provider);
-        mediaSession.setPlaybackState(new PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f).build());	
+        mediaSession.setPlaybackState(new PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f).build());  
         
-android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-boolean screenOffNow = pm != null && !pm.isInteractive();
-// [FIX] Không active nếu MyPlaylist đang thực sự phát — tránh 2 MediaSession
-// tranh nhau audio focus/volume routing gây bất ổn khi màn tắt.
-mediaSession.setActive(screenOffNow && !MyPlaylistService.isRunning);
+        android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+        boolean screenOffNow = pm != null && !pm.isInteractive();
+        mediaSession.setActive(screenOffNow && !MyPlaylistService.isRunning);
         isRunning = true;
     }
-        private boolean isRuleSet(String key) {
+
+    private boolean isRuleSet(String key) {
         return !prefs.getString(key, "NONE").equals("NONE");
     }
 
-private void handleSide(boolean isUp) {
-   // [FIX] Ép chạy tuần tự trên main thread của Handler h — tránh trường hợp
-   // callback hệ thống tới không cùng thread với volCheckRunnable đang chờ,
-   // có thể gây đọc/ghi pendingKey lệch nhịp -> ra sai action (vd Combo lại
-   // fire action của Tap).
-   h.post(() -> handleSideInternal(isUp));
-}
-
-private void handleSideInternal(boolean isUp) {
-   int currentKey = isUp ? 1 : -1;
-   long now = android.os.SystemClock.elapsedRealtime();
-
-   // [FIX CHÍNH] So với RAW key gần nhất, áp dụng bộ lọc LUÔN LUÔN — bất kể
-   // đang có pendingKey hay không. Trước đây chỉ lọc khi pendingKey == 0,
-   // nên tín hiệu "echo" đến ngay sau lần bấm đầu tiên (khi đang chờ phân
-   // loại Tap/Dtap/Combo) bị coi là lần bấm thật thứ 2 -> Tap tự nhảy sang
-   // Dtap/Combo. Đây là nguyên nhân chính gây nhầm lẫn tap/2tap/combo.
-   if (lastKeyPressed == currentKey && (now - lastKeyEventMs) < MIN_GAP_SAME_KEY_MS) {
-       lastKeyEventMs = now;
-       return;
-   }
-   lastKeyEventMs = now;
-   lastKeyPressed = currentKey;
-
-   if (volCheckRunnable != null) {
-       h.removeCallbacks(volCheckRunnable);
-       volCheckRunnable = null;
-   }
-
-   if (pendingKey != 0) {
-       if (pendingKey == currentKey) {
-           fire(isUp ? "volkey_up_dtap" : "volkey_down_dtap");
-       } else {
-           fire(pendingKey == 1 ? "volkey_up_combo" : "volkey_down_combo");
-       }
-       pendingKey = 0;
-       burstCount = 0;
-       return;
-   }
-
-   String dtapKey = isUp ? "volkey_up_dtap" : "volkey_down_dtap";
-   String comboKey = isUp ? "volkey_up_combo" : "volkey_down_combo";
-   boolean hasCombo = isRuleSet(comboKey);
-   boolean hasDtap = isRuleSet(dtapKey);
-
-   if (!hasCombo && !hasDtap) {
-       fire(isUp ? "volkey_up_tap" : "volkey_down_tap");
-       return;
-   }
-
-   pendingWindowMs = hasCombo ? COMBO_WINDOW_MS : DTAP_WINDOW_MS;
-   pendingKey = currentKey;
-   burstCount = 1;
-   vibrateAck();
-   scheduleCheck();
-}
-        private void scheduleCheck() {
-        volCheckRunnable = () -> {
-            fire(pendingKey == 1 ? "volkey_up_tap" : "volkey_down_tap");
-            pendingKey = 0;
-            burstCount = 0;
-            volCheckRunnable = null;
-        };
-        h.postDelayed(volCheckRunnable, pendingWindowMs);
+    private void handleSide(boolean isUp) {
+        h.post(() -> handleSideInternal(isUp));
     }
+
+    private void handleSideInternal(boolean isUp) {
+        int currentKey = isUp ? 1 : -1;
+        long now = android.os.SystemClock.elapsedRealtime();
+
+        if (currentKey == pendingKey && (now - lastPhysicalEventMs) < DEBOUNCE_MS) {
+            return; 
+        }
+        lastPhysicalEventMs = now;
+
+        String prefix = isUp ? "volkey_up" : "volkey_down";
+        boolean hasDtap = isRuleSet(prefix + "_dtap");
+        boolean hasCombo = isRuleSet(prefix + "_combo");
+
+        if (pendingKey == 0) {
+            pendingKey = currentKey;
+            vibrateAck(); 
+
+            if (!hasDtap && !hasCombo) {
+                executeAndResetState(prefix + "_tap");
+            } else {
+                actionRunnable = () -> executeAndResetState(prefix + "_tap");
+                h.postDelayed(actionRunnable, MAX_WAIT_MS);
+            }
+        } else {
+            if (actionRunnable != null) {
+                h.removeCallbacks(actionRunnable);
+                actionRunnable = null;
+            }
+
+            if (pendingKey == currentKey) {
+                executeAndResetState(prefix + "_dtap");
+            } else {
+                String comboActionKey = (pendingKey == 1) ? "volkey_up_combo" : "volkey_down_combo";
+                executeAndResetState(comboActionKey);
+            }
+        }
+    }
+
+    private void executeAndResetState(String prefKey) {
+        pendingKey = 0;
+        actionRunnable = null;
+        fire(prefKey);
+    }
+
     private void resetBurst() {
-        if (volCheckRunnable != null) {
-            h.removeCallbacks(volCheckRunnable);
-            volCheckRunnable = null;
+        if (actionRunnable != null) {
+            h.removeCallbacks(actionRunnable);
+            actionRunnable = null;
         }
         pendingKey = 0;
-        burstCount = 0;
+        lastPhysicalEventMs = 0;
     }
+
     private void vibrateAck() {
-        // Rung rất nhẹ, ngắn — báo "đã ghi nhận lần bấm đầu, đang chờ phân biệt Tap/Dtap/Combo"
-        // để người dùng không tưởng nhầm là hệ thống không phản hồi rồi bấm lại quá sớm.
         try {
             Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (Build.VERSION.SDK_INT >= 26)
@@ -198,6 +175,7 @@ private void handleSideInternal(boolean isUp) {
             else v.vibrate(12);
         } catch (Exception ignored) {}
     }
+
     private void fire(String key) {
         if (!prefs.getBoolean(key + "_on", true)) return;
         String action = prefs.getString(key, "NONE");
@@ -255,7 +233,6 @@ private void handleSideInternal(boolean isUp) {
     }
 
     public static boolean hasAnyRule(SharedPreferences p) {
-        // Cập nhật Rule Check theo hệ combo mới
         String[] keys = {
             "volkey_up_tap", "volkey_up_dtap", "volkey_up_combo",
             "volkey_down_tap", "volkey_down_dtap", "volkey_down_combo"

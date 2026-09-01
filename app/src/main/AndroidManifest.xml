@@ -119,6 +119,11 @@
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
         android:value="edgebar_accessible_home_overlay" />
 </service>
+<service android:name=".CoreFeaturesService" android:exported="false"
+    android:foregroundServiceType="specialUse">
+    <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="edgebar_core_features" />
+</service>
         <service
 android:name=".QsLockTile"
 android:label="EB Lacck"
