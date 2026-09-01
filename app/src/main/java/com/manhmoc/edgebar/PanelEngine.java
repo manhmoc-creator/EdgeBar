@@ -1089,45 +1089,44 @@ private static String currentSwapPanelId = null;
     private static String currentSwapRefKey = null;
 
 private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnable originalAction) {
-        cell.setOnLongClickListener(v -> {
-            currentSwapPanelId = panelId;
-            currentSwapRefKey = refKey;
-            cell.setBackground(getSwapHighlightBg(cell.getBackground()));
-            try {
-                Vibrator vib = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
-                if (vib != null) vib.vibrate(android.os.VibrationEffect.createOneShot(20, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
-            } catch (Exception ignored) {}
-            return true;
-        });
-        cell.setOnClickListener(v -> {
-            // Nếu đang trong trạng thái hoán đổi (đã nhấn giữ trước đó)
-            if (panelId.equals(currentSwapPanelId) && currentSwapRefKey != null) {
-                String sel = currentSwapRefKey;
-                // Reset trạng thái ngay lập tức để đưa các nút về bình thường
-                currentSwapPanelId = null;
-                currentSwapRefKey = null;
-                
-                // Nếu click vào nút KHÁC với nút đang nhấn giữ thì mới hoán đổi
-                if (!sel.equals(refKey)) {
-                    String px = "pack_panel_" + panelId + "_";
-                    List<String> order = csvToList(prefs.getString(px + "order", ""));
-                    int i1 = order.indexOf(sel), i2 = order.indexOf(refKey);
-                    if (i1 >= 0 && i2 >= 0) Collections.swap(order, i1, i2);
-                    prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
-                }
-                renderPanelGrid(panelId); // Vẽ lại lưới -> vòng tròn xanh biến mất
-                return; // DỪNG LẠI TẠI ĐÂY, KHÔNG MỞ APP/ACTION
-            }
+    cell.setOnLongClickListener(v -> {
+        currentSwapPanelId = panelId;
+        currentSwapRefKey = refKey;
+        cell.setBackground(getSwapHighlightBg(cell.getBackground()));
+        try {
+            Vibrator vib = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+            if (vib != null) vib.vibrate(android.os.VibrationEffect.createOneShot(20, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+        } catch (Exception ignored) {}
+        return true;
+    });
+
+    cell.setOnClickListener(v -> {
+        // Kiểm tra an toàn, nếu đang ở chế độ hoán đổi thì swap và DỪNG LẠI
+        if (currentSwapPanelId != null && currentSwapPanelId.equals(panelId) && currentSwapRefKey != null) {
+            String sel = currentSwapRefKey;
             
-            // Xóa rác nếu click nhầm
+            // Trả trạng thái về 0 ngay lập tức
             currentSwapPanelId = null;
             currentSwapRefKey = null;
-            
-            // Nếu không có trạng thái hoán đổi, mở app/shortcut bình thường
-            originalAction.run();
-        });
-        return cell;
-    }
+
+            if (!sel.equals(refKey)) {
+                String px = "pack_panel_" + panelId + "_";
+                List<String> order = csvToList(prefs.getString(px + "order", ""));
+                int i1 = order.indexOf(sel), i2 = order.indexOf(refKey);
+                if (i1 >= 0 && i2 >= 0) Collections.swap(order, i1, i2);
+                prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
+            }
+            renderPanelGrid(panelId); // Vẽ lại để xoá viền xanh
+            return; // QUAN TRỌNG: Cắt luồng tại đây để KHÔNG chạy lệnh mở App/Action
+        }
+
+        // Nếu không hoán đổi, dọn rác và chạy lệnh mở App bình thường
+        currentSwapPanelId = null;
+        currentSwapRefKey = null;
+        originalAction.run();
+    });
+    return cell;
+}
 
 private Drawable getSwapHighlightBg(Drawable orig) {
     // Viền tròn ôm quanh ô, nền trong suốt để icon vẫn hiện rõ trong lúc chọn
@@ -1287,12 +1286,10 @@ private void closePanel(String id) {
         panel.setVisibility(View.GONE);
         View handle = handles.get(id);
         if (handle != null) handle.setVisibility(View.VISIBLE);
-        
-        // [MỚI] Tránh sót trạng thái đang chọn hoán đổi khi mở lại panel
-        if (id.equals(currentSwapPanelId)) {
-            currentSwapPanelId = null;
-            currentSwapRefKey = null;
-        }
+if (id.equals(currentSwapPanelId)) {
+    currentSwapPanelId = null;
+    currentSwapRefKey = null;
+       }
     }
 
     private void closeAllPanels() { for (String id : new java.util.ArrayList<>(panels.keySet())) closePanel(id); }

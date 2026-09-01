@@ -97,11 +97,18 @@ public void setBubbleTouchable(boolean touchable) {
             iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
             iv.setPadding(0, 0, 0, 0); 
         } else {
-            d = d.mutate(); d.setTint(Color.WHITE);
-            Bitmap norm = PanelEngine.normalizeIconBitmap(d, iconSize, 0.77f);
-            if (norm != null) iv.setImageBitmap(norm);
-            else iv.setImageDrawable(d);
-            iv.setPadding(0, 0, 0, 0);
+            d = d.mutate(); 
+            d.setTint(Color.WHITE);
+            
+            // [FIX LAG KHỦNG KHIẾP BUBBLE] 
+            // KHÔNG GỌI PanelEngine.normalizeIconBitmap() ở đây! Nó làm Main Thread bị treo 1-2s.
+            // Dùng scale có sẵn của ImageView cực nhanh và không tốn CPU.
+            iv.setImageDrawable(d);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            
+            // Tính toán bù đệm để System Icon có kích thước tương đương với lúc normalize
+            int pad = (int) (iconSize * 0.15f); 
+            iv.setPadding(pad, pad, pad, pad);
         }
     }
 
