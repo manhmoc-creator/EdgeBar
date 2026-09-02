@@ -6248,214 +6248,233 @@ ids.sort((idA, idB) -> naturalCompareName(
         }
     }
 private void renderBubbleSettings() {
-        designSliderContainer.addView(createSectionTitle("💬 BONG BÓNG CHAT (ASSISTIVE TOUCH)"));
+    designSliderContainer.addView(createSectionTitle("💬 BONG BÓNG CHAT (ASSISTIVE TOUCH)"));
 
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, 10, 0, 20);
-        TextView tvOn = new TextView(this);
-        tvOn.setText(T("Enable bubble", "Bật bong bóng chat"));
-        tvOn.setTextColor(Color.WHITE);
-        tvOn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        Switch swOn = new Switch(this);
-swOn.setChecked(prefs.getBoolean("bubble_en", false));
-swOn.setOnCheckedChangeListener((v, c) -> {
-    prefs.edit().putBoolean("bubble_en", c).apply();
-    if (c) prefs.edit().putBoolean("bubble_circle_en", false).apply();
-    renderSliders();
-});
-row.addView(tvOn); row.addView(swOn);
-designSliderContainer.addView(row);
+    // ============ DRAWER 1: TÙY CHỈNH CHUNG (dùng chung cho cả 2 cấu hình) ============
+    LinearLayout dCommon = new LinearLayout(this);
+    dCommon.setOrientation(LinearLayout.VERTICAL);
+    dCommon.setPadding(20, 10, 20, 20);
 
-        Button btnMainIcon = new Button(this);
-        btnMainIcon.setText("🎨 ĐỔI ICON BONG BÓNG CHAT");
-        btnMainIcon.setBackground(getRounded("#FFC107", 20f));
-        btnMainIcon.setTextColor(Color.BLACK);
-        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-1, -2);
-        btnLp.setMargins(0, 0, 0, 20);
-        btnMainIcon.setLayoutParams(btnLp);
-        btnMainIcon.setOnClickListener(v -> {
-            showIconPickerDialog("bubble_main_icon", () -> {
-                Toast.makeText(this, "Đã đổi Icon Bong bóng chat", Toast.LENGTH_SHORT).show();
-                sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
+    dCommon.addView(createSlider(T("Bubble Size", "Kích thước bong bóng"), "bubble_size", 300, 120));
+    dCommon.addView(createSlider(T("Node Icon Size", "Kích thước icon 9 nút"), "bubble_icon_size", 200, 100));
+    dCommon.addView(createSlider(T("Node Background Opacity", "Độ đậm mờ nền 9 nút"), "bubble_node_bg_alpha", 255, 255));
+
+    dCommon.addView(createSectionTitle("⚙️ " + T("BUBBLE GESTURES", "CỬ CHỈ BONG BÓNG CHAT")));
+    List<String> rules = getDynamicIds("bubble_pack_rules");
+    if (rules.isEmpty()) {
+        String r1 = java.util.UUID.randomUUID().toString().substring(0, 8);
+        String r2 = java.util.UUID.randomUUID().toString().substring(0, 8);
+        rules.add(r1); rules.add(r2);
+        prefs.edit()
+            .putString("bubble_pack_rules", r1 + "," + r2)
+            .putString("prule_" + r1 + "_gestures", "dtap")
+            .putString("prule_" + r2 + "_gestures", "long")
+            .apply();
+    }
+    LinearLayout ruleRow = new LinearLayout(this);
+    ruleRow.setOrientation(LinearLayout.HORIZONTAL);
+    ruleRow.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+    for (String rId : rules) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(getRounded("#202124", 24f));
+        card.setPadding(20, 24, 20, 24);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+        lp.setMargins(6, 6, 6, 6);
+        card.setLayoutParams(lp);
+
+        TextView tGest = new TextView(this);
+        String g = prefs.getString("prule_" + rId + "_gestures", "");
+        tGest.setText(g.replace("dtap", "2 Chạm").replace("long", "Nhấn Giữ"));
+        tGest.setTextColor(Color.parseColor("#9AA0A6"));
+        tGest.setTextSize(12); tGest.setPadding(0, 0, 0, 5);
+
+        TextView tAct = new TextView(this);
+        tAct.setText(formatPruleActionLabel(rId));
+        tAct.setTextColor(Color.parseColor("#8AB4F8"));
+        tAct.setTextSize(15f);
+        tAct.setMaxLines(1); tAct.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+        LinearLayout bottomCtrl = new LinearLayout(this);
+        bottomCtrl.setOrientation(LinearLayout.HORIZONTAL);
+        bottomCtrl.setGravity(Gravity.CENTER_VERTICAL);
+        bottomCtrl.setPadding(0, 15, 0, 0);
+
+        Switch swRuleOn = new Switch(this);
+        swRuleOn.setChecked(prefs.getBoolean("prule_" + rId + "_en", true));
+        swRuleOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean("prule_" + rId + "_en", chk).apply());
+        swRuleOn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+        bottomCtrl.addView(swRuleOn);
+        card.addView(tGest); card.addView(tAct); card.addView(bottomCtrl);
+        card.setOnClickListener(v -> openBubbleRuleEditor(rId, this::renderSliders));
+        ruleRow.addView(card);
+    }
+    dCommon.addView(ruleRow);
+
+    dCommon.addView(createSectionTitle("🎨 " + T("ICON FOR 9 NODES", "CẤU HÌNH & ICON 9 NÚT TRÊN BẢNG")));
+    LinearLayout iconGrid = new LinearLayout(this);
+    iconGrid.setOrientation(LinearLayout.VERTICAL);
+    iconGrid.setPadding(0, 10, 0, 10);
+    String[] nodeTypes = {"APP", "SHORTCUT", "SYSTEM", "INTENT", "MACRO", "PANEL", "UTILITY", "TRIGGER", "SEARCH"};
+    String[] nodeLabels = {"Apps", "Shortcut", "System", "Intent", "Macro", "Panel", "Utility", "Trigger", "Search"};
+    for (int i = 0; i < 3; i++) {
+        LinearLayout rowIcon = new LinearLayout(this);
+        rowIcon.setOrientation(LinearLayout.HORIZONTAL);
+        rowIcon.setGravity(Gravity.CENTER);
+        for (int j = 0; j < 3; j++) {
+            int idx = i * 3 + j;
+            final String type = nodeTypes[idx];
+            Button btnIcon = new Button(this);
+            btnIcon.setText(nodeLabels[idx]);
+            btnIcon.setBackground(getRounded("#444444", 20f));
+            btnIcon.setTextColor(Color.WHITE);
+            btnIcon.setTextSize(10f);
+            LinearLayout.LayoutParams lpBtn = new LinearLayout.LayoutParams(0, 160, 1f);
+            lpBtn.setMargins(8, 8, 8, 8);
+            btnIcon.setLayoutParams(lpBtn);
+            btnIcon.setOnClickListener(v -> {
+                if (type.equals("SEARCH")) {
+                    Toast.makeText(this, "Nút Search không cần chọn Action, hãy nhấn giữ để đổi Icon.", Toast.LENGTH_LONG).show();
+                } else {
+                    showBubbleNodePicker(type);
+                }
             });
+            btnIcon.setOnLongClickListener(v -> {
+                showIconPickerDialog("bubble_node_icon_" + type, () -> {
+                    Toast.makeText(this, "Đã đổi Icon " + nodeLabels[idx], Toast.LENGTH_SHORT).show();
+                    sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
+                });
+                return true;
+            });
+            rowIcon.addView(btnIcon);
+        }
+        iconGrid.addView(rowIcon);
+    }
+    dCommon.addView(iconGrid);
+
+    designSliderContainer.addView(createDrawer("⚙️ " + T("COMMON SETTINGS", "TÙY CHỈNH CHUNG"), dCommon));
+
+    // ============ DRAWER 2: CẤU HÌNH 1 - BUBBLE PANEL ============
+    LinearLayout dCfg1 = new LinearLayout(this);
+    dCfg1.setOrientation(LinearLayout.VERTICAL);
+    dCfg1.setPadding(20, 10, 20, 20);
+
+    LinearLayout row1 = new LinearLayout(this);
+    row1.setOrientation(LinearLayout.HORIZONTAL);
+    row1.setGravity(Gravity.CENTER_VERTICAL);
+    row1.setPadding(0, 10, 0, 20);
+    TextView tvOn1 = new TextView(this);
+    tvOn1.setText(T("Enable Config 1 (Panel)", "Bật Cấu hình 1 (Bubble Panel)"));
+    tvOn1.setTextColor(Color.WHITE);
+    tvOn1.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Switch swOn1 = new Switch(this);
+    swOn1.setChecked(prefs.getBoolean("bubble_en", false));
+    swOn1.setOnCheckedChangeListener((v, c) -> {
+        prefs.edit().putBoolean("bubble_en", c).apply();
+        if (c) prefs.edit().putBoolean("bubble_circle_en", false).apply();
+        renderSliders();
+    });
+    row1.addView(tvOn1); row1.addView(swOn1);
+    dCfg1.addView(row1);
+
+    Button btnMainIcon = new Button(this);
+    btnMainIcon.setText("🎨 ĐỔI ICON BONG BÓNG CHAT (CẤU HÌNH 1)");
+    btnMainIcon.setBackground(getRounded("#FFC107", 20f));
+    btnMainIcon.setTextColor(Color.BLACK);
+    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-1, -2);
+    btnLp.setMargins(0, 0, 0, 20);
+    btnMainIcon.setLayoutParams(btnLp);
+    btnMainIcon.setOnClickListener(v -> {
+        showIconPickerDialog("bubble_main_icon", () -> {
+            Toast.makeText(this, "Đã đổi Icon Bong bóng chat", Toast.LENGTH_SHORT).show();
+            sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
         });
-        designSliderContainer.addView(btnMainIcon);
+    });
+    dCfg1.addView(btnMainIcon);
 
-        designSliderContainer.addView(createSlider(T("Bubble Size", "Kích thước bong bóng"), "bubble_size", 300, 120));
-        designSliderContainer.addView(createSlider(T("Icon Size in Panel", "Độ to nhỏ của 9 nút trong Panel"), "bubble_icon_size", 200, 100));
-        designSliderContainer.addView(createSlider(T("Panel Width", "Chiều rộng bảng"), "bubble_bg_w", 1500, 800));
-        designSliderContainer.addView(createSlider(T("Panel Max Height", "Chiều cao tối đa (List)"), "bubble_bg_h", 1500, 800));
-        designSliderContainer.addView(createSlider(T("Panel Opacity", "Độ đậm mờ bảng"), "bubble_bg_alpha", 255, 160));
-        designSliderContainer.addView(createSlider(T("Node Background Opacity", "Độ đậm mờ nền 9 nút"), "bubble_node_bg_alpha", 255, 255));
+    dCfg1.addView(createSlider(T("Panel Width", "Chiều rộng bảng"), "bubble_bg_w", 1500, 800));
+    dCfg1.addView(createSlider(T("Panel Max Height", "Chiều cao tối đa (List)"), "bubble_bg_h", 1500, 800));
+    dCfg1.addView(createSlider(T("Panel Opacity", "Độ đậm mờ bảng"), "bubble_bg_alpha", 255, 160));
 
-        // --- YÊU CẦU 1: HIỂN THỊ 2 DATA PACK CỬ CHỈ TRÊN CÙNG 1 DÒNG ---
-        designSliderContainer.addView(createSectionTitle("⚙️ CỬ CHỈ BONG BÓNG CHAT"));
-        List<String> rules = getDynamicIds("bubble_pack_rules");
-        if (rules.isEmpty()) {
-            String r1 = java.util.UUID.randomUUID().toString().substring(0, 8);
-            String r2 = java.util.UUID.randomUUID().toString().substring(0, 8);
-            rules.add(r1); rules.add(r2);
-            prefs.edit()
-                .putString("bubble_pack_rules", r1 + "," + r2)
-                .putString("prule_" + r1 + "_gestures", "dtap")
-                .putString("prule_" + r2 + "_gestures", "long")
-                .apply();
-        }
-        
-        LinearLayout ruleRow = new LinearLayout(this);
-        ruleRow.setOrientation(LinearLayout.HORIZONTAL);
-        ruleRow.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-        
-        for (String rId : rules) {
-            LinearLayout card = new LinearLayout(this);
-            card.setOrientation(LinearLayout.VERTICAL);
-            card.setBackground(getRounded("#202124", 24f));
-            card.setPadding(20, 24, 20, 24);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-            lp.setMargins(6, 6, 6, 6);
-            card.setLayoutParams(lp);
+    designSliderContainer.addView(createDrawer("1️⃣ " + T("CONFIG 1 - BUBBLE PANEL", "CẤU HÌNH 1 - BUBBLE PANEL"), dCfg1));
 
-            TextView tGest = new TextView(this);
-            String g = prefs.getString("prule_" + rId + "_gestures", "");
-            tGest.setText(g.replace("dtap", "2 Chạm").replace("long", "Nhấn Giữ"));
-            tGest.setTextColor(Color.parseColor("#9AA0A6"));
-            tGest.setTextSize(12); tGest.setPadding(0, 0, 0, 5);
+    // ============ DRAWER 3: CẤU HÌNH 2 - VÒNG ĐẠN ============
+    LinearLayout dCfg2 = new LinearLayout(this);
+    dCfg2.setOrientation(LinearLayout.VERTICAL);
+    dCfg2.setPadding(20, 10, 20, 20);
 
-            TextView tAct = new TextView(this);
-            tAct.setText(formatPruleActionLabel(rId));
-            tAct.setTextColor(Color.parseColor("#8AB4F8"));
-            tAct.setTextSize(15f);
-            tAct.setMaxLines(1); tAct.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    LinearLayout rowCircle = new LinearLayout(this);
+    rowCircle.setOrientation(LinearLayout.HORIZONTAL);
+    rowCircle.setGravity(Gravity.CENTER_VERTICAL);
+    rowCircle.setPadding(0, 0, 0, 20);
+    TextView tvCircleOn = new TextView(this);
+    tvCircleOn.setText(T("Enable Config 2 (Circle)", "Bật Cấu hình 2 (Ổ Đạn)"));
+    tvCircleOn.setTextColor(Color.WHITE);
+    tvCircleOn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Switch swCircleOn = new Switch(this);
+    swCircleOn.setChecked(prefs.getBoolean("bubble_circle_en", false));
+    swCircleOn.setOnCheckedChangeListener((v, c) -> {
+        prefs.edit().putBoolean("bubble_circle_en", c).apply();
+        if (c) prefs.edit().putBoolean("bubble_en", false).apply();
+        renderSliders();
+    });
+    rowCircle.addView(tvCircleOn); rowCircle.addView(swCircleOn);
+    dCfg2.addView(rowCircle);
 
-            LinearLayout bottomCtrl = new LinearLayout(this);
-            bottomCtrl.setOrientation(LinearLayout.HORIZONTAL);
-            bottomCtrl.setGravity(Gravity.CENTER_VERTICAL);
-            bottomCtrl.setPadding(0, 15, 0, 0);
-            
-            Switch swRuleOn = new Switch(this);
-            swRuleOn.setChecked(prefs.getBoolean("prule_" + rId + "_en", true));
-            swRuleOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean("prule_" + rId + "_en", chk).apply());
-            swRuleOn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-            
-            bottomCtrl.addView(swRuleOn);
-            card.addView(tGest); card.addView(tAct); card.addView(bottomCtrl);
-            card.setOnClickListener(v -> openBubbleRuleEditor(rId, this::renderSliders));
-            ruleRow.addView(card);
-        }
-        designSliderContainer.addView(ruleRow);
+    Button btnCircleIcon = new Button(this);
+    btnCircleIcon.setText("🎨 ĐỔI ICON BONG BÓNG (CẤU HÌNH 2)");
+    btnCircleIcon.setBackground(getRounded("#FFC107", 20f));
+    btnCircleIcon.setTextColor(Color.BLACK);
+    LinearLayout.LayoutParams bcLp = new LinearLayout.LayoutParams(-1, -2);
+    bcLp.setMargins(0, 0, 0, 20);
+    btnCircleIcon.setLayoutParams(bcLp);
+    btnCircleIcon.setOnClickListener(v -> showIconPickerDialog("bubble_circle_main_icon", () ->
+        Toast.makeText(this, "Đã đổi Icon Ổ Đạn", Toast.LENGTH_SHORT).show()));
+    dCfg2.addView(btnCircleIcon);
 
-        // --- CẤU HÌNH CUSTOM ICON CHO 9 NÚT TRÊN BẢNG ---
-        designSliderContainer.addView(createSectionTitle("🎨 CẤU HÌNH & ICON 9 NÚT TRÊN BẢNG"));
-        LinearLayout iconGrid = new LinearLayout(this);
-        iconGrid.setOrientation(LinearLayout.VERTICAL);
-        iconGrid.setPadding(0, 10, 0, 20);
-        
-        String[] nodeTypes = {"APP", "SHORTCUT", "SYSTEM", "INTENT", "MACRO", "PANEL", "UTILITY", "TRIGGER", "SEARCH"};
-        String[] nodeLabels = {"Apps", "Shortcut", "System", "Intent", "Macro", "Panel", "Utility", "Trigger", "Search"};
-        
-        for (int i = 0; i < 3; i++) { 
-            LinearLayout rowIcon = new LinearLayout(this);
-            rowIcon.setOrientation(LinearLayout.HORIZONTAL);
-            rowIcon.setGravity(Gravity.CENTER);
-            for (int j = 0; j < 3; j++) { 
-                int idx = i * 3 + j;
-                final String type = nodeTypes[idx];
-                Button btnIcon = new Button(this);
-                btnIcon.setText(nodeLabels[idx]);
-                btnIcon.setBackground(getRounded("#444444", 20f));
-                btnIcon.setTextColor(Color.WHITE);
-                btnIcon.setTextSize(10f);
-                LinearLayout.LayoutParams lpBtn = new LinearLayout.LayoutParams(0, 160, 1f);
-                lpBtn.setMargins(8, 8, 8, 8);
-                btnIcon.setLayoutParams(lpBtn);
-                btnIcon.setOnClickListener(v -> {
-                    if (type.equals("SEARCH")) {
-                        Toast.makeText(this, "Nút Search không cần chọn Action, hãy nhấn giữ để đổi Icon.", Toast.LENGTH_LONG).show();
-                    } else {
-                        showBubbleNodePicker(type); 
-                    }
-                });
-                btnIcon.setOnLongClickListener(v -> {
-                    showIconPickerDialog("bubble_node_icon_" + type, () -> {
-                        Toast.makeText(this, "Đã đổi Icon " + nodeLabels[idx], Toast.LENGTH_SHORT).show();
-                        sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
-                    });
-                    return true;
-                });
-                rowIcon.addView(btnIcon);
-            }
-            iconGrid.addView(rowIcon);
-        }
-        designSliderContainer.addView(iconGrid);
-        // ===== CẤU HÌNH 2: BUBBLE CIRCLE (Ổ ĐẠN) =====
-designSliderContainer.addView(createSectionTitle("🔫 Ổ ĐẠN (BUBBLE CIRCLE - CẤU HÌNH 2)"));
+    dCfg2.addView(createSlider(T("Ring Radius (%)", "Bán kính vòng đạn (%)"), "bubble_circle_radius", 95, 70));
+    dCfg2.addView(createSlider(T("Ring Background Width", "Độ rộng nền bạc mờ"), "bubble_circle_bg_width", 150, 60));
+    dCfg2.addView(createSlider(T("Ring Background Opacity", "Độ đậm mờ nền bạc"), "bubble_circle_bg_alpha", 255, 160));
+    // [MỚI] thêm 2 thanh kéo để cân bằng số lượng tuỳ chỉnh với Cấu hình 1
+    dCfg2.addView(createSlider(T("Node Size on Ring (%)", "Kích thước nút trên vòng đạn (%)"), "bubble_circle_node_scale", 150, 90));
+    dCfg2.addView(createSlider(T("Spin Sensitivity (deg/s)", "Độ nhạy xoay tít (độ/giây)"), "bubble_circle_spin_sensitivity", 1500, 720));
 
-LinearLayout rowCircle = new LinearLayout(this);
-rowCircle.setOrientation(LinearLayout.HORIZONTAL);
-rowCircle.setGravity(Gravity.CENTER_VERTICAL);
-rowCircle.setPadding(0, 0, 0, 20);
-TextView tvCircleOn = new TextView(this);
-tvCircleOn.setText(T("Enable Bubble Circle", "Bật Ổ Đạn (Cấu hình 2)"));
-tvCircleOn.setTextColor(Color.WHITE);
-tvCircleOn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-Switch swCircleOn = new Switch(this);
-swCircleOn.setChecked(prefs.getBoolean("bubble_circle_en", false));
-swCircleOn.setOnCheckedChangeListener((v, c) -> {
-    prefs.edit().putBoolean("bubble_circle_en", c).apply();
-    if (c) prefs.edit().putBoolean("bubble_en", false).apply();
-    renderSliders();
-});
-rowCircle.addView(tvCircleOn); rowCircle.addView(swCircleOn);
-designSliderContainer.addView(rowCircle);
+    dCfg2.addView(createSectionTitle("🔄 " + T("SPIN GESTURE ACTIONS", "CỬ CHỈ XOAY TÍT VÒNG ĐẠN")));
+    List<String[]> spinItems = buildItemsForKeys(new String[]{
+        "BACK","HOME","RECENTS","SCREEN_OFF","FLASH","SCREENSHOT","CAMERA","VOLUME","NOTIFICATIONS","QUICK_SETTINGS"
+    }, ACT_KEYS, ACT_LABS);
 
-Button btnCircleIcon = new Button(this);
-btnCircleIcon.setText("🎨 ĐỔI ICON BONG BÓNG (CẤU HÌNH 2)");
-btnCircleIcon.setBackground(getRounded("#FFC107", 20f));
-btnCircleIcon.setTextColor(Color.BLACK);
-LinearLayout.LayoutParams bcLp = new LinearLayout.LayoutParams(-1, -2);
-bcLp.setMargins(0, 0, 0, 20);
-btnCircleIcon.setLayoutParams(bcLp);
-btnCircleIcon.setOnClickListener(v -> showIconPickerDialog("bubble_circle_main_icon", () ->
-    Toast.makeText(this, "Đã đổi Icon Ổ Đạn", Toast.LENGTH_SHORT).show()));
-designSliderContainer.addView(btnCircleIcon);
+    final String[] cwAct = { prefs.getString("bubble_circle_spin_cw_act", "NONE") };
+    final String[] cwPkg = { "" }; final String[] cwSc = { "" };
+    TextView tvCw = new TextView(this);
+    tvCw.setTextColor(Color.parseColor("#4CAF50")); tvCw.setPadding(0, 10, 0, 20);
+    Runnable refreshCw = () -> tvCw.setText("↻ Thuận chiều: " + getActionLabel(cwAct[0]));
+    Button btnCw = singleActionCategoryBtn("↻ CHỌN HÀNH ĐỘNG (Xoay thuận chiều KĐH)", "#4CAF50", spinItems, cwAct, cwPkg, cwSc,
+        () -> { prefs.edit().putString("bubble_circle_spin_cw_act", cwAct[0]).apply(); refreshCw.run(); });
+    refreshCw.run();
+    dCfg2.addView(btnCw); dCfg2.addView(tvCw);
 
-designSliderContainer.addView(createSlider(T("Ring Radius (%)", "Bán kính vòng đạn (%)"), "bubble_circle_radius", 95, 70));
-designSliderContainer.addView(createSlider(T("Ring Background Width", "Độ rộng nền bạc mờ"), "bubble_circle_bg_width", 150, 60));
-designSliderContainer.addView(createSlider(T("Ring Background Opacity", "Độ đậm mờ nền bạc"), "bubble_circle_bg_alpha", 255, 160));
+    final String[] ccwAct = { prefs.getString("bubble_circle_spin_ccw_act", "NONE") };
+    final String[] ccwPkg = { "" }; final String[] ccwSc = { "" };
+    TextView tvCcw = new TextView(this);
+    tvCcw.setTextColor(Color.parseColor("#F44336")); tvCcw.setPadding(0, 10, 0, 20);
+    Runnable refreshCcw = () -> tvCcw.setText("↺ Ngược chiều: " + getActionLabel(ccwAct[0]));
+    Button btnCcw = singleActionCategoryBtn("↺ CHỌN HÀNH ĐỘNG (Xoay ngược chiều KĐH)", "#F44336", spinItems, ccwAct, ccwPkg, ccwSc,
+        () -> { prefs.edit().putString("bubble_circle_spin_ccw_act", ccwAct[0]).apply(); refreshCcw.run(); });
+    refreshCcw.run();
+    dCfg2.addView(btnCcw); dCfg2.addView(tvCcw);
 
-designSliderContainer.addView(createSectionTitle("🔄 CỬ CHỈ XOAY TÍT VÒNG ĐẠN"));
-List<String[]> spinItems = buildItemsForKeys(new String[]{
-    "BACK","HOME","RECENTS","SCREEN_OFF","FLASH","SCREENSHOT","CAMERA","VOLUME","NOTIFICATIONS","QUICK_SETTINGS"
-}, ACT_KEYS, ACT_LABS);
+    designSliderContainer.addView(createDrawer("2️⃣ " + T("CONFIG 2 - BUBBLE CIRCLE", "CẤU HÌNH 2 - VÒNG ĐẠN"), dCfg2));
 
-final String[] cwAct = { prefs.getString("bubble_circle_spin_cw_act", "NONE") };
-final String[] cwPkg = { "" }; final String[] cwSc = { "" };
-TextView tvCw = new TextView(this);
-tvCw.setTextColor(Color.parseColor("#4CAF50")); tvCw.setPadding(0, 10, 0, 20);
-Runnable refreshCw = () -> tvCw.setText("↻ Thuận chiều: " + getActionLabel(cwAct[0]));
-Button btnCw = singleActionCategoryBtn("↻ CHỌN HÀNH ĐỘNG (Xoay thuận chiều KĐH)", "#4CAF50", spinItems, cwAct, cwPkg, cwSc,
-    () -> { prefs.edit().putString("bubble_circle_spin_cw_act", cwAct[0]).apply(); refreshCw.run(); });
-refreshCw.run();
-designSliderContainer.addView(btnCw); designSliderContainer.addView(tvCw);
-
-final String[] ccwAct = { prefs.getString("bubble_circle_spin_ccw_act", "NONE") };
-final String[] ccwPkg = { "" }; final String[] ccwSc = { "" };
-TextView tvCcw = new TextView(this);
-tvCcw.setTextColor(Color.parseColor("#F44336")); tvCcw.setPadding(0, 10, 0, 20);
-Runnable refreshCcw = () -> tvCcw.setText("↺ Ngược chiều: " + getActionLabel(ccwAct[0]));
-Button btnCcw = singleActionCategoryBtn("↺ CHỌN HÀNH ĐỘNG (Xoay ngược chiều KĐH)", "#F44336", spinItems, ccwAct, ccwPkg, ccwSc,
-    () -> { prefs.edit().putString("bubble_circle_spin_ccw_act", ccwAct[0]).apply(); refreshCcw.run(); });
-refreshCcw.run();
-designSliderContainer.addView(btnCcw); designSliderContainer.addView(tvCcw);
-        TextView tvNote = new TextView(this);
-        tvNote.setText(T("1 Tap bubble to open panel. Tap again to close/go back. Tap nodes to config up to 9 actions. Long-press node to change icon.",
-            "Chạm bong bóng để mở Panel. Chạm lại để đóng/quay lại. Chạm 8 nút trên để gán tối đa 9 hành động. Nhấn giữ để đổi Icon."));
-        tvNote.setTextColor(Color.parseColor("#9AA0A6"));
-        tvNote.setTextSize(12f);
-        tvNote.setPadding(0, 20, 0, 0);
-        designSliderContainer.addView(tvNote);
+    TextView tvNote = new TextView(this);
+    tvNote.setText(T(
+        "1 Tap bubble to open panel/circle. Tap again on empty area to close/go back. Long-press a node to select it, then tap another to swap positions.",
+        "Chạm bong bóng để mở Panel/Vòng đạn. Chạm vào vùng trống để đóng/quay lại. Nhấn giữ 1 nút để chọn (viền sáng), rồi chạm nút khác để đổi vị trí."));
+    tvNote.setTextColor(Color.parseColor("#9AA0A6"));
+    tvNote.setTextSize(12f);
+    tvNote.setPadding(0, 20, 0, 0);
+    designSliderContainer.addView(tvNote);
     }
     private void showBubbleNodePicker(String type) {
         String prefKey = "bubble_node_items_" + type;

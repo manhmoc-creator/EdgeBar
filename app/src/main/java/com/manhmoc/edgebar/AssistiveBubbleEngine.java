@@ -87,7 +87,6 @@ private CircleMenuView circleView;
 private WindowManager.LayoutParams circleLp;
 private String circleSubmenuType = null;
 private float circleRotationDeg = 0f;
-private static final float CIRCLE_SPIN_THRESHOLD_DPS = 720f;
 private Bitmap centerIconBmp = null;
 
 private boolean isCircleModeActive() { return prefs.getBoolean("bubble_circle_en", false); }
@@ -1187,58 +1186,65 @@ private List<String> getSubItems(String type) {
     // ===================== BUBBLE CIRCLE (CẤU HÌNH 2 - Ổ ĐẠN) =====================
 
     private void moveToCenterAndOpenCircleMenu() {
-        DisplayMetrics dm = getRealMetrics();
-        int bSize = prefs.getInt("bubble_size", 120);
-        int targetX = dm.widthPixels / 2 - bSize / 2;
-        int targetY = dm.heightPixels / 2 - bSize / 2;
+    DisplayMetrics dm = getRealMetrics();
+    int bSize = prefs.getInt("bubble_size", 120);
+    int targetX = dm.widthPixels / 2 - bSize / 2;
+    int targetY = dm.heightPixels / 2 - bSize / 2;
 
-        restoreBubbleX = bubbleLp.x;
-        restoreBubbleY = bubbleLp.y;
-        int startX = bubbleLp.x, startY = bubbleLp.y;
-        circleSubmenuType = null;
-        circleRotationDeg = 0f;
+    restoreBubbleX = bubbleLp.x;
+    restoreBubbleY = bubbleLp.y;
+    int startX = bubbleLp.x, startY = bubbleLp.y;
+    circleSubmenuType = null;
+    circleRotationDeg = 0f;
 
-        openCircleMenu();
-
-        ValueAnimator centerAnim = ValueAnimator.ofFloat(0f, 1f);
-        centerAnim.setDuration(260);
-        centerAnim.setInterpolator(new DecelerateInterpolator(1.5f));
-        centerAnim.addUpdateListener(a -> {
-            float val = (float) a.getAnimatedValue();
-            bubbleLp.x = (int) (startX + (targetX - startX) * val);
-            bubbleLp.y = (int) (startY + (targetY - startY) * val);
-            try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
-            if (circleView != null) circleView.setAlpha(val);
-        });
-        centerAnim.addListener(new AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(Animator animation) {
-                if (bubbleView != null) bubbleView.setVisibility(View.INVISIBLE);
+    // BƯỚC 1: chỉ cho bong bóng chat bay vào tâm — CHƯA mở vòng đạn vội
+    ValueAnimator centerAnim = ValueAnimator.ofFloat(0f, 1f);
+    centerAnim.setDuration(220);
+    centerAnim.setInterpolator(new DecelerateInterpolator(1.5f));
+    centerAnim.addUpdateListener(a -> {
+        float val = (float) a.getAnimatedValue();
+        bubbleLp.x = (int) (startX + (targetX - startX) * val);
+        bubbleLp.y = (int) (startY + (targetY - startY) * val);
+        try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
+    });
+    centerAnim.addListener(new AnimatorListenerAdapter() {
+        @Override public void onAnimationEnd(Animator animation) {
+            if (bubbleView != null) bubbleView.setVisibility(View.INVISIBLE);
+            // BƯỚC 2: bong bóng đã tới tâm -> giờ mới "nở" vòng đạn ra
+            openCircleMenu();
+            if (circleView != null) {
+                circleView.setScaleX(0.4f); circleView.setScaleY(0.4f); circleView.setAlpha(0f);
+                circleView.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                    .setDuration(220).setInterpolator(new OvershootInterpolator(1.1f)).start();
             }
-        });
-        centerAnim.start();
-    }
-
+        }
+    });
+    centerAnim.start();
+}
     private void openCircleMenu() {
-        if (circleView != null) return;
-        int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-        DisplayMetrics dm = getRealMetrics();
-        int size = Math.min(dm.widthPixels, dm.heightPixels) - 40;
+    if (circleView != null) return;
+    int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+    DisplayMetrics dm = getRealMetrics();
+    int size = Math.min(dm.widthPixels, dm.heightPixels) - 40;
 
-        circleView = new CircleMenuView(ctx);
-        circleLp = new WindowManager.LayoutParams(size, size, wmType,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
-            PixelFormat.TRANSLUCENT);
-        circleLp.gravity = Gravity.CENTER;
-        circleView.setAlpha(0f);
-        try { wm.addView(circleView, circleLp); } catch (Exception e) { circleView = null; return; }
-        loadCircleCenterIcon();
-        refreshCirclePanel();
-    }
-
+    circleView = new CircleMenuView(ctx);
+    circleView.setFocusable(true);
+    circleView.setFocusableInTouchMode(true);
+    circleLp = new WindowManager.LayoutParams(size, size, wmType,
+        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+        PixelFormat.TRANSLUCENT);
+    circleLp.gravity = Gravity.CENTER;
+    circleView.setAlpha(0f);
+    try { wm.addView(circleView, circleLp); } catch (Exception e) { circleView = null; return; }
+    circleView.requestFocus();
+    loadCircleCenterIcon();
+    refreshCirclePanel();
+}
     private void closeCircleMenu() {
-        if (circleView == null) return;
+    closeCircleSearchOverlay(); // đóng luôn ô tìm kiếm nếu đang mở dở
+    if (circleView == null) return;
         try { wm.removeView(circleView); } catch (Exception ignored) {}
         circleView = null;
         circleSubmenuType = null;
@@ -1305,140 +1311,390 @@ private List<String> getSubItems(String type) {
     }
 
     private class CircleMenuView extends View {
-        private List<String[]> items = new ArrayList<>();
-        private final Paint pRingBg = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint pStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint pNodeBg = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint pNodeStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint pIconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private float lastTouchAngle = 0f;
-        private boolean dragging = false;
-        private final VelocityAngleTracker angTracker = new VelocityAngleTracker();
+    private List<String[]> items = new ArrayList<>();
+    private final Paint pRingBg = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pNodeBg = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pNodeStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pIconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private float lastTouchAngle = 0f;
+    private boolean dragging = false;
+    private final VelocityAngleTracker angTracker = new VelocityAngleTracker();
 
-        public CircleMenuView(Context c) {
-            super(c);
-            pRingBg.setStyle(Paint.Style.STROKE);
-            pStroke.setStyle(Paint.Style.STROKE);
-            pNodeStroke.setStyle(Paint.Style.STROKE);
-            pText.setTextAlign(Paint.Align.CENTER);
-            pText.setColor(Color.WHITE);
-        }
+    // [MỚI] icon thật cho từng nút + trạng thái "đang chọn để đổi chỗ"
+    private final Map<Integer, Bitmap> nodeIcons = new HashMap<>();
+    private Integer selectedNodeIdx = null;
+    private final Handler longPressHandler = new Handler(Looper.getMainLooper());
+    private Runnable longPressRunnable;
+    private int downNodeIdx = -1;
+    private float downX, downY;
 
-        public void setItems(List<String[]> items) { this.items = items; invalidate(); }
+    public CircleMenuView(Context c) {
+        super(c);
+        pRingBg.setStyle(Paint.Style.STROKE);
+        pStroke.setStyle(Paint.Style.STROKE);
+        pNodeStroke.setStyle(Paint.Style.STROKE);
+        pText.setTextAlign(Paint.Align.CENTER);
+        pText.setColor(Color.WHITE);
+    }
 
-        private float ringRadius() {
-            return Math.min(getWidth(), getHeight()) / 2f * (prefs.getInt("bubble_circle_radius", 70) / 100f);
-        }
+    public void setItems(List<String[]> newItems) {
+        this.items = newItems;
+        selectedNodeIdx = null;
+        nodeIcons.clear();
+        loadAllNodeIcons();
+        invalidate();
+    }
+    // ===================== [MỚI] Ô TÌM KIẾM RIÊNG CHO VÒNG ĐẠN =====================
+private FrameLayout circleSearchOverlay;
+private WindowManager.LayoutParams circleSearchLp;
 
-        @Override protected void onDraw(Canvas canvas) {
-            super.onDraw(canvas);
-            float cx = getWidth() / 2f, cy = getHeight() / 2f;
-            float ringR = ringRadius();
-            float bgWidth = prefs.getInt("bubble_circle_bg_width", 60);
-            int bgAlpha = prefs.getInt("bubble_circle_bg_alpha", 160);
-
-            // Nền bạc mờ (frosted silver)
-            pRingBg.setColor(Color.argb(bgAlpha, 200, 200, 210));
-            pRingBg.setStrokeWidth(bgWidth);
-            canvas.drawCircle(cx, cy, ringR, pRingBg);
-
-            // Viền ngoài + viền trong (ôm tâm)
-            pStroke.setColor(Color.argb(220, 235, 235, 245));
-            pStroke.setStrokeWidth(4f);
-            canvas.drawCircle(cx, cy, ringR + bgWidth / 2f, pStroke);
-            canvas.drawCircle(cx, cy, ringR - bgWidth / 2f, pStroke);
-
-            // Icon trung tâm
-            if (centerIconBmp != null) {
-                canvas.drawBitmap(centerIconBmp, cx - centerIconBmp.getWidth() / 2f, cy - centerIconBmp.getHeight() / 2f, pIconPaint);
+private void openCircleSearchOverlay() {
+    if (circleSearchOverlay != null) return;
+    int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+    FrameLayout overlay = new FrameLayout(ctx) {
+        @Override public boolean dispatchKeyEvent(KeyEvent event) {
+            if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
+                closeCircleSearchOverlay(); return true;
             }
-
-            int n = Math.max(1, items.size());
-            float nodeSize = prefs.getInt("bubble_icon_size", 100) * 0.9f;
-            pText.setTextSize(nodeSize * 0.22f);
-            int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
-            for (int i = 0; i < n; i++) {
-                float angle = (float) Math.toRadians(circleRotationDeg + i * (360f / n) - 90);
-                float nx = cx + ringR * (float) Math.cos(angle);
-                float ny = cy + ringR * (float) Math.sin(angle);
-
-                pNodeBg.setColor(Color.argb(nodeAlpha, 51, 51, 51));
-                canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeBg);
-                pNodeStroke.setColor(Color.argb(150, 190, 190, 200));
-                pNodeStroke.setStrokeWidth(3f);
-                canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeStroke);
-
-                String label = items.get(i)[0];
-                if (label != null && !label.isEmpty()) {
-                    if (label.length() > 8) label = label.substring(0, 7) + "…";
-                    canvas.drawText(label, nx, ny + pText.getTextSize() / 3, pText);
-                }
-            }
+            return super.dispatchKeyEvent(event);
         }
+    };
+    circleSearchLp = new WindowManager.LayoutParams(
+        prefs.getInt("bubble_bg_w", 800), WindowManager.LayoutParams.WRAP_CONTENT, wmType,
+        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+        PixelFormat.TRANSLUCENT);
+    circleSearchLp.gravity = Gravity.CENTER;
 
-        private int hitTestNode(float x, float y) {
-            float cx = getWidth() / 2f, cy = getHeight() / 2f;
-            float ringR = ringRadius();
-            float nodeSize = prefs.getInt("bubble_icon_size", 100) * 0.9f;
-            int n = Math.max(1, items.size());
-            for (int i = 0; i < n; i++) {
-                float angle = (float) Math.toRadians(circleRotationDeg + i * (360f / n) - 90);
-                float nx = cx + ringR * (float) Math.cos(angle);
-                float ny = cy + ringR * (float) Math.sin(angle);
-                float dx = x - nx, dy = y - ny;
-                if (Math.sqrt(dx * dx + dy * dy) <= nodeSize / 2f) return i;
-            }
-            return -1;
+    overlay.setOnTouchListener((v, event) -> {
+        if (event.getAction() == MotionEvent.ACTION_OUTSIDE) { closeCircleSearchOverlay(); return true; }
+        return false;
+    });
+
+    LinearLayout card = new LinearLayout(ctx);
+    card.setOrientation(LinearLayout.VERTICAL);
+    GradientDrawable bg = new GradientDrawable();
+    bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 160), 0, 0, 0));
+    bg.setCornerRadius(prefs.getInt("bubble_bg_radius", 40));
+    card.setBackground(bg);
+    card.setPadding(20, 30, 20, 20);
+    card.setOnClickListener(v -> {});
+    buildCircleSearchMenu(card);
+    overlay.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+
+    try { wm.addView(overlay, circleSearchLp); circleSearchOverlay = overlay; } catch (Exception e) { }
+}
+
+private void closeCircleSearchOverlay() {
+    if (circleSearchOverlay == null) return;
+    try { wm.removeView(circleSearchOverlay); } catch (Exception ignored) {}
+    circleSearchOverlay = null;
+}
+
+private void buildCircleSearchMenu(LinearLayout card) {
+    EditText et = new EditText(ctx);
+    et.setHint("🔍 Tìm kiếm hệ thống...");
+    et.setHintTextColor(Color.parseColor("#9AA0A6"));
+    et.setTextColor(Color.WHITE);
+    et.setSingleLine(true);
+    GradientDrawable bgE = new GradientDrawable();
+    bgE.setColor(Color.argb(prefs.getInt("bubble_node_bg_alpha", 255), 51, 51, 51));
+    bgE.setCornerRadius(100f);
+    et.setBackground(bgE);
+    et.setPadding(28, 20, 28, 20);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+    lp.setMargins(0, 0, 0, 15);
+    et.setLayoutParams(lp);
+    card.addView(et);
+
+    ScrollView scroll = new ScrollView(ctx);
+    LinearLayout listContainer = new LinearLayout(ctx);
+    listContainer.setOrientation(LinearLayout.VERTICAL);
+    scroll.addView(listContainer);
+    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, prefs.getInt("bubble_bg_h", 800));
+    card.addView(scroll, slp);
+
+    Runnable[] refresh = new Runnable[1];
+    refresh[0] = () -> {
+        listContainer.removeAllViews();
+        String q = et.getText().toString().trim().toLowerCase(Locale.ROOT);
+        for (String[] item : buildItems("ALL")) {
+            if (!q.isEmpty() && !item[0].toLowerCase(Locale.ROOT).contains(q)) continue;
+            LinearLayout row = new LinearLayout(ctx);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(10, 16, 10, 16);
+            TextView tv = new TextView(ctx);
+            tv.setText(item[0]); tv.setTextColor(Color.WHITE); tv.setTextSize(14f);
+            row.addView(tv);
+            row.setOnClickListener(v -> { runItem(item[1]); closeCircleSearchOverlay(); closeCircleMenu(); });
+            listContainer.addView(row);
         }
-
-        @Override public boolean onTouchEvent(MotionEvent e) {
-            float cx = getWidth() / 2f, cy = getHeight() / 2f;
-            float x = e.getX(), y = e.getY();
-            switch (e.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    dragging = false;
-                    lastTouchAngle = (float) Math.toDegrees(Math.atan2(y - cy, x - cx));
-                    angTracker.reset();
-                    return true;
-                case MotionEvent.ACTION_MOVE: {
-                    float curAngle = (float) Math.toDegrees(Math.atan2(y - cy, x - cx));
-                    float delta = curAngle - lastTouchAngle;
-                    if (delta > 180) delta -= 360; if (delta < -180) delta += 360;
-                    if (!dragging && Math.abs(delta) > 3f) dragging = true;
-                    if (dragging) {
-                        circleRotationDeg += delta;
-                        angTracker.addSample(delta);
-                        invalidate();
-                    }
-                    lastTouchAngle = curAngle;
-                    return true;
-                }
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    if (!dragging) {
-                        int idx = hitTestNode(x, y);
-                        if (idx >= 0 && idx < items.size()) onNodeTap(items.get(idx));
-                    } else {
-                        float velocity = angTracker.getVelocityDegPerSec();
-                        if (Math.abs(velocity) >= CIRCLE_SPIN_THRESHOLD_DPS) fireCircleSpinAction(velocity > 0);
-                    }
-                    dragging = false;
-                    return true;
-            }
-            return super.onTouchEvent(e);
-        }
-
-        private void onNodeTap(String[] item) {
-            String ref = item[1];
+    };
+    refresh[0].run();
+    et.addTextChangedListener(new android.text.TextWatcher() {
+        public void afterTextChanged(android.text.Editable s) { refresh[0].run(); }
+        public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+        public void onTextChanged(CharSequence s,int a,int b,int c){}
+    });
+    et.postDelayed(() -> {
+        et.requestFocus();
+        android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) ctx.getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) imm.showSoftInput(et, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+    }, 200);
+}
+    // [MỚI] tải icon thật (App/Shortcut/System...) giống hệt nguồn icon đã chọn ở 9 ô cấu hình
+    private void loadAllNodeIcons() {
+        int iconSize = Math.round(prefs.getInt("bubble_icon_size", 100) * (prefs.getInt("bubble_circle_node_scale", 90) / 100f));
+        for (int i = 0; i < items.size(); i++) {
+            String ref = items.get(i)[1];
+            final int idx = i;
+            if (ref == null || ref.isEmpty()) continue;
             if (ref.startsWith("TYPE:")) {
-                circleSubmenuType = ref.substring(5);
-                circleRotationDeg = 0f;
-                refreshCirclePanel();
-            } else if (!ref.isEmpty()) {
-                runItem(ref);
-                closeCircleMenu();
+                String type = ref.substring(5);
+                String customOverride = prefs.getString("bubble_node_icon_" + type, "");
+                bubbleIconExecutor.execute(() -> {
+                    boolean isApp = customOverride.startsWith("app:");
+                    Drawable d = customOverride.isEmpty() ? null : getCustomIcon(customOverride);
+                    if (d == null) { d = fallbackTypeDrawable(type); isApp = false; }
+                    Bitmap bmp = drawableToNodeBitmap(d, iconSize, isApp);
+                    bubbleIconHandler.post(() -> { nodeIcons.put(idx, bmp); invalidate(); });
+                });
+            } else {
+                String customOverride = prefs.getString("bubble_node_icon_override_" + circleSubmenuType + "_" + ref, "");
+                bubbleIconExecutor.execute(() -> {
+                    boolean isApp = customOverride.startsWith("app:") || ref.startsWith("app:")
+                        || ref.startsWith("act:CREATE_SHORTCUT_") || ref.startsWith("act:RUN_SHORTCUT_");
+                    Drawable d = resolveSubNodeIcon(customOverride, ref);
+                    if (d == null) { d = fallbackActionDrawable(ref); isApp = false; }
+                    Bitmap bmp = drawableToNodeBitmap(d, iconSize, isApp);
+                    bubbleIconHandler.post(() -> { nodeIcons.put(idx, bmp); invalidate(); });
+                });
             }
         }
     }
+
+    private Drawable fallbackTypeDrawable(String type) {
+        int res;
+        switch (type) {
+            case "SYSTEM": res = android.R.drawable.ic_menu_preferences; break;
+            case "UTILITY": res = android.R.drawable.ic_menu_manage; break;
+            case "APP": res = android.R.drawable.sym_def_app_icon; break;
+            case "SHORTCUT": res = android.R.drawable.ic_menu_send; break;
+            case "TRIGGER": res = android.R.drawable.ic_menu_directions; break;
+            case "INTENT": res = android.R.drawable.ic_menu_compass; break;
+            case "SEARCH": res = android.R.drawable.ic_menu_search; break;
+            default: res = android.R.drawable.ic_menu_view;
+        }
+        try { return ctx.getDrawable(res); } catch (Exception e) { return null; }
+    }
+
+    private Drawable fallbackActionDrawable(String ref) {
+        int res = android.R.drawable.ic_menu_view;
+        if (ref.equals("act:BACK")) res = android.R.drawable.ic_media_rew;
+        else if (ref.equals("act:HOME")) res = android.R.drawable.ic_menu_compass;
+        else if (ref.equals("act:RECENTS")) res = android.R.drawable.ic_menu_recent_history;
+        else if (ref.equals("act:SCREEN_OFF")) res = android.R.drawable.ic_lock_lock;
+        else if (ref.equals("act:POWER_DIALOG")) res = android.R.drawable.ic_lock_power_off;
+        else if (ref.equals("act:SCREENSHOT") || ref.equals("act:CAMERA")) res = android.R.drawable.ic_menu_camera;
+        else if (ref.equals("act:NOTIFICATIONS")) res = android.R.drawable.ic_dialog_email;
+        else if (ref.equals("act:VOICE_RECORD") || ref.equals("act:TOGGLE_RECORD")) res = android.R.drawable.ic_btn_speak_now;
+        try { return ctx.getDrawable(res); } catch (Exception e) { return null; }
+    }
+
+    // KHÔNG dùng PanelEngine.normalizeIconBitmap() ở đây (đã có cảnh báo gây lag ở applyIconToImageView)
+    // -> chỉ scale/pad đơn giản, rẻ CPU, chạy trong luồng nền là an toàn.
+    private Bitmap drawableToNodeBitmap(Drawable d, int size, boolean isApp) {
+        if (d == null) return null;
+        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        Drawable dm = d.mutate();
+        if (!isApp) dm.setTint(Color.WHITE);
+        int pad = isApp ? 0 : Math.round(size * 0.15f);
+        dm.setBounds(pad, pad, size - pad, size - pad);
+        dm.draw(c);
+        return bmp;
+    }
+
+    private float ringRadius() {
+        return Math.min(getWidth(), getHeight()) / 2f * (prefs.getInt("bubble_circle_radius", 70) / 100f);
+    }
+
+    @Override protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        float cx = getWidth() / 2f, cy = getHeight() / 2f;
+        float ringR = ringRadius();
+        float bgWidth = prefs.getInt("bubble_circle_bg_width", 60);
+        int bgAlpha = prefs.getInt("bubble_circle_bg_alpha", 160);
+
+        pRingBg.setColor(Color.argb(bgAlpha, 200, 200, 210));
+        pRingBg.setStrokeWidth(bgWidth);
+        canvas.drawCircle(cx, cy, ringR, pRingBg);
+
+        pStroke.setColor(Color.argb(220, 235, 235, 245));
+        pStroke.setStrokeWidth(4f);
+        canvas.drawCircle(cx, cy, ringR + bgWidth / 2f, pStroke);
+        canvas.drawCircle(cx, cy, ringR - bgWidth / 2f, pStroke);
+
+        if (centerIconBmp != null) {
+            canvas.drawBitmap(centerIconBmp, cx - centerIconBmp.getWidth() / 2f, cy - centerIconBmp.getHeight() / 2f, pIconPaint);
+        }
+
+        int n = Math.max(1, items.size());
+        float nodeScale = prefs.getInt("bubble_circle_node_scale", 90) / 100f;
+        float nodeSize = prefs.getInt("bubble_icon_size", 100) * nodeScale;
+        pText.setTextSize(nodeSize * 0.20f);
+        int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
+        for (int i = 0; i < n; i++) {
+            float angle = (float) Math.toRadians(circleRotationDeg + i * (360f / n) - 90);
+            float nx = cx + ringR * (float) Math.cos(angle);
+            float ny = cy + ringR * (float) Math.sin(angle);
+
+            boolean selected = selectedNodeIdx != null && selectedNodeIdx == i;
+            pNodeBg.setColor(selected ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 51, 51, 51));
+            canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeBg);
+            pNodeStroke.setColor(selected ? Color.WHITE : Color.argb(150, 190, 190, 200));
+            pNodeStroke.setStrokeWidth(selected ? 5f : 3f);
+            canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeStroke);
+
+            // [MỚI] Vẽ ICON THẬT trong nút — thay cho việc chỉ ghi chữ như trước
+            Bitmap icon = nodeIcons.get(i);
+            if (icon != null) {
+                canvas.drawBitmap(icon, nx - icon.getWidth() / 2f, ny - icon.getHeight() / 2f, pIconPaint);
+            }
+
+            // [MỚI] Nhãn ngắn hiện DƯỚI nút (không đè icon) để user vẫn biết đây là loại gì
+            String[] item = items.get(i);
+            String label = item[0];
+            if (label != null && !label.isEmpty()) {
+                if (label.length() > 8) label = label.substring(0, 7) + "…";
+                pText.setColor((item[1] == null || item[1].isEmpty()) ? Color.GRAY : Color.WHITE);
+                canvas.drawText(label, nx, ny + nodeSize / 2f + pText.getTextSize() + 6, pText);
+            }
+        }
+    }
+
+    private int hitTestNode(float x, float y) {
+        float cx = getWidth() / 2f, cy = getHeight() / 2f;
+        float ringR = ringRadius();
+        float nodeSize = prefs.getInt("bubble_icon_size", 100) * (prefs.getInt("bubble_circle_node_scale", 90) / 100f);
+        int n = Math.max(1, items.size());
+        for (int i = 0; i < n; i++) {
+            float angle = (float) Math.toRadians(circleRotationDeg + i * (360f / n) - 90);
+            float nx = cx + ringR * (float) Math.cos(angle);
+            float ny = cy + ringR * (float) Math.sin(angle);
+            float dx = x - nx, dy = y - ny;
+            if (Math.sqrt(dx * dx + dy * dy) <= nodeSize / 2f) return i;
+        }
+        return -1;
+    }
+
+    @Override public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_BACK) { closeOrBack(); return true; }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override public boolean onTouchEvent(MotionEvent e) {
+        if (e.getActionMasked() == MotionEvent.ACTION_OUTSIDE) { closeOrBack(); return true; }
+        float cx = getWidth() / 2f, cy = getHeight() / 2f;
+        float x = e.getX(), y = e.getY();
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                dragging = false;
+                downX = x; downY = y;
+                downNodeIdx = hitTestNode(x, y);
+                lastTouchAngle = (float) Math.toDegrees(Math.atan2(y - cy, x - cx));
+                angTracker.reset();
+                if (downNodeIdx >= 0) {
+                    longPressRunnable = () -> {
+                        if (!dragging && downNodeIdx >= 0) {
+                            selectedNodeIdx = downNodeIdx;
+                            try {
+                                Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+                                if (v != null) v.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE));
+                            } catch (Exception ignored) {}
+                            invalidate();
+                        }
+                    };
+                    longPressHandler.postDelayed(longPressRunnable, ViewConfiguration.getLongPressTimeout());
+                }
+                return true;
+            case MotionEvent.ACTION_MOVE: {
+                if (Math.abs(x - downX) > 20 || Math.abs(y - downY) > 20 && longPressRunnable != null) {
+                    longPressHandler.removeCallbacks(longPressRunnable);
+                }
+                float curAngle = (float) Math.toDegrees(Math.atan2(y - cy, x - cx));
+                float delta = curAngle - lastTouchAngle;
+                if (delta > 180) delta -= 360; if (delta < -180) delta += 360;
+                if (!dragging && Math.abs(delta) > 3f && selectedNodeIdx == null) dragging = true;
+                if (dragging) {
+                    circleRotationDeg += delta;
+                    angTracker.addSample(delta);
+                    invalidate();
+                }
+                lastTouchAngle = curAngle;
+                return true;
+            }
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (longPressRunnable != null) longPressHandler.removeCallbacks(longPressRunnable);
+                if (!dragging) {
+                    int idx = hitTestNode(x, y);
+                    if (selectedNodeIdx != null) {
+                        if (idx >= 0 && idx != selectedNodeIdx) swapNodes(selectedNodeIdx, idx);
+                        else { selectedNodeIdx = null; invalidate(); }
+                    } else if (idx >= 0 && idx < items.size()) {
+                        onNodeTap(items.get(idx));
+                    } else {
+                        closeOrBack(); // [YÊU CẦU 1] chạm chỗ nào trống trong vòng đạn cũng đóng/lùi
+                    }
+                } else if (selectedNodeIdx == null) {
+                    float velocity = angTracker.getVelocityDegPerSec();
+                    if (Math.abs(velocity) >= prefs.getInt("bubble_circle_spin_sensitivity", 720)) fireCircleSpinAction(velocity > 0);
+                }
+                dragging = false;
+                downNodeIdx = -1;
+                return true;
+        }
+        return super.onTouchEvent(e);
+    }
+
+    private void closeOrBack() {
+        if (circleSubmenuType != null) { circleSubmenuType = null; circleRotationDeg = 0f; refreshCirclePanel(); }
+        else closeCircleMenu();
+    }
+
+    // [YÊU CẦU 3a] nhấn giữ 1 nút -> chọn (tô xanh); chạm nút khác -> đổi chỗ (giống Bubble Panel)
+    private void swapNodes(int i1, int i2) {
+        if (circleSubmenuType == null) {
+            List<String> order = new ArrayList<>(getMainOrder());
+            if (i1 >= order.size() || i2 >= order.size()) return;
+            Collections.swap(order, i1, i2);
+            prefs.edit().putString("bubble_node_order", TextUtils.join(",", order)).apply();
+        } else {
+            List<String> list = getSubItems(circleSubmenuType);
+            if (i1 >= list.size() || i2 >= list.size()) return;
+            Collections.swap(list, i1, i2);
+            prefs.edit().putString("bubble_node_items_" + circleSubmenuType, TextUtils.join(",", list)).apply();
+        }
+        refreshCirclePanel(); // setItems() bên trong tự reset selectedNodeIdx
+    }
+
+    private void onNodeTap(String[] item) {
+        String ref = item[1];
+        if (ref.startsWith("TYPE:")) {
+            String type = ref.substring(5);
+            if (type.equals("SEARCH")) { openCircleSearchOverlay(); return; } // [YÊU CẦU 3d]
+            circleSubmenuType = type;
+            circleRotationDeg = 0f;
+            refreshCirclePanel();
+        } else if (!ref.isEmpty()) {
+            runItem(ref);
+            closeCircleMenu();
+         }
+      }
+   }
 }
