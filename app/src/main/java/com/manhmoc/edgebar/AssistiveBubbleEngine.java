@@ -728,7 +728,7 @@ private List<String> getSubItems(String type) {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
                 GradientDrawable bg = new GradientDrawable();
-bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 160), 200, 200, 210)); // [MỚI] màu bạc, đồng bộ vành khuyên Circle
+bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 220), 18, 18, 18)); // #121212
 bg.setCornerRadius(prefs.getInt("bubble_bg_radius", 40));
 bg.setStroke(4, Color.argb(150, 138, 180, 248)); // viền xanh nhạt đồng bộ màu accent
 card.setBackground(bg);
@@ -1407,7 +1407,7 @@ LinearLayout card = new LinearLayout(ctx);
 card.setOrientation(LinearLayout.VERTICAL);
 GradientDrawable bg = new GradientDrawable();
 bg.setShape(GradientDrawable.OVAL); // hình tròn
-bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 200), 200, 200, 210)); // [MỚI] màu bạc đồng bộ vành khuyên
+bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 220), 18, 18, 18)); // #121212
 bg.setStroke(5, Color.parseColor("#8AB4F8")); // [MỚI] viền xanh bao quanh cho dễ nhìn
 card.setBackground(bg);
 // [MỚI] Clip nội dung con theo đúng hình tròn của nền — bảng cố định, không xoay
@@ -1420,7 +1420,10 @@ card.setOutlineProvider(new ViewOutlineProvider() {
 card.setPadding((int)(ringSize*0.14f), (int)(ringSize*0.20f), (int)(ringSize*0.14f), (int)(ringSize*0.14f));
     card.setOnClickListener(v -> {});
     buildCircleSearchMenu(card);
-    overlay.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+    FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+cardLp.gravity = Gravity.CENTER;
+cardLp.setMargins(60, 60, 60, 60); // điều chỉnh cho vừa với vòng tròn
+overlay.addView(card, cardLp);
 
     try { wm.addView(overlay, circleSearchLp); circleSearchOverlay = overlay; } catch (Exception e) { }
 }
@@ -1457,32 +1460,56 @@ private void buildCircleSearchMenu(LinearLayout card) {
     Runnable[] refresh = new Runnable[1];
     refresh[0] = () -> {
         listContainer.removeAllViews();
-        String q = et.getText().toString().trim().toLowerCase(Locale.ROOT);
-        for (String[] item : buildItems("ALL")) {
-            if (!q.isEmpty() && !item[0].toLowerCase(Locale.ROOT).contains(q)) continue;
-            LinearLayout row = new LinearLayout(ctx);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(10, 16, 10, 16);
-            TextView tv = new TextView(ctx);
-tv.setText(getActionLabelForSubNode(item[1]));
-tv.setTextColor(item[1].isEmpty() ? Color.GRAY : Color.parseColor("#8AB4F8"));
-if (!item[1].isEmpty()) tv.setTextSize(14f);
-            row.addView(tv);
-            row.setOnClickListener(v -> {
-                String r = item[1];
-                closeCircleSearchOverlay();
-                if (r.startsWith("act:")) {
-                    closeCircleMenuInstant();
-                    if (bubbleView != null) bubbleView.post(() -> runItem(r)); else runItem(r);
-                } else {
-                    runItem(r);
-                    closeCircleMenu();
-                }
-            });
-            listContainer.addView(row);
+String q = et.getText().toString().trim().toLowerCase(Locale.ROOT);
+List<String[]> allItems = buildItems("ALL");
+for (String[] item : allItems) {
+    if (!q.isEmpty() && !item[0].toLowerCase(Locale.ROOT).contains(q)) continue;
+    LinearLayout row = new LinearLayout(ctx);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setGravity(Gravity.CENTER_VERTICAL);
+    row.setPadding(10, 16, 10, 16);
+
+    // Thêm icon
+    ImageView iv = new ImageView(ctx);
+    int iconSize = 70;
+    LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(iconSize, iconSize);
+    ilp.setMargins(0, 0, 20, 0);
+    iv.setLayoutParams(ilp);
+    String ref = item[1];
+    Drawable iconDrawable = resolveSubNodeIcon(prefs.getString("bubble_node_icon_override_" + circleSubmenuType + "_" + ref, ""), ref);
+    if (iconDrawable == null) iconDrawable = fallbackActionDrawable(ref);
+    if (iconDrawable != null) {
+        if (!ref.startsWith("app:") && !ref.startsWith("act:CREATE_SHORTCUT_") && !ref.startsWith("act:RUN_SHORTCUT_")) {
+            iconDrawable = iconDrawable.mutate();
+            iconDrawable.setTint(Color.WHITE);
         }
-    };
+        iv.setImageDrawable(iconDrawable);
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+    } else {
+        iv.setImageResource(android.R.drawable.ic_menu_view);
+    }
+    row.addView(iv);
+
+    TextView tv = new TextView(ctx);
+    tv.setText(getActionLabelForSubNode(ref));
+    tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.parseColor("#8AB4F8"));
+    tv.setTextSize(14f);
+    row.addView(tv);
+
+    row.setOnClickListener(v -> {
+        String r = item[1];
+        closeCircleSearchOverlay();
+        if (r.startsWith("act:")) {
+            closeCircleMenuInstant();
+            if (bubbleView != null) bubbleView.post(() -> runItem(r)); else runItem(r);
+        } else {
+            runItem(r);
+            closeCircleMenu();
+        }
+    });
+    listContainer.addView(row);
+    }
+};
     refresh[0].run();
     et.addTextChangedListener(new android.text.TextWatcher() {
         public void afterTextChanged(android.text.Editable s) { refresh[0].run(); }
