@@ -1418,7 +1418,7 @@ private void buildCircleSearchMenu(LinearLayout card) {
 }
     private class CircleMenuView extends View {
     private List<String[]> items = new ArrayList<>();
-        private final Paint pRingBg = new Paint(Paint.ANTI_ALIAS_FLAG);
+                private final Paint pRingBg = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pNodeBg = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pNodeStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -1426,6 +1426,7 @@ private void buildCircleSearchMenu(LinearLayout card) {
     private final Paint pIconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pCenterBg = new Paint(Paint.ANTI_ALIAS_FLAG);     // [MỚI] nền tròn của bong bóng ở tâm
     private final Paint pCenterStroke = new Paint(Paint.ANTI_ALIAS_FLAG); // [MỚI] viền xanh của bong bóng ở tâm
+    private final Paint pLeaderLine = new Paint(Paint.ANTI_ALIAS_FLAG);   // [MỚI] đường kẻ callout ra tên node
         private float lastTouchAngle = 0f;
     private boolean dragging = false;
     private final VelocityAngleTracker angTracker = new VelocityAngleTracker();
@@ -1439,7 +1440,7 @@ private void buildCircleSearchMenu(LinearLayout card) {
     private float downX, downY;
     private boolean longPressJustFired = false; // [MỚI] chặn buông tay sau long-press làm mất chọn
 
-        public CircleMenuView(Context c) {
+                public CircleMenuView(Context c) {
         super(c);
         pRingBg.setStyle(Paint.Style.STROKE);
         pStroke.setStyle(Paint.Style.STROKE);
@@ -1448,6 +1449,7 @@ private void buildCircleSearchMenu(LinearLayout card) {
         pText.setColor(Color.WHITE);
         pCenterBg.setStyle(Paint.Style.FILL);       // [MỚI]
         pCenterStroke.setStyle(Paint.Style.STROKE); // [MỚI]
+        pLeaderLine.setStyle(Paint.Style.STROKE);   // [MỚI]
     }
 
     public void setItems(List<String[]> newItems) {
@@ -1566,7 +1568,7 @@ private void buildCircleSearchMenu(LinearLayout card) {
         int n = Math.max(1, items.size());
         float nodeScale = prefs.getInt("bubble_circle_node_scale", 90) / 100f;
         float nodeSize = prefs.getInt("bubble_icon_size", 100) * nodeScale;
-        pText.setTextSize(nodeSize * 0.20f);
+        pText.setTextSize(nodeSize * 0.27f);
         int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
         for (int i = 0; i < n; i++) {
             float angle = (float) Math.toRadians(circleRotationDeg + i * (360f / n) - 90);
@@ -1586,26 +1588,40 @@ private void buildCircleSearchMenu(LinearLayout card) {
                 canvas.drawBitmap(icon, nx - icon.getWidth() / 2f, ny - icon.getHeight() / 2f, pIconPaint);
             }
 
-                        // [MỚI] Nhãn kiểu "nan hoa": kéo 1 đường thẳng từ tâm nút ra ngoài vành,
-            // đặt chữ ở đầu đường đó — áp dụng đồng thời cho cả nhãn loại (System/
-            // Intent/App/Shortcut...) lẫn nhãn tên cụ thể (tên app, tên shortcut...)
-            // vì cả 2 trường hợp đều đi qua cùng 1 vòng lặp này.
+                         // [MỚI] Callout line: kẻ thẳng từ mép node tỏa ra ngoài, tên đặt cuối đường
+            // kẻ và XOAY theo đúng góc của node đó — lật 180° ở nửa trái vòng tròn để
+            // chữ không bị ngược đầu, giống layout radial label chuẩn.
             String[] item = items.get(i);
             String label = item[0];
             if (label != null && !label.isEmpty()) {
                 if (label.length() > 10) label = label.substring(0, 9) + "…";
-                boolean empty = (item[1] == null || item[1].isEmpty());
 
-                float labelDist = ringR + nodeSize / 2f + 40f;
-                float lx = cx + labelDist * (float) Math.cos(angle);
-                float ly = cy + labelDist * (float) Math.sin(angle);
+                float leaderLen = nodeSize * 0.85f;
+                float lx1 = nx + (nodeSize / 2f) * (float) Math.cos(angle);
+                float ly1 = ny + (nodeSize / 2f) * (float) Math.sin(angle);
+                float lx2 = nx + (nodeSize / 2f + leaderLen) * (float) Math.cos(angle);
+                float ly2 = ny + (nodeSize / 2f + leaderLen) * (float) Math.sin(angle);
 
-                pStroke.setColor(Color.argb(150, 200, 200, 210));
-                pStroke.setStrokeWidth(2.5f);
-                canvas.drawLine(nx, ny, lx, ly, pStroke);
+                pLeaderLine.setColor(Color.argb(180, 200, 200, 210));
+                pLeaderLine.setStrokeWidth(2.5f);
+                canvas.drawLine(lx1, ly1, lx2, ly2, pLeaderLine);
 
-                pText.setColor(empty ? Color.GRAY : Color.WHITE);
-                canvas.drawText(label, lx, ly + pText.getTextSize() / 3f, pText);
+                pText.setColor((item[1] == null || item[1].isEmpty()) ? Color.GRAY : Color.WHITE);
+
+                float rotDeg = (float) Math.toDegrees(angle);
+                boolean flip = rotDeg > 90 || rotDeg < -90;
+                float textRot = flip ? rotDeg + 180 : rotDeg;
+                pText.setTextAlign(flip ? Paint.Align.RIGHT : Paint.Align.LEFT);
+
+                float gap = 10f;
+                float tx = lx2 + (float) Math.cos(angle) * gap;
+                float ty = ly2 + (float) Math.sin(angle) * gap;
+
+                canvas.save();
+                canvas.rotate(textRot, tx, ty);
+                canvas.drawText(label, tx, ty + pText.getTextSize() * 0.3f, pText);
+                canvas.restore();
+                pText.setTextAlign(Paint.Align.CENTER); // trả về mặc định cho tâm bong bóng dùng lại
             }
         }
     }
