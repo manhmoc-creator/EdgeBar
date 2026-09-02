@@ -1477,7 +1477,8 @@ for (String[] item : allItems) {
     iv.setLayoutParams(ilp);
     String ref = item[1];
     Drawable iconDrawable = resolveSubNodeIcon(prefs.getString("bubble_node_icon_override_" + circleSubmenuType + "_" + ref, ""), ref);
-    if (iconDrawable == null) iconDrawable = fallbackActionDrawable(ref);
+// Không gọi fallbackActionDrawable, để iconDrawable có thể null và xử lý ở dưới
+
     if (iconDrawable != null) {
         if (!ref.startsWith("app:") && !ref.startsWith("act:CREATE_SHORTCUT_") && !ref.startsWith("act:RUN_SHORTCUT_")) {
             iconDrawable = iconDrawable.mutate();
