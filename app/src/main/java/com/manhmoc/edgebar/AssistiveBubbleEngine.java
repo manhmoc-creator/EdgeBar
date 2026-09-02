@@ -698,10 +698,10 @@ private List<String> getSubItems(String type) {
     private LinearLayout buildPanelCard() {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable bg = new GradientDrawable();
-bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 160), 0, 0, 0));
+                GradientDrawable bg = new GradientDrawable();
+bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 160), 200, 200, 210)); // [MỚI] màu bạc, đồng bộ vành khuyên Circle
 bg.setCornerRadius(prefs.getInt("bubble_bg_radius", 40));
-bg.setStroke(4, Color.argb(150, 138, 180, 248)); // [MỚI] viền xanh nhạt đồng bộ màu accent
+bg.setStroke(4, Color.argb(150, 138, 180, 248)); // viền xanh nhạt đồng bộ màu accent
 card.setBackground(bg);
         card.setPadding(20, 30, 20, 30);
 
@@ -883,7 +883,7 @@ card.setBackground(bg);
         box.addView(content);
         
         box.setOnLongClickListener(v -> { selectedSubIdx = idx; refreshPanelCard(); return true; });
-                box.setOnClickListener(v -> {
+            box.setOnClickListener(v -> {
             if (selectedSubIdx != null) {
                 if (selectedSubIdx != idx) {
                     List<String> list = getSubItems(type);
@@ -894,7 +894,12 @@ card.setBackground(bg);
                 refreshPanelCard();
             } else {
                 if (!ref.isEmpty()) {
-                    if (ref.startsWith("act:")) { closeMenuInstant(); runItem(ref); }
+                    if (ref.startsWith("act:")) {
+                        closeMenuInstant();
+                        // [FIX LAG] Nhường 1 khung hình cho WM vẽ xong việc đóng bảng
+                        // trước khi bắn broadcast, tránh dồn IPC gây khựng hình.
+                        if (bubbleView != null) bubbleView.post(() -> runItem(ref)); else runItem(ref);
+                    }
                     else { runItem(ref); closeMenu(); }
                 }
             }
@@ -1044,9 +1049,14 @@ card.setBackground(bg);
 
             final String ref = item[1];
             
-            row.setOnClickListener(v -> {
-                runItem(ref); 
-                closeMenu();
+                        row.setOnClickListener(v -> {
+                if (ref.startsWith("act:")) {
+                    closeMenuInstant();
+                    if (bubbleView != null) bubbleView.post(() -> runItem(ref)); else runItem(ref);
+                } else {
+                    runItem(ref);
+                    closeMenu();
+                }
             });
 
             listContainer.addView(row);
@@ -1206,33 +1216,25 @@ card.setBackground(bg);
 
     restoreBubbleX = bubbleLp.x;
     restoreBubbleY = bubbleLp.y;
-    int startX = bubbleLp.x, startY = bubbleLp.y;
     circleSubmenuType = null;
     circleRotationDeg = 0f;
 
-    // BƯỚC 1: chỉ cho bong bóng chat bay vào tâm — CHƯA mở vòng đạn vội
-    ValueAnimator centerAnim = ValueAnimator.ofFloat(0f, 1f);
-    centerAnim.setDuration(220);
-    centerAnim.setInterpolator(new DecelerateInterpolator(1.5f));
-    centerAnim.addUpdateListener(a -> {
-        float val = (float) a.getAnimatedValue();
-        bubbleLp.x = (int) (startX + (targetX - startX) * val);
-        bubbleLp.y = (int) (startY + (targetY - startY) * val);
-        try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
-    });
-    centerAnim.addListener(new AnimatorListenerAdapter() {
-        @Override public void onAnimationEnd(Animator animation) {
-            if (bubbleView != null) bubbleView.setVisibility(View.INVISIBLE);
-            // BƯỚC 2: bong bóng đã tới tâm -> giờ mới "nở" vòng đạn ra
-            openCircleMenu();
-            if (circleView != null) {
-                circleView.setScaleX(0.4f); circleView.setScaleY(0.4f); circleView.setAlpha(0f);
-                circleView.animate().alpha(1f).scaleX(1f).scaleY(1f)
-    .setDuration(130).setInterpolator(new OvershootInterpolator(1.1f)).start();
-            }
+    // [FIX TỐC ĐỘ] Đặt vị trí tâm NGAY (không animate di chuyển) rồi ẩn bong bóng,
+    // mở vòng đạn tức thời — chỉ còn 1 hiệu ứng nở rất ngắn cho cảm giác mượt.
+    bubbleLp.x = targetX; bubbleLp.y = targetY;
+    try {
+        if (bubbleView != null) {
+            wm.updateViewLayout(bubbleView, bubbleLp);
+            bubbleView.setVisibility(View.INVISIBLE);
         }
-    });
-    centerAnim.start();
+    } catch (Exception ignored) {}
+
+    openCircleMenu();
+    if (circleView != null) {
+        circleView.setScaleX(0.6f); circleView.setScaleY(0.6f); circleView.setAlpha(0f);
+        circleView.animate().alpha(1f).scaleX(1f).scaleY(1f)
+            .setDuration(90).setInterpolator(new DecelerateInterpolator(1.2f)).start();
+    }
 }
     private void openCircleMenu() {
     if (circleView != null) return;
@@ -1372,8 +1374,9 @@ private void openCircleSearchOverlay() {
 LinearLayout card = new LinearLayout(ctx);
 card.setOrientation(LinearLayout.VERTICAL);
 GradientDrawable bg = new GradientDrawable();
-bg.setShape(GradientDrawable.OVAL); // [MỚI] hình tròn thay vì bo góc vuông
-bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 200), 0, 0, 0));
+bg.setShape(GradientDrawable.OVAL); // hình tròn
+bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 200), 200, 200, 210)); // [MỚI] màu bạc đồng bộ vành khuyên
+bg.setStroke(5, Color.parseColor("#8AB4F8")); // [MỚI] viền xanh bao quanh cho dễ nhìn
 card.setBackground(bg);
 // [MỚI] Clip nội dung con theo đúng hình tròn của nền — bảng cố định, không xoay
 card.setClipToOutline(true);
@@ -1432,7 +1435,17 @@ private void buildCircleSearchMenu(LinearLayout card) {
             TextView tv = new TextView(ctx);
             tv.setText(item[0]); tv.setTextColor(Color.WHITE); tv.setTextSize(14f);
             row.addView(tv);
-            row.setOnClickListener(v -> { runItem(item[1]); closeCircleSearchOverlay(); closeCircleMenu(); });
+            row.setOnClickListener(v -> {
+                String r = item[1];
+                closeCircleSearchOverlay();
+                if (r.startsWith("act:")) {
+                    closeCircleMenuInstant();
+                    if (bubbleView != null) bubbleView.post(() -> runItem(r)); else runItem(r);
+                } else {
+                    runItem(r);
+                    closeCircleMenu();
+                }
+            });
             listContainer.addView(row);
         }
     };
@@ -1744,7 +1757,7 @@ private void buildCircleSearchMenu(LinearLayout card) {
         refreshCirclePanel(); // setItems() bên trong tự reset selectedNodeIdx
     }
 
-    private void onNodeTap(String[] item) {
+        private void onNodeTap(String[] item) {
     String ref = item[1];
     if (ref.startsWith("TYPE:")) {
         String type = ref.substring(5);
@@ -1754,10 +1767,10 @@ private void buildCircleSearchMenu(LinearLayout card) {
         refreshCirclePanel();
     } else if (!ref.isEmpty()) {
         if (ref.startsWith("act:")) {
-            // [FIX] Đóng NGAY không animation cho action ở lại màn hình hiện tại
-            // -> cảm giác phản hồi tức thời như Assistive Touch
             closeCircleMenuInstant();
-            runItem(ref);
+            // [FIX LAG] Nhường 1 khung hình cho WM đóng vòng đạn xong rồi mới bắn
+            // broadcast — tránh khựng hình khi tap Trigger/System/Utility.
+            if (bubbleView != null) bubbleView.post(() -> runItem(ref)); else runItem(ref);
         } else {
             runItem(ref);
             closeCircleMenu();

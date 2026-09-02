@@ -123,6 +123,8 @@ private static final String[] KEYGUARD_BOUNCER_IDS = {
     private Vibrator vibrator;
     private PanelEngine panelEngine;
     private AssistiveBubbleEngine bubbleEngine;
+    private final java.util.concurrent.ExecutorService iconColorExecutor =
+    java.util.concurrent.Executors.newSingleThreadExecutor();
     private final String[] BARS = {"b_c", "r", "l", "r_u", "r_c", "r_d", "t_c", "t_r", "t_l", "l_u", "l_c", "l_d"};
     private final int[] GRAV = {
         Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT,
@@ -175,6 +177,10 @@ private final Handler iconColorHandler = new Handler(android.os.Looper.getMainLo
 private long lastIconColorSampleMs = 0;
 private boolean iconColorSamplePending = false;
 private long lastIconColorEventGateMs = 0;
+// [FIX BUG 3] Đảm bảo tại mọi thời điểm chỉ có TỐI ĐA 1 HardwareBuffer full màn hình
+// đang sống trong RAM — chặn trường hợp 2 sự kiện (cuộn + đổi app) rơi gần nhau khiến
+// 2 lệnh takeScreenshot() chồng lên nhau, gây tăng đột biến RAM đủ để bị OOM-kill.
+private volatile boolean isCapturingIconColorScreenshot = false;
 private static final long ICON_COLOR_EVENT_GATE_MS = 100; // giảm tần suất chụp màn hình khi cuộn -> giảm áp lực RAM/GPU
 // [FIX] Interval co giãn: mặc định nhanh (250ms) khi hệ thống đang cho phép,
 // tự nới ra khi bị OS từ chối (throttle) — tránh vòng lặp "gọi dồn -> bị chặn dồn".
@@ -213,27 +219,54 @@ private void requestIconColorSample() {
 }
 private void doSampleIconColors(boolean isFollowUp) {
     if (Build.VERSION.SDK_INT < 30) return;
+    if (MyPlaylistService.isRunning || VoiceRecorderService.isRunning || ScreenRecorderService.isRunning) return;
+    // [FIX BUG 3] Chặn chồng lệnh chụp màn hình — nếu 1 lượt takeScreenshot() trước
+    // CHƯA đóng xong HardwareBuffer (vẫn còn trong iconColorExecutor xử lý), tuyệt
+    // đối không bắn lệnh mới, dù sự kiện cuộn/đổi app có dồn dập tới đâu.
+    if (isCapturingIconColorScreenshot) return;
     final boolean needLock = barNeedsAutoColor(bars, "lock_");
     final boolean needHomacc = barNeedsAutoColor(accHomeBars, "homacc_");
     if (!needLock && !needHomacc) return;
+
+    // [FIX ANR] Đọc toạ độ/kích thước từng Bar (rẻ, chỉ đọc field) ngay trên main thread —
+    // phần NẶNG (cắt Bitmap, đo độ sáng) sẽ giao cho thread nền bên dưới.
+    final java.util.List<Object[]> lockJobs = needLock ? buildColorSampleJobs(bars, "lock_") : java.util.Collections.emptyList();
+    final java.util.List<Object[]> homaccJobs = needHomacc ? buildColorSampleJobs(accHomeBars, "homacc_") : java.util.Collections.emptyList();
+    if (lockJobs.isEmpty() && homaccJobs.isEmpty()) return;
+
+    isCapturingIconColorScreenshot = true; // [FIX BUG 3] khoá lại NGAY trước khi gọi takeScreenshot()
     try {
         takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
             new AccessibilityService.TakeScreenshotCallback() {
                 @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
-                    try {
-                        Bitmap hw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
-                        if (hw != null) {
-                            if (needLock) applyAutoColorsFromScreenshot(hw, bars, "lock_");
-                            if (needHomacc) applyAutoColorsFromScreenshot(hw, accHomeBars, "homacc_");
+                    // [FIX ANR/OOM QUAN TRỌNG] Trước đây cắt Bitmap + đo màu chạy NGAY
+                    // trên main thread (vì callback đăng ký qua getMainExecutor()), lặp
+                    // lại liên tục mỗi khi cuộn màn hình -> nghẽn main thread -> ANR ->
+                    // hệ thống giết CẢ TIẾN TRÌNH. Dời việc nặng sang thread nền, main
+                    // thread chỉ nhận lại danh sách màu để tô icon.
+                    iconColorExecutor.execute(() -> {
+                        java.util.List<Object[]> pendingTints = new java.util.ArrayList<>();
+                        try {
+                            Bitmap screenHw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
+                            if (screenHw != null) {
+                                sampleJobsInto(screenHw, lockJobs, pendingTints);
+                                sampleJobsInto(screenHw, homaccJobs, pendingTints);
+                            }
+                        } catch (Exception ignored) {
+                        } finally {
+                            try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+                            if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
                         }
-                    } catch (Exception ignored) {
-                    } finally {
-                        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
-                        if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
-                    }
-                    // Thành công -> co interval về mức nhanh nhất, và nếu đây là
-                    // lần chụp gốc (không phải follow-up) thì bắn thêm 1 lần "vét"
-                    // sau 350ms để bắt đúng khung hình lúc hiệu ứng app đã ổn định.
+                        iconColorHandler.post(() -> {
+                            // [FIX BUG 3] Chỉ mở khoá SAU KHI buffer đã chắc chắn đóng (đã
+                            // qua khỏi finally ở trên) — đảm bảo tại mọi thời điểm chỉ có
+                            // tối đa 1 buffer full màn hình sống trong RAM.
+                            isCapturingIconColorScreenshot = false;
+                            for (Object[] pair : pendingTints) {
+                                try { ((BarView) pair[0]).setIconTintColor((Integer) pair[1]); } catch (Exception ignored) {}
+                            }
+                        });
+                    });
                     iconColorCurrentIntervalMs = ICON_COLOR_INTERVAL_MIN_MS;
                     if (!isFollowUp && !iconColorFollowUpPending) {
                         iconColorFollowUpPending = true;
@@ -244,82 +277,55 @@ private void doSampleIconColors(boolean isFollowUp) {
                     }
                 }
                 @Override public void onFailure(int errorCode) {
-                    // [FIX CHÍNH] Trước đây bỏ trống -> icon "đứng màu" vô thời hạn.
-                    // Giờ: nới interval ra (tối đa 1200ms) rồi CHỦ ĐỘNG thử lại,
-                    // không chờ sự kiện scroll/đổi app kế tiếp mới thử.
+                    isCapturingIconColorScreenshot = false; // [FIX BUG 3] mở khoá ngay khi hệ thống từ chối
                     iconColorCurrentIntervalMs = Math.min(ICON_COLOR_INTERVAL_MAX_MS,
                         iconColorCurrentIntervalMs * 2);
                     iconColorHandler.postDelayed(() -> doSampleIconColors(false), iconColorCurrentIntervalMs);
                 }
             });
-    } catch (Exception ignored) {}
-}
-private void doSampleIconColors() {
-    if (Build.VERSION.SDK_INT < 30) return;
-    final boolean needLock = barNeedsAutoColor(bars, "lock_");
-    final boolean needHomacc = barNeedsAutoColor(accHomeBars, "homacc_");
-    if (!needLock && !needHomacc) return;
-    try {
-        takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
-            new AccessibilityService.TakeScreenshotCallback() {
-@Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
-    try {
-        // [FIX] Chỉ tô màu khi overlay Homacc THẬT SỰ đang tồn tại — tránh trường
-        // hợp hiếm gặp: overlay vừa bị gỡ (do khoá máy/tắt Trợ năng) trong lúc
-        // screenshot đang xử lý bất đồng bộ, khiến việc set tint gây tác dụng phụ
-        // không mong muốn lên vòng đời View.
-        Bitmap hw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
-        if (hw != null) {
-            if (needLock) applyAutoColorsFromScreenshot(hw, bars, "lock_");
-            if (needHomacc && isHomaccDrawn) applyAutoColorsFromScreenshot(hw, accHomeBars, "homacc_");
-        }
-    } catch (Exception ignored) {
-                    } finally {
-                        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
-                        if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
-                    }
-                }
-                @Override public void onFailure(int errorCode) {}
-            });
-    } catch (Exception ignored) {}
-}
-
-private void applyAutoColorsFromScreenshot(Bitmap screenHw, View[] arr, String prefix) {
-    if (arr == null) return;
-    int[] loc = new int[2];
-    int screenW = screenHw.getWidth(), screenH = screenHw.getHeight();
-for (int i = 0; i < 12; i++) {
-    View v = arr[i];
-    if (!(v instanceof BarView) || v.getVisibility() != View.VISIBLE) continue;
-    if (prefs.getString(prefix + BARS[i] + "_icons", "").isEmpty()) continue;
-    if (isAutoColorOff(prefix, BARS[i])) { ((BarView) v).setIconTintColor(null); continue; }
-    // [FIX] Bỏ qua nếu View chưa layout xong / chưa gắn vào cửa sổ — đây là
-    // nguyên nhân khiến 1 Bar đổi màu còn Bar khác thì không (đọc sai toạ độ).
-    if (!v.isAttachedToWindow() || v.getWidth() <= 0 || v.getHeight() <= 0) continue;
-    try {
-        v.getLocationOnScreen(loc);
-            int w = Math.max(1, v.getWidth()), h = Math.max(1, v.getHeight());
-            int x = Math.max(0, Math.min(loc[0], screenW - 1));
-            int y = Math.max(0, Math.min(loc[1], screenH - 1));
-            int rw = Math.min(w, screenW - x);
-            int rh = Math.min(h, screenH - y);
-            if (rw <= 0 || rh <= 0) continue;
-
-            int avg = sampleRegionLuminance(screenHw, x, y, rw, rh);
-            if (avg < 0) continue;
-
-            String tintKey = prefix + BARS[i];
-            Integer prevState = lastBarTintState.get(tintKey);
-            boolean toBlack;
-            if (prevState == null) toBlack = avg >= ICON_COLOR_LIGHT_THRESHOLD;
-            else if (prevState == 1) toBlack = avg >= (ICON_COLOR_LIGHT_THRESHOLD - ICON_COLOR_HYSTERESIS);
-            else toBlack = avg >= (ICON_COLOR_LIGHT_THRESHOLD + ICON_COLOR_HYSTERESIS);
-            lastBarTintState.put(tintKey, toBlack ? 1 : 0);
-            ((BarView) v).setIconTintColor(toBlack ? Color.BLACK : Color.WHITE);
-        } catch (Exception ignored) {}
+    } catch (Exception e) {
+        isCapturingIconColorScreenshot = false; // [FIX BUG 3] gọi takeScreenshot() ném lỗi tức thì -> vẫn phải mở khoá
     }
 }
+// [MỚI] Đọc vị trí/kích thước Bar — BẮT BUỘC chạy trên main thread (View getter).
+private java.util.List<Object[]> buildColorSampleJobs(View[] arr, String prefix) {
+    java.util.List<Object[]> jobs = new java.util.ArrayList<>();
+    if (arr == null) return jobs;
+    int[] loc = new int[2];
+    for (int i = 0; i < 12; i++) {
+        View v = arr[i];
+        if (!(v instanceof BarView) || v.getVisibility() != View.VISIBLE) continue;
+        if (prefs.getString(prefix + BARS[i] + "_icons", "").isEmpty()) continue;
+        if (isAutoColorOff(prefix, BARS[i])) { ((BarView) v).setIconTintColor(null); continue; }
+        if (!v.isAttachedToWindow() || v.getWidth() <= 0 || v.getHeight() <= 0) continue;
+        v.getLocationOnScreen(loc);
+        jobs.add(new Object[]{v, loc[0], loc[1], v.getWidth(), v.getHeight(), prefix + BARS[i]});
+    }
+    return jobs;
+}
 
+// [MỚI] Chạy TRÊN THREAD NỀN — cắt Bitmap + đo độ sáng, gom kết quả vào pendingTints.
+private void sampleJobsInto(Bitmap screenHw, java.util.List<Object[]> jobs, java.util.List<Object[]> pendingTints) {
+    int screenW = screenHw.getWidth(), screenH = screenHw.getHeight();
+    for (Object[] job : jobs) {
+        View v = (View) job[0];
+        int x = Math.max(0, Math.min((int) job[1], screenW - 1));
+        int y = Math.max(0, Math.min((int) job[2], screenH - 1));
+        int rw = Math.min((int) job[3], screenW - x);
+        int rh = Math.min((int) job[4], screenH - y);
+        String tintKey = (String) job[5];
+        if (rw <= 0 || rh <= 0) continue;
+        int avg = sampleRegionLuminance(screenHw, x, y, rw, rh);
+        if (avg < 0) continue;
+        Integer prevState = lastBarTintState.get(tintKey);
+        boolean toBlack;
+        if (prevState == null) toBlack = avg >= ICON_COLOR_LIGHT_THRESHOLD;
+        else if (prevState == 1) toBlack = avg >= (ICON_COLOR_LIGHT_THRESHOLD - ICON_COLOR_HYSTERESIS);
+        else toBlack = avg >= (ICON_COLOR_LIGHT_THRESHOLD + ICON_COLOR_HYSTERESIS);
+        lastBarTintState.put(tintKey, toBlack ? 1 : 0);
+        pendingTints.add(new Object[]{v, toBlack ? Color.BLACK : Color.WHITE});
+    }
+}
 /** Trả về độ sáng trung bình [0-255] của 1 vùng nhỏ, -1 nếu lỗi. Ưu tiên crop trực tiếp
  *  trên Bitmap HARDWARE (thao tác phía GPU, gần như miễn phí) rồi mới copy đúng phần nhỏ
  *  đó sang ARGB_8888 để đọc pixel — tránh copy nguyên màn hình (~15-20MB) mỗi lần lấy mẫu,

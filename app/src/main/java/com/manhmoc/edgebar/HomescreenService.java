@@ -828,33 +828,33 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
             String action = i.getAction();
             if (Intent.ACTION_SCREEN_OFF.equals(action)) {
     removeYtdlOverlay(); 
-    removeRippleViewIfIdle(); 
-    
-    // [YÊU CẦU MỚI] Tự động hồi sinh Trợ năng (cho màn Lock) khi tắt màn hình từ Homeb
-    try {
-        String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
-        String cur = android.provider.Settings.Secure.getString(c.getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        if (cur == null) cur = "";
-        if (!cur.contains(mySvc)) {
-            // 1. Tắt cờ Homeb
-            prefs.edit().putBoolean("shortcut_home_on", false).apply();
-            
-            // 2. Bật Trợ năng bằng lệnh Secure
-            String newVal = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
-            android.provider.Settings.Secure.putString(c.getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
-            android.provider.Settings.Secure.putString(c.getContentResolver(), android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
-            
-            // 3. Show full overlay cho không gian Lock (Hủy mọi thao tác Ẩn thủ công trước đó)
-            SharedPreferences.Editor ed = prefs.edit();
-            for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
-            for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
-            ed.apply();
-            
-            // 4. Tự sát Homeb Service để nhường quyền điều khiển ngay lập tức
-            stopSelf();
-        }
-    } catch (Exception ignored) {}
-    
+    removeRippleViewIfIdle();
+    // [FIX] KHÔNG tự bật lại Trợ năng ở đây nữa — đã dời sang ACTION_SCREEN_ON bên dưới,
+    // chỉ bật khi màn BẬT LẠI và đang ở màn khoá, thay vì bật ngay lúc vừa tắt màn.
+
+} else if (Intent.ACTION_SCREEN_ON.equals(action)) {
+    // [MỚI] Màn vừa bật lại. Nếu máy đang khoá (chưa mở khoá) thì cần Trợ năng/Homacc
+    // để vẽ Lock bar ngay — còn nếu không có khoá thì cứ để Homeb tiếp tục, khỏi bật
+    // Trợ năng làm gì cho tốn thêm 1 lần chuyển đổi vô ích.
+    if (km != null && km.isKeyguardLocked()) {
+        try {
+            String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
+            String cur = android.provider.Settings.Secure.getString(c.getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (cur == null) cur = "";
+            if (!cur.contains(mySvc)) {
+                prefs.edit().putBoolean("shortcut_home_on", false).apply();
+                String newVal = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
+                android.provider.Settings.Secure.putString(c.getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
+                android.provider.Settings.Secure.putString(c.getContentResolver(), android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
+                SharedPreferences.Editor ed = prefs.edit();
+                for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
+                for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
+                ed.apply();
+                stopSelf();
+            }
+        } catch (Exception ignored) {}
+    }
+
 } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
     // [THAY BẰNG CODE HỒI SINH HOMEB Ở ĐÂY]
     SharedPreferences.Editor ed = prefs.edit();
@@ -1010,7 +1010,7 @@ HomebWatchdogReceiver.scheduleRepeating(this);
 prefs.registerOnSharedPreferenceChangeListener(prefListener);
         IntentFilter filter = new IntentFilter();
 filter.addAction(Intent.ACTION_SCREEN_OFF);
-// ACTION_SCREEN_ON đã được xử lý qua ACTION_USER_PRESENT, bỏ ACTION_SCREEN_ON
+filter.addAction(Intent.ACTION_SCREEN_ON); // [FIX] cần lại để bắt đúng lúc màn bật + đang khoá
 filter.addAction(Intent.ACTION_USER_PRESENT);
 filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS); // giữ để bắt homekey/recentapps
 // [TÌM] đoạn setup IntentFilter trong onCreate():

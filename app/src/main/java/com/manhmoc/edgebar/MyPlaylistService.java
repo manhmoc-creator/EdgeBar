@@ -74,6 +74,8 @@ private boolean pausedByFocusLoss = false;        // đánh dấu việc pause l
     private final List<String> trackNames = new ArrayList<>();
     private int currentIndex = 0;
     private android.graphics.Bitmap currentArt; // [MỚI] ảnh bìa bài đang phát
+    private final java.util.concurrent.ExecutorService albumArtExecutor =
+    java.util.concurrent.Executors.newSingleThreadExecutor();
 
     // [MỚI] Audio Focus — xin quyền phát với hệ thống để app khác (Files by Google,
     // Spotify...) tự dừng khi EdgeBar phát, và ngược lại EdgeBar tự dừng khi app khác giành lại.
@@ -229,20 +231,48 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
         }
         final int idxForArt = idx;
         player.setOnPreparedListener(mp -> {
-            mp.start();
-            isRunning = true; isPaused = false;
-            currentArt = extractAlbumArt(tracks.get(idxForArt));
-            if (session != null) {
-                MediaMetadata.Builder meta = new MediaMetadata.Builder()
-                    .putString(MediaMetadata.METADATA_KEY_TITLE, trackNames.get(idxForArt))
-                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "My Playlist");
-                if (currentArt != null) meta.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, currentArt);
-        meta.putLong(MediaMetadata.METADATA_KEY_DURATION, mp.getDuration());
+    mp.start();
+    isRunning = true; isPaused = false;
+
+    // [FIX ANR NGHIÊM TRỌNG] extractAlbumArt() dùng MediaMetadataRetriever với URI SAF
+    // (content://) rất chậm vì phải IPC sang app quản lý file. Trước đây chạy ĐỒNG BỘ
+    // ngay tại đây — tức đúng lúc chuyển bài — làm nghẽn main thread mỗi lần đổi bài.
+    // Nghẽn đủ lâu -> ANR -> hệ thống giết CẢ TIẾN TRÌNH (Homacc/Lock/Panel chết theo,
+    // nhạc dừng hẳn không hồi vì Service này không phải START_STICKY). Giờ: phát nhạc +
+    // cập nhật thông báo NGAY LẬP TỨC không chờ ảnh bìa; ảnh bìa nạp async ở nền rồi
+    // cập nhật lại sau — không còn bất kỳ chặn nào trên main thread lúc chuyển bài.
+    currentArt = null;
+    if (session != null) {
+        MediaMetadata.Builder meta = new MediaMetadata.Builder()
+            .putString(MediaMetadata.METADATA_KEY_TITLE, trackNames.get(idxForArt))
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, "My Playlist")
+            .putLong(MediaMetadata.METADATA_KEY_DURATION, mp.getDuration());
         session.setMetadata(meta.build());
     }
     updateSessionState(true);
     startPosTicker();
     startForegroundNotif(trackNames.get(currentIndex), false);
+
+    final Uri artUri = tracks.get(idxForArt);
+    albumArtExecutor.execute(() -> {
+        android.graphics.Bitmap art = extractAlbumArt(artUri);
+        if (art == null) return;
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+            // Chỉ áp dụng nếu vẫn đang phát đúng bài này — tránh gán nhầm ảnh bìa
+            // nếu user đã bấm Next/Prev trong lúc ảnh còn đang tải ở nền.
+            if (currentIndex != idxForArt || !isRunning) return;
+            currentArt = art;
+            if (session != null) {
+                MediaMetadata.Builder meta2 = new MediaMetadata.Builder()
+                    .putString(MediaMetadata.METADATA_KEY_TITLE, trackNames.get(idxForArt))
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "My Playlist")
+                    .putLong(MediaMetadata.METADATA_KEY_DURATION, player != null ? player.getDuration() : 0)
+                    .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art);
+                session.setMetadata(meta2.build());
+            }
+            startForegroundNotif(trackNames.get(currentIndex), isPaused);
+        });
+    });
 });
         try {
             player.setDataSource(this, tracks.get(currentIndex));
@@ -518,9 +548,10 @@ private void stopPosTicker() {
     posTicker = null;
 }
         @Override public void onDestroy() {
-        viewerPollHandler.removeCallbacksAndMessages(null); // [MỚI] dừng vòng lặp chờ, tránh leak Handler
-        focusPollHandler.removeCallbacksAndMessages(null);  // [MỚI] dừng vòng dò audio focus, tránh leak Handler
-        if (isRunning) stopPlayback();
-        super.onDestroy();
-    }
+    viewerPollHandler.removeCallbacksAndMessages(null);
+    focusPollHandler.removeCallbacksAndMessages(null);
+    albumArtExecutor.shutdownNow(); // [MỚI] tránh giữ Thread chạy sau khi Service đã chết
+    if (isRunning) stopPlayback();
+    super.onDestroy();
+  }
 }
