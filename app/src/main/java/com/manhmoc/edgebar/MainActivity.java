@@ -912,7 +912,7 @@ btnUninstallTop.setLayoutParams(unTopLp);
 btnUninstallTop.setMinimumHeight(0);
 btnUninstallTop.setOnClickListener(v -> confirmThenUninstallApp());
 
-Button btnUpdateTop = createSystemBtn("Update", "#333333", "#00E5FF");
+Button btnUpdateTop = createSystemBtn("Update", "#333333", "#8AB4F8");
 btnUpdateTop.setTextSize(14f);
 btnUpdateTop.setPadding(24, 12, 24, 12); // Tăng đệm dọc
 LinearLayout.LayoutParams upLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -1158,8 +1158,8 @@ showMainMenu();
     pageConditions.setVisibility(idx==1?View.VISIBLE:View.GONE);
     pageEcosystem.setVisibility(idx==2?View.VISIBLE:View.GONE);
     updateFabVisibility();
-    b1.setBackground(getRounded(idx==1?"#222222":"#00000000", 20f)); b1.setTextColor(idx==1?Color.parseColor("#00E5FF"):Color.GRAY);
-    b2.setBackground(getRounded(idx==2?"#222222":"#00000000", 20f)); b2.setTextColor(idx==2?Color.parseColor("#00E5FF"):Color.GRAY);
+    b1.setBackground(getRounded(idx==1?"#222222":"#00000000", 20f)); b1.setTextColor(idx==1?Color.parseColor("#8AB4F8"):Color.GRAY);
+    b2.setBackground(getRounded(idx==2?"#222222":"#00000000", 20f)); b2.setTextColor(idx==2?Color.parseColor("#8AB4F8"):Color.GRAY);
     if(idx==1) renderRulesList();
     if(idx==2) renderEcosystem();
 }
@@ -1243,7 +1243,7 @@ navBackStack.clear(); // ← THÊM DÒNG NÀY
     gesSubHeader.setVisibility(View.GONE);
     // [FIX] Bỏ ImageButton back riêng — chỉ Nav Bar có nút Back.
     tvGesSubTitle = new TextView(this);
-    tvGesSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvGesSubTitle.setTextSize(18);
+    tvGesSubTitle.setTextColor(Color.parseColor("#8AB4F8")); tvGesSubTitle.setTextSize(18);
     LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-2, -2); tlp.setMargins(20, 0, 0, 0);
     tvGesSubTitle.setLayoutParams(tlp);
     gesSubHeader.addView(tvGesSubTitle);
@@ -1587,7 +1587,7 @@ private LinearLayout buildGestureIconDrawer() {
 
     TextView header = new TextView(this);
     header.setText("📁 " + T("ICON FOR 22 GESTURES FRONTIER", "ICON CHO 22 CỬ CHỈ") + " (▼)");
-    header.setTextColor(Color.parseColor("#00E5FF"));
+    header.setTextColor(Color.parseColor("#8AB4F8"));
     header.setPadding(30, 30, 30, 30);
     header.setTextSize(16);
     header.setBackground(getRounded("#202124", 25f));
@@ -1624,7 +1624,7 @@ body.addView(createSlider(T("Jump Icon Opacity", "Độ đậm Icon Nhảy"), "h
                 tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
                 Button btnPick = new Button(this);
                 btnPick.setBackground(getRounded("#303134", 16f));
-                btnPick.setTextColor(Color.parseColor("#00E5FF"));
+                btnPick.setTextColor(Color.parseColor("#8AB4F8"));
                 btnPick.setTextSize(12f);
                 btnPick.setPadding(20, 12, 20, 12);
                 Runnable updateLabel = () -> {
@@ -1663,7 +1663,7 @@ private void renderVolKeyRules() {
         card.setBackground(getRounded("#1E1E1E", 25f)); card.setPadding(35,35,35,35);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(15,15,15,15); card.setLayoutParams(lp);
         TextView t1 = new TextView(this); t1.setText(vName); t1.setTextColor(Color.parseColor("#FFC107")); t1.setTextSize(15);
-        TextView t2 = new TextView(this); t2.setText(getActionLabelSmart(action, prefs.getString(key + "_launch_pkg", ""))); t2.setTextColor(Color.parseColor("#00E5FF")); t2.setTextSize(13); t2.setPadding(0,10,0,10);
+        TextView t2 = new TextView(this); t2.setText(getActionLabelSmart(action, prefs.getString(key + "_launch_pkg", ""))); t2.setTextColor(Color.parseColor("#8AB4F8")); t2.setTextSize(13); t2.setPadding(0,10,0,10);
         card.addView(t1); card.addView(t2);
         card.setOnClickListener(v -> openVolKeyActionPicker(key, vName)); 
         card.setOnLongClickListener(v -> {
@@ -1887,7 +1887,7 @@ if (!isFrontier) {
         final boolean fIsBar = isBar; final String fId = id;
 final int fTabState = tabState;
         Button btnEdit = new Button(this);
-        btnEdit.setBackground(getRounded("#00E5FF", 14f));
+        btnEdit.setBackground(getRounded("#8AB4F8", 14f));
         btnEdit.setTextColor(Color.BLACK);
         btnEdit.setTextSize(11f);
         btnEdit.setPadding(10, 8, 10, 8);
@@ -1981,7 +1981,7 @@ private LinearLayout buildFrontierSelectionToolbar(String listKey, java.util.Lis
 
     TextView tvCount = new TextView(this);
     tvCount.setText(frontierSelectedItems.size() + " " + T("selected", "đã chọn"));
-    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setTextColor(Color.parseColor("#8AB4F8"));
     tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
     Button btnShare = new Button(this); btnShare.setText("🔗 " + T("Share", "Chia sẻ"));
@@ -2124,7 +2124,7 @@ private String cloneDataPackDeep(String itemKey) {
     frontierBackRow.setPadding(0, 0, 0, 20);
     frontierBackRow.setVisibility(View.GONE);
     TextView tvFrontierSubTitle = new TextView(this);
-    tvFrontierSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvFrontierSubTitle.setTextSize(16);
+    tvFrontierSubTitle.setTextColor(Color.parseColor("#8AB4F8")); tvFrontierSubTitle.setTextSize(16);
     LinearLayout.LayoutParams ftlp = new LinearLayout.LayoutParams(-2, -2); ftlp.setMargins(20, 0, 0, 0);
     tvFrontierSubTitle.setLayoutParams(ftlp);
     frontierBackRow.addView(tvFrontierSubTitle);
@@ -2465,7 +2465,7 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
 
     TextView title = new TextView(this);
     title.setText(T("Share pattern(s) to...", "Chia sẻ Pattern sang..."));
-    title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(18); title.setPadding(0,0,0,20);
+    title.setTextColor(Color.parseColor("#8AB4F8")); title.setTextSize(18); title.setPadding(0,0,0,20);
     root.addView(title);
 
     LinearLayout tabs = new LinearLayout(this);
@@ -2497,9 +2497,9 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
     Runnable[] renderGrid = new Runnable[1];
     Runnable[] styleTabs = new Runnable[1];
     styleTabs[0] = () -> {
-        bHomeb.setBackground(getRounded(curTab[0]==0?"#00E5FF":"#222222",20f)); bHomeb.setTextColor(curTab[0]==0?Color.BLACK:Color.WHITE);
-        bHomacc.setBackground(getRounded(curTab[0]==1?"#00E5FF":"#222222",20f)); bHomacc.setTextColor(curTab[0]==1?Color.BLACK:Color.WHITE);
-        bLock.setBackground(getRounded(curTab[0]==2?"#00E5FF":"#222222",20f)); bLock.setTextColor(curTab[0]==2?Color.BLACK:Color.WHITE);
+        bHomeb.setBackground(getRounded(curTab[0]==0?"#8AB4F8":"#222222",20f)); bHomeb.setTextColor(curTab[0]==0?Color.BLACK:Color.WHITE);
+        bHomacc.setBackground(getRounded(curTab[0]==1?"#8AB4F8":"#222222",20f)); bHomacc.setTextColor(curTab[0]==1?Color.BLACK:Color.WHITE);
+        bLock.setBackground(getRounded(curTab[0]==2?"#8AB4F8":"#222222",20f)); bLock.setTextColor(curTab[0]==2?Color.BLACK:Color.WHITE);
     };
     renderGrid[0] = () -> {
         grid.removeAllViews();
@@ -2635,7 +2635,7 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
 
     TextView tvCount = new TextView(this);
     tvCount.setText(prulesSelectedItems.size() + " " + T("selected", "đã chọn"));
-    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setTextColor(Color.parseColor("#8AB4F8"));
     tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
     Button btnShare = new Button(this); btnShare.setText("🔗 " + T("Share", "Chia sẻ"));
@@ -2765,7 +2765,7 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     swApp.setOnCheckedChangeListener((b,c) -> launchAppSelected[0] = c);
     swApp.setPadding(0, 0, 20, 0);
     Button btnPickApp = new Button(this);
-    btnPickApp.setBackground(getRounded("#00E5FF", 20f));
+    btnPickApp.setBackground(getRounded("#8AB4F8", 20f));
     btnPickApp.setTextColor(Color.BLACK);
     btnPickApp.setTextSize(13.5f);
     btnPickApp.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -2858,9 +2858,9 @@ vTrig.addView(cbOs);
 
     content.addView(vTrig); content.addView(vAct);
     View.OnClickListener tabClick = v -> {
-        bTrig.setBackground(getRounded(v==bTrig?"#00E5FF":"#222222", 15f));
+        bTrig.setBackground(getRounded(v==bTrig?"#8AB4F8":"#222222", 15f));
         bTrig.setTextColor(v==bTrig?Color.BLACK:Color.WHITE);
-        bAct.setBackground(getRounded(v==bAct?"#00E5FF":"#222222", 15f));
+        bAct.setBackground(getRounded(v==bAct?"#8AB4F8":"#222222", 15f));
         bAct.setTextColor(v==bAct?Color.BLACK:Color.WHITE);
         vTrig.setVisibility(v==bTrig?View.VISIBLE:View.GONE);
         vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE);
@@ -3175,7 +3175,7 @@ spComp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
         tvOpt.setLayoutParams(optLp);
         vTrig.addView(tvOpt);
         LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
-        TextView tvA = new TextView(this); tvA.setText(T("CHOOSE ACTIONS (Multi-select)", "CHỌN HÀNH ĐỘNG THỰC THI (Được chọn nhiều)")); tvA.setTextColor(Color.parseColor("#00E5FF")); tvA.setPadding(0,0,0,20); vAct.addView(tvA);
+        TextView tvA = new TextView(this); tvA.setText(T("CHOOSE ACTIONS (Multi-select)", "CHỌN HÀNH ĐỘNG THỰC THI (Được chọn nhiều)")); tvA.setTextColor(Color.parseColor("#8AB4F8")); tvA.setPadding(0,0,0,20); vAct.addView(tvA);
         
        final String[] actKeysUsed = isVolKeyMode ? getVolKeyActKeys() : ACT_KEYS;
 final String[] actLabsUsed = isVolKeyMode ? getVolKeyActLabs() : ACT_LABS;
@@ -3244,7 +3244,7 @@ for (String sa : savedArray) {
             swApp.setOnCheckedChangeListener((b,c) -> launchAppSelected[0] = c);
             swApp.setPadding(0, 0, 20, 0);
             Button btnPickApp = new Button(this);
-            btnPickApp.setBackground(getRounded("#00E5FF", 20f));
+            btnPickApp.setBackground(getRounded("#8AB4F8", 20f));
             btnPickApp.setTextColor(Color.BLACK);
             btnPickApp.setTextSize(13.5f);
             btnPickApp.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -3317,9 +3317,9 @@ if (!isVolKeyMode) vTrig.addView(cbOs); else cbOs.setChecked(false);
 
 content.addView(vTrig); content.addView(vAct);
 View.OnClickListener tabClick = v -> {
-bTrig.setBackground(getRounded(v==bTrig?"#00E5FF":"#222222", 15f));
+bTrig.setBackground(getRounded(v==bTrig?"#8AB4F8":"#222222", 15f));
 bTrig.setTextColor(v==bTrig?Color.BLACK:Color.WHITE);
-bAct.setBackground(getRounded(v==bAct?"#00E5FF":"#222222", 15f));
+bAct.setBackground(getRounded(v==bAct?"#8AB4F8":"#222222", 15f));
 bAct.setTextColor(v==bAct?Color.BLACK:Color.WHITE);
 vTrig.setVisibility(v==bTrig?View.VISIBLE:View.GONE);
 vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE);
@@ -3568,7 +3568,7 @@ private void showActionCategoryPicker(String title, List<String[]> items,
     root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30, 80, 30, 30);
 
     TextView tvTitle = new TextView(this); tvTitle.setText(title);
-    tvTitle.setTextColor(Color.parseColor("#00E5FF")); tvTitle.setTextSize(18); tvTitle.setPadding(0, 0, 0, 20);
+    tvTitle.setTextColor(Color.parseColor("#8AB4F8")); tvTitle.setTextSize(18); tvTitle.setPadding(0, 0, 0, 20);
     root.addView(tvTitle);
 
     TextView tvHint = new TextView(this);
@@ -3579,7 +3579,7 @@ private void showActionCategoryPicker(String title, List<String[]> items,
     root.addView(tvHint);
 
     EditText etSearch = new EditText(this);
-    etSearch.setHint("🔍 " + T("Search...", "Tìm kiếm..."));
+    etSearch.setHint(" " + T("Search...", "Tìm kiếm..."));
     etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
     etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30, 25, 30, 25);
     root.addView(etSearch);
@@ -3837,7 +3837,7 @@ private void buildEcosystemSpace() {
     ecoSubHeader.setPadding(0, 0, 0, 20);
     ecoSubHeader.setVisibility(View.GONE);
     tvEcoSubTitle = new TextView(this);
-    tvEcoSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvEcoSubTitle.setTextSize(16);
+    tvEcoSubTitle.setTextColor(Color.parseColor("#8AB4F8")); tvEcoSubTitle.setTextSize(16);
     LinearLayout.LayoutParams etlp = new LinearLayout.LayoutParams(-2, -2); etlp.setMargins(20, 0, 0, 0);
     tvEcoSubTitle.setLayoutParams(etlp);
     ecoSubHeader.addView(tvEcoSubTitle);
@@ -4206,7 +4206,7 @@ private LinearLayout buildEcoSelectionToolbar() {
 
     TextView tvCount = new TextView(this);
     tvCount.setText(ecoSelectedItems.size() + " " + T("selected", "đã chọn"));
-    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setTextColor(Color.parseColor("#8AB4F8"));
     tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
     Button btnDup = new Button(this); btnDup.setText("🧬 " + T("Duplicate", "Nhân bản"));
@@ -4363,7 +4363,7 @@ card.addView(r1);
                         final int finalBoundSlot = boundSlot;
 CheckBox cbShowTile = new CheckBox(this);
 cbShowTile.setText("Hiện QS");
-cbShowTile.setTextColor(Color.parseColor("#00E5FF"));
+cbShowTile.setTextColor(Color.parseColor("#8AB4F8"));
 cbShowTile.setTextSize(11.5f);
 cbShowTile.setEnabled(finalBoundSlot != -1);
 cbShowTile.setChecked(finalBoundSlot != -1 && prefs.getBoolean("tile_active_" + id, false));
@@ -4382,7 +4382,7 @@ cbShowTile.setOnCheckedChangeListener((vw, chk) -> {
                         tvQsStatus.setTextSize(10.5f);
                         if (boundSlot != -1) {
                             tvQsStatus.setText(" [SLOT " + boundSlot + "]");
-                            tvQsStatus.setTextColor(Color.parseColor("#00E5FF")); 
+                            tvQsStatus.setTextColor(Color.parseColor("#8AB4F8")); 
                         } else {
                             tvQsStatus.setText(" [CHƯA GÁN SLOT]");
                             tvQsStatus.setTextColor(Color.parseColor("#D32F2F")); 
@@ -4572,7 +4572,7 @@ cardWrap.addView(selDot);
         bar.setPadding(0, 0, 0, 20);
         TextView tvCount = new TextView(this);
         tvCount.setText(trashSelectedItems.size() + " " + T("selected", "đã chọn"));
-        tvCount.setTextColor(Color.parseColor("#00E5FF"));
+        tvCount.setTextColor(Color.parseColor("#8AB4F8"));
         tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
         Button btnRestore = new Button(this); btnRestore.setText("♻️ " + T("Restore", "Khôi phục"));
@@ -4961,7 +4961,7 @@ private LinearLayout buildMyPlaylistSelectionToolbar(List<String> ids) {
 
     TextView tvCount = new TextView(this);
     tvCount.setText(myPlSelectedItems.size() + " " + T("selected", "đã chọn"));
-    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setTextColor(Color.parseColor("#8AB4F8"));
     tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
     Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", "Xóa"));
@@ -5153,7 +5153,7 @@ private void renderCachedStorageList() {
             
             TextView tvSub = new TextView(this); 
             tvSub.setText(subtitle + " ›"); // dấu › gợi ý "chạm để mở"
-            tvSub.setTextColor(Color.parseColor("#00E5FF")); // đổi màu để báo hiệu có thể bấm
+            tvSub.setTextColor(Color.parseColor("#8AB4F8")); // đổi màu để báo hiệu có thể bấm
             tvSub.setTextSize(11); tvSub.setPadding(0, 5, 0, 0);
             
             card.addView(tvTitle); card.addView(tvSub);
@@ -5221,7 +5221,7 @@ private void renderVoiceRecordList() {
     Button btnRefresh = new Button(this);
     btnRefresh.setText("🔄 " + T("Refresh", "Làm mới"));
     btnRefresh.setBackground(getRounded("#202124", 20f));
-    btnRefresh.setTextColor(Color.parseColor("#00E5FF"));
+    btnRefresh.setTextColor(Color.parseColor("#8AB4F8"));
     LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(-1, -2);
     rLp.setMargins(0, 0, 0, 20);
     btnRefresh.setLayoutParams(rLp);
@@ -5270,7 +5270,7 @@ private void renderVoiceRecordList() {
 
         TextView tSize = new TextView(this);
         tSize.setText(StorageScanner.formatSize(size) + "  ›");
-        tSize.setTextColor(Color.parseColor("#00E5FF")); tSize.setTextSize(11);
+        tSize.setTextColor(Color.parseColor("#8AB4F8")); tSize.setTextSize(11);
         tSize.setPadding(0, 5, 0, 0);
 
         card.addView(tName); card.addView(tSize);
@@ -5314,7 +5314,7 @@ private LinearLayout buildVoiceSelectionToolbar() {
 
     TextView tvCount = new TextView(this);
     tvCount.setText(voiceSelectedItems.size() + " " + T("selected", "đã chọn"));
-    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setTextColor(Color.parseColor("#8AB4F8"));
     tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
     Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", "Xóa"));
@@ -5645,7 +5645,7 @@ private LinearLayout buildVideoSelectionToolbar() {
 
     TextView tvCount = new TextView(this);
     tvCount.setText(videoSelectedItems.size() + " " + T("selected", "đã chọn"));
-    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setTextColor(Color.parseColor("#8AB4F8"));
     tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
     Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", "Xóa"));
@@ -5777,7 +5777,7 @@ private void openTileEditorV2(String id) {
 
     TextView tvActionHint = new TextView(this);
     tvActionHint.setText(T("Action (choose 1 of 6 categories):", "Hành động (chọn 1 trong 6 mục):"));
-    tvActionHint.setTextColor(Color.parseColor("#00E5FF"));
+    tvActionHint.setTextColor(Color.parseColor("#8AB4F8"));
     content.addView(tvActionHint);
 
     final String[] chosenAct = { prefs.getString("tilev2_"+id+"_act", "NONE") };
@@ -5791,7 +5791,7 @@ private void openTileEditorV2(String id) {
         T("Selected: ", "Đang chọn: ") + resolveTileActionLabel(chosenAct[0], chosenPkg[0], chosenScId[0]));
 
     Button btnApp = new Button(this); btnApp.setText("📱 APP");
-    btnApp.setBackground(getRounded("#00E5FF",20f)); btnApp.setTextColor(Color.BLACK);
+    btnApp.setBackground(getRounded("#8AB4F8",20f)); btnApp.setTextColor(Color.BLACK);
     btnApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> {
         chosenAct[0] = "LAUNCH_APP"; chosenPkg[0] = pkg; chosenScId[0]="";
         refreshCurrent.run();
@@ -5837,7 +5837,7 @@ private void openTileEditorV2(String id) {
     content.addView(btnPickIcon);
     content.addView(tvIconCurrent);
 
-    TextView tvSlotHint = new TextView(this); tvSlotHint.setText("\nGán vào QS Tile số:"); tvSlotHint.setTextColor(Color.parseColor("#00E5FF"));
+    TextView tvSlotHint = new TextView(this); tvSlotHint.setText("\nGán vào QS Tile số:"); tvSlotHint.setTextColor(Color.parseColor("#8AB4F8"));
     content.addView(tvSlotHint);
     List<Integer> freeSlots = new ArrayList<>();
     int curSlotPos = -1;
@@ -5908,7 +5908,7 @@ private void openTileEditorV2(String id) {
     designBackRow.setVisibility(View.GONE);
     // [FIX] Bỏ ImageButton back riêng.
     tvDesignSubTitle = new TextView(this);
-    tvDesignSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvDesignSubTitle.setTextSize(16);
+    tvDesignSubTitle.setTextColor(Color.parseColor("#8AB4F8")); tvDesignSubTitle.setTextSize(16);
     LinearLayout.LayoutParams dtlp = new LinearLayout.LayoutParams(-2, -2); dtlp.setMargins(20, 0, 0, 0);
     tvDesignSubTitle.setLayoutParams(dtlp);
     designBackRow.addView(tvDesignSubTitle);
@@ -6489,11 +6489,11 @@ private void renderBubbleSettings() {
         root.setPadding(30,80,30,30);
         
         TextView title = new TextView(this); title.setText("Cấu hình tối đa 9 mục cho " + type);
-        title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(16); title.setPadding(0,0,0,20);
+        title.setTextColor(Color.parseColor("#8AB4F8")); title.setTextSize(16); title.setPadding(0,0,0,20);
         root.addView(title);
 
         EditText etSearch = new EditText(this);
-        etSearch.setHint("🔍 Tìm kiếm...");
+        etSearch.setHint(" Tìm kiếm...");
         etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
         etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
         root.addView(etSearch);
@@ -6706,7 +6706,7 @@ private void renderBubbleSettings() {
         
         TextView title = new TextView(this);
         title.setText("⚙️ CỬ CHỈ BONG BÓNG CHAT");
-        title.setTextColor(Color.parseColor("#00E5FF"));
+        title.setTextColor(Color.parseColor("#8AB4F8"));
         title.setTextSize(18f); title.setPadding(0, 0, 0, 20);
         root.addView(title);
         
@@ -6908,7 +6908,7 @@ private void openBubbleRuleEditor(String editId, Runnable onRefresh) {
         
         LinearLayout vAct = new LinearLayout(this);
         vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
-        TextView tvA = new TextView(this); tvA.setText(T("CHOOSE ACTIONS (Multi-select)", "CHỌN HÀNH ĐỘNG THỰC THI (Được chọn nhiều)")); tvA.setTextColor(Color.parseColor("#00E5FF")); tvA.setPadding(0,0,0,20); vAct.addView(tvA);
+        TextView tvA = new TextView(this); tvA.setText(T("CHOOSE ACTIONS (Multi-select)", "CHỌN HÀNH ĐỘNG THỰC THI (Được chọn nhiều)")); tvA.setTextColor(Color.parseColor("#8AB4F8")); tvA.setPadding(0,0,0,20); vAct.addView(tvA);
         
         String savedActs = editId != null ? prefs.getString("prule_" + editId + "_acts", "") : "";
         final java.util.LinkedHashSet<String> selectedActs = new java.util.LinkedHashSet<>();
@@ -6931,7 +6931,7 @@ private void openBubbleRuleEditor(String editId, Runnable onRefresh) {
         swApp.setOnCheckedChangeListener((b,c) -> launchAppSelected[0] = c);
         swApp.setPadding(0, 0, 20, 0);
         Button btnPickApp = new Button(this);
-        btnPickApp.setBackground(getRounded("#00E5FF", 20f));
+        btnPickApp.setBackground(getRounded("#8AB4F8", 20f));
         btnPickApp.setTextColor(Color.BLACK);
         btnPickApp.setTextSize(13.5f);
         btnPickApp.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -6979,9 +6979,9 @@ private void openBubbleRuleEditor(String editId, Runnable onRefresh) {
         content.addView(vTrig); content.addView(vAct);
         
         View.OnClickListener tabClick = v -> {
-            bTrig.setBackground(getRounded(v==bTrig?"#00E5FF":"#222222", 15f));
+            bTrig.setBackground(getRounded(v==bTrig?"#8AB4F8":"#222222", 15f));
             bTrig.setTextColor(v==bTrig?Color.BLACK:Color.WHITE);
-            bAct.setBackground(getRounded(v==bAct?"#00E5FF":"#222222", 15f));
+            bAct.setBackground(getRounded(v==bAct?"#8AB4F8":"#222222", 15f));
             bAct.setTextColor(v==bAct?Color.BLACK:Color.WHITE);
             vTrig.setVisibility(v==bTrig?View.VISIBLE:View.GONE);
             vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE);
@@ -7059,7 +7059,7 @@ private LinearLayout buildPanelSelectionToolbar(List<String> ids) {
 
     TextView tvCount = new TextView(this);
     tvCount.setText(panelSelectedItems.size() + " " + T("selected", "đã chọn"));
-    tvCount.setTextColor(Color.parseColor("#00E5FF"));
+    tvCount.setTextColor(Color.parseColor("#8AB4F8"));
     tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
     Button btnDup = new Button(this); btnDup.setText("🧬 " + T("Duplicate", "Nhân bản"));
@@ -7325,7 +7325,7 @@ content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 
 
             Button btnAddItems = new Button(this);
             btnAddItems.setText("✨ COLLECT (" + totalCount + ")");
-            btnAddItems.setBackground(getRounded("#00E5FF", 20f));
+            btnAddItems.setBackground(getRounded("#8AB4F8", 20f));
             btnAddItems.setTextColor(Color.BLACK);
             btnAddItems.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
             LinearLayout.LayoutParams lpAdd = new LinearLayout.LayoutParams(-1, 130);
@@ -7350,7 +7350,7 @@ panelCfgBody.setVisibility(View.GONE);
 
 TextView panelCfgHeader = new TextView(this);
 panelCfgHeader.setText("📁 PANEL CONFIG (Chạm để mở ▼)");
-panelCfgHeader.setTextColor(Color.parseColor("#00E5FF"));
+panelCfgHeader.setTextColor(Color.parseColor("#8AB4F8"));
 panelCfgHeader.setPadding(30, 30, 30, 30);
 panelCfgHeader.setTextSize(16);
 panelCfgHeader.setBackground(getRounded("#202124", 25f));
@@ -7515,7 +7515,7 @@ private void openBubbleGestureEditor() {
 
         TextView title = new TextView(this);
         title.setText("⚙️ CỬ CHỈ BONG BÓNG CHAT");
-        title.setTextColor(Color.parseColor("#00E5FF"));
+        title.setTextColor(Color.parseColor("#8AB4F8"));
         title.setTextSize(18f); title.setPadding(0, 0, 0, 20);
         root.addView(title);
 
@@ -7595,9 +7595,9 @@ private void openBubbleGestureEditor() {
     }
 private void stylePanelTabs(Button b1, Button b2, Button b3) {
 // --- [KẾT THÚC CODE MỚI] ---
-    b1.setBackground(getRounded(currentPanelIdx==1?"#00E5FF":"#222222",15f)); b1.setTextColor(currentPanelIdx==1?Color.BLACK:Color.WHITE);
-    b2.setBackground(getRounded(currentPanelIdx==2?"#00E5FF":"#222222",15f)); b2.setTextColor(currentPanelIdx==2?Color.BLACK:Color.WHITE);
-    b3.setBackground(getRounded(currentPanelIdx==3?"#00E5FF":"#222222",15f)); b3.setTextColor(currentPanelIdx==3?Color.BLACK:Color.WHITE);
+    b1.setBackground(getRounded(currentPanelIdx==1?"#8AB4F8":"#222222",15f)); b1.setTextColor(currentPanelIdx==1?Color.BLACK:Color.WHITE);
+    b2.setBackground(getRounded(currentPanelIdx==2?"#8AB4F8":"#222222",15f)); b2.setTextColor(currentPanelIdx==2?Color.BLACK:Color.WHITE);
+    b3.setBackground(getRounded(currentPanelIdx==3?"#8AB4F8":"#222222",15f)); b3.setTextColor(currentPanelIdx==3?Color.BLACK:Color.WHITE);
 }
     private int currentPanelSubTab = 0; // 0=Handle, 1=Panel, 2=Common (Biến tối ưu RAM)
     private boolean isPanelDrawerOpen = false;
@@ -7711,7 +7711,7 @@ private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShort
         root.setBackgroundColor(Color.parseColor("#121212"));
         root.setPadding(30,80,30,30);
         EditText etSearch = new EditText(this);
-        etSearch.setHint("🔍 " + T("Search...","Tìm kiếm..."));
+        etSearch.setHint(" " + T("Search...","Tìm kiếm..."));
         etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
         etSearch.setBackground(getRounded("#2C2C2C", 20f));
         etSearch.setPadding(30,25,30,25);
@@ -7973,7 +7973,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
 
     TextView tvTitle = new TextView(this);
     tvTitle.setText("Chỉnh sửa Items trên Panel");
-    tvTitle.setTextColor(Color.parseColor("#00E5FF"));
+    tvTitle.setTextColor(Color.parseColor("#8AB4F8"));
     tvTitle.setTextSize(18); tvTitle.setPadding(0, 0, 0, 20);
     root.addView(tvTitle);
 
@@ -7990,7 +7990,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
     root.addView(tabs);
 
     EditText etSearch = new EditText(this);
-    etSearch.setHint("🔍 Tìm kiếm...");
+    etSearch.setHint(" Tìm kiếm...");
     etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
     etSearch.setBackground(getRounded("#2C2C2C", 20f));
     etSearch.setPadding(30, 25, 30, 25);
@@ -8113,7 +8113,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
                 
                 TextView tvH = new TextView(MainActivity.this);
                 tvH.setText(item[0]);
-                tvH.setTextColor(Color.parseColor("#00E5FF"));
+                tvH.setTextColor(Color.parseColor("#8AB4F8"));
                 tvH.setTextSize(15f);
                 tvH.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
                 header.addView(tvH);
@@ -8262,11 +8262,11 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
     });
 
     View.OnClickListener tabClick = v -> {
-        bApps.setBackground(getRounded(v == bApps ? "#00E5FF" : "#222222", 15f));
+        bApps.setBackground(getRounded(v == bApps ? "#8AB4F8" : "#222222", 15f));
         bApps.setTextColor(v == bApps ? Color.BLACK : Color.WHITE);
-        bActs.setBackground(getRounded(v == bActs ? "#00E5FF" : "#222222", 15f));
+        bActs.setBackground(getRounded(v == bActs ? "#8AB4F8" : "#222222", 15f));
         bActs.setTextColor(v == bActs ? Color.BLACK : Color.WHITE);
-        bScs.setBackground(getRounded(v == bScs ? "#00E5FF" : "#222222", 15f));
+        bScs.setBackground(getRounded(v == bScs ? "#8AB4F8" : "#222222", 15f));
         bScs.setTextColor(v == bScs ? Color.BLACK : Color.WHITE);
         
         currentTab[0] = (v == bApps) ? 0 : (v == bActs ? 1 : 2);
@@ -8321,7 +8321,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
 
     TextView title = new TextView(this);
     title.setText(T("Choose icons for the bar", "Chọn icon cho thanh"));
-    title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(18); title.setPadding(0,0,0,20);
+    title.setTextColor(Color.parseColor("#8AB4F8")); title.setTextSize(18); title.setPadding(0,0,0,20);
     root.addView(title);
 
     LinearLayout tabs = new LinearLayout(this);
@@ -8352,7 +8352,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
     LinearLayout appsPage = new LinearLayout(this);
     appsPage.setOrientation(LinearLayout.VERTICAL);
     EditText etSearch = new EditText(this);
-    etSearch.setHint("🔍 " + T("Search...", "Tìm kiếm..."));
+    etSearch.setHint(" " + T("Search...", "Tìm kiếm..."));
     etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
     etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
     appsPage.addView(etSearch);
@@ -8427,9 +8427,9 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
     refreshCount[0].run();
 
     View.OnClickListener tabClick = v -> {
-        bApps.setBackground(getRounded(v==bApps?"#00E5FF":"#222222", 15f)); bApps.setTextColor(v==bApps?Color.BLACK:Color.WHITE);
-        bPool.setBackground(getRounded(v==bPool?"#00E5FF":"#222222", 15f)); bPool.setTextColor(v==bPool?Color.BLACK:Color.WHITE);
-        bCustom.setBackground(getRounded(v==bCustom?"#00E5FF":"#222222", 15f)); bCustom.setTextColor(v==bCustom?Color.BLACK:Color.WHITE);
+        bApps.setBackground(getRounded(v==bApps?"#8AB4F8":"#222222", 15f)); bApps.setTextColor(v==bApps?Color.BLACK:Color.WHITE);
+        bPool.setBackground(getRounded(v==bPool?"#8AB4F8":"#222222", 15f)); bPool.setTextColor(v==bPool?Color.BLACK:Color.WHITE);
+        bCustom.setBackground(getRounded(v==bCustom?"#8AB4F8":"#222222", 15f)); bCustom.setTextColor(v==bCustom?Color.BLACK:Color.WHITE);
         appsPage.setVisibility(v==bApps?View.VISIBLE:View.GONE);
         poolScroll.setVisibility(v==bPool?View.VISIBLE:View.GONE);
         customScroll.setVisibility(v==bCustom?View.VISIBLE:View.GONE);
@@ -8467,7 +8467,7 @@ private FrameLayout buildIconGridCell(String ref, java.util.function.Supplier<Im
     lp.setMargins(6,6,6,6);
     cell.setLayoutParams(lp);
     boolean sel = selectedOrder.contains(ref);
-    cell.setBackground(getRounded(sel ? "#00E5FF" : "#202124", 16f));
+    cell.setBackground(getRounded(sel ? "#8AB4F8" : "#202124", 16f));
 
     ImageView iv = iconFactory.get();
     FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(-1, -1);
@@ -8480,7 +8480,7 @@ private FrameLayout buildIconGridCell(String ref, java.util.function.Supplier<Im
         check.setText("✓");
         check.setTextColor(Color.BLACK);
         check.setTextSize(14f);
-        check.setBackground(getRounded("#00E5FF", 100f));
+        check.setBackground(getRounded("#8AB4F8", 100f));
         FrameLayout.LayoutParams cLp = new FrameLayout.LayoutParams(40, 40);
         cLp.gravity = Gravity.TOP | Gravity.END;
         check.setGravity(Gravity.CENTER);
@@ -8492,11 +8492,11 @@ private FrameLayout buildIconGridCell(String ref, java.util.function.Supplier<Im
         if (selectedOrder.contains(ref)) selectedOrder.remove(ref); else selectedOrder.add(ref);
         onToggle.run();
         // Vẽ lại tại chỗ thay vì render lại toàn bộ Dialog — rẻ, tức thì
-        cell.setBackground(getRounded(selectedOrder.contains(ref) ? "#00E5FF" : "#202124", 16f));
+        cell.setBackground(getRounded(selectedOrder.contains(ref) ? "#8AB4F8" : "#202124", 16f));
         if (selectedOrder.contains(ref) && cell.getChildCount() < 2) {
             TextView check = new TextView(this);
             check.setText("✓"); check.setTextColor(Color.BLACK); check.setTextSize(14f);
-            check.setBackground(getRounded("#00E5FF", 100f));
+            check.setBackground(getRounded("#8AB4F8", 100f));
             FrameLayout.LayoutParams cLp = new FrameLayout.LayoutParams(40, 40);
             cLp.gravity = Gravity.TOP | Gravity.END;
             check.setGravity(Gravity.CENTER);
@@ -8521,7 +8521,7 @@ private FrameLayout buildIconGridCell(String ref, java.util.function.Supplier<Im
 
         TextView title = new TextView(this);
         title.setText(T("Choose icon for this action", "Chọn icon cho hành động này"));
-        title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(18); title.setPadding(0,0,0,20);
+        title.setTextColor(Color.parseColor("#8AB4F8")); title.setTextSize(18); title.setPadding(0,0,0,20);
         root.addView(title);
 
         LinearLayout tabs = new LinearLayout(this);
@@ -8543,7 +8543,7 @@ private FrameLayout buildIconGridCell(String ref, java.util.function.Supplier<Im
         LinearLayout appsPage = new LinearLayout(this);
         appsPage.setOrientation(LinearLayout.VERTICAL);
         EditText etSearch = new EditText(this);
-        etSearch.setHint("🔍 " + T("Search...", "Tìm kiếm..."));
+        etSearch.setHint(" " + T("Search...", "Tìm kiếm..."));
         etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
         etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
         appsPage.addView(etSearch);
@@ -8591,11 +8591,11 @@ private FrameLayout buildIconGridCell(String ref, java.util.function.Supplier<Im
         customScroll.setVisibility(View.GONE);
 
         View.OnClickListener tabClick = v -> {
-            bApps.setBackground(getRounded(v==bApps?"#00E5FF":"#222222", 15f));
+            bApps.setBackground(getRounded(v==bApps?"#8AB4F8":"#222222", 15f));
             bApps.setTextColor(v==bApps?Color.BLACK:Color.WHITE);
-            bPool.setBackground(getRounded(v==bPool?"#00E5FF":"#222222", 15f));
+            bPool.setBackground(getRounded(v==bPool?"#8AB4F8":"#222222", 15f));
             bPool.setTextColor(v==bPool?Color.BLACK:Color.WHITE);
-            bCustom.setBackground(getRounded(v==bCustom?"#00E5FF":"#222222", 15f));
+            bCustom.setBackground(getRounded(v==bCustom?"#8AB4F8":"#222222", 15f));
             bCustom.setTextColor(v==bCustom?Color.BLACK:Color.WHITE);
             appsPage.setVisibility(v==bApps?View.VISIBLE:View.GONE);
             poolScroll.setVisibility(v==bPool?View.VISIBLE:View.GONE);
@@ -8704,11 +8704,11 @@ private void showSingleAppPickerDialogCallback(java.util.function.Consumer<Strin
     root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
 
     TextView title = new TextView(this); title.setText(T("Choose one app", "Chọn 1 ứng dụng"));
-    title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(18); title.setPadding(0,0,0,20);
+    title.setTextColor(Color.parseColor("#8AB4F8")); title.setTextSize(18); title.setPadding(0,0,0,20);
     root.addView(title);
 
     EditText etSearch = new EditText(this);
-    etSearch.setHint("🔍 " + T("Search...","Tìm kiếm..."));
+    etSearch.setHint(" " + T("Search...","Tìm kiếm..."));
     etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
     etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
     root.addView(etSearch);
@@ -8765,11 +8765,11 @@ private void showShortcutPickerDialog(java.util.function.BiConsumer<String,Strin
     root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
 
     TextView title = new TextView(this); title.setText(T("Choose a Shortcut Provider","Chọn một ứng dụng"));
-    title.setTextColor(Color.parseColor("#00E5FF")); title.setTextSize(18); title.setPadding(0,0,0,20);
+    title.setTextColor(Color.parseColor("#8AB4F8")); title.setTextSize(18); title.setPadding(0,0,0,20);
     root.addView(title);
 
     EditText etSearch = new EditText(this);
-    etSearch.setHint("🔍 " + T("Search...","Tìm kiếm..."));
+    etSearch.setHint(" " + T("Search...","Tìm kiếm..."));
     etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
     etSearch.setBackground(getRounded("#2C2C2C", 20f)); etSearch.setPadding(30,25,30,25);
     root.addView(etSearch);
@@ -8867,7 +8867,7 @@ private void deleteShortcutGlobally(String id) {
     btnSave.setLayoutParams(lpSave);
     
     Button btnDownload = new Button(this); btnDownload.setText("📥 TẢI NGAY");
-    btnDownload.setBackground(getRounded("#00E5FF", 20f)); btnDownload.setTextColor(Color.BLACK);
+    btnDownload.setBackground(getRounded("#8AB4F8", 20f)); btnDownload.setTextColor(Color.BLACK);
     btnDownload.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
     
     btnRow.addView(btnSave); btnRow.addView(btnDownload);
@@ -8908,7 +8908,7 @@ private void deleteShortcutGlobally(String id) {
     });
 
     Button btnDownload = new Button(this); btnDownload.setText("📥 TẢI NGAY");
-    btnDownload.setBackground(getRounded("#00E5FF", 20f)); btnDownload.setTextColor(Color.BLACK);
+    btnDownload.setBackground(getRounded("#8AB4F8", 20f)); btnDownload.setTextColor(Color.BLACK);
     btnDownload.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
     btnDownload.setOnClickListener(v -> {
         prefs.edit().putString("ytdl_last_link", etLink.getText().toString()).apply();
@@ -8950,7 +8950,7 @@ private String queryDisplayName(Uri uri) {
     LinearLayout panelDrawer = new LinearLayout(this); panelDrawer.setOrientation(LinearLayout.VERTICAL);
     panelDrawer.setPadding(30,20,30,20); panelDrawer.setBackground(getRounded("#222222", 20f));
     TextView title = new TextView(this); title.setText("📱 EDGE PANEL");
-    title.setTextColor(Color.parseColor("#00E5FF")); title.setPadding(0,0,0,20);
+    title.setTextColor(Color.parseColor("#8AB4F8")); title.setPadding(0,0,0,20);
     panelDrawer.addView(title);
 
     CheckBox cbEn = new CheckBox(this); cbEn.setText("Bật Edge Panel");
@@ -8968,7 +8968,7 @@ private String queryDisplayName(Uri uri) {
 
     Button btnPickPanelApps = new Button(this);
     btnPickPanelApps.setText("📱 CHỌN APP CHO PANEL");
-    btnPickPanelApps.setBackground(getRounded("#00E5FF", 20f)); btnPickPanelApps.setTextColor(Color.BLACK);
+    btnPickPanelApps.setBackground(getRounded("#8AB4F8", 20f)); btnPickPanelApps.setTextColor(Color.BLACK);
     btnPickPanelApps.setOnClickListener(v -> showPanelAppPicker());
     panelDrawer.addView(btnPickPanelApps);
 
@@ -9194,7 +9194,7 @@ private void doRevokeAdminAndUninstall() {
     private LinearLayout createDrawer(String title, View content) { 
         LinearLayout container = new LinearLayout(this); container.setOrientation(LinearLayout.VERTICAL); container.setBackground(getRounded("#222222", 20f)); 
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1,-2); clp.setMargins(0,0,0,20); container.setLayoutParams(clp); 
-        TextView header = new TextView(this); header.setText(title); header.setTextColor(Color.parseColor("#00E5FF")); header.setPadding(30,30,30,30); header.setTextSize(16); 
+        TextView header = new TextView(this); header.setText(title); header.setTextColor(Color.parseColor("#8AB4F8")); header.setPadding(30,30,30,30); header.setTextSize(16); 
         content.setVisibility(View.GONE); 
         header.setOnClickListener(v -> { boolean isClosed = content.getVisibility() == View.GONE; content.setVisibility(isClosed ? View.VISIBLE : View.GONE); header.setBackground(getRounded(isClosed ? "#333333" : "#222222", 20f)); }); 
         container.addView(header); container.addView(content); 
@@ -9231,7 +9231,7 @@ private Button createSystemBtn(String text, String bgHex, String textHex) {
     private Button createTabBtn(String t) { Button b = new Button(this); b.setText(t); return b; }
 
 // [THIẾT KẾ THỐNG NHẤT] 1 màu nhấn duy nhất cho toàn bộ tab trong app — thay vì
-// mỗi nơi tự chọn màu riêng (#00E5FF/#FFC107/#E91E63/#4CAF50 lẫn lộn). Dùng lại
+// mỗi nơi tự chọn màu riêng (#8AB4F8/#FFC107/#E91E63/#4CAF50 lẫn lộn). Dùng lại
 // đúng createTabBtn() đã có, chỉ chuẩn hoá cách tô màu active/inactive.
 private static final String ACCENT_COLOR = "#8AB4F8";      // Google Blue - accent chính
 private static final String SURFACE_COLOR = "#202124";     // Nền card/nút
@@ -9240,7 +9240,7 @@ private void styleTabActive(Button b, boolean active) {
     b.setBackground(getRounded(active ? ACCENT_COLOR : "#222222", 20f));
     b.setTextColor(active ? Color.BLACK : Color.parseColor("#9AA0A6"));
 }
-    private TextView createSectionTitle(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.parseColor("#00E5FF")); tv.setPadding(0,10,0,20); return tv; }
+    private TextView createSectionTitle(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.parseColor("#8AB4F8")); tv.setPadding(0,10,0,20); return tv; }
     private Spinner createSpinner() { Spinner sp = new Spinner(this); sp.setBackground(getRounded("#2C2C2C", 20f)); sp.setPadding(20,20,20,20); return sp; }
     private EditText createInput(String h, String k) { EditText et = new EditText(this); et.setHint(h); et.setHintTextColor(Color.GRAY); et.setTextColor(Color.WHITE); et.setText(prefs.getString(k,"")); et.setBackground(getRounded("#2C2C2C", 20f)); et.setPadding(30,30,30,30); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,10,0,10); et.setLayoutParams(lp); et.addTextChangedListener(new android.text.TextWatcher(){public void afterTextChanged(android.text.Editable s){prefs.edit().putString(k,s.toString()).apply();}public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}}); return et; }
     private LinearLayout createCycleRow(String title, String key, String[] states) {
@@ -9254,7 +9254,7 @@ private void styleTabActive(Button b, boolean active) {
     
     // Nút bấm Icon Style / Show Name được phóng to rõ ràng cho tay người dùng Pixel 2 XL
     TextView tvVal = new TextView(this);
-    tvVal.setTextColor(Color.parseColor("#00E5FF"));
+    tvVal.setTextColor(Color.parseColor("#8AB4F8"));
     tvVal.setTextSize(14.5f); // Phóng to font chữ (+1.5sp)
     tvVal.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
     int cur = prefs.getInt(key, 0);
@@ -9651,7 +9651,7 @@ private void buildSensorSpaceOnce() {
     sensorBackRow.setPadding(0, 0, 0, 20);
     sensorBackRow.setVisibility(View.GONE);
     TextView tvSubTitle = new TextView(this);
-    tvSubTitle.setTextColor(Color.parseColor("#00E5FF")); tvSubTitle.setTextSize(16);
+    tvSubTitle.setTextColor(Color.parseColor("#8AB4F8")); tvSubTitle.setTextSize(16);
     LinearLayout.LayoutParams ftlp = new LinearLayout.LayoutParams(-2, -2); ftlp.setMargins(20, 0, 0, 0);
     tvSubTitle.setLayoutParams(ftlp);
     sensorBackRow.addView(tvSubTitle);

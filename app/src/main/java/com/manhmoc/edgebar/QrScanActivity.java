@@ -113,7 +113,7 @@ public class QrScanActivity extends Activity {
 
         frame = new View(this);
         GradientDrawable fd = new GradientDrawable();
-        fd.setStroke(10, Color.parseColor("#00E5FF")); // khung dày hơn (trước đây 4)
+        fd.setStroke(10, Color.parseColor("#8AB4F8")); // khung dày hơn (trước đây 4)
         fd.setCornerRadius(32f);
         frame.setBackground(fd);
         int fsize = (int) (getResources().getDisplayMetrics().widthPixels * 0.68f);
@@ -330,7 +330,7 @@ public class QrScanActivity extends Activity {
 
         TextView title = new TextView(this);
         title.setText("✨ Tạo mã QR");
-        title.setTextColor(Color.parseColor("#00E5FF"));
+        title.setTextColor(Color.parseColor("#8AB4F8"));
         title.setTextSize(17);
         title.setPadding(0, 0, 0, 20);
         card.addView(title);
@@ -352,7 +352,7 @@ public class QrScanActivity extends Activity {
 
         Button btnGen = new Button(this);
         btnGen.setText("Tạo mã");
-        btnGen.setBackground(makeRounded("#00E5FF", 20f));
+        btnGen.setBackground(makeRounded("#8AB4F8", 20f));
         btnGen.setTextColor(Color.BLACK);
         card.addView(btnGen);
 
@@ -585,7 +585,7 @@ public class QrScanActivity extends Activity {
 
         Button btnRetry = new Button(this);
         btnRetry.setText("Quét lại");
-        btnRetry.setBackground(makeRounded("#00E5FF", 20f));
+        btnRetry.setBackground(makeRounded("#8AB4F8", 20f));
         btnRetry.setTextColor(Color.BLACK);
         btnRetry.setOnClickListener(v -> {
             root.removeView(resultCard); resultCard = null;
@@ -603,7 +603,7 @@ public class QrScanActivity extends Activity {
         cameraClosed = false;
         if (bottomBar != null) bottomBar.setVisibility(View.VISIBLE); // [MỚI]
         GradientDrawable fd = new GradientDrawable();
-        fd.setStroke(10, Color.parseColor("#00E5FF"));
+        fd.setStroke(10, Color.parseColor("#8AB4F8"));
         fd.setCornerRadius(32f);
         frame.setBackground(fd);
         if (surfaceView.getHolder().getSurface() != null && surfaceView.getHolder().getSurface().isValid()) {
@@ -702,7 +702,7 @@ public class QrScanActivity extends Activity {
 
         TextView tvType = new TextView(this);
         tvType.setText(parsed.typeLabel);
-        tvType.setTextColor(Color.parseColor("#00E5FF"));
+        tvType.setTextColor(Color.parseColor("#8AB4F8"));
         tvType.setTextSize(13);
         card.addView(tvType);
 
@@ -781,7 +781,7 @@ public class QrScanActivity extends Activity {
         if (parsed.primaryAction != null) {
             Button btnAction = new Button(this);
             btnAction.setText(parsed.actionLabel);
-            btnAction.setBackground(makeRounded("#00E5FF", 20f));
+            btnAction.setBackground(makeRounded("#8AB4F8", 20f));
             btnAction.setTextColor(Color.BLACK);
             btnAction.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
             btnAction.setOnClickListener(v -> {

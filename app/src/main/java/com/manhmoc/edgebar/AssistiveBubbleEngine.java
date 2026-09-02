@@ -801,8 +801,7 @@ card.setBackground(bg);
         
                 TextView tv = new TextView(ctx);
 tv.setText(getLabelForType(type));
-tv.setTextColor(Color.parseColor("#00E5FF"));
-tv.setShadowLayer(6f, 0f, 2f, Color.argb(255, 0, 0, 0));
+tv.setTextColor(Color.parseColor("#8AB4F8"));
 tv.setTextSize(12f);
         tv.setSingleLine(true);
         tv.setGravity(Gravity.CENTER);
@@ -834,7 +833,7 @@ tv.setTextSize(12f);
     private void buildSubmenuGrid(LinearLayout card, String type) {
         TextView tvHeader = new TextView(ctx);
         tvHeader.setText(getLabelForType(type));
-        tvHeader.setTextColor(Color.parseColor("#00E5FF"));
+        tvHeader.setTextColor(Color.parseColor("#8AB4F8"));
         tvHeader.setTextSize(16f);
         tvHeader.setGravity(Gravity.CENTER);
         tvHeader.setPadding(0, 0, 0, 20);
@@ -903,9 +902,8 @@ tv.setTextSize(12f);
         
                TextView tv = new TextView(ctx);
 tv.setText(getActionLabelForSubNode(ref));
-tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.parseColor("#00E5FF"));
-if (!ref.isEmpty()) tv.setShadowLayer(6f, 0f, 2f, Color.argb(255, 0, 0, 0));
-tv.setTextSize(11f);
+tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.parseColor("#8AB4F8"));
+if (!ref.isEmpty()) tv.setTextSize(11f);
         tv.setSingleLine(true);
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(0, 10, 0, 0);
@@ -939,7 +937,7 @@ tv.setTextSize(11f);
     }
     private void buildSearchMenu(LinearLayout card) {
         EditText et = new EditText(ctx);
-        et.setHint("🔍 Tìm kiếm hệ thống...");
+        et.setHint(" Tìm kiếm hệ thống...");
         et.setHintTextColor(Color.parseColor("#9AA0A6"));
         et.setTextColor(Color.WHITE);
         et.setSingleLine(true);
@@ -1468,9 +1466,8 @@ private void buildCircleSearchMenu(LinearLayout card) {
             row.setPadding(10, 16, 10, 16);
             TextView tv = new TextView(ctx);
 tv.setText(getActionLabelForSubNode(item[1]));
-tv.setTextColor(item[1].isEmpty() ? Color.GRAY : Color.parseColor("#00E5FF"));
-if (!item[1].isEmpty()) tv.setShadowLayer(6f, 0f, 2f, Color.argb(255, 0, 0, 0));
-tv.setTextSize(14f);
+tv.setTextColor(item[1].isEmpty() ? Color.GRAY : Color.parseColor("#8AB4F8"));
+if (!item[1].isEmpty()) tv.setTextSize(14f);
             row.addView(tv);
             row.setOnClickListener(v -> {
                 String r = item[1];

@@ -705,14 +705,14 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
 
     private void applyGradient(int w, int h) {
         int[] cArr; switch(cTheme) {
-            case "NEON": cArr=new int[]{Color.parseColor("#FF0055"), Color.parseColor("#7000FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FF0055")}; break;
-            case "CYBERPUNK": cArr=new int[]{Color.parseColor("#F500FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FFDF00"), Color.parseColor("#F500FF")}; break;
+            case "NEON": cArr=new int[]{Color.parseColor("#FF0055"), Color.parseColor("#7000FF"), Color.parseColor("#8AB4F8"), Color.parseColor("#FF0055")}; break;
+            case "CYBERPUNK": cArr=new int[]{Color.parseColor("#F500FF"), Color.parseColor("#8AB4F8"), Color.parseColor("#FFDF00"), Color.parseColor("#F500FF")}; break;
             case "LAVA": cArr=new int[]{Color.parseColor("#FF0000"), Color.parseColor("#FF5A00"), Color.parseColor("#FF9A00"), Color.parseColor("#FF0000")}; break;
             case "OCEAN": cArr=new int[]{Color.parseColor("#005BEA"), Color.parseColor("#00C6FB"), Color.parseColor("#005BEA")}; break;
             case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
             case "SUNSET": cArr=new int[]{Color.parseColor("#FF512F"), Color.parseColor("#DD2476"), Color.parseColor("#FF512F")}; break;
             case "GOOGLE": cArr=new int[]{Color.parseColor("#4285F4"), Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4")}; break;
-            case "AURORA": cArr=new int[]{Color.parseColor("#8E2DE2"), Color.parseColor("#4A00E0"), Color.parseColor("#00E5FF"), Color.parseColor("#8E2DE2")}; break;
+            case "AURORA": cArr=new int[]{Color.parseColor("#8E2DE2"), Color.parseColor("#4A00E0"), Color.parseColor("#8AB4F8"), Color.parseColor("#8E2DE2")}; break;
             case "ABYSS": cArr=new int[]{Color.parseColor("#0F2027"), Color.parseColor("#203A43"), Color.parseColor("#2C5364"), Color.parseColor("#0F2027")}; break;
             case "COSMIC": cArr=new int[]{Color.parseColor("#FF00CC"), Color.parseColor("#333399"), Color.parseColor("#FF00CC")}; break;
             case "FOREST": cArr=new int[]{Color.parseColor("#11998E"), Color.parseColor("#38EF7D"), Color.parseColor("#11998E")}; break;
@@ -2157,7 +2157,7 @@ private void dispatchTwoFingerAccMenuGesture() {
 
         android.widget.Button bCancel = ytdlBtn("HỦY", "#333333", Color.WHITE);
         android.widget.Button bSave = ytdlBtn("LƯU LINK", "#4CAF50", Color.WHITE);
-        android.widget.Button bDownload = ytdlBtn("TẢI", "#00E5FF", Color.BLACK);
+        android.widget.Button bDownload = ytdlBtn("TẢI", "#8AB4F8", Color.BLACK);
         btnRow.addView(bCancel); btnRow.addView(bSave); btnRow.addView(bDownload);
         card.addView(btnRow);
 
