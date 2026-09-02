@@ -110,9 +110,11 @@ private boolean isCircleModeActive() { return prefs.getBoolean("bubble_circle_en
     if (!want && bubbleView != null) destroyAll();
 }
 
-    public void onPrefChanged(String key) {
+       public void onPrefChanged(String key) {
         if (key == null) return;
-        if (key.equals("bubble_en") || key.equals("bubble_size") || key.equals("bubble_icon_size") || key.equals("bubble_main_icon") || key.equals("bubble_node_bg_alpha")) { 
+        if (key.equals("bubble_en") || key.equals("bubble_circle_en") || key.equals("bubble_size")
+            || key.equals("bubble_icon_size") || key.equals("bubble_main_icon")
+            || key.equals("bubble_circle_main_icon") || key.equals("bubble_node_bg_alpha")) { 
             destroyAll(); rebuild(); 
         }
     }
@@ -237,14 +239,21 @@ private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, 
             iv.setPadding(pad, pad, pad, pad);
         }
     }
-
+    private String getActiveBubbleMainIconRef() {
+    if (isCircleModeActive()) {
+        String c = prefs.getString("bubble_circle_main_icon", "");
+        return !c.isEmpty() ? c : prefs.getString("bubble_main_icon", "");
+    }
+    return prefs.getString("bubble_main_icon", "");
+}
     private void buildBubble() {
         if (bubbleView != null) return;
         ImageView iv = new ImageView(ctx);
         int size = prefs.getInt("bubble_size", 120);
         
-        Drawable customIcon = getCustomIcon(prefs.getString("bubble_main_icon", ""));
-        applyIconToImageView(iv, customIcon, size, customIcon != null && prefs.getString("bubble_main_icon", "").startsWith("app:"));
+        String activeIconRef = getActiveBubbleMainIconRef();
+        Drawable customIcon = getCustomIcon(activeIconRef);
+        applyIconToImageView(iv, customIcon, size, customIcon != null && activeIconRef.startsWith("app:"));
         if (customIcon == null) {
             try { iv.setImageDrawable(ctx.getPackageManager().getApplicationIcon(ctx.getPackageName())); }
             catch (Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
@@ -770,9 +779,10 @@ card.setBackground(bg);
         }
         iconBox.addView(iv);
         
-        TextView tv = new TextView(ctx);
+                TextView tv = new TextView(ctx);
         tv.setText(getLabelForType(type));
-        tv.setTextColor(Color.WHITE);
+        tv.setTextColor(Color.parseColor("#8AB4F8"));
+        tv.setShadowLayer(4f, 0f, 1.5f, Color.argb(200, 0, 0, 0));
         tv.setTextSize(12f);
         tv.setSingleLine(true);
         tv.setGravity(Gravity.CENTER);
@@ -871,9 +881,10 @@ card.setBackground(bg);
         }
 
         
-        TextView tv = new TextView(ctx);
+                TextView tv = new TextView(ctx);
         tv.setText(getActionLabelForSubNode(ref));
-        tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.WHITE);
+        tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.parseColor("#8AB4F8"));
+        if (!ref.isEmpty()) tv.setShadowLayer(4f, 0f, 1.5f, Color.argb(200, 0, 0, 0));
         tv.setTextSize(11f);
         tv.setSingleLine(true);
         tv.setGravity(Gravity.CENTER);
@@ -1489,8 +1500,9 @@ private void buildCircleSearchMenu(LinearLayout card) {
         pRingBg.setStyle(Paint.Style.STROKE);
         pStroke.setStyle(Paint.Style.STROKE);
         pNodeStroke.setStyle(Paint.Style.STROKE);
-        pText.setTextAlign(Paint.Align.CENTER);
-        pText.setColor(Color.WHITE);
+                pText.setTextAlign(Paint.Align.CENTER);
+        pText.setColor(Color.parseColor("#8AB4F8"));
+        pText.setShadowLayer(5f, 0f, 2f, Color.argb(220, 0, 0, 0));
         pCenterBg.setStyle(Paint.Style.FILL);       // [MỚI]
         pCenterStroke.setStyle(Paint.Style.STROKE); // [MỚI]
     }
@@ -1631,11 +1643,11 @@ private void buildCircleSearchMenu(LinearLayout card) {
             }
 
                // [MỚI] Nhãn ngắn hiện DƯỚI nút (không đè icon) để user vẫn biết đây là loại gì
-            String[] item = items.get(i);
+                        String[] item = items.get(i);
             String label = item[0];
             if (label != null && !label.isEmpty()) {
                 if (label.length() > 8) label = label.substring(0, 7) + "…";
-                pText.setColor((item[1] == null || item[1].isEmpty()) ? Color.GRAY : Color.WHITE);
+                pText.setColor((item[1] == null || item[1].isEmpty()) ? Color.GRAY : Color.parseColor("#8AB4F8"));
                 canvas.drawText(label, nx, ny + nodeSize / 2f + pText.getTextSize() + 6, pText);
             }
         }
