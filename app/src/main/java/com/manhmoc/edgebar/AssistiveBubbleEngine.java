@@ -1265,13 +1265,20 @@ private List<String> getSubItems(String type) {
         }
     }
 
-    private void loadCircleCenterIcon() {
+        private void loadCircleCenterIcon() {
         String ref = prefs.getString("bubble_circle_main_icon", "");
         if (ref.isEmpty()) ref = prefs.getString("bubble_main_icon", "");
         Drawable d = getCustomIcon(ref);
+        if (d == null) {
+            // [MỚI] Chưa tuỳ chỉnh icon riêng cho Vòng đạn -> dùng icon app gốc,
+            // giống hệt fallback của bong bóng chat thật trong buildBubble().
+            try { d = ctx.getPackageManager().getApplicationIcon(ctx.getPackageName()); }
+            catch (Exception e) { d = null; }
+        }
         if (d == null) { centerIconBmp = null; return; }
-        int size = prefs.getInt("bubble_size", 120);
-        centerIconBmp = PanelEngine.normalizeIconBitmap(d, size, 1f);
+        // [MỚI] Trừ padding 15dp x2 để icon không chạm sát viền, giống bong bóng thật
+        int iconSize = Math.max(20, prefs.getInt("bubble_size", 120) - 30);
+        centerIconBmp = PanelEngine.normalizeIconBitmap(d, iconSize, 1f);
     }
 
     private void refreshCirclePanel() {
@@ -1411,13 +1418,15 @@ private void buildCircleSearchMenu(LinearLayout card) {
 }
     private class CircleMenuView extends View {
     private List<String[]> items = new ArrayList<>();
-    private final Paint pRingBg = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint pRingBg = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pNodeBg = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pNodeStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pIconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private float lastTouchAngle = 0f;
+    private final Paint pCenterBg = new Paint(Paint.ANTI_ALIAS_FLAG);     // [MỚI] nền tròn của bong bóng ở tâm
+    private final Paint pCenterStroke = new Paint(Paint.ANTI_ALIAS_FLAG); // [MỚI] viền xanh của bong bóng ở tâm
+        private float lastTouchAngle = 0f;
     private boolean dragging = false;
     private final VelocityAngleTracker angTracker = new VelocityAngleTracker();
 
@@ -1428,14 +1437,17 @@ private void buildCircleSearchMenu(LinearLayout card) {
     private Runnable longPressRunnable;
     private int downNodeIdx = -1;
     private float downX, downY;
+    private boolean longPressJustFired = false; // [MỚI] chặn buông tay sau long-press làm mất chọn
 
-    public CircleMenuView(Context c) {
+        public CircleMenuView(Context c) {
         super(c);
         pRingBg.setStyle(Paint.Style.STROKE);
         pStroke.setStyle(Paint.Style.STROKE);
         pNodeStroke.setStyle(Paint.Style.STROKE);
         pText.setTextAlign(Paint.Align.CENTER);
         pText.setColor(Color.WHITE);
+        pCenterBg.setStyle(Paint.Style.FILL);       // [MỚI]
+        pCenterStroke.setStyle(Paint.Style.STROKE); // [MỚI]
     }
 
     public void setItems(List<String[]> newItems) {
@@ -1538,6 +1550,15 @@ private void buildCircleSearchMenu(LinearLayout card) {
         canvas.drawCircle(cx, cy, ringR + bgWidth / 2f, pStroke);
         canvas.drawCircle(cx, cy, ringR - bgWidth / 2f, pStroke);
 
+                // [MỚI] Vẽ nền tròn + viền xanh giống hệt bong bóng chat thật (buildBubble())
+        // trước khi vẽ icon lên trên — đây chính là "vòng xanh" mà trước đây bị thiếu.
+        float centerR = prefs.getInt("bubble_size", 120) / 2f;
+        pCenterBg.setColor(Color.parseColor("#DD202124"));
+        canvas.drawCircle(cx, cy, centerR, pCenterBg);
+        pCenterStroke.setColor(Color.parseColor("#8AB4F8"));
+        pCenterStroke.setStrokeWidth(4f);
+        canvas.drawCircle(cx, cy, centerR - 2f, pCenterStroke);
+
         if (centerIconBmp != null) {
             canvas.drawBitmap(centerIconBmp, cx - centerIconBmp.getWidth() / 2f, cy - centerIconBmp.getHeight() / 2f, pIconPaint);
         }
@@ -1565,13 +1586,26 @@ private void buildCircleSearchMenu(LinearLayout card) {
                 canvas.drawBitmap(icon, nx - icon.getWidth() / 2f, ny - icon.getHeight() / 2f, pIconPaint);
             }
 
-            // [MỚI] Nhãn ngắn hiện DƯỚI nút (không đè icon) để user vẫn biết đây là loại gì
+                        // [MỚI] Nhãn kiểu "nan hoa": kéo 1 đường thẳng từ tâm nút ra ngoài vành,
+            // đặt chữ ở đầu đường đó — áp dụng đồng thời cho cả nhãn loại (System/
+            // Intent/App/Shortcut...) lẫn nhãn tên cụ thể (tên app, tên shortcut...)
+            // vì cả 2 trường hợp đều đi qua cùng 1 vòng lặp này.
             String[] item = items.get(i);
             String label = item[0];
             if (label != null && !label.isEmpty()) {
-                if (label.length() > 8) label = label.substring(0, 7) + "…";
-                pText.setColor((item[1] == null || item[1].isEmpty()) ? Color.GRAY : Color.WHITE);
-                canvas.drawText(label, nx, ny + nodeSize / 2f + pText.getTextSize() + 6, pText);
+                if (label.length() > 10) label = label.substring(0, 9) + "…";
+                boolean empty = (item[1] == null || item[1].isEmpty());
+
+                float labelDist = ringR + nodeSize / 2f + 40f;
+                float lx = cx + labelDist * (float) Math.cos(angle);
+                float ly = cy + labelDist * (float) Math.sin(angle);
+
+                pStroke.setColor(Color.argb(150, 200, 200, 210));
+                pStroke.setStrokeWidth(2.5f);
+                canvas.drawLine(nx, ny, lx, ly, pStroke);
+
+                pText.setColor(empty ? Color.GRAY : Color.WHITE);
+                canvas.drawText(label, lx, ly + pText.getTextSize() / 3f, pText);
             }
         }
     }
@@ -1596,13 +1630,14 @@ private void buildCircleSearchMenu(LinearLayout card) {
         return super.onKeyDown(keyCode, event);
     }
 
-    @Override public boolean onTouchEvent(MotionEvent e) {
+        @Override public boolean onTouchEvent(MotionEvent e) {
         if (e.getActionMasked() == MotionEvent.ACTION_OUTSIDE) { closeOrBack(); return true; }
         float cx = getWidth() / 2f, cy = getHeight() / 2f;
         float x = e.getX(), y = e.getY();
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 dragging = false;
+                longPressJustFired = false; // [MỚI] reset cho lượt chạm mới
                 downX = x; downY = y;
                 downNodeIdx = hitTestNode(x, y);
                 lastTouchAngle = (float) Math.toDegrees(Math.atan2(y - cy, x - cx));
@@ -1611,6 +1646,7 @@ private void buildCircleSearchMenu(LinearLayout card) {
                     longPressRunnable = () -> {
                         if (!dragging && downNodeIdx >= 0) {
                             selectedNodeIdx = downNodeIdx;
+                            longPressJustFired = true; // [MỚI] đánh dấu: vừa long-press xong
                             try {
                                 Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
                                 if (v != null) v.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE));
@@ -1622,7 +1658,7 @@ private void buildCircleSearchMenu(LinearLayout card) {
                 }
                 return true;
             case MotionEvent.ACTION_MOVE: {
-                if (Math.abs(x - downX) > 20 || Math.abs(y - downY) > 20 && longPressRunnable != null) {
+                if ((Math.abs(x - downX) > 20 || Math.abs(y - downY) > 20) && longPressRunnable != null) {
                     longPressHandler.removeCallbacks(longPressRunnable);
                 }
                 float curAngle = (float) Math.toDegrees(Math.atan2(y - cy, x - cx));
@@ -1640,6 +1676,15 @@ private void buildCircleSearchMenu(LinearLayout card) {
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
                 if (longPressRunnable != null) longPressHandler.removeCallbacks(longPressRunnable);
+                // [MỚI] Vừa long-press xong (tay chưa kịp rời khỏi ô) -> CHỈ tiêu thụ sự
+                // kiện buông tay này, KHÔNG deselect/swap gì cả. Giữ nguyên trạng thái
+                // "đang chọn" (vòng xanh) để chờ đúng lượt chạm KẾ TIẾP vào ô khác.
+                if (longPressJustFired) {
+                    longPressJustFired = false;
+                    dragging = false;
+                    downNodeIdx = -1;
+                    return true;
+                }
                 if (!dragging) {
                     int idx = hitTestNode(x, y);
                     if (selectedNodeIdx != null) {
@@ -1660,7 +1705,6 @@ private void buildCircleSearchMenu(LinearLayout card) {
         }
         return super.onTouchEvent(e);
     }
-
     private void closeOrBack() {
         if (circleSubmenuType != null) { circleSubmenuType = null; circleRotationDeg = 0f; refreshCirclePanel(); }
         else closeCircleMenu();
