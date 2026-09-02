@@ -1435,7 +1435,7 @@ private void closeCircleSearchOverlay() {
 
 private void buildCircleSearchMenu(LinearLayout card) {
     EditText et = new EditText(ctx);
-    et.setHint("🔍 Tìm kiếm hệ thống...");
+    et.setHint(" Tìm kiếm hệ thống...");
     et.setHintTextColor(Color.parseColor("#9AA0A6"));
     et.setTextColor(Color.WHITE);
     et.setSingleLine(true);
@@ -1467,9 +1467,9 @@ private void buildCircleSearchMenu(LinearLayout card) {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(10, 16, 10, 16);
             TextView tv = new TextView(ctx);
-tv.setText(getActionLabelForSubNode(ref));
-tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.parseColor("#00E5FF"));
-if (!ref.isEmpty()) tv.setShadowLayer(6f, 0f, 2f, Color.argb(255, 0, 0, 0));
+tv.setText(getActionLabelForSubNode(item[1]));
+tv.setTextColor(item[1].isEmpty() ? Color.GRAY : Color.parseColor("#00E5FF"));
+if (!item[1].isEmpty()) tv.setShadowLayer(6f, 0f, 2f, Color.argb(255, 0, 0, 0));
 tv.setTextSize(14f);
             row.addView(tv);
             row.setOnClickListener(v -> {
