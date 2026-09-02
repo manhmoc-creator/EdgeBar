@@ -1309,44 +1309,7 @@ private List<String> getSubItems(String type) {
             return accumDeg / (dt / 1000f);
         }
     }
-
-    private class CircleMenuView extends View {
-    private List<String[]> items = new ArrayList<>();
-    private final Paint pRingBg = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint pStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint pNodeBg = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint pNodeStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint pIconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private float lastTouchAngle = 0f;
-    private boolean dragging = false;
-    private final VelocityAngleTracker angTracker = new VelocityAngleTracker();
-
-    // [MỚI] icon thật cho từng nút + trạng thái "đang chọn để đổi chỗ"
-    private final Map<Integer, Bitmap> nodeIcons = new HashMap<>();
-    private Integer selectedNodeIdx = null;
-    private final Handler longPressHandler = new Handler(Looper.getMainLooper());
-    private Runnable longPressRunnable;
-    private int downNodeIdx = -1;
-    private float downX, downY;
-
-    public CircleMenuView(Context c) {
-        super(c);
-        pRingBg.setStyle(Paint.Style.STROKE);
-        pStroke.setStyle(Paint.Style.STROKE);
-        pNodeStroke.setStyle(Paint.Style.STROKE);
-        pText.setTextAlign(Paint.Align.CENTER);
-        pText.setColor(Color.WHITE);
-    }
-
-    public void setItems(List<String[]> newItems) {
-        this.items = newItems;
-        selectedNodeIdx = null;
-        nodeIcons.clear();
-        loadAllNodeIcons();
-        invalidate();
-    }
-    // ===================== [MỚI] Ô TÌM KIẾM RIÊNG CHO VÒNG ĐẠN =====================
+// ===================== [MỚI] Ô TÌM KIẾM RIÊNG CHO VÒNG ĐẠN =====================
 private FrameLayout circleSearchOverlay;
 private WindowManager.LayoutParams circleSearchLp;
 
@@ -1446,6 +1409,42 @@ private void buildCircleSearchMenu(LinearLayout card) {
         if (imm != null) imm.showSoftInput(et, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
     }, 200);
 }
+    private class CircleMenuView extends View {
+    private List<String[]> items = new ArrayList<>();
+    private final Paint pRingBg = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pNodeBg = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pNodeStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pIconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private float lastTouchAngle = 0f;
+    private boolean dragging = false;
+    private final VelocityAngleTracker angTracker = new VelocityAngleTracker();
+
+    // [MỚI] icon thật cho từng nút + trạng thái "đang chọn để đổi chỗ"
+    private final Map<Integer, Bitmap> nodeIcons = new HashMap<>();
+    private Integer selectedNodeIdx = null;
+    private final Handler longPressHandler = new Handler(Looper.getMainLooper());
+    private Runnable longPressRunnable;
+    private int downNodeIdx = -1;
+    private float downX, downY;
+
+    public CircleMenuView(Context c) {
+        super(c);
+        pRingBg.setStyle(Paint.Style.STROKE);
+        pStroke.setStyle(Paint.Style.STROKE);
+        pNodeStroke.setStyle(Paint.Style.STROKE);
+        pText.setTextAlign(Paint.Align.CENTER);
+        pText.setColor(Color.WHITE);
+    }
+
+    public void setItems(List<String[]> newItems) {
+        this.items = newItems;
+        selectedNodeIdx = null;
+        nodeIcons.clear();
+        loadAllNodeIcons();
+        invalidate();
+    }
     // [MỚI] tải icon thật (App/Shortcut/System...) giống hệt nguồn icon đã chọn ở 9 ô cấu hình
     private void loadAllNodeIcons() {
         int iconSize = Math.round(prefs.getInt("bubble_icon_size", 100) * (prefs.getInt("bubble_circle_node_scale", 90) / 100f));
