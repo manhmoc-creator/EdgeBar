@@ -176,19 +176,31 @@ public class VolumeButtonService extends Service {
         } catch (Exception ignored) {}
     }
 
-    private void fire(String key) {
-        if (!prefs.getBoolean(key + "_on", true)) return;
-        String action = prefs.getString(key, "NONE");
-        if (action.equals("NONE")) return;
-        if (prefs.getBoolean(key + "_vib", true)) {
-            try {
-                Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
-                if (Build.VERSION.SDK_INT >= 26)
-                    v.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE));
-                else v.vibrate(25);
-            } catch (Exception ignored) {}
-        }
-        String act = action.split(",")[0].trim();
+    // [MỚI] Danh sách action BẮT BUỘC cần màn sáng mới có ý nghĩa — Camera/Chụp màn
+// hình/Menu nguồn/Thông báo/Cài đặt nhanh/Chia đôi màn/Quay màn/Tự xoay/Quét QR/
+// Quét dung lượng đều cần nhìn thấy UI. PLAY_MY_PLAYLIST, TOGGLE_RECORD,
+// PAUSE_RECORD, FLASH, VOLUME, TOGGLE_OVERLAY, TOGGLE_WORK_PROFILE KHÔNG cần
+// màn sáng, vẫn chạy ngầm bình thường khi màn tắt.
+private static final java.util.Set<String> SCREEN_REQUIRED_ACTS = new java.util.HashSet<>(java.util.Arrays.asList(
+    "CAMERA", "SCREENSHOT", "POWER_DIALOG", "NOTIFICATIONS", "QUICK_SETTINGS",
+    "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE", "SCAN_QR", "OPEN_STORAGE_SCAN"
+));
+
+private void fire(String key) {
+    if (!prefs.getBoolean(key + "_on", true)) return;
+    String action = prefs.getString(key, "NONE");
+    if (action.equals("NONE")) return;
+    if (prefs.getBoolean(key + "_vib", true)) {
+        try {
+            Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+            if (Build.VERSION.SDK_INT >= 26)
+                v.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE));
+            else v.vibrate(25);
+        } catch (Exception ignored) {}
+    }
+    String act = action.split(",")[0].trim();
+
+    Runnable doFire = () -> {
         Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
         if (act.startsWith("RUN_SHORTCUT_")) {
             ipc.putExtra("act", "RUN_SHORTCUT");
@@ -197,7 +209,24 @@ public class VolumeButtonService extends Service {
             ipc.putExtra("act", act);
         }
         sendBroadcast(ipc);
+    };
+
+    android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+    boolean screenOff = pm != null && !pm.isInteractive();
+    if (screenOff && SCREEN_REQUIRED_ACTS.contains(act)) {
+        try {
+            android.os.PowerManager.WakeLock wl = pm.newWakeLock(
+                android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "EdgeBar:VolKeyWake");
+            wl.acquire(3000);
+        } catch (Exception ignored) {}
+        // Đợi 350ms để màn hình + Lock bar kịp bật ổn định rồi mới bắn action,
+        // tránh trường hợp action chạy trước khi Trợ năng/Homeb kịp vẽ overlay.
+        new Handler(android.os.Looper.getMainLooper()).postDelayed(doFire, 350);
+    } else {
+        doFire.run();
     }
+}
 
     private boolean startForegroundQuiet() {
         try {

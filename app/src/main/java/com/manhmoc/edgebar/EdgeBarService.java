@@ -175,7 +175,7 @@ private final Handler iconColorHandler = new Handler(android.os.Looper.getMainLo
 private long lastIconColorSampleMs = 0;
 private boolean iconColorSamplePending = false;
 private long lastIconColorEventGateMs = 0;
-private static final long ICON_COLOR_EVENT_GATE_MS = 60;
+private static final long ICON_COLOR_EVENT_GATE_MS = 100; // giảm tần suất chụp màn hình khi cuộn -> giảm áp lực RAM/GPU
 // [FIX] Interval co giãn: mặc định nhanh (250ms) khi hệ thống đang cho phép,
 // tự nới ra khi bị OS từ chối (throttle) — tránh vòng lặp "gọi dồn -> bị chặn dồn".
 private static final long ICON_COLOR_INTERVAL_MIN_MS = 250;
@@ -1478,21 +1478,11 @@ private void triggerBlacklistAutoHomeb() {
             getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         if (cur == null || !cur.contains(mySvc)) return;
 
-        HomeEngineManager.turnOnHomeb(this); // bật Homeb TRƯỚC, tránh khoảng trống mất bar
-        prefs.edit().putBoolean("acc_off_by_blacklist_auto", true).apply(); // cờ dành cho tính năng tự bật lại sau này
-
-        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-            try {
-                String[] parts = cur.split(":");
-                java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
-                for (String pt : parts) if (!pt.trim().isEmpty() && !pt.trim().equals(mySvc)) set.add(pt.trim());
-                android.provider.Settings.Secure.putString(
-                    getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-                    android.text.TextUtils.join(":", set));
-            } catch (Exception ignored) {}
-        }, 150);
+        prefs.edit().putBoolean("acc_off_by_blacklist_auto", true).apply();
+        HomeEngineManager.turnOnHomeb(this); // đã tự tắt Trợ năng bên trong — KHÔNG ghi lại lần 2
     } catch (Exception ignored) {}
 }
+
 // [FIX BADTOKEN + TỐI ƯU PIXEL 2XL] Dialog gọi từ Context của AccessibilityService
     // KHÔNG có Activity window token — .show() trực tiếp sẽ ném BadTokenException âm
     // thầm (bị nuốt bởi try-catch của exec()). Ép window type sang loại Overlay hệ
@@ -2952,6 +2942,19 @@ private void updateHomaccLive() {
 @Override
 public void onInterrupt() {}
 
+// [FIX] Khi Trợ năng bị tắt (tay, ToggleReceiver, hay Blacklist Auto-Homeb), hệ
+// thống chỉ unbind chứ KHÔNG tự onDestroy() vì Service đã ở trạng thái "started"
+// (do startForeground(99,...) trong onServiceConnected()). Nếu không chủ động dọn
+// ở đây, notification "EB Lacck" + mọi overlay (bars/corners/panel/bubble/ripple/
+// rec indicator) sẽ treo lại trong RAM cho tới khi bị OOM-kill mới mất — đây chính
+// là nguồn gốc hiện tượng "biến mất rồi tự hồi lại".
+@Override
+public boolean onUnbind(Intent intent) {
+    try { getSystemService(NotificationManager.class).cancel(99); } catch (Exception ignored) {}
+    try { stopForeground(true); } catch (Exception ignored) {}
+    stopSelf();
+    return super.onUnbind(intent);
+}
 // ===== CHỈ BÁO GHI ÂM (chấm đỏ + mm:ss) — bản dành cho EdgeBarService =====
 private void ensureRecIndicator() {
     if (recIndicatorView != null) return;
