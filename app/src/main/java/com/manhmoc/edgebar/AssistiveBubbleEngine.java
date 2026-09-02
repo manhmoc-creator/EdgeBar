@@ -111,13 +111,18 @@ private boolean isCircleModeActive() { return prefs.getBoolean("bubble_circle_en
 }
 
        public void onPrefChanged(String key) {
-        if (key == null) return;
-        if (key.equals("bubble_en") || key.equals("bubble_circle_en") || key.equals("bubble_size")
-            || key.equals("bubble_icon_size") || key.equals("bubble_main_icon")
-            || key.equals("bubble_circle_main_icon") || key.equals("bubble_node_bg_alpha")) { 
-            destroyAll(); rebuild(); 
-        }
+    if (key == null) return;
+    if (key.equals("bubble_en") || key.equals("bubble_circle_en") || key.equals("bubble_size")
+        || key.equals("bubble_icon_size") || key.equals("bubble_main_icon")
+        || key.equals("bubble_circle_main_icon") || key.equals("bubble_node_bg_alpha")) { 
+        destroyAll(); rebuild(); 
     }
+    // Nếu bạn muốn cập nhật icon ngay mà không rebuild toàn bộ, có thể thêm:
+    if (key.equals("bubble_circle_main_icon") && isCircleModeActive() && circleView != null) {
+        updateBubbleIcon();
+        // Có thể refresh Circle panel nếu cần
+    }
+}
 
 public void destroy() { destroyAll(); }
 
@@ -241,10 +246,25 @@ private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, 
     }
     private String getActiveBubbleMainIconRef() {
     if (isCircleModeActive()) {
-        String c = prefs.getString("bubble_circle_main_icon", "");
-        return !c.isEmpty() ? c : prefs.getString("bubble_main_icon", "");
+        return prefs.getString("bubble_circle_main_icon", "");
     }
     return prefs.getString("bubble_main_icon", "");
+}
+private void updateBubbleIcon() {
+    if (bubbleView == null) return;
+    String ref = getActiveBubbleMainIconRef();
+    Drawable d = getCustomIcon(ref);
+    if (d == null) {
+        try {
+            d = ctx.getPackageManager().getApplicationIcon(ctx.getPackageName());
+        } catch (Exception e) {
+            d = ctx.getDrawable(android.R.drawable.sym_def_app_icon);
+        }
+    }
+    if (bubbleView instanceof ImageView) {
+        ImageView iv = (ImageView) bubbleView;
+        applyIconToImageView(iv, d, prefs.getInt("bubble_size", 120), ref.startsWith("app:"));
+    }
 }
     private void buildBubble() {
         if (bubbleView != null) return;
@@ -780,10 +800,10 @@ card.setBackground(bg);
         iconBox.addView(iv);
         
                 TextView tv = new TextView(ctx);
-        tv.setText(getLabelForType(type));
-        tv.setTextColor(Color.parseColor("#8AB4F8"));
-        tv.setShadowLayer(4f, 0f, 1.5f, Color.argb(200, 0, 0, 0));
-        tv.setTextSize(12f);
+tv.setText(getLabelForType(type));
+tv.setTextColor(Color.parseColor("#00E5FF"));
+tv.setShadowLayer(6f, 0f, 2f, Color.argb(255, 0, 0, 0));
+tv.setTextSize(12f);
         tv.setSingleLine(true);
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(0, 10, 0, 0);
@@ -881,11 +901,11 @@ card.setBackground(bg);
         }
 
         
-                TextView tv = new TextView(ctx);
-        tv.setText(getActionLabelForSubNode(ref));
-        tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.parseColor("#8AB4F8"));
-        if (!ref.isEmpty()) tv.setShadowLayer(4f, 0f, 1.5f, Color.argb(200, 0, 0, 0));
-        tv.setTextSize(11f);
+               TextView tv = new TextView(ctx);
+tv.setText(getActionLabelForSubNode(ref));
+tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.parseColor("#00E5FF"));
+if (!ref.isEmpty()) tv.setShadowLayer(6f, 0f, 2f, Color.argb(255, 0, 0, 0));
+tv.setTextSize(11f);
         tv.setSingleLine(true);
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(0, 10, 0, 0);
@@ -1239,7 +1259,7 @@ card.setBackground(bg);
             bubbleView.setVisibility(View.INVISIBLE);
         }
     } catch (Exception ignored) {}
-
+    updateBubbleIcon();
     openCircleMenu();
     if (circleView != null) {
         circleView.setScaleX(0.6f); circleView.setScaleY(0.6f); circleView.setAlpha(0f);
@@ -1275,6 +1295,9 @@ card.setBackground(bg);
         circleView = null;
         circleSubmenuType = null;
         if (bubbleView != null) bubbleView.setVisibility(View.VISIBLE);
+        if (prefs.getBoolean("bubble_en", false)) {
+    updateBubbleIcon();
+}
         if (restoreBubbleX != -1 && restoreBubbleY != -1) {
             if (jumpAnim != null) jumpAnim.cancel();
             jumpAnim = ValueAnimator.ofFloat(0f, 1f);
@@ -1444,7 +1467,10 @@ private void buildCircleSearchMenu(LinearLayout card) {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(10, 16, 10, 16);
             TextView tv = new TextView(ctx);
-            tv.setText(item[0]); tv.setTextColor(Color.WHITE); tv.setTextSize(14f);
+tv.setText(getActionLabelForSubNode(ref));
+tv.setTextColor(ref.isEmpty() ? Color.GRAY : Color.parseColor("#00E5FF"));
+if (!ref.isEmpty()) tv.setShadowLayer(6f, 0f, 2f, Color.argb(255, 0, 0, 0));
+tv.setTextSize(14f);
             row.addView(tv);
             row.setOnClickListener(v -> {
                 String r = item[1];
