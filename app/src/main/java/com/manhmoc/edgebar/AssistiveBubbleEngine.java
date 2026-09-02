@@ -1347,6 +1347,8 @@ private WindowManager.LayoutParams circleSearchLp;
 private void openCircleSearchOverlay() {
     if (circleSearchOverlay != null) return;
     int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+    DisplayMetrics dmS = getRealMetrics();
+    int ringSize = Math.min(dmS.widthPixels, dmS.heightPixels) - 40; // khớp đúng đường kính vòng đạn
     FrameLayout overlay = new FrameLayout(ctx) {
         @Override public boolean dispatchKeyEvent(KeyEvent event) {
             if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
@@ -1367,10 +1369,6 @@ private void openCircleSearchOverlay() {
         if (event.getAction() == MotionEvent.ACTION_OUTSIDE) { closeCircleSearchOverlay(); return true; }
         return false;
     });
-
-    DisplayMetrics dmS = getRealMetrics();
-int ringSize = Math.min(dmS.widthPixels, dmS.heightPixels) - 40; // khớp đúng đường kính vòng đạn
-
 LinearLayout card = new LinearLayout(ctx);
 card.setOrientation(LinearLayout.VERTICAL);
 GradientDrawable bg = new GradientDrawable();
