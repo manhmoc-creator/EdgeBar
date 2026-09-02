@@ -1586,7 +1586,7 @@ private void buildCircleSearchMenu(LinearLayout card) {
                 canvas.drawBitmap(icon, nx - icon.getWidth() / 2f, ny - icon.getHeight() / 2f, pIconPaint);
             }
 
-             // [MỚI] Nhãn ngắn hiện DƯỚI nút (không đè icon) để user vẫn biết đây là loại gì
+               // [MỚI] Nhãn ngắn hiện DƯỚI nút (không đè icon) để user vẫn biết đây là loại gì
             String[] item = items.get(i);
             String label = item[0];
             if (label != null && !label.isEmpty()) {
