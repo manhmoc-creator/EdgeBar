@@ -628,7 +628,15 @@ jumpAnim.setInterpolator(new DecelerateInterpolator(1.6f)); // đồng bộ, kh�
             jumpAnim.start();
         }
     }
-
+private void closeMenuInstant() {
+    if (menuOverlay != null) { try { wm.removeView(menuOverlay); } catch (Exception ignored) {} menuOverlay = null; }
+    selectedMainIdx = null; selectedSubIdx = null; currentSubmenu = null;
+    if (jumpAnim != null) jumpAnim.cancel();
+    if (restoreBubbleX != -1 && restoreBubbleY != -1) {
+        bubbleLp.x = restoreBubbleX; bubbleLp.y = restoreBubbleY;
+        try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
+    }
+}
     private List<String> getMainOrder() {
         String csv = prefs.getString("bubble_node_order", "");
         List<String> out = new ArrayList<>();
@@ -875,7 +883,7 @@ card.setBackground(bg);
         box.addView(content);
         
         box.setOnLongClickListener(v -> { selectedSubIdx = idx; refreshPanelCard(); return true; });
-        box.setOnClickListener(v -> {
+                box.setOnClickListener(v -> {
             if (selectedSubIdx != null) {
                 if (selectedSubIdx != idx) {
                     List<String> list = getSubItems(type);
@@ -885,14 +893,14 @@ card.setBackground(bg);
                 selectedSubIdx = null;
                 refreshPanelCard();
             } else {
-    if (!ref.isEmpty()) {
-        if (ref.startsWith("act:")) { closeMenuInstant(); runItem(ref); }
-        else { runItem(ref); closeMenu(); }
-    }
-});
+                if (!ref.isEmpty()) {
+                    if (ref.startsWith("act:")) { closeMenuInstant(); runItem(ref); }
+                    else { runItem(ref); closeMenu(); }
+                }
+            }
+        });
         return box;
     }
-
     private void buildSearchMenu(LinearLayout card) {
         EditText et = new EditText(ctx);
         et.setHint("🔍 Tìm kiếm hệ thống...");
