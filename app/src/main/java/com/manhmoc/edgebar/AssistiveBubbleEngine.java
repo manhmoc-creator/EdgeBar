@@ -1683,19 +1683,16 @@ for (String[] item : allItems) {
     }
 
     private Drawable fallbackTypeDrawable(String type) {
-        int res;
-        switch (type) {
-            case "SYSTEM": res = android.R.drawable.ic_menu_preferences; break;
-            case "UTILITY": res = android.R.drawable.ic_menu_manage; break;
-            case "APP": res = android.R.drawable.sym_def_app_icon; break;
-            case "SHORTCUT": res = android.R.drawable.ic_menu_send; break;
-            case "TRIGGER": res = android.R.drawable.ic_menu_directions; break;
-            case "INTENT": res = android.R.drawable.ic_menu_compass; break;
-            case "SEARCH": res = android.R.drawable.ic_menu_search; break;
-            default: res = android.R.drawable.ic_menu_view;
-        }
-        try { return ctx.getDrawable(res); } catch (Exception e) { return null; }
-    }
+    int res = android.R.drawable.ic_menu_view;
+    if ("SYSTEM".equals(type)) res = android.R.drawable.ic_menu_preferences;
+    else if ("UTILITY".equals(type)) res = android.R.drawable.ic_menu_manage;
+    else if ("APP".equals(type)) res = android.R.drawable.sym_def_app_icon;
+    else if ("SHORTCUT".equals(type)) res = android.R.drawable.ic_menu_send;
+    else if ("TRIGGER".equals(type)) res = android.R.drawable.ic_menu_directions;
+    else if ("INTENT".equals(type)) res = android.R.drawable.ic_menu_compass;
+    else if ("SEARCH".equals(type)) res = android.R.drawable.ic_menu_search;
+    try { return ctx.getDrawable(res); } catch (Exception e) { return null; }
+}
 
     private Drawable fallbackActionDrawable(String ref) {
         int res = android.R.drawable.ic_menu_view;
