@@ -119,7 +119,7 @@ private SensorEventListener stepListener = new SensorEventListener() {
 
 private final Runnable pocketExitRunnable = () -> {
     if (sensorManager != null && stepSensor != null) sensorManager.unregisterListener(stepListener);
-    int threshold = prefs.getInt("sensor_pocket_step_threshold", 3);
+    int threshold = this.prefs.getInt("sensor_pocket_step_threshold", 3);
     pocketModeActive = stepCountWindow >= threshold;
     stepCountWindow = 0;
 };
