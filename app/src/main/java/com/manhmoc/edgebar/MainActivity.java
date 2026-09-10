@@ -6316,8 +6316,8 @@ private void renderBubbleSettings() {
     LinearLayout iconGrid = new LinearLayout(this);
     iconGrid.setOrientation(LinearLayout.VERTICAL);
     iconGrid.setPadding(0, 10, 0, 10);
-    String[] nodeTypes = {"APP", "SHORTCUT", "SYSTEM", "INTENT", "MACRO", "PANEL", "UTILITY", "TRIGGER", "SEARCH"};
-    String[] nodeLabels = {"Apps", "Shortcut", "System", "Intent", "Macro", "Panel", "Utility", "Trigger", "Search"};
+    String[] nodeTypes = {"APP", "SHORTCUT", "SYSTEM", "INTENT", "QSTILE", "PANEL", "UTILITY", "TRIGGER", "SEARCH"};
+    String[] nodeLabels = {"Apps", "Shortcut", "System", "Intent", "QS Tile", "Panel", "Utility", "Trigger", "Search"};
     for (int i = 0; i < 3; i++) {
         LinearLayout rowIcon = new LinearLayout(this);
         rowIcon.setOrientation(LinearLayout.HORIZONTAL);
@@ -6524,17 +6524,15 @@ private void renderBubbleSettings() {
                     etSearch.setText(" "); etSearch.setText(""); 
                 });
             });
-            root.addView(btnNewShortcut, 2);
+root.addView(btnNewShortcut, 2);
 
-            // Bỏ gọi shortcut Edge Bar để tránh lặp
-            for (ResolveInfo ri : ShortcutScanner.getProviders(this)) {
-                if (ri.activityInfo.packageName.equals(getPackageName())) continue;
-                allItems.add(new String[]{ri.loadLabel(getPackageManager()).toString(), "act:CREATE_SHORTCUT_" + ri.activityInfo.packageName + "/" + ri.activityInfo.name});
-            }
-            for (String id : csvToList(prefs.getString("shortcut_ids", ""))) {
-                allItems.add(new String[]{"(Đã lưu) " + prefs.getString("shortcut_" + id + "_name", "Shortcut"), "act:RUN_SHORTCUT_" + id});
-            }
-        }
+// [SỬA] Chỉ liệt kê Shortcut ĐÃ TẠO SẴN, bỏ hẳn list provider thô —
+// chọn thẳng provider khiến runtime không hiểu, mỗi lần chạm chỉ mở lại
+// dialog "Tạo shortcut" thay vì chạy đúng shortcut đó.
+for (String id : csvToList(prefs.getString("shortcut_ids", ""))) {
+    allItems.add(new String[]{prefs.getString("shortcut_" + id + "_name", "Shortcut"), "act:RUN_SHORTCUT_" + id});
+}
+}
         else if (type.equals("SYSTEM")) {
             String[][] sys = { {"BACK","Quay lại"},{"HOME","Màn chính"},{"RECENTS","Đa nhiệm"},{"SCREEN_OFF","Tắt màn hình"},{"FLASH","Đèn pin"},{"SCREENSHOT","Chụp màn hình"},{"CAMERA","Camera"},{"VOLUME","Âm lượng"},{"POWER_DIALOG","Menu nguồn"},{"NOTIFICATIONS","Thông báo"},{"QUICK_SETTINGS","Cài đặt nhanh"},{"SPLIT_SCREEN","Chia đôi màn hình"},{"SCREEN_RECORD","Quay màn hình"},{"AUTO_ROTATE_TOGGLE","Tự động xoay"}, {"TRIGGER_ACC_MENU_2F", "Giả lập 2 ngón"} };
             for (String[] s : sys) allItems.add(new String[]{s[1], "act:" + s[0]});
@@ -6548,7 +6546,10 @@ private void renderBubbleSettings() {
             for (String[] s : trg) allItems.add(new String[]{s[1], "act:" + s[0]});
         }
         else if (type.equals("INTENT")) allItems.addAll(buildDynamicPackItems("intent_ids", "intent_", "act:INTENT_", "Intent"));
-        else if (type.equals("MACRO")) allItems.addAll(buildDynamicPackItems("macro_ids", "macro_", "act:MACRO_", "Macro"));
+        else if (type.equals("QSTILE")) {
+             for (String id : csvToList(prefs.getString("tile_ids_v2", "")))
+        allItems.add(new String[]{prefs.getString("tilev2_" + id + "_label", "QS Tile"), "act:QSTILE_" + id});
+}
         else if (type.equals("PANEL")) allItems.addAll(buildDynamicPackItems("pack_panel_ids", "pack_panel_", "act:PANEL_", "Panel"));
 
         List<String> validRefs = new ArrayList<>();
@@ -8296,15 +8297,27 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
 
     bCancel.setOnClickListener(v -> d.dismiss());
     bSave.setOnClickListener(v -> {
-        prefs.edit()
-            .putString(prefPrefix + "apps", android.text.TextUtils.join(",", selApps))
-            .putString(prefPrefix + "acts", android.text.TextUtils.join(",", selActs))
-            .putString(prefPrefix + "shortcuts", android.text.TextUtils.join(",", selScs))
-            .apply();
-        syncPanelService();
-        if (onSaved != null) onSaved.run();
-        d.dismiss();
-    });
+    // [FIX] Đồng bộ lại "order" theo đúng apps/acts/shortcuts MỚI: bỏ ref đã gỡ,
+    // thêm ref mới — chặn hiện tượng item ma / item mới bị mất khi đổi chỗ icon.
+    java.util.Set<String> validRefs = new java.util.LinkedHashSet<>();
+    for (String a : selApps) validRefs.add(a);
+    for (String a : selActs) validRefs.add(a);
+    for (String s : selScs) validRefs.add("SC:" + s);
+
+    List<String> order = csvToList(prefs.getString(prefPrefix + "order", ""));
+    order.retainAll(validRefs);
+    for (String ref : validRefs) if (!order.contains(ref)) order.add(ref);
+
+    prefs.edit()
+        .putString(prefPrefix + "apps", android.text.TextUtils.join(",", selApps))
+        .putString(prefPrefix + "acts", android.text.TextUtils.join(",", selActs))
+        .putString(prefPrefix + "shortcuts", android.text.TextUtils.join(",", selScs))
+        .putString(prefPrefix + "order", android.text.TextUtils.join(",", order))
+        .apply();
+    syncPanelService();
+    if (onSaved != null) onSaved.run();
+    d.dismiss();
+});
 
     d.setContentView(root); d.show();
 }

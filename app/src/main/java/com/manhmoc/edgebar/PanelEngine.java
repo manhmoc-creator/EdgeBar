@@ -1137,10 +1137,19 @@ private void fastRenderPanelGrid(String id) {
     int cellSize = iconSize + CELL_INNER_PAD;
 
     LinearLayout gridContainer = (LinearLayout) panel.getChildAt(0); 
-    gridContainer.removeAllViews();
+gridContainer.removeAllViews();
 
-    List<String> order = csvToList(prefs.getString(px + "order", ""));
-    LinearLayout row = null;
+// [FIX] Lọc bỏ khỏi "order" mọi ref không còn tồn tại trong apps/acts/shortcuts hiện tại
+java.util.Set<String> validRefs = new java.util.LinkedHashSet<>();
+for (String a : csvToList(prefs.getString(px+"apps",""))) validRefs.add(a);
+for (String a : csvToList(prefs.getString(px+"acts",""))) validRefs.add(a);
+for (String s : csvToList(prefs.getString(px+"shortcuts",""))) validRefs.add("SC:" + s);
+List<String> order = csvToList(prefs.getString(px + "order", ""));
+order.retainAll(validRefs);
+for (String ref : validRefs) if (!order.contains(ref)) order.add(ref);
+prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
+
+LinearLayout row = null;
 
     for (int i = 0; i < order.size(); i++) {
         if (i % cols == 0) {

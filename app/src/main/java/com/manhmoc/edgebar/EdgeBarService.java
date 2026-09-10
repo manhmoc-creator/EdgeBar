@@ -2384,9 +2384,11 @@ setViewVisibilityAnimated(bars[i], shouldShowBar);
                 int iconSize = prefs.getInt("lock_"+BARS[i]+"_icon_size", prefs.getInt("lock_bar_icon_size", 40));
 int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", prefs.getInt("lock_bar_icon_alpha", 255));
 ((BarView)bars[i]).setIcons(resolveBarIcons(prefs.getString("lock_"+BARS[i]+"_icons",""), iconSize), iconAlpha);
-                int priMode = prefs.getInt("lock_"+BARS[i]+"_pri_mode",0);
+                                int priMode = prefs.getInt("lock_"+BARS[i]+"_pri_mode",0);
                 int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-                if (priMode==1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                // [MỚI] Đang xem trước ở Frontier -> chỉ hiển thị hình, KHÔNG nhận cử chỉ thật
+                if (priMode==1 || isPreview) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+
                 else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
         int pushY = (pushForKbd && (i==0 || i==1 || i==5 || i==9 || i==11)) ? cachedKbdHeight : 0;
 // Ở HomescreenService thì thay thành: int pushY = (pushForKbd && (i==0 || i==1 || i==5 || i==9 || i==11)) ? lastKbdHeight : 0;
@@ -2412,9 +2414,11 @@ View.VISIBLE : View.GONE);
                 int visMode = prefs.getInt(ck+"vis_mode",0);
                 boolean isAuto = (visMode==1), isInv = (visMode==2);
                 ((CornerView)corners[i]).updateProps(prefs.getInt("lock_corner_thick",8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv);
-                int priMode = prefs.getInt(ck+"pri_mode",0);
+                                int priMode = prefs.getInt(ck+"pri_mode",0);
                 int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-                if (priMode==1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                // [MỚI] Đang xem trước ở Frontier -> chỉ hiển thị hình, KHÔNG nhận cử chỉ thật
+                if (priMode==1 || isPreview) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+
                 else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
                 WindowManager.LayoutParams p = (WindowManager.LayoutParams) corners[i].getLayoutParams();
                 p.flags = baseFlags; p.gravity = C_GRAV[i];

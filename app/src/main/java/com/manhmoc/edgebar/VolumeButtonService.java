@@ -30,7 +30,7 @@ public class VolumeButtonService extends Service {
     
     // --- THUẬT TOÁN ĐIỀU KHIỂN VOLKEY SIÊU NHẠY ---
     private static final long DEBOUNCE_MS = 60; // Lọc nhiễu cơ học của nút cứng
-    private static final long MAX_WAIT_MS = 480; // Chờ nhịp 2 tối đa
+    private static final long MAX_WAIT_MS = 450; // Chờ nhịp 2 tối đa
     
     private int pendingKey = 0; // 0: rảnh, 1: up, -1: down
     private long lastPhysicalEventMs = 0;

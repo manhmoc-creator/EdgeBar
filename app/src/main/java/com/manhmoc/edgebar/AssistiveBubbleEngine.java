@@ -30,6 +30,9 @@ public class AssistiveBubbleEngine {
     private Integer selectedMainIdx = null;
     private Integer selectedSubIdx = null;
     private String currentSubmenu = null;
+    private static List<String[]> cachedAppItems = null;
+private static long cachedAppItemsTs = 0;
+private static final long APP_ITEMS_CACHE_MS = 5 * 60 * 1000; // 5 phút, đồng bộ kiểu cache đã dùng ở MainActivity
     private static final java.util.concurrent.ExecutorService bubbleIconExecutor =
     new java.util.concurrent.ThreadPoolExecutor(2, 6, 30, java.util.concurrent.TimeUnit.SECONDS,
         new java.util.concurrent.LinkedBlockingDeque<>()); // tăng từ fixed(4) lên 2-6 co giãn
@@ -60,6 +63,7 @@ private Drawable resolveSubNodeIcon(String customOverride, String ref) {
     PackageManager pm = ctx.getPackageManager();
     try {
         if (ref.startsWith("app:")) return pm.getApplicationIcon(ref.substring(4));
+        if (ref.startsWith("act:QSTILE_")) return resolveQsTileIcon(ref.substring("act:QSTILE_".length())); 
         if (ref.startsWith("act:CREATE_SHORTCUT_")) {
             String[] split = ref.substring(20).split("/");
             return pm.getActivityIcon(new ComponentName(split[0], split[1]));
@@ -79,8 +83,24 @@ private Drawable resolveSubNodeIcon(String customOverride, String ref) {
     } catch (Exception ignored) {}
     return null;
 }
-    private static final String[] DEFAULT_ORDER = {"APP","SHORTCUT","SYSTEM","INTENT","MACRO","PANEL","UTILITY","TRIGGER","SEARCH"};
-    
+private Drawable resolveQsTileIcon(String tileId) {
+    int idx = prefs.getInt("tilev2_" + tileId + "_icon_idx", -1);
+    if (idx >= 0 && idx < PanelEngine.SYSTEM_ICON_POOL.length) {
+        try { return ctx.getDrawable(PanelEngine.SYSTEM_ICON_POOL[idx]); } catch (Exception ignored) {}
+    }
+    String act = prefs.getString("tilev2_" + tileId + "_act", "");
+    if (act.equals("LAUNCH_APP")) {
+        try { return ctx.getPackageManager().getApplicationIcon(prefs.getString("tilev2_" + tileId + "_launch_pkg", "")); }
+        catch (Exception ignored) {}
+    } else if (act.equals("RUN_SHORTCUT")) {
+        String path = prefs.getString("shortcut_" + prefs.getString("tilev2_" + tileId + "_shortcut_id", "") + "_icon_path", "");
+        if (!path.isEmpty()) { Bitmap bmp = BitmapFactory.decodeFile(path); if (bmp != null) return new BitmapDrawable(ctx.getResources(), bmp); }
+    }
+    return null;
+}
+    private static final String[] DEFAULT_ORDER = {"APP","SHORTCUT","SYSTEM","INTENT","QSTILE","PANEL","UTILITY","TRIGGER","SEARCH"}; 
+
+
     private int restoreBubbleX = -1, restoreBubbleY = -1;
     private ValueAnimator jumpAnim;
     private ComponentCallbacks configCallbacks;
@@ -311,9 +331,11 @@ private void updateBubbleIcon() {
         final Runnable[] pendingSingleTap = {null};
         final Handler tapHandler = new Handler(Looper.getMainLooper());
         final Runnable longPressCheck = () -> {
-            longFiredFlag[0] = true;
-            fireGestureAction("long");
-        };
+    if (isDragging[0]) return; // [FIX] đang kéo -> không phải giữ tĩnh, bỏ qua
+    longFiredFlag[0] = true;
+    fireGestureAction("long");
+};
+
         final int DTAP_WINDOW_MS = 220; // ngắn hơn hẳn timeout mặc định của hệ thống (~300-400ms)
 
         bubbleView.setOnTouchListener((v, e) -> {
@@ -335,9 +357,10 @@ private void updateBubbleIcon() {
                     
                     float newX = e.getRawX() - downRaw[0];
                     float newY = e.getRawY() - downRaw[1];
-                    if (!isDragging[0] && (Math.abs(newX - bubbleLp.x) > 8 || Math.abs(newY - bubbleLp.y) > 8)) {
-                        isDragging[0] = true;
-                    }
+                    if (!isDragging[0] && (Math.abs(newX - bubbleLp.x) > 16 || Math.abs(newY - bubbleLp.y) > 16)) {
+    isDragging[0] = true;
+    tapHandler.removeCallbacks(longPressCheck); // [FIX] huỷ hẹn giờ Long Press ngay khi bắt đầu kéo
+}
                     if (isDragging[0]) {
                         bubbleLp.x = (int) newX;
                         bubbleLp.y = (int) newY;
@@ -692,7 +715,7 @@ private List<String> getSubItems(String type) {
         switch (type) {
             case "APP": return "Apps"; case "SHORTCUT": return "Shortcut"; case "SYSTEM": return "System";
             case "UTILITY": return "Utility"; case "TRIGGER": return "Trigger"; case "INTENT": return "Intent";
-            case "MACRO": return "Macro"; case "PANEL": return "Panel"; case "SEARCH": return "Search";
+            case "QSTILE": return "QS Tile"; case "PANEL": return "Panel"; case "SEARCH": return "Search";
             default: return "Node";
         }
     }
@@ -711,9 +734,9 @@ private List<String> getSubItems(String type) {
             return prefs.getString("shortcut_" + ref.substring(17) + "_name", "Shortcut");
         } else if (ref.startsWith("act:INTENT_")) {
             return prefs.getString("intent_" + ref.substring(11) + "_name", "Intent");
-        } else if (ref.startsWith("act:MACRO_")) {
-            return prefs.getString("macro_" + ref.substring(10) + "_name", "Macro");
-        } else if (ref.startsWith("act:PANEL_")) {
+        } else if (ref.startsWith("act:QSTILE_")) {
+            return prefs.getString("tilev2_" + ref.substring(11) + "_label", "QS Tile");
+         } else if (ref.startsWith("act:PANEL_")) {
             return prefs.getString("pack_panel_" + ref.substring(10) + "_name", "Panel");
         } else if (ref.startsWith("act:")) {
             List<String[]> allItems = buildItems("ALL");
@@ -1140,20 +1163,27 @@ if (!ref.isEmpty()) tv.setTextSize(11f);
         }
         switch (type) {
             case "APP": {
-                // YÊU CẦU 3: Quét cả ứng dụng trong không gian riêng (Island) bằng LauncherApps
-                android.os.UserManager um = (android.os.UserManager) ctx.getSystemService(Context.USER_SERVICE);
-                android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE);
-                try {
-                    for (android.os.UserHandle profile : um.getUserProfiles()) {
-                        boolean island = !profile.equals(android.os.Process.myUserHandle());
-                        for (android.content.pm.LauncherActivityInfo info : la.getActivityList(null, profile)) {
-                            out.add(new String[]{info.getLabel().toString() + (island ? " [Island]" : ""), "app:" + info.getApplicationInfo().packageName});
-                        }
-                    }
-                } catch (Exception ignored) {}
-                out.sort((a, b) -> a[0].compareToIgnoreCase(b[0]));
-                break;
+    long now = System.currentTimeMillis();
+    if (cachedAppItems != null && (now - cachedAppItemsTs) < APP_ITEMS_CACHE_MS) {
+        out.addAll(cachedAppItems);
+        break;
+    }
+    List<String[]> fresh = new ArrayList<>();
+    android.os.UserManager um = (android.os.UserManager) ctx.getSystemService(Context.USER_SERVICE);
+    android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE);
+    try {
+        for (android.os.UserHandle profile : um.getUserProfiles()) {
+            boolean island = !profile.equals(android.os.Process.myUserHandle());
+            for (android.content.pm.LauncherActivityInfo info : la.getActivityList(null, profile)) {
+                fresh.add(new String[]{info.getLabel().toString() + (island ? " [Island]" : ""), "app:" + info.getApplicationInfo().packageName});
             }
+        }
+    } catch (Exception ignored) {}
+    fresh.sort((a, b) -> a[0].compareToIgnoreCase(b[0]));
+    cachedAppItems = fresh; cachedAppItemsTs = now;
+    out.addAll(fresh);
+    break;
+}
             case "SHORTCUT": {
                 for (ResolveInfo ri : ShortcutScanner.getProviders(ctx)) {
                     if (ri.activityInfo.packageName.equals(ctx.getPackageName())) continue; 
@@ -1182,11 +1212,11 @@ if (!ref.isEmpty()) tv.setTextSize(11f);
                     out.add(new String[]{prefs.getString("intent_" + id + "_name", "Intent"), "act:INTENT_" + id});
                 break;
             }
-            case "MACRO": {
-                for (String id : csvToList(prefs.getString("macro_ids", "")))
-                    out.add(new String[]{prefs.getString("macro_" + id + "_name", "Macro"), "act:MACRO_" + id});
-                break;
-            }
+            case "QSTILE": {
+                 for (String id : csvToList(prefs.getString("tile_ids_v2", "")))
+                     out.add(new String[]{prefs.getString("tilev2_" + id + "_label", "QS Tile"), "act:QSTILE_" + id});
+                  break;
+             }
             case "PANEL": {
                 for (String id : csvToList(prefs.getString("pack_panel_ids", "")))
                     out.add(new String[]{prefs.getString("pack_panel_" + id + "_name", "Panel"), "act:PANEL_" + id});
@@ -1217,6 +1247,8 @@ if (!ref.isEmpty()) tv.setTextSize(11f);
                 createIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 try { ctx.startActivity(createIntent); } catch (Exception ignored) {}
             }
+        } else if (ref.startsWith("act:QSTILE_")) {
+    fireQsTile(ref.substring("act:QSTILE_".length()));
         } else if (ref.startsWith("act:")) {
             Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             ipc.putExtra("act", ref.substring(4));
@@ -1235,6 +1267,13 @@ if (!ref.isEmpty()) tv.setTextSize(11f);
             ctx.sendBroadcast(ipc);
         }
     }
+private void fireQsTile(String tileId) {
+    String act = prefs.getString("tilev2_" + tileId + "_act", "NONE");
+    if (act.equals("NONE") || act.isEmpty()) return;
+    if (act.equals("LAUNCH_APP")) runItem("app:" + prefs.getString("tilev2_" + tileId + "_launch_pkg", ""));
+    else if (act.equals("RUN_SHORTCUT")) runItem("act:RUN_SHORTCUT_" + prefs.getString("tilev2_" + tileId + "_shortcut_id", ""));
+    else runItem("act:" + act);
+}
     // ===================== BUBBLE CIRCLE (CẤU HÌNH 2 - Ổ ĐẠN) =====================
 
     private void moveToCenterAndOpenCircleMenu() {
@@ -1345,15 +1384,38 @@ if (!ref.isEmpty()) tv.setTextSize(11f);
         circleView.animate().alpha(1f).setDuration(90).start();
         circleView.invalidate();
     }
+// [MỚI] Hoán vị hiển thị RIÊNG cho Vòng đạn — không đụng vào dữ liệu/thứ tự của
+// Bubble Panel. Chỉ lưu 9 chỉ số (vị trí gốc -> vị trí hiển thị), Zero-RAM ngoài
+// lúc user thực sự đổi chỗ 2 nút.
+private int[] getCirclePerm(String key) {
+    int[] perm = new int[9];
+    for (int i = 0; i < 9; i++) perm[i] = i;
+    String csv = prefs.getString(key, "");
+    if (!csv.isEmpty()) {
+        String[] parts = csv.split(",");
+        if (parts.length == 9) {
+            try { for (int i = 0; i < 9; i++) perm[i] = Integer.parseInt(parts[i].trim()); }
+            catch (Exception e) { for (int i = 0; i < 9; i++) perm[i] = i; }
+        }
+    }
+    return perm;
+}
+        private List<String[]> getCurrentCircleItems() {
+        // [SỬA] Nội dung 9 ô vẫn lấy từ nguồn dùng chung (Common Settings), nhưng
+        // THỨ TỰ hiển thị áp qua permKey riêng của Circle -> không còn ảnh hưởng Panel.
+        List<String> base = (circleSubmenuType == null) ? getMainOrder() : getSubItems(circleSubmenuType);
+        String permKey = (circleSubmenuType == null) ? "bubble_circle_perm_MAIN" : "bubble_circle_perm_" + circleSubmenuType;
+        int[] perm = getCirclePerm(permKey);
 
-    private List<String[]> getCurrentCircleItems() {
-        List<String> order = getMainOrder();
         List<String[]> out = new ArrayList<>();
-        if (circleSubmenuType == null) {
-            for (String type : order) out.add(new String[]{getLabelForType(type), "TYPE:" + type});
-        } else {
-            for (String ref : getSubItems(circleSubmenuType))
+        for (int i = 0; i < 9; i++) {
+            int srcIdx = perm[i];
+            String ref = (srcIdx >= 0 && srcIdx < base.size()) ? base.get(srcIdx) : "";
+            if (circleSubmenuType == null) {
+                out.add(ref.isEmpty() ? new String[]{"", "TYPE:"} : new String[]{getLabelForType(ref), "TYPE:" + ref});
+            } else {
                 out.add(new String[]{ref.isEmpty() ? "" : getActionLabelForSubNode(ref), ref});
+            }
         }
         return out;
     }
@@ -1523,6 +1585,8 @@ for (String[] item : allItems) {
         if (imm != null) imm.showSoftInput(et, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
     }, 200);
 }
+    private Runnable spinHoldRunnable;
+    private float lastSpinVelocity = 0f;
     private class CircleMenuView extends View {
     private List<String[]> items = new ArrayList<>();
         private final Paint pRingBg = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -1648,11 +1712,11 @@ for (String[] item : allItems) {
         float bgWidth = prefs.getInt("bubble_circle_bg_width", 60);
         int bgAlpha = prefs.getInt("bubble_circle_bg_alpha", 160);
 
-        pRingBg.setColor(Color.argb(bgAlpha, 200, 200, 210));
+                pRingBg.setColor(Color.argb(bgAlpha, 18, 18, 18)); // [MỚI] nền đen #121212 đồng bộ Bubble Panel
         pRingBg.setStrokeWidth(bgWidth);
         canvas.drawCircle(cx, cy, ringR, pRingBg);
 
-        pStroke.setColor(Color.argb(220, 235, 235, 245));
+        pStroke.setColor(Color.parseColor("#8AB4F8")); // [MỚI] viền xanh accent, đồng bộ toàn app
         pStroke.setStrokeWidth(4f);
         canvas.drawCircle(cx, cy, ringR + bgWidth / 2f, pStroke);
         canvas.drawCircle(cx, cy, ringR - bgWidth / 2f, pStroke);
@@ -1725,7 +1789,7 @@ for (String[] item : allItems) {
     }
 
         @Override public boolean onTouchEvent(MotionEvent e) {
-        if (e.getActionMasked() == MotionEvent.ACTION_OUTSIDE) { closeOrBack(); return true; }
+        if (e.getActionMasked() == MotionEvent.ACTION_OUTSIDE) { closeCircleMenu(); return true; } // [FIX] đồng bộ với Panel: chạm ra ngoài = đóng ngay
         float cx = getWidth() / 2f, cy = getHeight() / 2f;
         float x = e.getX(), y = e.getY();
         switch (e.getActionMasked()) {
@@ -1758,14 +1822,23 @@ for (String[] item : allItems) {
                 float curAngle = (float) Math.toDegrees(Math.atan2(y - cy, x - cx));
                 float delta = curAngle - lastTouchAngle;
                 if (delta > 180) delta -= 360; if (delta < -180) delta += 360;
-                if (!dragging && Math.abs(delta) > 3f && selectedNodeIdx == null) dragging = true;
+                if (!dragging && Math.abs(delta) > 0.8f && selectedNodeIdx == null) dragging = true;
                 if (dragging) {
-                    circleRotationDeg += delta;
-                    angTracker.addSample(delta);
-                    invalidate();
-                }
-                lastTouchAngle = curAngle;
-                return true;
+    circleRotationDeg += delta;
+    angTracker.addSample(delta);
+    float v = angTracker.getVelocityDegPerSec();
+    if (Math.abs(v) > 5f) lastSpinVelocity = v;
+    invalidate();
+    if (spinHoldRunnable != null) removeCallbacks(spinHoldRunnable);
+    if (Math.abs(v) >= prefs.getInt("bubble_circle_spin_sensitivity", 720)) {
+        // [FIX] Chỉ khởi chạy action khi xoay ĐỦ NHANH rồi GIỮ YÊN đủ thời gian
+        // (dùng chung hold_dur toàn hệ thống), không còn bắn ngay lúc nhả tay.
+        spinHoldRunnable = () -> { fireCircleSpinAction(lastSpinVelocity > 0); dragging = false; };
+        postDelayed(spinHoldRunnable, prefs.getInt("hold_dur", 600));
+    }
+}
+lastTouchAngle = curAngle;
+return true;
             }
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
@@ -1790,9 +1863,8 @@ for (String[] item : allItems) {
                         closeOrBack(); // [YÊU CẦU 1] chạm chỗ nào trống trong vòng đạn cũng đóng/lùi
                     }
                 } else if (selectedNodeIdx == null) {
-                    float velocity = angTracker.getVelocityDegPerSec();
-                    if (Math.abs(velocity) >= prefs.getInt("bubble_circle_spin_sensitivity", 720)) fireCircleSpinAction(velocity > 0);
-                }
+    if (spinHoldRunnable != null) { removeCallbacks(spinHoldRunnable); spinHoldRunnable = null; }
+}
                 dragging = false;
                 downNodeIdx = -1;
                 return true;
@@ -1804,19 +1876,16 @@ for (String[] item : allItems) {
         else closeCircleMenu();
     }
 
-    // [YÊU CẦU 3a] nhấn giữ 1 nút -> chọn (tô xanh); chạm nút khác -> đổi chỗ (giống Bubble Panel)
+        // [SỬA] Chỉ đổi chỗ trong PERM RIÊNG của Circle — không còn ghi đè
+    // "bubble_node_order"/"bubble_node_items_<type>" của Bubble Panel nữa.
     private void swapNodes(int i1, int i2) {
-        if (circleSubmenuType == null) {
-            List<String> order = new ArrayList<>(getMainOrder());
-            if (i1 >= order.size() || i2 >= order.size()) return;
-            Collections.swap(order, i1, i2);
-            prefs.edit().putString("bubble_node_order", TextUtils.join(",", order)).apply();
-        } else {
-            List<String> list = getSubItems(circleSubmenuType);
-            if (i1 >= list.size() || i2 >= list.size()) return;
-            Collections.swap(list, i1, i2);
-            prefs.edit().putString("bubble_node_items_" + circleSubmenuType, TextUtils.join(",", list)).apply();
-        }
+        String permKey = (circleSubmenuType == null) ? "bubble_circle_perm_MAIN" : "bubble_circle_perm_" + circleSubmenuType;
+        int[] perm = getCirclePerm(permKey);
+        if (i1 < 0 || i2 < 0 || i1 >= perm.length || i2 >= perm.length) return;
+        int tmp = perm[i1]; perm[i1] = perm[i2]; perm[i2] = tmp;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < perm.length; i++) { if (i > 0) sb.append(','); sb.append(perm[i]); }
+        prefs.edit().putString(permKey, sb.toString()).apply();
         refreshCirclePanel(); // setItems() bên trong tự reset selectedNodeIdx
     }
 
