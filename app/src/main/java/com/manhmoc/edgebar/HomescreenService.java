@@ -1102,7 +1102,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     {"lock_","home_","homacc_","anim_","vib_","hold_",
      "pack_panel_","lenap_","bubble_",
      "blacklist","locklist","avoid_kbd","shortcut_","preview_","lang_","ytdl_",
-     "intent_","tile_","macro_","i1_","i2_","i3_","i4_","i5_","i6_","i7_",
+     "intent_","tile_","tilev2_","macro_","i1_","i2_","i3_","i4_","i5_","i6_","i7_",
      "i8_","i9_","i10_","i11_","i12_","i13_","i14_","i15_"};
     for (String prefix : ourPrefixes)
         if (k.startsWith(prefix) || k.equals(prefix)) { isOurKey = true; break; }
@@ -1260,7 +1260,7 @@ private void setViewVisibilityAnimated(View v, boolean show) {
 private void applyLockGateInstant() {
     boolean isPreview = prefs.getBoolean("preview_lock", false);
     boolean isLocked = (km != null && km.isKeyguardLocked()) || isPreview;
-    boolean isSecureOverlayVisible = isBouncerVisible && !isPreview;
+    boolean isSecureOverlayVisible = (isBouncerVisible || qrScannerOverlayActive) && !isPreview;
     for (int i = 0; i < 12; i++) {
         if (bars[i] == null) continue;
         int lockMode = prefs.getInt("lock_" + BARS[i] + "_lockmode", 1);

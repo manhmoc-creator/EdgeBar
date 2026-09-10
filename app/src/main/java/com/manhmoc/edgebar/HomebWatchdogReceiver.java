@@ -72,6 +72,6 @@ public class HomebWatchdogReceiver extends BroadcastReceiver {
             c, 503, i,
             android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
                 am.setInexactRepeating(android.app.AlarmManager.ELAPSED_REALTIME,
-            android.os.SystemClock.elapsedRealtime() + 60*1000, 60*1000, pi);
+    android.os.SystemClock.elapsedRealtime() + 15*60*1000, 15*60*1000, pi);
     }
 }

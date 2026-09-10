@@ -38,7 +38,7 @@ public class VolumeButtonService extends Service {
     
     private final Handler keepAliveHandler = new Handler();
 private Runnable keepAliveRunnable;
-private static final long KEEP_ALIVE_INTERVAL_MS = 240000; // 4 phút — đủ để giữ MediaSession sống, không phá Doze
+private static final long KEEP_ALIVE_INTERVAL_MS = 900000; // [FIX PIN] 15 phút — MediaSession vẫn đủ sống, giảm 3.75x số lần wake CPU
 
     private android.os.PowerManager.WakeLock kaWakeLock;
 

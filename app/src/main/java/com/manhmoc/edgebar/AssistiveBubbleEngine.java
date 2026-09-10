@@ -1155,10 +1155,10 @@ if (!ref.isEmpty()) tv.setTextSize(11f);
 
     private List<String[]> buildItems(String type) {
         List<String[]> out = new ArrayList<>();
-        if (type.equals("SEARCH") || type.equals("ALL")) {
+                if (type.equals("SEARCH") || type.equals("ALL")) {
             out.addAll(buildItems("APP")); out.addAll(buildItems("SHORTCUT")); out.addAll(buildItems("SYSTEM"));
             out.addAll(buildItems("UTILITY")); out.addAll(buildItems("TRIGGER")); out.addAll(buildItems("INTENT"));
-            out.addAll(buildItems("MACRO")); out.addAll(buildItems("PANEL"));
+            out.addAll(buildItems("QSTILE")); out.addAll(buildItems("PANEL"));
             return out;
         }
         switch (type) {
@@ -1827,16 +1827,32 @@ for (String[] item : allItems) {
     circleRotationDeg += delta;
     angTracker.addSample(delta);
     float v = angTracker.getVelocityDegPerSec();
+    boolean directionFlipped = (Math.abs(v) > 5f) && lastSpinVelocity != 0f
+        && Math.signum(v) != Math.signum(lastSpinVelocity);
     if (Math.abs(v) > 5f) lastSpinVelocity = v;
     invalidate();
-    if (spinHoldRunnable != null) removeCallbacks(spinHoldRunnable);
+    // [FIX] Đổi hướng giữa chừng -> huỷ hẹn giờ cũ, không cho bắn nhầm hướng trước đó
+    if (directionFlipped && spinHoldRunnable != null) {
+        removeCallbacks(spinHoldRunnable);
+        spinHoldRunnable = null;
+    } else if (spinHoldRunnable != null) {
+        removeCallbacks(spinHoldRunnable);
+    }
     if (Math.abs(v) >= prefs.getInt("bubble_circle_spin_sensitivity", 720)) {
-        // [FIX] Chỉ khởi chạy action khi xoay ĐỦ NHANH rồi GIỮ YÊN đủ thời gian
-        // (dùng chung hold_dur toàn hệ thống), không còn bắn ngay lúc nhả tay.
-        spinHoldRunnable = () -> { fireCircleSpinAction(lastSpinVelocity > 0); dragging = false; };
-        postDelayed(spinHoldRunnable, prefs.getInt("hold_dur", 600));
+        final float capturedVelocity = v;
+        spinHoldRunnable = () -> {
+            fireCircleSpinAction(capturedVelocity > 0);
+            dragging = false;
+            try {
+                Vibrator vib = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+                if (vib != null) vib.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE));
+            } catch (Exception ignored) {}
+        };
+        // [FIX] dùng riêng "bubble_circle_hold_dur" thay vì "hold_dur" chung toàn hệ thống
+        postDelayed(spinHoldRunnable, prefs.getInt("bubble_circle_hold_dur", 450));
     }
 }
+
 lastTouchAngle = curAngle;
 return true;
             }

@@ -1494,7 +1494,13 @@ private void addHideTargetCheckboxes(LinearLayout container, String fullPrefKey,
 // [MỚI] Ngược với addHideTargetCheckboxes(): mặc định TỰ ĐỘNG BẬT cho mọi bar,
 // tick vào bar nào để TẮT tự động đổi màu (giữ icon trắng cố định) cho bar đó.
 private void addAutoColorOffCheckboxes(LinearLayout container, String fullPrefKey, String[] keys, String[] names) {
+    // [FIX PIN] Mặc định TẮT auto-color cho toàn bộ bar nếu user chưa từng cấu hình —
+    // tránh chụp screenshot ngầm liên tục khi cuộn, đây là nguồn hao pin lớn nhất lúc màn bật.
+    if (!prefs.contains(fullPrefKey)) {
+        prefs.edit().putString(fullPrefKey, TextUtils.join(",", keys)).apply();
+    }
     java.util.Set<String> offSet = new java.util.LinkedHashSet<>();
+
     for (String s : prefs.getString(fullPrefKey, "").split(",")) if (!s.trim().isEmpty()) offSet.add(s.trim());
     TextView tvNote = new TextView(this);
     tvNote.setText(T("Auto: light bg→black icon, dark→white. Check a bar to always keep it white.",
@@ -6439,6 +6445,7 @@ private void renderBubbleSettings() {
     // [MỚI] thêm 2 thanh kéo để cân bằng số lượng tuỳ chỉnh với Cấu hình 1
     dCfg2.addView(createSlider(T("Node Size on Ring (%)", "Kích thước nút trên vòng đạn (%)"), "bubble_circle_node_scale", 150, 90));
     dCfg2.addView(createSlider(T("Spin Sensitivity (deg/s)", "Độ nhạy xoay tít (độ/giây)"), "bubble_circle_spin_sensitivity", 1500, 720));
+    dCfg2.addView(createSlider(T("Spin+Hold Duration (ms)", "Thời gian Giữ sau khi Xoay (ms)"), "bubble_circle_hold_dur", 1500, 450));
 
     dCfg2.addView(createSectionTitle("🔄 " + T("SPIN GESTURE ACTIONS", "CỬ CHỈ XOAY TÍT VÒNG ĐẠN")));
     List<String[]> spinItems = buildItemsForKeys(new String[]{

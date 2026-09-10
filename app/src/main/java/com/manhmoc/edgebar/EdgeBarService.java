@@ -29,10 +29,18 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.TriggerEvent;
+import android.hardware.TriggerEventListener;
 import android.os.Build;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.view.GestureDetector;
@@ -63,6 +71,57 @@ private boolean lastPreviewHomaccState = false;
 private FingerprintGestureController fpController;
 private FingerprintGestureController.FingerprintGestureCallback fpCallback;
 private boolean fpRegistered = false;
+
+// ===== [MỚI] CẢM BIẾN KHI MÀN TẮT: Proximity + Significant Motion + Step Detector =====
+private SensorManager sensorManager;
+private Sensor proxSensor, sigMotionSensor, stepSensor;
+private boolean sensorsRegistered = false;
+private long lastProxTapMs = 0;
+private boolean proxPendingSingle = false;
+private static final long PROX_DTAP_WINDOW_MS = 500;
+private boolean pocketModeActive = false; // true = nghi đang trong túi/đang chạy -> chặn wave nhầm
+private final Handler proxHandler = new Handler(android.os.Looper.getMainLooper());
+private Runnable proxSingleRunnable;
+private int stepCountWindow = 0;
+
+private SensorEventListener proxListener = new SensorEventListener() {
+    @Override public void onSensorChanged(SensorEvent e) {
+        boolean near = e.values[0] < proxSensor.getMaximumRange();
+        if (!near) return; // chỉ xử lý lúc tay/vật che lại (wave), không xử lý lúc rời ra
+        if (pocketModeActive) return; // đang nghi trong túi -> bỏ qua toàn bộ, tránh chạm nhầm
+        long now = SystemClock.elapsedRealtime();
+        if (proxPendingSingle && (now - lastProxTapMs) <= PROX_DTAP_WINDOW_MS) {
+            proxHandler.removeCallbacks(proxSingleRunnable);
+            proxPendingSingle = false;
+            fireSensorGesture("prox_dtap");
+        } else {
+            proxPendingSingle = true;
+            lastProxTapMs = now;
+            proxSingleRunnable = () -> { proxPendingSingle = false; fireSensorGesture("prox_tap"); };
+            proxHandler.postDelayed(proxSingleRunnable, PROX_DTAP_WINDOW_MS);
+        }
+    }
+    @Override public void onAccuracyChanged(Sensor s, int a) {}
+};
+
+private TriggerEventListener sigMotionTrigger = new TriggerEventListener() {
+    @Override public void onTrigger(TriggerEvent event) {
+        pocketModeActive = true; // vừa có chuyển động đáng kể -> nghi đang cầm/bỏ túi
+        armStepDetectorTemporarily();
+        armSignificantMotion(); // TYPE_SIGNIFICANT_MOTION là one-shot -> phải tự gắn lại
+    }
+};
+
+private SensorEventListener stepListener = new SensorEventListener() {
+    @Override public void onSensorChanged(SensorEvent e) { stepCountWindow++; }
+    @Override public void onAccuracyChanged(Sensor s, int a) {}
+};
+
+private final Runnable pocketExitRunnable = () -> {
+    if (sensorManager != null && stepSensor != null) sensorManager.unregisterListener(stepListener);
+    pocketModeActive = stepCountWindow >= 3; // >=3 bước trong 8s -> chắc chắn đang di chuyển, giữ Pocket Mode
+    stepCountWindow = 0;
+};
 // [MỚI] AppLock — lưu mốc thời gian unlock gần nhất theo RAM, không ghi prefs
     public static void markPackageUnlocked(String pkg) { AppLockHelper.markUnlocked(pkg); }
     private void checkAppLock(String pkg) { AppLockHelper.check(this, prefs, pkg); }
@@ -114,7 +173,9 @@ private boolean recIndicatorTestPaused = false;
     private KeyguardManager km;
 private volatile boolean isBouncerVisible = false;
 private volatile long lastBouncerCheckMs = 0L;
+private volatile boolean qrScannerOverlayActive = false; // [MỚI] QR Scanner đang mở -> coi như có overlay bảo mật che lockscreen gốc
 private static final long BOUNCER_CHECK_THROTTLE_MS = 60;
+
 private static final String[] KEYGUARD_BOUNCER_IDS = {
     "com.android.systemui:id/keyguard_pin_view",
     "com.android.systemui:id/keyguard_security_container"
@@ -184,7 +245,7 @@ private volatile boolean isCapturingIconColorScreenshot = false;
 private volatile long iconColorCaptureStartMs = 0L;
 private static final long ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS = 4000; // quá thời gian này coi như kẹt, tự giải phóng
 
-private static final long ICON_COLOR_EVENT_GATE_MS = 350; // giãn cách tối thiểu giữa 2 lần chụp khi cuộn
+private static final long ICON_COLOR_EVENT_GATE_MS = 400; // giãn cách tối thiểu giữa 2 lần chụp khi cuộn
 private static final long ICON_COLOR_INTERVAL_MIN_MS = 400;
 private static final long ICON_COLOR_INTERVAL_MAX_MS = 5000;
 private long iconColorCurrentIntervalMs = ICON_COLOR_INTERVAL_MIN_MS;
@@ -395,7 +456,7 @@ private static final java.util.Set<String> EB_KEY_PREFIXES =
     new java.util.HashSet<>(java.util.Arrays.asList(
         "lock_","home_","morse_","homacc_","anim_","vib_","hold_",
         "blacklist","avoid_kbd","shortcut_","preview_",
-        "lang_","ytdl_","intent_","tile_","macro_",
+        "lang_","ytdl_","intent_","tile_","tilev2_","macro_",
         // [FIX] Khóa thật của Panel là "pack_panel_<id>_..." — không phải "panel".
         // Thiếu tiền tố đúng khiến isOurKey() chặn TOÀN BỘ thay đổi live của Panel
         // (Preview Handle, Enable, slider...) ngay từ vòng lọc whitelist.
@@ -497,11 +558,14 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         String act = i.getAction();
         if ("com.manhmoc.edgebar.TEST_ANIM".equals(act)) {
             playAnim();
-        } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
+                } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
             if (isHomaccDrawn) removeAccessibleHome();
             removeYtdlOverlay(); 
             removeRippleViewIfIdle(); 
             AppLockHelper.clearAll(); 
+            registerScreenOffSensors(); // [MỚI] chỉ sống khi màn tắt — 0 pin lúc màn sáng
+
+    registerScreenOffSensors(); // [MỚI] chỉ sống khi màn tắt — 0 pin lúc màn sáng
             if (fpRegistered && fpController != null && fpCallback != null) {
                 try { fpController.unregisterFingerprintGestureCallback(fpCallback); } catch (Exception e) {}
                 fpRegistered = false;
@@ -517,10 +581,11 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
             ed.apply();
 
-        } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
+                } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
+            unregisterScreenOffSensors(); // [MỚI] huỷ ngay khi mở khoá — tuyệt đối không sống lúc dùng máy
             if (AccessibleHomeService.isRunning) drawAccessibleHome();
-            refreshFingerprintRegistration(); 
-            
+            refreshFingerprintRegistration();
+
             // [MỚI] Hồi sinh hoàn toàn: Hủy mọi cờ xuyên thấu/giả lập đang kẹt
             isDispatchingSyntheticGesture = false;
             setTransientUntouchable(false);
@@ -541,7 +606,11 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
 } else if ("com.manhmoc.edgebar.PANEL_TEST_TOGGLE".equals(act)) {
     String panelId = i.getStringExtra("panel_id");
     if (panelEngine != null && panelId != null) panelEngine.setForceTest(panelId, i.getBooleanExtra("on", false));
+} else if ("com.manhmoc.edgebar.QR_SCAN_STATE".equals(act)) {
+    qrScannerOverlayActive = i.getBooleanExtra("open", false);
+    applyLockGateInstant();
 } else if ("com.manhmoc.edgebar.PAUSE_WM_OPS".equals(act)) {
+
     for (int j=0;j<12;j++) if (bars[j]!=null) bars[j].setVisibility(View.GONE);
     for (int j=0;j<4;j++) if (corners[j]!=null) corners[j].setVisibility(View.GONE);
     for (int j=0;j<12;j++) if (accHomeBars[j]!=null) accHomeBars[j].setVisibility(View.GONE);
@@ -1154,6 +1223,7 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
 filter.addAction("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
 filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
 filter.addAction("com.manhmoc.edgebar.PANEL_TEST_TOGGLE");
+filter.addAction("com.manhmoc.edgebar.QR_SCAN_STATE");
 filter.addAction("com.manhmoc.edgebar.PAUSE_WM_OPS");
         filter.addAction("com.manhmoc.edgebar.RESUME_WM_OPS");
         filter.addAction(VoiceRecorderService.TICK_ACTION);
@@ -2311,6 +2381,54 @@ private void refreshFingerprintRegistration() {
         fpRegistered = false;
     }
 }
+        // ===== [MỚI] Hàm điều khiển cảm biến khi màn tắt =====
+        private void armSignificantMotion() {
+            if (sensorManager == null || sigMotionSensor == null) return;
+            sensorManager.requestTriggerSensor(sigMotionTrigger, sigMotionSensor);
+        }
+
+        private void armStepDetectorTemporarily() {
+            if (sensorManager == null || stepSensor == null) return;
+            proxHandler.removeCallbacks(pocketExitRunnable);
+            stepCountWindow = 0;
+            sensorManager.registerListener(stepListener, stepSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            proxHandler.postDelayed(pocketExitRunnable, 8000);
+        }
+
+        private boolean hasAnyProxRule() {
+            return !prefs.getString("sensor_prox_tap", "NONE").equals("NONE")
+                || !prefs.getString("sensor_prox_dtap", "NONE").equals("NONE");
+        }
+
+        private void fireSensorGesture(String gesture) {
+            handleAction("sensor_" + gesture); // tận dụng handleAction() có sẵn -> tự có vib/anim/rule
+        }
+
+        private void registerScreenOffSensors() {
+            if (sensorsRegistered) return;
+            if (!hasAnyProxRule()) return; // [TIẾT KIỆM PIN] user chưa gán rule -> không đăng ký gì cả
+            if (sensorManager == null) sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+            proxSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+            sigMotionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION);
+            stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
+            if (proxSensor != null) sensorManager.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            if (sigMotionSensor != null) armSignificantMotion();
+            sensorsRegistered = true;
+            pocketModeActive = false;
+        }
+
+        private void unregisterScreenOffSensors() {
+            if (!sensorsRegistered) return;
+            if (sensorManager != null) {
+                sensorManager.unregisterListener(proxListener);
+                sensorManager.unregisterListener(stepListener);
+                if (sigMotionSensor != null) sensorManager.cancelTriggerSensor(sigMotionTrigger, sigMotionSensor);
+            }
+            proxHandler.removeCallbacksAndMessages(null);
+            sensorsRegistered = false;
+            pocketModeActive = false;
+        }
+
         private void createFloatingBars() {
         fV = new FlashView(this);
         fV.setAlpha(0f); fV.setVisibility(View.GONE);
@@ -2359,7 +2477,7 @@ private void syncHomaccPreviewState() {
 boolean isPreview = prefs.getBoolean("preview_lock", false);
 boolean isLocked = km.isKeyguardLocked() || isPreview;
 // true = có PIN/camera bảo mật/calculator... đang che màn khoá gốc
-boolean isSecureOverlayVisible = isBouncerVisible && !isPreview;
+boolean isSecureOverlayVisible = (isBouncerVisible || qrScannerOverlayActive) && !isPreview;
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hide = isBl; // isKbd không ẩn nữa — đẩy lên thay vì ẩn
 boolean pushForKbd = avoidKbd && cachedKbdHeight > 0;
@@ -2461,7 +2579,7 @@ private void setViewVisibilityAnimated(View v, boolean show) {
 private void applyLockGateInstant() {
     boolean isPreview = prefs.getBoolean("preview_lock", false);
     boolean isLocked = (km != null && km.isKeyguardLocked()) || isPreview;
-    boolean isSecureOverlayVisible = isBouncerVisible && !isPreview;
+    boolean isSecureOverlayVisible = (isBouncerVisible || qrScannerOverlayActive) && !isPreview;
     for (int i = 0; i < 12; i++) {
         if (bars[i] == null) continue;
         int lockMode = prefs.getInt("lock_" + BARS[i] + "_lockmode", 1);

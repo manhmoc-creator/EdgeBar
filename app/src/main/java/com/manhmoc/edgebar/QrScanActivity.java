@@ -50,9 +50,11 @@ public class QrScanActivity extends Activity {
     private View frame;
     private final MultiFormatReader zxingReader = new MultiFormatReader();
 
-    private String cameraId;
+        private String cameraId;
     private int sensorOrientation = 90;
     private Size previewSize;
+    private volatile long scanStartMs = 0L;
+    private static final long BOOST_AFTER_MS = 1800;
 
     // [MỚI] Timeout tự tắt cam nếu quét quá lâu không ra kết quả — chống nóng máy
     private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
@@ -74,7 +76,9 @@ public class QrScanActivity extends Activity {
                 | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
                 | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD);
         }
+        sendBroadcast(new Intent("com.manhmoc.edgebar.QR_SCAN_STATE").putExtra("open", true));
         Map<DecodeHintType, Object> hints = new EnumMap<>(DecodeHintType.class);
+
         hints.put(DecodeHintType.TRY_HARDER, Boolean.TRUE);
         hints.put(DecodeHintType.POSSIBLE_FORMATS, Arrays.asList(
             BarcodeFormat.QR_CODE, BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
@@ -495,11 +499,13 @@ public class QrScanActivity extends Activity {
                         List<android.view.Surface> targets = Arrays.asList(reader.getSurface(), previewSurface);
                         c.createCaptureSession(targets,
                             new CameraCaptureSession.StateCallback() {
-                                @Override public void onConfigured(CameraCaptureSession s) {
+                            @Override public void onConfigured(CameraCaptureSession s) {
                                     session = s;
                                     try { s.setRepeatingRequest(req.build(), null, bgHandler); } catch (Exception ignored) {}
+                                    scanStartMs = System.currentTimeMillis();
                                     runOnUiThread(() -> scheduleScanTimeout()); // [MỚI]
                                 }
+
                                 @Override public void onConfigureFailed(CameraCaptureSession s) {}
                             }, bgHandler);
                     } catch (Exception ignored) {}
@@ -598,9 +604,10 @@ public class QrScanActivity extends Activity {
     }
 
     /** [MỚI] Mở lại camera + reset trạng thái quét, dùng chung cho nút "Quét lại" ở cả 2 nơi. */
-    private void restartScanning() {
+        private void restartScanning() {
         paused = false;
         cameraClosed = false;
+        scanStartMs = System.currentTimeMillis();
         if (bottomBar != null) bottomBar.setVisibility(View.VISIBLE); // [MỚI]
         GradientDrawable fd = new GradientDrawable();
         fd.setStroke(10, Color.parseColor("#8AB4F8"));
@@ -612,7 +619,7 @@ public class QrScanActivity extends Activity {
     }
     /** HybridBinarizer trước (nhanh, ánh sáng đều); rớt thì thử GlobalHistogramBinarizer
      *  (chịu ánh sáng không đều/độ tương phản cục bộ thấp — hay gặp ở QR có logo giữa). */
-    private Result tryDecode(LuminanceSource src) {
+       private Result tryDecode(LuminanceSource src) {
         try {
             Result r = zxingReader.decodeWithState(new BinaryBitmap(new HybridBinarizer(src)));
             zxingReader.reset();
@@ -624,6 +631,26 @@ public class QrScanActivity extends Activity {
             zxingReader.reset();
             return r;
         } catch (Exception ignored) { zxingReader.reset(); }
+        // [MỚI] QR có logo giữa hay lệch sáng cục bộ -> thử thêm ảnh đảo độ sáng
+        try {
+            LuminanceSource inv = src.invert();
+            Result r = zxingReader.decodeWithState(new BinaryBitmap(new HybridBinarizer(inv)));
+            zxingReader.reset();
+            return r;
+        } catch (Exception ignored) { zxingReader.reset(); }
+        // [MỚI] Sau ~1.8s chưa ra -> thử crop phóng to 75% vùng giữa khung hình,
+        // giúp bắt QR nhỏ/lệch tâm hoặc rìa bị logo che nhưng giữa vẫn còn dữ liệu.
+        if (scanStartMs != 0 && System.currentTimeMillis() - scanStartMs > BOOST_AFTER_MS) {
+            try {
+                int fullW = src.getWidth(), fullH = src.getHeight();
+                int cropSize = Math.min(fullW, fullH) * 3 / 4;
+                int cropX = (fullW - cropSize) / 2, cropY = (fullH - cropSize) / 2;
+                LuminanceSource cropped = src.crop(cropX, cropY, cropSize, cropSize);
+                Result r = zxingReader.decodeWithState(new BinaryBitmap(new HybridBinarizer(cropped)));
+                zxingReader.reset();
+                return r;
+            } catch (Exception ignored) { zxingReader.reset(); }
+        }
         return null;
     }
     /** Hiệu ứng: khung đổi xanh lá + thu nhỏ có nảy (bounce) báo hiệu "đã khoá QR",
@@ -1103,8 +1130,10 @@ public class QrScanActivity extends Activity {
         return src.substring(start, end).trim();
     }
 
-    @Override protected void onDestroy() {
+        @Override protected void onDestroy() {
+        sendBroadcast(new Intent("com.manhmoc.edgebar.QR_SCAN_STATE").putExtra("open", false));
         cancelScanTimeout();
+
         try { if (session != null) session.close(); } catch (Exception ignored) {}
         if (camera != null) camera.close();
         if (reader != null) reader.close();

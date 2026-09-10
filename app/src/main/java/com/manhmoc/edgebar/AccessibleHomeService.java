@@ -54,7 +54,7 @@ scheduleWatchdog();
         // inexact = OS tự gộp cùng các báo thức khác của hệ thống → tiết kiệm pin,
         // sai số vài phút không ảnh hưởng vì mục đích chỉ là "tự phục hồi", không cần chính xác
                 am.setInexactRepeating(android.app.AlarmManager.ELAPSED_REALTIME,
-            android.os.SystemClock.elapsedRealtime() + 60*1000, 60*1000, pi);
+    android.os.SystemClock.elapsedRealtime() + 15*60*1000, 15*60*1000, pi);
     }
 @Override
 public int onStartCommand(Intent intent, int flags, int startId) {
