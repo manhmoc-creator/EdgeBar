@@ -122,8 +122,9 @@ private boolean recIndicatorTestPaused = false;
     }
         private CameraManager cm;
     private String cId;
-        private boolean fOn = false, isKbd = false, isBl = false;
+            private boolean fOn = false, isKbd = false, isBl = false;
     private boolean isBouncerVisible = false; // [FIX] HomescreenService không tự theo dõi bouncer như EdgeBarService, luôn để false vì Homeb chỉ chạy khi unlocked
+    private boolean qrScannerOverlayActive = false; // [FIX] Thêm khai báo còn thiếu — Homeb không theo dõi QR Scanner thật (luôn false) nhưng biến này bắt buộc phải tồn tại để applyLockGateInstant() biên dịch được, vì hàm này được copy nguyên khối từ EdgeBarService.java
     private SharedPreferences prefs;
     private KeyguardManager km;
     private Vibrator vibrator;
