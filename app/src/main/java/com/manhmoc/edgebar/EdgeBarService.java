@@ -181,11 +181,12 @@ private long lastIconColorEventGateMs = 0;
 // đang sống trong RAM — chặn trường hợp 2 sự kiện (cuộn + đổi app) rơi gần nhau khiến
 // 2 lệnh takeScreenshot() chồng lên nhau, gây tăng đột biến RAM đủ để bị OOM-kill.
 private volatile boolean isCapturingIconColorScreenshot = false;
-private static final long ICON_COLOR_EVENT_GATE_MS = 100; // giảm tần suất chụp màn hình khi cuộn -> giảm áp lực RAM/GPU
-// [FIX] Interval co giãn: mặc định nhanh (250ms) khi hệ thống đang cho phép,
-// tự nới ra khi bị OS từ chối (throttle) — tránh vòng lặp "gọi dồn -> bị chặn dồn".
-private static final long ICON_COLOR_INTERVAL_MIN_MS = 250;
-private static final long ICON_COLOR_INTERVAL_MAX_MS = 1200;
+private volatile long iconColorCaptureStartMs = 0L;
+private static final long ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS = 4000; // quá thời gian này coi như kẹt, tự giải phóng
+
+private static final long ICON_COLOR_EVENT_GATE_MS = 350; // giãn cách tối thiểu giữa 2 lần chụp khi cuộn
+private static final long ICON_COLOR_INTERVAL_MIN_MS = 400;
+private static final long ICON_COLOR_INTERVAL_MAX_MS = 5000;
 private long iconColorCurrentIntervalMs = ICON_COLOR_INTERVAL_MIN_MS;
 // [FIX] Sau khi vẽ xong 1 lần, chụp thêm 1 lần "vét" muộn để bắt đúng khung hình
 // sau khi hiệu ứng chuyển cảnh của app kết thúc — khắc phục cảm giác đổi màu trễ nhịp.
@@ -220,10 +221,20 @@ private void requestIconColorSample() {
 private void doSampleIconColors(boolean isFollowUp) {
     if (Build.VERSION.SDK_INT < 30) return;
     if (MyPlaylistService.isRunning || VoiceRecorderService.isRunning || ScreenRecorderService.isRunning) return;
+    android.os.PowerManager pmSample = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+    if (pmSample != null && !pmSample.isInteractive()) return; // [MỚI] màn tắt -> không chụp, không tốn pin
+
     // [FIX BUG 3] Chặn chồng lệnh chụp màn hình — nếu 1 lượt takeScreenshot() trước
     // CHƯA đóng xong HardwareBuffer (vẫn còn trong iconColorExecutor xử lý), tuyệt
     // đối không bắn lệnh mới, dù sự kiện cuộn/đổi app có dồn dập tới đâu.
-    if (isCapturingIconColorScreenshot) return;
+    if (isCapturingIconColorScreenshot) {
+        if (System.currentTimeMillis() - iconColorCaptureStartMs > ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS) {
+            isCapturingIconColorScreenshot = false; // [FIX] watchdog: callback không về -> tự giải phóng, không để kẹt vĩnh viễn
+        } else {
+            return;
+        }
+    }
+
     final boolean needLock = barNeedsAutoColor(bars, "lock_");
     final boolean needHomacc = barNeedsAutoColor(accHomeBars, "homacc_");
     if (!needLock && !needHomacc) return;
@@ -235,6 +246,8 @@ private void doSampleIconColors(boolean isFollowUp) {
     if (lockJobs.isEmpty() && homaccJobs.isEmpty()) return;
 
     isCapturingIconColorScreenshot = true; // [FIX BUG 3] khoá lại NGAY trước khi gọi takeScreenshot()
+    iconColorCaptureStartMs = System.currentTimeMillis();
+
     try {
         takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
             new AccessibilityService.TakeScreenshotCallback() {

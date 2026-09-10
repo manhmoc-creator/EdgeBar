@@ -37,17 +37,19 @@ public class VolumeButtonService extends Service {
     private Runnable actionRunnable = null;
     
     private final Handler keepAliveHandler = new Handler();
-    private Runnable keepAliveRunnable;
-    private static final long KEEP_ALIVE_INTERVAL_MS = 12000;
+private Runnable keepAliveRunnable;
+private static final long KEEP_ALIVE_INTERVAL_MS = 240000; // 4 phút — đủ để giữ MediaSession sống, không phá Doze
+
     private android.os.PowerManager.WakeLock kaWakeLock;
 
     private void startKeepAlive() {
-        stopKeepAlive();
-        keepAliveRunnable = () -> {
-            try {
-                android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-                kaWakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "EdgeBar:VolKeyAlive");
-                kaWakeLock.acquire(3000); 
+    stopKeepAlive();
+    keepAliveRunnable = () -> {
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+            kaWakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "EdgeBar:VolKeyAlive");
+            kaWakeLock.acquire(500);
+
                 if (mediaSession != null) {
                     mediaSession.setPlaybackState(new PlaybackState.Builder()
                             .setState(PlaybackState.STATE_PLAYING, 0, 1f).build());
