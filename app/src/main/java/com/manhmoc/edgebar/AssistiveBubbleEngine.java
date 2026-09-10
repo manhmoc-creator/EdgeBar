@@ -822,7 +822,6 @@ card.setBackground(bg);
 
         int fallbackRes;
         switch (type) {
-                    switch (type) {
             case "SYSTEM": fallbackRes = android.R.drawable.ic_menu_preferences; break;
             case "UTILITY": fallbackRes = android.R.drawable.ic_menu_manage; break;
             case "APP": fallbackRes = android.R.drawable.sym_def_app_icon; break;
