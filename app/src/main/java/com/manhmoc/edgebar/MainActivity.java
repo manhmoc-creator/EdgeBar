@@ -756,13 +756,15 @@ if (currentMainTab == 0) {
             } else {
                 fab.setOnClickListener(v -> openEmptyPillDialog());
             }
-        } else if (currentMainTab == 1) { // Condition Space
+                } else if (currentMainTab == 1) { // Condition Space
         if (currentGesTab == 5) { // FRONTIER — nút tròn compass thay cho "+NEW EB"
             fab.setVisibility(View.VISIBLE);
             fab.setOnClickListener(v -> {
                 if (frontierSubTab == 1) ensureHomeServiceForPreview();
                 showCallPTDropdownFrontier();
             });
+        } else if (currentGesTab == 6) { // SENSOR — chọn action ngay trong card, không cần FAB
+            fab.setVisibility(View.GONE);
         } else {
             fab.setVisibility(View.VISIBLE);
             fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
@@ -1494,11 +1496,6 @@ private void addHideTargetCheckboxes(LinearLayout container, String fullPrefKey,
 // [MỚI] Ngược với addHideTargetCheckboxes(): mặc định TỰ ĐỘNG BẬT cho mọi bar,
 // tick vào bar nào để TẮT tự động đổi màu (giữ icon trắng cố định) cho bar đó.
 private void addAutoColorOffCheckboxes(LinearLayout container, String fullPrefKey, String[] keys, String[] names) {
-    // [FIX PIN] Mặc định TẮT auto-color cho toàn bộ bar nếu user chưa từng cấu hình —
-    // tránh chụp screenshot ngầm liên tục khi cuộn, đây là nguồn hao pin lớn nhất lúc màn bật.
-    if (!prefs.contains(fullPrefKey)) {
-        prefs.edit().putString(fullPrefKey, TextUtils.join(",", keys)).apply();
-    }
     java.util.Set<String> offSet = new java.util.LinkedHashSet<>();
 
     for (String s : prefs.getString(fullPrefKey, "").split(",")) if (!s.trim().isEmpty()) offSet.add(s.trim());
@@ -2116,6 +2113,103 @@ private String cloneDataPackDeep(String itemKey) {
     ed.putString(newItemKey + "_pack_rules", TextUtils.join(",", newRules));
     ed.apply();
     return newItemKey;
+}
+    private void renderSensorSpace(LinearLayout body) {
+    body.removeAllViews();
+    reloadActionLabels();
+
+    body.addView(createSectionTitle("👆 " + T("WAVE GESTURE (Proximity)", "CỬ CHỈ VẪY TAY (Cảm biến tiệm cận)")));
+    body.addView(buildSensorActionRow("sensor_prox_tap", T("1 Wave", "Vẫy 1 lần")));
+    body.addView(buildSensorActionRow("sensor_prox_dtap", T("2 Waves (quick)", "Vẫy 2 lần liên tiếp")));
+
+    body.addView(createSectionTitle("🎒 " + T("POCKET MODE (Anti false-touch)", "POCKET MODE (Chống chạm nhầm)")));
+    LinearLayout pocketRow = new LinearLayout(this);
+    pocketRow.setOrientation(LinearLayout.HORIZONTAL);
+    pocketRow.setGravity(Gravity.CENTER_VERTICAL);
+    pocketRow.setPadding(0, 10, 0, 20);
+    TextView tvPocket = new TextView(this);
+    tvPocket.setText(T("Enable Pocket Mode", "Bật chế độ trong túi/khi chạy"));
+    tvPocket.setTextColor(Color.WHITE);
+    tvPocket.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Switch swPocket = new Switch(this);
+    swPocket.setChecked(prefs.getBoolean("sensor_pocketmode_en", true));
+    swPocket.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("sensor_pocketmode_en", c).apply());
+    pocketRow.addView(tvPocket); pocketRow.addView(swPocket);
+    body.addView(pocketRow);
+
+    TextView tvNote = new TextView(this);
+    tvNote.setText(T(
+        "When significant motion is detected (pocket/bag, running), EdgeBar counts steps briefly. Enough steps -> wave gestures are blocked until motion stops.",
+        "Khi máy phát hiện chuyển động mạnh (bỏ túi/cặp, bắt đầu chạy), EdgeBar đếm bước chân trong vài giây. Đủ số bước -> tạm khoá cử chỉ vẫy tay cho tới khi hết chuyển động."));
+    tvNote.setTextColor(Color.parseColor("#9AA0A6"));
+    tvNote.setTextSize(11.5f);
+    tvNote.setPadding(0, 0, 0, 20);
+    body.addView(tvNote);
+
+    body.addView(createSlider(T("Step threshold to lock", "Số bước để khoá cử chỉ"), "sensor_pocket_step_threshold", 15, 3));
+    body.addView(createSlider(T("Detection window (sec)", "Thời gian dò chuyển động (giây)"), "sensor_pocket_window_sec", 30, 8));
+}
+
+private LinearLayout buildSensorActionRow(String prefKey, String title) {
+    LinearLayout card = new LinearLayout(this);
+    card.setOrientation(LinearLayout.VERTICAL);
+    card.setBackground(getRounded("#1E1E1E", 25f));
+    card.setPadding(30, 25, 30, 25);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+    lp.setMargins(0, 0, 0, 20);
+    card.setLayoutParams(lp);
+
+    TextView tvTitle = new TextView(this);
+    tvTitle.setText(title);
+    tvTitle.setTextColor(Color.parseColor("#FFC107"));
+    tvTitle.setTextSize(14.5f);
+    tvTitle.setPadding(0, 0, 0, 12);
+    card.addView(tvTitle);
+
+    TextView tvCurrent = new TextView(this);
+    tvCurrent.setTextColor(Color.parseColor("#8AB4F8"));
+    tvCurrent.setPadding(0, 0, 0, 15);
+    final String[] chosenAct = { prefs.getString(prefKey, "NONE") };
+    final String[] chosenPkg = { prefs.getString(prefKey + "_launch_pkg", "") };
+    final String[] chosenScId = { prefs.getString(prefKey + "_shortcut_id", "") };
+    Runnable refresh = () -> {
+        tvCurrent.setText(T("Selected: ", "Đang chọn: ") + resolveTileActionLabel(chosenAct[0], chosenPkg[0], chosenScId[0]));
+        prefs.edit()
+            .putString(prefKey, chosenAct[0])
+            .putString(prefKey + "_launch_pkg", chosenPkg[0])
+            .putString(prefKey + "_shortcut_id", chosenScId[0])
+            .apply();
+    };
+    refresh.run();
+    card.addView(tvCurrent);
+
+    Button btnApp = new Button(this); btnApp.setText("📱 APP");
+    btnApp.setBackground(getRounded("#8AB4F8", 18f)); btnApp.setTextColor(Color.BLACK);
+    btnApp.setOnClickListener(v -> showSingleAppPickerDialogCallback(pkg -> {
+        chosenAct[0] = "LAUNCH_APP"; chosenPkg[0] = pkg; chosenScId[0] = "";
+        refresh.run();
+    }));
+    card.addView(btnApp);
+
+    Button btnSc = new Button(this); btnSc.setText("🔗 SHORTCUT");
+    btnSc.setBackground(getRounded("#7C4DFF", 18f)); btnSc.setTextColor(Color.WHITE);
+    btnSc.setOnClickListener(v -> showShortcutPickerDialog((scId, name) -> {
+        chosenAct[0] = "RUN_SHORTCUT"; chosenScId[0] = scId; chosenPkg[0] = "";
+        refresh.run();
+    }));
+    card.addView(btnSc);
+
+    List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME","SCREENSHOT","CAMERA","NOTIFICATIONS","QUICK_SETTINGS"}, ACT_KEYS, ACT_LABS);
+    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY","TOGGLE_RECORD","PLAY_MY_PLAYLIST","SCAN_QR"}, ACT_KEYS, ACT_LABS);
+    List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
+    List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel");
+
+    card.addView(singleActionCategoryBtn("⚙️ SYSTEM", "#4CAF50", SYS_ITEMS, chosenAct, chosenPkg, chosenScId, refresh));
+    card.addView(singleActionCategoryBtn("🛠️ UTILITIES", "#FF9800", UTIL_ITEMS, chosenAct, chosenPkg, chosenScId, refresh));
+    card.addView(singleActionCategoryBtn("⚡ INTENTS", "#D32F2F", INTENT_ITEMS, chosenAct, chosenPkg, chosenScId, refresh));
+    card.addView(singleActionCategoryBtn("🗂️ PANEL", "#9C27B0", PANEL_ITEMS, chosenAct, chosenPkg, chosenScId, refresh));
+
+    return card;
 }
     private void buildFrontierSpaceOnce() {
     frontierSpaceBuilt = true;
@@ -6444,8 +6538,9 @@ private void renderBubbleSettings() {
     dCfg2.addView(createSlider(T("Ring Background Opacity", "Độ đậm mờ nền bạc"), "bubble_circle_bg_alpha", 255, 160));
     // [MỚI] thêm 2 thanh kéo để cân bằng số lượng tuỳ chỉnh với Cấu hình 1
     dCfg2.addView(createSlider(T("Node Size on Ring (%)", "Kích thước nút trên vòng đạn (%)"), "bubble_circle_node_scale", 150, 90));
-    dCfg2.addView(createSlider(T("Spin Sensitivity (deg/s)", "Độ nhạy xoay tít (độ/giây)"), "bubble_circle_spin_sensitivity", 1500, 720));
+        dCfg2.addView(createSlider(T("Spin Sensitivity (deg/s)", "Độ nhạy xoay tít (độ/giây)"), "bubble_circle_spin_sensitivity", 1500, 720));
     dCfg2.addView(createSlider(T("Spin+Hold Duration (ms)", "Thời gian Giữ sau khi Xoay (ms)"), "bubble_circle_hold_dur", 1500, 450));
+    dCfg2.addView(createSlider(T("Spin+Hold Duration (ms)", "Thời gian Giữ sau khi Xoay (ms)"), "bubble_circle_hold_dur", 450, 450));
 
     dCfg2.addView(createSectionTitle("🔄 " + T("SPIN GESTURE ACTIONS", "CỬ CHỈ XOAY TÍT VÒNG ĐẠN")));
     List<String[]> spinItems = buildItemsForKeys(new String[]{
@@ -9684,20 +9779,13 @@ private void buildSensorSpaceOnce() {
     listRules.addView(body);
     sensorBodyContainer = body;
 
-    LinearLayout row = createSettingsRow("flare_24px", "Proximity Sensor", "Cảm biến Tiệm cận", () -> {
+        LinearLayout row = createSettingsRow("flare_24px", "Proximity Sensor", "Cảm biến Tiệm cận", () -> {
         subTab.setVisibility(View.GONE);
         gesSubHeader.setVisibility(View.GONE);
         sensorBackRow.setVisibility(View.VISIBLE);
-        tvSubTitle.setText("PROXIMITY SENSOR");
+        tvSubTitle.setText("SENSOR");
         body.setVisibility(View.VISIBLE);
-        
-        body.removeAllViews();
-        TextView tv = new TextView(this);
-        tv.setText("Không gian lưu Data Pack cho Cảm biến (Giao diện giữ chỗ)");
-        tv.setTextColor(Color.GRAY);
-        tv.setPadding(0, 40, 0, 0);
-        body.addView(tv);
-
+        renderSensorSpace(body);
         updateFabVisibility();
         navBackStack.push(() -> {
             body.setVisibility(View.GONE);

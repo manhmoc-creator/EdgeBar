@@ -119,9 +119,11 @@ private SensorEventListener stepListener = new SensorEventListener() {
 
 private final Runnable pocketExitRunnable = () -> {
     if (sensorManager != null && stepSensor != null) sensorManager.unregisterListener(stepListener);
-    pocketModeActive = stepCountWindow >= 3; // >=3 bước trong 8s -> chắc chắn đang di chuyển, giữ Pocket Mode
+    int threshold = prefs.getInt("sensor_pocket_step_threshold", 3);
+    pocketModeActive = stepCountWindow >= threshold;
     stepCountWindow = 0;
 };
+
 // [MỚI] AppLock — lưu mốc thời gian unlock gần nhất theo RAM, không ghi prefs
     public static void markPackageUnlocked(String pkg) { AppLockHelper.markUnlocked(pkg); }
     private void checkAppLock(String pkg) { AppLockHelper.check(this, prefs, pkg); }
@@ -245,7 +247,7 @@ private volatile boolean isCapturingIconColorScreenshot = false;
 private volatile long iconColorCaptureStartMs = 0L;
 private static final long ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS = 4000; // quá thời gian này coi như kẹt, tự giải phóng
 
-private static final long ICON_COLOR_EVENT_GATE_MS = 400; // giãn cách tối thiểu giữa 2 lần chụp khi cuộn
+private static final long ICON_COLOR_EVENT_GATE_MS = 350; // giãn cách tối thiểu giữa 2 lần chụp khi cuộn
 private static final long ICON_COLOR_INTERVAL_MIN_MS = 400;
 private static final long ICON_COLOR_INTERVAL_MAX_MS = 5000;
 private long iconColorCurrentIntervalMs = ICON_COLOR_INTERVAL_MIN_MS;
@@ -2388,12 +2390,13 @@ private void refreshFingerprintRegistration() {
         }
 
         private void armStepDetectorTemporarily() {
-            if (sensorManager == null || stepSensor == null) return;
-            proxHandler.removeCallbacks(pocketExitRunnable);
-            stepCountWindow = 0;
-            sensorManager.registerListener(stepListener, stepSensor, SensorManager.SENSOR_DELAY_NORMAL);
-            proxHandler.postDelayed(pocketExitRunnable, 8000);
-        }
+    if (sensorManager == null || stepSensor == null) return;
+    proxHandler.removeCallbacks(pocketExitRunnable);
+    stepCountWindow = 0;
+    sensorManager.registerListener(stepListener, stepSensor, SensorManager.SENSOR_DELAY_NORMAL);
+    int windowSec = prefs.getInt("sensor_pocket_window_sec", 8);
+    proxHandler.postDelayed(pocketExitRunnable, windowSec * 1000L);
+}
 
         private boolean hasAnyProxRule() {
             return !prefs.getString("sensor_prox_tap", "NONE").equals("NONE")
@@ -2405,18 +2408,19 @@ private void refreshFingerprintRegistration() {
         }
 
         private void registerScreenOffSensors() {
-            if (sensorsRegistered) return;
-            if (!hasAnyProxRule()) return; // [TIẾT KIỆM PIN] user chưa gán rule -> không đăng ký gì cả
-            if (sensorManager == null) sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-            proxSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
-            sigMotionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION);
-            stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
-            if (proxSensor != null) sensorManager.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_NORMAL);
-            if (sigMotionSensor != null) armSignificantMotion();
-            sensorsRegistered = true;
-            pocketModeActive = false;
-        }
-
+    if (sensorsRegistered) return;
+    if (!hasAnyProxRule()) return; // [TIẾT KIỆM PIN] user chưa gán rule -> không đăng ký gì cả
+    if (sensorManager == null) sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+    proxSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+    if (proxSensor != null) sensorManager.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_NORMAL);
+    if (prefs.getBoolean("sensor_pocketmode_en", true)) { // [MỚI] user có thể tắt hẳn Pocket Mode
+        sigMotionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION);
+        stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
+        if (sigMotionSensor != null) armSignificantMotion();
+    }
+    sensorsRegistered = true;
+    pocketModeActive = false;
+}
         private void unregisterScreenOffSensors() {
             if (!sensorsRegistered) return;
             if (sensorManager != null) {

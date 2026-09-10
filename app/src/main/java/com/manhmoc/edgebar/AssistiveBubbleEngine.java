@@ -689,11 +689,27 @@ private void closeMenuInstant() {
         try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
     }
 }
+        private static final java.util.Set<String> VALID_MAIN_TYPES =
+        new java.util.HashSet<>(java.util.Arrays.asList(DEFAULT_ORDER));
+
     private List<String> getMainOrder() {
         String csv = prefs.getString("bubble_node_order", "");
         List<String> out = new ArrayList<>();
-        if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
-        if (out.size() != 9) { out.clear(); Collections.addAll(out, DEFAULT_ORDER); }
+        if (!csv.isEmpty()) for (String s : csv.split(",")) {
+            String t = s.trim();
+            if (t.equals("MACRO")) t = "QSTILE"; // [MIGRATION] MACRO đã bị thay bằng QSTILE
+            if (!t.isEmpty()) out.add(t);
+        }
+        boolean valid = out.size() == 9;
+        if (valid) {
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (String t : out) { if (!VALID_MAIN_TYPES.contains(t) || !seen.add(t)) { valid = false; break; } }
+        }
+        if (!valid) {
+            out.clear();
+            Collections.addAll(out, DEFAULT_ORDER);
+            prefs.edit().putString("bubble_node_order", TextUtils.join(",", out)).apply();
+        }
         return out;
     }
 
@@ -806,6 +822,7 @@ card.setBackground(bg);
 
         int fallbackRes;
         switch (type) {
+                    switch (type) {
             case "SYSTEM": fallbackRes = android.R.drawable.ic_menu_preferences; break;
             case "UTILITY": fallbackRes = android.R.drawable.ic_menu_manage; break;
             case "APP": fallbackRes = android.R.drawable.sym_def_app_icon; break;
@@ -813,8 +830,11 @@ card.setBackground(bg);
             case "TRIGGER": fallbackRes = android.R.drawable.ic_menu_directions; break;
             case "INTENT": fallbackRes = android.R.drawable.ic_menu_compass; break;
             case "SEARCH": fallbackRes = android.R.drawable.ic_menu_search; break;
+            case "QSTILE": fallbackRes = android.R.drawable.ic_menu_manage; break;
+            case "PANEL": fallbackRes = android.R.drawable.ic_menu_view; break;
             default: fallbackRes = android.R.drawable.ic_menu_view;
         }
+
         try { applyIconToImageView(iv, ctx.getDrawable(fallbackRes), iconSize, false); } catch (Exception ignored) {}
 
         if (!customOverride.isEmpty()) {
@@ -1420,8 +1440,7 @@ private int[] getCirclePerm(String key) {
         return out;
     }
 
-    /** Đo tốc độ góc trung bình trong cửa sổ ~150ms để phát hiện "xoay tít". */
-    private class VelocityAngleTracker {
+        private class VelocityAngleTracker {
         private float accumDeg = 0f;
         private long startTs = 0L;
         void reset() { accumDeg = 0f; startTs = System.currentTimeMillis(); }
@@ -1432,10 +1451,13 @@ private int[] getCirclePerm(String key) {
         }
         float getVelocityDegPerSec() {
             long dt = System.currentTimeMillis() - startTs;
-            if (dt <= 0) return 0f;
+            // [FIX] dt quá nhỏ (mới reset) -> phép chia cho ra vận tốc ảo cực lớn dù
+            // chỉ lệch vài độ. Bắt buộc phải trôi qua ít nhất 60ms mới tin số liệu.
+            if (dt < 60) return 0f;
             return accumDeg / (dt / 1000f);
         }
     }
+
 // ===================== [MỚI] Ô TÌM KIẾM RIÊNG CHO VÒNG ĐẠN =====================
 private FrameLayout circleSearchOverlay;
 private WindowManager.LayoutParams circleSearchLp;
@@ -1823,23 +1845,19 @@ for (String[] item : allItems) {
                 float delta = curAngle - lastTouchAngle;
                 if (delta > 180) delta -= 360; if (delta < -180) delta += 360;
                 if (!dragging && Math.abs(delta) > 0.8f && selectedNodeIdx == null) dragging = true;
-                if (dragging) {
+                                if (dragging) {
     circleRotationDeg += delta;
     angTracker.addSample(delta);
     float v = angTracker.getVelocityDegPerSec();
+    // [FIX] Đổi hướng xoay giữa chừng -> huỷ hẹn giờ cũ ngay, không bắn nhầm hướng trước đó
     boolean directionFlipped = (Math.abs(v) > 5f) && lastSpinVelocity != 0f
         && Math.signum(v) != Math.signum(lastSpinVelocity);
     if (Math.abs(v) > 5f) lastSpinVelocity = v;
     invalidate();
-    // [FIX] Đổi hướng giữa chừng -> huỷ hẹn giờ cũ, không cho bắn nhầm hướng trước đó
-    if (directionFlipped && spinHoldRunnable != null) {
-        removeCallbacks(spinHoldRunnable);
-        spinHoldRunnable = null;
-    } else if (spinHoldRunnable != null) {
-        removeCallbacks(spinHoldRunnable);
-    }
-    if (Math.abs(v) >= prefs.getInt("bubble_circle_spin_sensitivity", 720)) {
+    if (spinHoldRunnable != null) { removeCallbacks(spinHoldRunnable); spinHoldRunnable = null; }
+    if (!directionFlipped && Math.abs(v) >= prefs.getInt("bubble_circle_spin_sensitivity", 720)) {
         final float capturedVelocity = v;
+        // Riêng "hold_dur" của Bubble Circle, tách khỏi hold_dur chung toàn hệ thống
         spinHoldRunnable = () -> {
             fireCircleSpinAction(capturedVelocity > 0);
             dragging = false;
@@ -1848,14 +1866,13 @@ for (String[] item : allItems) {
                 if (vib != null) vib.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE));
             } catch (Exception ignored) {}
         };
-        // [FIX] dùng riêng "bubble_circle_hold_dur" thay vì "hold_dur" chung toàn hệ thống
         postDelayed(spinHoldRunnable, prefs.getInt("bubble_circle_hold_dur", 450));
     }
 }
-
 lastTouchAngle = curAngle;
 return true;
             }
+
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
                 if (longPressRunnable != null) longPressHandler.removeCallbacks(longPressRunnable);
