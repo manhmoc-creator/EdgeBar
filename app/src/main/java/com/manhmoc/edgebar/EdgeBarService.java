@@ -84,25 +84,76 @@ private final Handler proxHandler = new Handler(android.os.Looper.getMainLooper(
 private Runnable proxSingleRunnable;
 private int stepCountWindow = 0;
 
+// [MỚI] Đếm sóng vẫy tay — gom nhiều lần near trong cửa sổ 2.5s
+private int waveCount = 0;
+private long waveWindowStart = 0;
+private static final long WAVE_WINDOW_MS = 2500;
+private Runnable waveCommitRunnable;
+
 private SensorEventListener proxListener = new SensorEventListener() {
     @Override public void onSensorChanged(SensorEvent e) {
         boolean near = e.values[0] < proxSensor.getMaximumRange();
-        if (!near) return; // chỉ xử lý lúc tay/vật che lại (wave), không xử lý lúc rời ra
-        if (pocketModeActive) return; // đang nghi trong túi -> bỏ qua toàn bộ, tránh chạm nhầm
+        if (!near) return;
+        if (pocketModeActive) return;
         long now = SystemClock.elapsedRealtime();
-        if (proxPendingSingle && (now - lastProxTapMs) <= PROX_DTAP_WINDOW_MS) {
-            proxHandler.removeCallbacks(proxSingleRunnable);
-            proxPendingSingle = false;
-            fireSensorGesture("prox_dtap");
-        } else {
-            proxPendingSingle = true;
-            lastProxTapMs = now;
-            proxSingleRunnable = () -> { proxPendingSingle = false; fireSensorGesture("prox_tap"); };
-            proxHandler.postDelayed(proxSingleRunnable, PROX_DTAP_WINDOW_MS);
+        if (waveWindowStart == 0 || (now - waveWindowStart) > WAVE_WINDOW_MS) {
+            waveCount = 0;
+            waveWindowStart = now;
         }
+        waveCount++;
+        if (waveCommitRunnable != null) proxHandler.removeCallbacks(waveCommitRunnable);
+        waveCommitRunnable = () -> {
+            int count = Math.min(waveCount, 4);
+            waveCount = 0; waveWindowStart = 0;
+            fireSensorWaveGesture(count);
+        };
+        proxHandler.postDelayed(waveCommitRunnable, WAVE_WINDOW_MS);
     }
     @Override public void onAccuracyChanged(Sensor s, int a) {}
 };
+
+/** [MỚI] Đọc đúng Data Pack đang bật (chỉ 1 pack) và thực thi action của nó. */
+private void fireSensorWaveGesture(int waveCount) {
+    String gestureKey = "wave" + waveCount;
+    String activeGesture = prefs.getString("sensor_prox_active_gesture", "");
+    if (!activeGesture.equals(gestureKey)) return;
+
+    String csv = prefs.getString("sensor_prox_pack_ids", "");
+    for (String id : csv.split(",")) {
+        id = id.trim();
+        if (id.isEmpty()) continue;
+        String px = "sensor_prox_pack_" + id + "_";
+        if (!prefs.getBoolean(px + "en", false)) continue;
+        String g = prefs.getString(px + "gesture", "");
+        if (!g.equals(gestureKey)) continue;
+
+        String action = prefs.getString(px + "action", "NONE");
+        if (action.equals("NONE")) return;
+
+        boolean vibOn = prefs.getBoolean(px + "vib", true);
+        boolean animOn = prefs.getBoolean(px + "anim", true);
+        if (vibOn) doVibrate(prefs.getInt("vib_dur", 30));
+        if (animOn) playAnim();
+
+        String primaryAct = action.split(",")[0].trim();
+        if (primaryAct.equals("SCREEN_ON")) { exec("SCREEN_ON"); return; }
+        if (SENSOR_SCREEN_REQUIRED_ACTS.contains(primaryAct)) {
+            try {
+                android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm != null && !pm.isInteractive()) {
+                    android.os.PowerManager.WakeLock wl = pm.newWakeLock(
+                        android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                        "EdgeBar:SensorWake");
+                    wl.acquire(3000);
+                }
+            } catch (Exception ignored) {}
+            new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> exec(primaryAct), 350);
+        } else {
+            exec(primaryAct);
+        }
+        return;
+    }
+}
 
 private TriggerEventListener sigMotionTrigger = new TriggerEventListener() {
     @Override public void onTrigger(TriggerEvent event) {
