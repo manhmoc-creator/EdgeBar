@@ -2495,18 +2495,6 @@ private void refreshFingerprintRegistration() {
             sensorsRegistered = false;
             pocketModeActive = false;
         }
-        private void unregisterScreenOffSensors() {
-            if (!sensorsRegistered) return;
-            if (sensorManager != null) {
-                sensorManager.unregisterListener(proxListener);
-                sensorManager.unregisterListener(stepListener);
-                if (sigMotionSensor != null) sensorManager.cancelTriggerSensor(sigMotionTrigger, sigMotionSensor);
-            }
-            proxHandler.removeCallbacksAndMessages(null);
-            sensorsRegistered = false;
-            pocketModeActive = false;
-        }
-
         private void createFloatingBars() {
         fV = new FlashView(this);
         fV.setAlpha(0f); fV.setVisibility(View.GONE);
