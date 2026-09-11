@@ -566,9 +566,8 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             removeRippleViewIfIdle(); 
             AppLockHelper.clearAll(); 
             registerScreenOffSensors(); // [MỚI] chỉ sống khi màn tắt — 0 pin lúc màn sáng
-
-    registerScreenOffSensors(); // [MỚI] chỉ sống khi màn tắt — 0 pin lúc màn sáng
             if (fpRegistered && fpController != null && fpCallback != null) {
+
                 try { fpController.unregisterFingerprintGestureCallback(fpCallback); } catch (Exception e) {}
                 fpRegistered = false;
             }
@@ -2386,41 +2385,116 @@ private void refreshFingerprintRegistration() {
         // ===== [MỚI] Hàm điều khiển cảm biến khi màn tắt =====
         private void armSignificantMotion() {
             if (sensorManager == null || sigMotionSensor == null) return;
-            sensorManager.requestTriggerSensor(sigMotionTrigger, sigMotionSensor);
+            // [FIX BOOTLOOP] bọc try-catch: requestTriggerSensor có thể ném lỗi trên
+            // vài ROM/thiết bị nếu sensor bị hệ thống thu hồi giữa chừng -> tuyệt đối
+            // không được để crash lan lên AccessibilityService (gây bootloop).
+            try { sensorManager.requestTriggerSensor(sigMotionTrigger, sigMotionSensor); }
+            catch (Exception e) { android.util.Log.w("EdgeBar_Sensor", "armSignificantMotion failed", e); }
         }
 
         private void armStepDetectorTemporarily() {
     if (sensorManager == null || stepSensor == null) return;
+    if (!hasActivityRecognitionPermission()) return; // [FIX BOOTLOOP] chưa có quyền -> không đăng ký
     proxHandler.removeCallbacks(pocketExitRunnable);
     stepCountWindow = 0;
-    sensorManager.registerListener(stepListener, stepSensor, SensorManager.SENSOR_DELAY_NORMAL);
-    int windowSec = prefs.getInt("sensor_pocket_window_sec", 8);
-    proxHandler.postDelayed(pocketExitRunnable, windowSec * 1000L);
+    // [FIX BOOTLOOP] Đây chính là nguyên nhân gây reboot loop: registerListener() cho
+    // TYPE_STEP_DETECTOR ném SecurityException nếu thiếu quyền ACTIVITY_RECOGNITION
+    // (Android 10+). Exception này trước đây KHÔNG được bắt, xảy ra mỗi lần tắt màn
+    // hình -> crash lặp AccessibilityService -> bất ổn system_server -> tự reboot.
+    try {
+        sensorManager.registerListener(stepListener, stepSensor, SensorManager.SENSOR_DELAY_NORMAL);
+        int windowSec = prefs.getInt("sensor_pocket_window_sec", 8);
+        proxHandler.postDelayed(pocketExitRunnable, windowSec * 1000L);
+    } catch (Exception e) {
+        android.util.Log.w("EdgeBar_Sensor", "armStepDetectorTemporarily failed", e);
+    }
 }
+
+        private boolean hasActivityRecognitionPermission() {
+            // API < 29 không cần quyền này cho step sensor -> luôn coi như OK
+            if (Build.VERSION.SDK_INT < 29) return true;
+            return checkSelfPermission(android.Manifest.permission.ACTIVITY_RECOGNITION)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        }
 
         private boolean hasAnyProxRule() {
             return !prefs.getString("sensor_prox_tap", "NONE").equals("NONE")
                 || !prefs.getString("sensor_prox_dtap", "NONE").equals("NONE");
         }
 
+                // [MỚI] 3 cảm biến (Proximity/SigMotion/Step) CHỈ hoạt động khi màn hình TẮT.
+        // Một số action (Camera, Chụp màn hình, Menu nguồn, Quét QR...) cần màn sáng
+        // mới có ý nghĩa/thực thi được; action khác (Đèn pin, Bật/tắt ghi âm...) thì
+        // không cần. Đồng bộ đúng danh sách + hành vi đã có sẵn ở VolumeButtonService.
+        private static final java.util.Set<String> SENSOR_SCREEN_REQUIRED_ACTS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "CAMERA", "SCREENSHOT", "POWER_DIALOG", "NOTIFICATIONS", "QUICK_SETTINGS", "SCAN_QR"
+        ));
+
         private void fireSensorGesture(String gesture) {
-            handleAction("sensor_" + gesture); // tận dụng handleAction() có sẵn -> tự có vib/anim/rule
+            String key = "sensor_" + gesture;
+            String action = prefs.getString(key, "NONE");
+            if (action.equals("NONE") || !prefs.getBoolean(key + "_on", true)) return;
+            String primaryAct = action.split(",")[0].trim();
+
+            if (primaryAct.equals("SCREEN_ON")) {
+                handleAction(key); // exec("SCREEN_ON") đã tự lo việc bật màn + wakelock
+                return;
+            }
+            if (SENSOR_SCREEN_REQUIRED_ACTS.contains(primaryAct)) {
+                try {
+                    android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+                    if (pm != null && !pm.isInteractive()) {
+                        android.os.PowerManager.WakeLock wl = pm.newWakeLock(
+                            android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                            "EdgeBar:SensorWake");
+                        wl.acquire(3000);
+                    }
+                } catch (Exception ignored) {}
+                // Đợi màn hình kịp bật ổn định rồi mới chạy action thật, tránh action
+                // chạy trước khi overlay/app kịp vẽ ra màn hình vừa sáng.
+                new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> handleAction(key), 350);
+                return;
+            }
+            handleAction(key); // FLASH, TOGGLE_RECORD, PLAY_MY_PLAYLIST... không cần màn sáng -> chạy ngay
         }
 
         private void registerScreenOffSensors() {
     if (sensorsRegistered) return;
     if (!hasAnyProxRule()) return; // [TIẾT KIỆM PIN] user chưa gán rule -> không đăng ký gì cả
     if (sensorManager == null) sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-    proxSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
-    if (proxSensor != null) sensorManager.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_NORMAL);
-    if (prefs.getBoolean("sensor_pocketmode_en", true)) { // [MỚI] user có thể tắt hẳn Pocket Mode
-        sigMotionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION);
-        stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
-        if (sigMotionSensor != null) armSignificantMotion();
+    try {
+        proxSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+        if (proxSensor != null) sensorManager.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_NORMAL);
+    } catch (Exception e) {
+        android.util.Log.w("EdgeBar_Sensor", "register proximity failed", e);
+    }
+    // [FIX BOOTLOOP] Pocket Mode giờ chỉ bật khi ĐÃ có quyền ACTIVITY_RECOGNITION —
+    // nếu chưa cấp, bỏ qua êm (cử chỉ vẫy tay ở cảm biến tiệm cận vẫn hoạt động
+    // bình thường, chỉ mất khả năng chống chạm nhầm khi bỏ túi).
+    if (prefs.getBoolean("sensor_pocketmode_en", true) && hasActivityRecognitionPermission()) {
+        try {
+            sigMotionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION);
+            stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
+            if (sigMotionSensor != null) armSignificantMotion();
+        } catch (Exception e) {
+            android.util.Log.w("EdgeBar_Sensor", "register pocket-mode sensors failed", e);
+        }
     }
     sensorsRegistered = true;
     pocketModeActive = false;
 }
+        private void unregisterScreenOffSensors() {
+            if (!sensorsRegistered) return;
+            if (sensorManager != null) {
+                try { sensorManager.unregisterListener(proxListener); } catch (Exception ignored) {}
+                try { sensorManager.unregisterListener(stepListener); } catch (Exception ignored) {}
+                try { if (sigMotionSensor != null) sensorManager.cancelTriggerSensor(sigMotionTrigger, sigMotionSensor); }
+                catch (Exception ignored) {}
+            }
+            proxHandler.removeCallbacksAndMessages(null);
+            sensorsRegistered = false;
+            pocketModeActive = false;
+        }
         private void unregisterScreenOffSensors() {
             if (!sensorsRegistered) return;
             if (sensorManager != null) {

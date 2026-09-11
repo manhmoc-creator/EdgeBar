@@ -369,7 +369,7 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
     private void reloadActionLabels() {
 // [XÓA] OPEN_PANEL_1/2/3 — Panel giờ liệt kê động qua nút "PANEL" (buildDynamicPackItems).
-String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
+String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "SCREEN_ON",
         "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA",
         "NOTIFICATIONS", "QUICK_SETTINGS", "TOGGLE_OVERLAY", "YTDL_DOWNLOAD", "TOGGLE_RECORD",
         "LAUNCH_APP", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE",
@@ -383,7 +383,7 @@ String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF",
         "TRIGGER_UP_HOLD", "TRIGGER_DOWN_HOLD", "TRIGGER_LEFT_HOLD", "TRIGGER_RIGHT_HOLD", "TRIGGER_DIAG_HOLD",
         "TRIGGER_ACC_MENU_2F"};
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
-        T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Flashlight", "Đèn pin"),
+        T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Screen On", "Bật màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Toggle Voice Record", "Bật/Tắt Ghi Âm"),
         T("Launch App", "Mở Ứng dụng"), T("Split Screen", "Chia đôi màn hình"), T("Screen Record", "Quay màn hình"), T("Auto-Rotate Toggle", "Bật/Tắt Tự Động Xoay"),
         T("Pause/Resume Recording", "Tạm Dừng/Tiếp Tục Ghi Âm"), T("Storage Scan", "Quét Dung Lượng"), T("Scan QR", "Quét QR"),
@@ -1023,6 +1023,21 @@ main.addView(btnDnd);
                 requestPermissions(new String[]{audioPerm}, 203));
             main.addView(btnAudio);
         }
+// --- ACTIVITY_RECOGNITION (để Pocket Mode của cảm biến hoạt động, tránh crash) ---
+if (Build.VERSION.SDK_INT >= 29 &&
+        checkSelfPermission(android.Manifest.permission.ACTIVITY_RECOGNITION)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+    Button btnActRecog = new Button(this);
+    btnActRecog.setText("⚠️ CẤP QUYỀN NHẬN DIỆN HOẠT ĐỘNG (Pocket Mode)");
+    btnActRecog.setBackground(getRounded("#00897B", 25f));
+    btnActRecog.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams arLp = new LinearLayout.LayoutParams(-1, -2);
+    arLp.setMargins(0, 10, 0, 0);
+    btnActRecog.setLayoutParams(arLp);
+    btnActRecog.setOnClickListener(v ->
+        requestPermissions(new String[]{android.Manifest.permission.ACTIVITY_RECOGNITION}, 204));
+    main.addView(btnActRecog);
+}
 // --- WRITE_SETTINGS (để dùng Auto-Rotate Toggle) ---
         btnWriteSettings = new Button(this);
         btnWriteSettings.setText("⚠️ CẤP QUYỀN SỬA CÀI ĐẶT HỆ THỐNG (Tự Động Xoay)");
@@ -2199,7 +2214,7 @@ private LinearLayout buildSensorActionRow(String prefKey, String title) {
     }));
     card.addView(btnSc);
 
-    List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME","SCREENSHOT","CAMERA","NOTIFICATIONS","QUICK_SETTINGS"}, ACT_KEYS, ACT_LABS);
+    List<String[]> SYS_ITEMS = buildItemsForKeys(new String[]{"BACK","HOME","RECENTS","SCREEN_OFF","SCREEN_ON","FLASH","POWER_DIALOG","VOLUME","SCREENSHOT","CAMERA","NOTIFICATIONS","QUICK_SETTINGS"}, ACT_KEYS, ACT_LABS);
     List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"TOGGLE_OVERLAY","TOGGLE_RECORD","PLAY_MY_PLAYLIST","SCAN_QR"}, ACT_KEYS, ACT_LABS);
     List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
     List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel");
