@@ -2469,9 +2469,15 @@ private void refreshFingerprintRegistration() {
         }
 
         private boolean hasAnyProxRule() {
-            return !prefs.getString("sensor_prox_tap", "NONE").equals("NONE")
-                || !prefs.getString("sensor_prox_dtap", "NONE").equals("NONE");
-        }
+    String csv = prefs.getString("sensor_prox_pack_ids", "");
+    if (csv.isEmpty()) return false;
+    for (String id : csv.split(",")) {
+        String t = id.trim();
+        if (t.isEmpty()) continue;
+        if (prefs.getBoolean("sensor_prox_pack_" + t + "_en", false)) return true;
+    }
+    return false;
+}
 
                 // [MỚI] 3 cảm biến (Proximity/SigMotion/Step) CHỈ hoạt động khi màn hình TẮT.
         // Một số action (Camera, Chụp màn hình, Menu nguồn, Quét QR...) cần màn sáng
