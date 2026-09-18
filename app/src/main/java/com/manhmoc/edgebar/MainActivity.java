@@ -2598,20 +2598,30 @@ private void openSensorPackEditor(String space, String editId) {
 
     final String[] selectedGesture = { prefs.getString(px + "gesture", "wave1") };
     if (space.equals("prox")) {
-        content.addView(createSectionTitle(T("1. CHOOSE GESTURE", "1. CHỌN CỬ CHỈ")));
-        android.widget.RadioGroup rg = new android.widget.RadioGroup(this);
-        for (int i = 0; i < SENSOR_GESTURE_KEYS.length; i++) {
-            final String gKey = SENSOR_GESTURE_KEYS[i];
-            android.widget.RadioButton rb = new android.widget.RadioButton(this);
-            rb.setText(SENSOR_GESTURE_LABELS[i]);
-            rb.setTextColor(Color.WHITE);
-            rb.setPadding(0, 15, 0, 15);
-            rb.setChecked(gKey.equals(selectedGesture[0]));
-            rb.setOnClickListener(v -> selectedGesture[0] = gKey);
-            rg.addView(rb);
-        }
-        content.addView(rg);
+    content.addView(createSectionTitle(T("1. CHOOSE GESTURE", "1. CHỌN CỬ CHỈ")));
+    android.widget.RadioGroup rg = new android.widget.RadioGroup(this);
+    java.util.List<android.widget.RadioButton> allRadios = new java.util.ArrayList<>();
+    for (int i = 0; i < SENSOR_GESTURE_KEYS.length; i++) {
+        final String gKey = SENSOR_GESTURE_KEYS[i];
+        android.widget.RadioButton rb = new android.widget.RadioButton(this);
+        rb.setId(android.view.View.generateViewId()); // [FIX] BẮT BUỘC có ID riêng để RadioGroup tự bỏ tick nút cũ
+        rb.setText(SENSOR_GESTURE_LABELS[i]);
+        rb.setTextColor(Color.WHITE);
+        rb.setPadding(0, 15, 0, 15);
+        rb.setChecked(gKey.equals(selectedGesture[0]));
+        allRadios.add(rb);
+        rb.setOnClickListener(v -> {
+            selectedGesture[0] = gKey;
+            // [FIX] Chặn thêm 1 lớp an toàn: tự tay bỏ tick mọi nút khác,
+            // không phụ thuộc hoàn toàn vào cơ chế nội bộ của RadioGroup.
+            for (android.widget.RadioButton other : allRadios) {
+                if (other != v) other.setChecked(false);
+            }
+        });
+        rg.addView(rb);
     }
+    content.addView(rg);
+}
 
     content.addView(createSectionTitle(T("2. OPTIONS", "2. TÙY CHỌN")));
     CheckBox cbVib = new CheckBox(this);
