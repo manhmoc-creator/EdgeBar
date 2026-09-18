@@ -76,6 +76,8 @@ private boolean fpRegistered = false;
 private SensorManager sensorManager;
 private Sensor proxSensor, sigMotionSensor, stepSensor;
 private boolean sensorsRegistered = false;
+private android.os.PowerManager.WakeLock sensorWakeLock;   // ← THÊM DÒNG NÀY
+
 private long lastProxTapMs = 0;
 private boolean proxPendingSingle = false;
 private static final long PROX_DTAP_WINDOW_MS = 500;
@@ -505,7 +507,7 @@ private static final java.util.Set<String> EB_KEY_PREFIXES =
         // [FIX] Khóa thật của Panel là "pack_panel_<id>_..." — không phải "panel".
         // Thiếu tiền tố đúng khiến isOurKey() chặn TOÀN BỘ thay đổi live của Panel
         // (Preview Handle, Enable, slider...) ngay từ vòng lọc whitelist.
-        "pack_panel_","lenap_","bubble_",
+        "pack_panel_","lenap_","bubble_","sensor_","texture_","volkey_","applock_",
         "i1_","i2_","i3_","i4_","i5_","i6_","i7_","i8_",
         "i9_","i10_","i11_","i12_","i13_","i14_","i15_"
     ));
@@ -2475,20 +2477,21 @@ private void refreshFingerprintRegistration() {
         }
 
         private void armStepDetectorTemporarily() {
-    if (sensorManager == null || stepSensor == null) return;
-    if (!hasActivityRecognitionPermission()) return; // [FIX BOOTLOOP] chưa có quyền -> không đăng ký
+    if (sensorManager == null || stepSensor == null || !hasActivityRecognitionPermission()) {
+        // Không thể đếm bước để xác nhận "đang trong túi" -> đừng chặn Proximity oan,
+        // coi như không phải trong túi và trả trạng thái về bình thường ngay lập tức.
+        pocketModeActive = false;
+        return;
+    }
     proxHandler.removeCallbacks(pocketExitRunnable);
     stepCountWindow = 0;
-    // [FIX BOOTLOOP] Đây chính là nguyên nhân gây reboot loop: registerListener() cho
-    // TYPE_STEP_DETECTOR ném SecurityException nếu thiếu quyền ACTIVITY_RECOGNITION
-    // (Android 10+). Exception này trước đây KHÔNG được bắt, xảy ra mỗi lần tắt màn
-    // hình -> crash lặp AccessibilityService -> bất ổn system_server -> tự reboot.
     try {
         sensorManager.registerListener(stepListener, stepSensor, SensorManager.SENSOR_DELAY_NORMAL);
         int windowSec = prefs.getInt("sensor_pocket_window_sec", 8);
         proxHandler.postDelayed(pocketExitRunnable, windowSec * 1000L);
     } catch (Exception e) {
         android.util.Log.w("EdgeBar_Sensor", "armStepDetectorTemporarily failed", e);
+        pocketModeActive = false; // đăng ký thất bại -> không giữ trạng thái chặn treo
     }
 }
 
@@ -2568,10 +2571,33 @@ private void refreshFingerprintRegistration() {
             android.util.Log.w("EdgeBar_Sensor", "register pocket-mode sensors failed", e);
         }
     }
-    sensorsRegistered = true;
-pocketModeActive = false;
-lastProxNear = false; // [MỚI] reset trạng thái mỗi lần đăng ký lại sensor
-}
+            sensorsRegistered = true;
+        pocketModeActive = false;
+        lastProxNear = false;
+
+                // [FIX WAVEUP v2 - TỐI ƯU PIN] Nếu máy có wake-up proximity sensor,
+        // KHÔNG cần giữ wakelock — sensor tự đánh thức CPU khi có event, tiết
+        // kiệm pin gần như hoàn toàn (chỉ tốn ~baseline idle). Chỉ fallback
+        // về wakelock khi máy không có wake-up sensor.
+        try {
+            boolean isWakeUpProx = (proxSensor != null)
+                && (Build.VERSION.SDK_INT >= 21) && proxSensor.isWakeUpSensor();
+            if (!isWakeUpProx) {
+                // Máy cũ / ROM không hỗ trợ wake-up prox -> giữ wakelock như cũ
+                android.os.PowerManager pmWL = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+                if (sensorWakeLock == null) {
+                    sensorWakeLock = pmWL.newWakeLock(
+                        android.os.PowerManager.PARTIAL_WAKE_LOCK,
+                        "EdgeBar:ProxSensor");
+                    sensorWakeLock.setReferenceCounted(false);
+                }
+                if (!sensorWakeLock.isHeld()) sensorWakeLock.acquire();
+            }
+            // Nếu isWakeUpProx=true: bỏ qua wakelock — pin tiết kiệm như WaveUp.
+        } catch (Exception ignored) {}
+
+    }
+
         private void unregisterScreenOffSensors() {
             if (!sensorsRegistered) return;
             if (sensorManager != null) {
@@ -2580,10 +2606,17 @@ lastProxNear = false; // [MỚI] reset trạng thái mỗi lần đăng ký lạ
                 try { if (sigMotionSensor != null) sensorManager.cancelTriggerSensor(sigMotionTrigger, sigMotionSensor); }
                 catch (Exception ignored) {}
             }
-            proxHandler.removeCallbacksAndMessages(null);
+                        proxHandler.removeCallbacksAndMessages(null);
+            // [FIX WAVEUP] Nhả wakelock khi màn sáng lại — CPU ngủ bình thường trở lại,
+            // không tốn pin dư thừa. setReferenceCounted(false) ở Fix B đảm bảo
+            // gọi release() dù chưa acquire cũng không ném exception.
+            try {
+                if (sensorWakeLock != null && sensorWakeLock.isHeld()) sensorWakeLock.release();
+            } catch (Exception ignored) {}
             sensorsRegistered = false;
             pocketModeActive = false;
         }
+
         private void createFloatingBars() {
         fV = new FlashView(this);
         fV.setAlpha(0f); fV.setVisibility(View.GONE);

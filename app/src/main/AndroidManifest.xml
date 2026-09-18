@@ -169,5 +169,22 @@ android:exported="true">
         <service android:name=".Tile28" android:label="Tile 28" android:icon="@drawable/ic_launcher_fg" android:enabled="false" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
         <service android:name=".Tile29" android:label="Tile 29" android:icon="@drawable/ic_launcher_fg" android:enabled="false" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
         <service android:name=".Tile30" android:label="Tile 30" android:icon="@drawable/ic_launcher_fg" android:enabled="false" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
+
+        <!-- [MỚI] Edge Bar Widget trong suốt — hỗ trợ Tap + Double-Tap -->
+        <receiver android:name=".EdgeBarWidgetProvider" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.manhmoc.edgebar.WIDGET_TAP" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/widget_edgebar_info" />
+        </receiver>
+        <activity android:name=".WidgetConfigActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

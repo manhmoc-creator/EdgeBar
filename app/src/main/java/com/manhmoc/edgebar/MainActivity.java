@@ -514,7 +514,7 @@ private String[] getVolKeyActLabs() {
         super.onActivityResult(req, res, data);
         // [TỐI ƯU PIXEL 2XL] Bỏ chặn data.getData() != null ở cấp cao nhất
         // vì ACTION_CREATE_SHORTCUT trả về data qua ParcelableExtra, getData() luôn null.
-        if (res == RESULT_OK && data != null) {
+        if (res == RESULT_OK) {
             try {
                 if (req == 101 && data.getData() != null) {
                     java.io.OutputStream os = getContentResolver().openOutputStream(data.getData());
@@ -563,51 +563,50 @@ private String[] getVolKeyActLabs() {
     ed.putString("myplaylist_ids", TextUtils.join(",", ids)).apply();
     if (added > 0) { Toast.makeText(this, T("Added "+added+" songs","Đã thêm "+added+" bài"), Toast.LENGTH_SHORT).show(); renderEcosystem(); }
                 } else if (req == 104) {
-                    try {
-                        Intent shortcutIntent = data.getParcelableExtra(Intent.EXTRA_SHORTCUT_INTENT);
-                        String shortcutName = data.getStringExtra(Intent.EXTRA_SHORTCUT_NAME);
-                        if (shortcutIntent == null) {
-                            Toast.makeText(this, "Shortcut không hợp lệ!", Toast.LENGTH_SHORT).show();
-} else if (req == REQ_UNINSTALL_CONFIRM) {
-    doRevokeAdminAndUninstall();
-} else {
-                            String id = java.util.UUID.randomUUID().toString().substring(0, 8);
-                            String iconPath = "";
-                            Bitmap bmp = data.getParcelableExtra(Intent.EXTRA_SHORTCUT_ICON);
-                            if (bmp != null) iconPath = ShortcutScanner.saveIconToFile(this, bmp, id);
-                            String uri = shortcutIntent.toUri(Intent.URI_INTENT_SCHEME);
-                            
-                            // [THUẬT TOÁN MỚI] Tách bạch danh sách lưu trữ shortcut của Panel và Frontier
-                            boolean isPanelSc = prefs.getBoolean("is_panel_shortcut_pending", false);
-                            String targetList = isPanelSc ? "panel_shortcut_ids" : "shortcut_ids";
-                            
-                            String curIds = prefs.getString(targetList, "");
-                            String newIds = curIds.isEmpty() ? id : curIds + "," + id;
-                            prefs.edit()
-                                .putString("shortcut_" + id + "_name", shortcutName == null ? "Shortcut" : shortcutName)
-                                .putString("shortcut_" + id + "_intent_uri", uri)
-                                .putString("shortcut_" + id + "_icon_path", iconPath)
-                                .putString(targetList, newIds)
-                                .putBoolean("is_panel_shortcut_pending", false) // Giải phóng RAM cờ
-                                .apply();
-                            if (pendingShortcutCallback != null) {
-                                pendingShortcutCallback.accept(id, shortcutName == null ? "Shortcut" : shortcutName);
-                            }
-                            pendingShortcutCallback = null;
-                            Toast.makeText(this, T("Shortcut saved!", "Đã lưu Shortcut!"), Toast.LENGTH_SHORT).show();
-                        }
-                    } catch (Exception e) { 
-                        prefs.edit().putBoolean("is_panel_shortcut_pending", false).apply();
-                        Toast.makeText(this, "Lỗi lưu Shortcut!", Toast.LENGTH_SHORT).show(); 
-                    }
-                }
-            } catch(Exception e) { 
-                prefs.edit().putBoolean("is_panel_shortcut_pending", false).apply();
-                Toast.makeText(this, "IO Error!", Toast.LENGTH_LONG).show(); 
+    try {
+        Intent shortcutIntent = data.getParcelableExtra(Intent.EXTRA_SHORTCUT_INTENT);
+        String shortcutName = data.getStringExtra(Intent.EXTRA_SHORTCUT_NAME);
+        if (shortcutIntent == null) {
+            Toast.makeText(this, "Shortcut không hợp lệ!", Toast.LENGTH_SHORT).show();
+        } else {
+            String id = java.util.UUID.randomUUID().toString().substring(0, 8);
+            String iconPath = "";
+            Bitmap bmp = data.getParcelableExtra(Intent.EXTRA_SHORTCUT_ICON);
+            if (bmp != null) iconPath = ShortcutScanner.saveIconToFile(this, bmp, id);
+            String uri = shortcutIntent.toUri(Intent.URI_INTENT_SCHEME);
+
+            boolean isPanelSc = prefs.getBoolean("is_panel_shortcut_pending", false);
+            String targetList = isPanelSc ? "panel_shortcut_ids" : "shortcut_ids";
+
+            String curIds = prefs.getString(targetList, "");
+            String newIds = curIds.isEmpty() ? id : curIds + "," + id;
+            prefs.edit()
+                .putString("shortcut_" + id + "_name", shortcutName == null ? "Shortcut" : shortcutName)
+                .putString("shortcut_" + id + "_intent_uri", uri)
+                .putString("shortcut_" + id + "_icon_path", iconPath)
+                .putString(targetList, newIds)
+                .putBoolean("is_panel_shortcut_pending", false)
+                .apply();
+            if (pendingShortcutCallback != null) {
+                pendingShortcutCallback.accept(id, shortcutName == null ? "Shortcut" : shortcutName);
             }
+            pendingShortcutCallback = null;
+            Toast.makeText(this, T("Shortcut saved!", "Đã lưu Shortcut!"), Toast.LENGTH_SHORT).show();
+        }
+    } catch (Exception e) {
+        prefs.edit().putBoolean("is_panel_shortcut_pending", false).apply();
+        Toast.makeText(this, "Lỗi lưu Shortcut!", Toast.LENGTH_SHORT).show();
+    }
+} else if (req == REQ_UNINSTALL_CONFIRM) {
+    // ✅ FIX: nhánh này phải ở CẤP NGOÀI (cùng cấp với req==104), mới được gọi đúng
+    doRevokeAdminAndUninstall();
+    }
+            } catch (Exception e) {}
         }
     }
-    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+
     super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     if (requestCode == 201 && grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
         Intent i = new Intent(this, VoiceRecorderService.class);
