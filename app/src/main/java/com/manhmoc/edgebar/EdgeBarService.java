@@ -164,7 +164,12 @@ private void fireSensorWaveGesture(int waveCount) {
 
 private TriggerEventListener sigMotionTrigger = new TriggerEventListener() {
     @Override public void onTrigger(TriggerEvent event) {
-        pocketModeActive = true; // vừa có chuyển động đáng kể -> nghi đang cầm/bỏ túi
+        // [FIX] KHÔNG khoá ngay lập tức nữa — chỉ bắt đầu đếm bước để XÁC NHẬN
+        // có đang đi/chạy (bỏ túi) hay không. Khoá ngay như trước khiến MỌI thao
+        // tác cầm máy lên để vẫy tay cũng bị chặn oan suốt cả cửa sổ dò (mặc định
+        // 8 giây) — đây chính là lý do cử chỉ Proximity gần như không bao giờ nhận.
+        // pocketModeActive chỉ được bật lại (nếu có) bên trong pocketExitRunnable,
+        // SAU KHI đã đếm đủ số bước thật sự trong khoảng thời gian dò.
         armStepDetectorTemporarily();
         armSignificantMotion(); // TYPE_SIGNIFICANT_MOTION là one-shot -> phải tự gắn lại
     }
