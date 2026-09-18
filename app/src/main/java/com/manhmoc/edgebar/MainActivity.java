@@ -811,9 +811,20 @@ if (currentMainTab == 0) {
                 if (frontierSubTab == 1) ensureHomeServiceForPreview();
                 showCallPTDropdownFrontier();
             });
-        } else if (currentGesTab == 6) { // SENSOR — chọn action ngay trong card, không cần FAB
-            fab.setVisibility(View.GONE);
+                } else if (currentGesTab == 6) { // SENSOR — FAB: tạo Data Pack nếu chưa có, ngược lại mở Premium
+            fab.setVisibility(View.VISIBLE);
+            fab.setOnClickListener(v -> {
+                java.util.List<String> proxPacks = getDynamicIds("sensor_prox_pack_ids");
+                if (proxPacks.isEmpty()) {
+                    // Chưa có Data Pack sensor tiệm cận nào → mở editor tạo mới
+                    openSensorPackEditor("prox", null);
+                } else {
+                    // Đã có 1 Data Pack rồi → mở Premium cho user đọc
+                    showPremiumDialog();
+                }
+            });
         } else {
+
             fab.setVisibility(View.VISIBLE);
             fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
         }
@@ -2710,20 +2721,25 @@ content.addView(etName);
             }
         }
         SharedPreferences.Editor ed = prefs.edit();
-        if (isNew) {
-            List<String> ids = getDynamicIds("sensor_" + space + "_pack_ids");
-            ids.add(id);
-            ed.putString("sensor_" + space + "_pack_ids", TextUtils.join(",", ids));
-        }
-        String nameStr = etName.getText().toString().trim();
-        ed.putString(px + "name", nameStr.isEmpty() ? "Data Pack" : nameStr);
-        if (space.equals("prox")) ed.putString(px + "gesture", selectedGesture[0]);
-        ed.putString(px + "action", chosenAct[0]);
-        ed.putString(px + "launch_pkg", chosenPkg[0]);
-        ed.putString(px + "shortcut_id", chosenScId[0]);
-        ed.putBoolean(px + "vib", cbVib.isChecked());
-        ed.putBoolean(px + "anim", cbAnim.isChecked());
-        ed.apply();
+if (isNew) {
+    List<String> ids = getDynamicIds("sensor_" + space + "_pack_ids");
+    ids.add(id);
+    ed.putString("sensor_" + space + "_pack_ids", TextUtils.join(",", ids));
+    // [FIX] Set en=true NGAY khi tạo mới — nếu để false mặc định,
+    // hasAnyProxRule() luôn trả về false → registerScreenOffSensors() return sớm
+    // → proximity sensor KHÔNG BAO GIỜ được đăng ký với hệ thống → vẫy tay vô ích.
+    ed.putBoolean(px + "en", true);
+}
+String nameStr = etName.getText().toString().trim();
+ed.putString(px + "name", nameStr.isEmpty() ? "Data Pack" : nameStr);
+if (space.equals("prox")) ed.putString(px + "gesture", selectedGesture[0]);
+ed.putString(px + "action", chosenAct[0]);
+ed.putString(px + "launch_pkg", chosenPkg[0]);
+ed.putString(px + "shortcut_id", chosenScId[0]);
+ed.putBoolean(px + "vib", cbVib.isChecked());
+ed.putBoolean(px + "anim", cbAnim.isChecked());
+ed.apply();
+
         renderSensorDrawers(sensorBodyContainer);
         d.dismiss();
     });
@@ -4283,8 +4299,8 @@ private void showActionCategoryPicker(String title, List<String[]> items,
 private void buildMainMenuList() {
     pageMainMenu.removeAllViews();
     Object[][] items = {
-    {"touch_app_24px", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Frontier · Texture · VolKey", (Runnable)() -> openSpace(1)},
-    {"light_mode_24px", T("Display","Hiển thị"), "Anima · Lenap · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
+    {"touch_app_24px", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Frontier · Texture · VolKey · Sensor", (Runnable)() -> openSpace(1)},
+    {"light_mode_24px", T("Display","Hiển thị"), "Anima · Lenap · Bubble · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
     {"flash_on_24px", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)this::openEcosystemMenu},
     {"file_present_24px", T("Storage","Bộ nhớ"), T("Storage Scan","Quét dung lượng"), (Runnable)() -> openEco(3, false)},
     {"music_note_24px", T("Sound & Media","Âm thanh & Media"), T("Voice Recording · Screen Recording · My Playlist","Ghi âm · Quay màn hình · Danh sách phát"), (Runnable)() -> openEco(4, false)},
@@ -6870,6 +6886,9 @@ private void renderBubbleSettings() {
     dCommon.addView(createSlider(T("Bubble Size", "Kích thước bong bóng"), "bubble_size", 300, 120));
     dCommon.addView(createSlider(T("Node Icon Size", "Kích thước icon 9 nút"), "bubble_icon_size", 200, 100));
     dCommon.addView(createSlider(T("Node Background Opacity", "Độ đậm mờ nền 9 nút"), "bubble_node_bg_alpha", 255, 255));
+    dCommon.addView(createSlider(
+    T("Bubble Opacity (%)", "Độ đậm bong bóng (%)"),
+    "bubble_alpha_pct", 100, 87));
 
     dCommon.addView(createSectionTitle("⚙️ " + T("BUBBLE GESTURES", "CỬ CHỈ BONG BÓNG CHAT")));
     List<String> rules = getDynamicIds("bubble_pack_rules");

@@ -82,13 +82,35 @@ private void loadIconAsync(String cacheKey, java.util.function.Supplier<Drawable
         });
     });
 }
+/** [MỚI] Load icon app có xử lý Island (work profile).
+ *  Thử profile chính trước (nhanh), nếu thất bại thì quét LauncherApps qua mọi UserHandle. */
+private Drawable getAppIconAnyProfile(String pkg) {
+    try {
+        return ctx.getPackageManager().getApplicationIcon(pkg);
+    } catch (Exception ignored) {}
+    try {
+        android.os.UserManager um = (android.os.UserManager) ctx.getSystemService(Context.USER_SERVICE);
+        android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE);
+        if (um == null || la == null) return null;
+        for (android.os.UserHandle profile : um.getUserProfiles()) {
+            java.util.List<android.content.pm.LauncherActivityInfo> acts = la.getActivityList(pkg, profile);
+            if (acts != null && !acts.isEmpty()) return acts.get(0).getBadgedIcon(0);
+        }
+    } catch (Exception ignored) {}
+    return null;
+}
+
 private Drawable resolveSubNodeIcon(String customOverride, String ref) {
     Drawable d = getCustomIcon(customOverride);
     if (d != null) return d;
     PackageManager pm = ctx.getPackageManager();
     try {
-        if (ref.startsWith("app:")) return pm.getApplicationIcon(ref.substring(4));
+        // [FIX ISLAND] Dùng helper mới thay vì pm.getApplicationIcon() — helper tự
+        // quét qua mọi UserHandle nên Island cũng lấy được icon.
+        if (ref.startsWith("app:")) return getAppIconAnyProfile(ref.substring(4));
         if (ref.startsWith("act:QSTILE_")) return resolveQsTileIcon(ref.substring("act:QSTILE_".length())); 
+
+
         if (ref.startsWith("act:CREATE_SHORTCUT_")) {
             String[] split = ref.substring(20).split("/");
             return pm.getActivityIcon(new ComponentName(split[0], split[1]));
@@ -158,10 +180,11 @@ private boolean isCircleModeActive() { return prefs.getBoolean("bubble_circle_en
        public void onPrefChanged(String key) {
     if (key == null) return;
     if (key.equals("bubble_en") || key.equals("bubble_circle_en") || key.equals("bubble_size")
-        || key.equals("bubble_icon_size") || key.equals("bubble_main_icon")
-        || key.equals("bubble_circle_main_icon") || key.equals("bubble_node_bg_alpha")) { 
-        destroyAll(); rebuild(); 
-    }
+    || key.equals("bubble_icon_size") || key.equals("bubble_main_icon")
+    || key.equals("bubble_circle_main_icon") || key.equals("bubble_node_bg_alpha")
+    || key.equals("bubble_alpha_pct")) {   // ← THÊM
+    destroyAll(); rebuild(); 
+}
     // Nếu bạn muốn cập nhật icon ngay mà không rebuild toàn bộ, có thể thêm:
     if (key.equals("bubble_circle_main_icon") && isCircleModeActive() && circleView != null) {
         updateBubbleIcon();
@@ -328,7 +351,10 @@ private void updateBubbleIcon() {
         
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(Color.parseColor("#DD202124"));
+        int alphaPct = prefs.getInt("bubble_alpha_pct", 87); // mặc định 87% như cũ
+int alphaByte = Math.max(0, Math.min(255, Math.round(alphaPct * 255f / 100f)));
+bg.setColor(Color.argb(alphaByte, 32, 33, 36)); // nền #202124
+
         bg.setStroke(4, Color.parseColor("#8AB4F8"));
         iv.setBackground(bg);
         iv.setPadding(15, 15, 15, 15);
@@ -928,26 +954,20 @@ tv.setTextSize(12f);
     }
 
     private void buildSubmenuGrid(LinearLayout card, String type) {
-        TextView tvHeader = new TextView(ctx);
-        tvHeader.setText(getLabelForType(type));
-        tvHeader.setTextColor(Color.parseColor("#8AB4F8"));
-        tvHeader.setTextSize(16f);
-        tvHeader.setGravity(Gravity.CENTER);
-        tvHeader.setPadding(0, 0, 0, 20);
-        card.addView(tvHeader);
-
-        List<String> items = getSubItems(type);
-        for (int i = 0; i < 3; i++) {
-            LinearLayout row = new LinearLayout(ctx);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setWeightSum(3);
-            for (int j = 0; j < 3; j++) {
-                int idx = i * 3 + j;
-                row.addView(buildSubNodeButton(type, idx, items.get(idx)));
-            }
-            card.addView(row);
+    // [FIX] Bỏ hoàn toàn tvHeader tiêu đề — đã có nút Back trong nav bar hiển thị
+    // tên submenu rồi, không cần thêm dòng nữa làm panel cao lệch so với 9 nút chính.
+    List<String> items = getSubItems(type);
+    for (int i = 0; i < 3; i++) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setWeightSum(3);
+        for (int j = 0; j < 3; j++) {
+            int idx = i * 3 + j;
+            row.addView(buildSubNodeButton(type, idx, items.get(idx)));
         }
+        card.addView(row);
     }
+}
 
     private FrameLayout buildSubNodeButton(String type, int idx, String ref) {
         FrameLayout box = new FrameLayout(ctx);
@@ -977,21 +997,33 @@ tv.setTextSize(12f);
 
             String customOverride = prefs.getString("bubble_node_icon_override_" + type + "_" + ref, "");
 
-            int defaultIconRes = android.R.drawable.ic_menu_view;
-            if (ref.equals("act:BACK")) defaultIconRes = android.R.drawable.ic_media_rew;
-            else if (ref.equals("act:HOME")) defaultIconRes = android.R.drawable.ic_menu_compass;
-            else if (ref.equals("act:RECENTS")) defaultIconRes = android.R.drawable.ic_menu_recent_history;
-            else if (ref.equals("act:SCREEN_OFF")) defaultIconRes = android.R.drawable.ic_lock_lock;
-            else if (ref.equals("act:POWER_DIALOG")) defaultIconRes = android.R.drawable.ic_lock_power_off;
-            else if (ref.equals("act:SCREENSHOT") || ref.equals("act:CAMERA")) defaultIconRes = android.R.drawable.ic_menu_camera;
-            else if (ref.equals("act:NOTIFICATIONS")) defaultIconRes = android.R.drawable.ic_dialog_email;
-            else if (ref.equals("act:VOICE_RECORD") || ref.equals("act:TOGGLE_RECORD")) defaultIconRes = android.R.drawable.ic_btn_speak_now;
-            try { applyIconToImageView(iv, ctx.getDrawable(defaultIconRes), iconSize, false); } catch (Exception ignored) {}
+            // [FIX ISLAND] Phân biệt rõ 2 loại để chọn placeholder phù hợp:
+//  - App (kể cả Island): icon thật load bất đồng bộ, đặt placeholder "Android robot"
+//    (sym_def_app_icon) thay vì con mắt ic_menu_view — mắt gây hiểu nhầm là "lỗi".
+//  - Action (System/Utility/Trigger): dùng icon hệ thống tương ứng như cũ.
+final boolean isAppRef = ref.startsWith("app:")
+    || ref.startsWith("act:CREATE_SHORTCUT_") || ref.startsWith("act:RUN_SHORTCUT_")
+    || customOverride.startsWith("app:");
 
-            boolean isAppIconFinal = customOverride.startsWith("app:") || ref.startsWith("app:")
-                || ref.startsWith("act:CREATE_SHORTCUT_") || ref.startsWith("act:RUN_SHORTCUT_");
-            loadIconAsync("sub_" + type + "_" + ref + "_" + customOverride,
-                () -> resolveSubNodeIcon(customOverride, ref), iv, iconSize, isAppIconFinal);
+if (!isAppRef) {
+    int defaultIconRes = android.R.drawable.ic_menu_view;
+    if (ref.equals("act:BACK")) defaultIconRes = android.R.drawable.ic_media_rew;
+    else if (ref.equals("act:HOME")) defaultIconRes = android.R.drawable.ic_menu_compass;
+    else if (ref.equals("act:RECENTS")) defaultIconRes = android.R.drawable.ic_menu_recent_history;
+    else if (ref.equals("act:SCREEN_OFF")) defaultIconRes = android.R.drawable.ic_lock_lock;
+    else if (ref.equals("act:POWER_DIALOG")) defaultIconRes = android.R.drawable.ic_lock_power_off;
+    else if (ref.equals("act:SCREENSHOT") || ref.equals("act:CAMERA")) defaultIconRes = android.R.drawable.ic_menu_camera;
+    else if (ref.equals("act:NOTIFICATIONS")) defaultIconRes = android.R.drawable.ic_dialog_email;
+    else if (ref.equals("act:VOICE_RECORD") || ref.equals("act:TOGGLE_RECORD")) defaultIconRes = android.R.drawable.ic_btn_speak_now;
+    try { applyIconToImageView(iv, ctx.getDrawable(defaultIconRes), iconSize, false); } catch (Exception ignored) {}
+} else {
+    // Placeholder cho app: robot Android, không phải con mắt
+    try { applyIconToImageView(iv, ctx.getDrawable(android.R.drawable.sym_def_app_icon), iconSize, true); } catch (Exception ignored) {}
+}
+
+loadIconAsync("sub_" + type + "_" + ref + "_" + customOverride,
+    () -> resolveSubNodeIcon(customOverride, ref), iv, iconSize, isAppRef);
+
 
             iconBox.addView(iv);
         }
@@ -1309,12 +1341,34 @@ if (shown.size() > 40) shown = new ArrayList<>(shown.subList(0, 40));
     }
 
     private void runItem(String ref) {
-        if (ref.startsWith("app:")) {
-            try {
-                Intent li = ctx.getPackageManager().getLaunchIntentForPackage(ref.substring(4));
-                if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(li); }
-            } catch (Exception ignored) {}
-        } else if (ref.startsWith("act:CREATE_SHORTCUT_")) {
+    if (ref.startsWith("app:")) {
+        String pkg = ref.substring(4);
+        // [FIX ISLAND] Thử profile chính trước (nhanh); nếu không có Intent thì
+        // quét qua mọi UserHandle để mở đúng bản Island qua LauncherApps.
+        try {
+            Intent li = ctx.getPackageManager().getLaunchIntentForPackage(pkg);
+            if (li != null) {
+                li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(li);
+                return;
+            }
+        } catch (Exception ignored) {}
+        try {
+            android.os.UserManager um = (android.os.UserManager) ctx.getSystemService(Context.USER_SERVICE);
+            android.content.pm.LauncherApps la = (android.content.pm.LauncherApps) ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE);
+            if (um != null && la != null) {
+                for (android.os.UserHandle profile : um.getUserProfiles()) {
+                    java.util.List<android.content.pm.LauncherActivityInfo> acts = la.getActivityList(pkg, profile);
+                    if (acts != null && !acts.isEmpty()) {
+                        la.startMainActivity(acts.get(0).getComponentName(), profile, null, null);
+                        return;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+    } else if (ref.startsWith("act:CREATE_SHORTCUT_")) {
+
+
             String[] split = ref.substring(20).split("/");
             if (split.length == 2) {
                 Intent createIntent = new Intent(Intent.ACTION_CREATE_SHORTCUT);

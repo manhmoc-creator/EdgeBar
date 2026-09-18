@@ -527,6 +527,28 @@ private static final long LOCK_DEBOUNCE_MS = 400;
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     // TẦNG 1: Whitelist tuyệt đối — bỏ qua mọi key không thuộc EdgeBar
     if (!isOurKey(k)) return;
+    // [FIX SENSOR] Bật/tắt 1 Data Pack sensor tiệm cận giữa chừng -> ép đăng ký lại
+// ngay ở lần tắt màn tiếp theo. Nếu không, vì sensorsRegistered đang true từ lần
+// tắt màn trước (khi pack chưa bật), registerScreenOffSensors() sẽ return sớm
+// và sensor "câm" mãi dù user đã bật rule.
+if (k != null && k.startsWith("sensor_prox_") && k.endsWith("_en")) {
+    boolean screenOff = false;
+    try {
+        android.os.PowerManager pmS = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+        screenOff = pmS != null && !pmS.isInteractive();
+    } catch (Exception ignored) {}
+    // Nếu màn ĐANG TẮT (hiếm khi xảy ra vì user phải mở app để bật Switch),
+    // ép đăng ký lại ngay. Nếu màn đang sáng, chỉ cần set cờ sensorsRegistered
+    // = false để lần ACTION_SCREEN_OFF kế tiếp chắc chắn đăng ký lại.
+    if (screenOff) {
+        unregisterScreenOffSensors();
+        registerScreenOffSensors();
+    } else {
+        // Đánh dấu để lần tắt màn tới chắc chắn re-register
+        unregisterScreenOffSensors();
+    }
+    return;
+}
 
     // TẦNG 1.5: bubble_ → Bong bóng chat AssistiveTouch, xử lý riêng
     if (k != null && k.startsWith("bubble_")) {
