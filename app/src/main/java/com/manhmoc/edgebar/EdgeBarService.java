@@ -90,10 +90,16 @@ private long waveWindowStart = 0;
 private static final long WAVE_WINDOW_MS = 2500;
 private Runnable waveCommitRunnable;
 
+private boolean lastProxNear = false; // trạng thái near/far gần nhất, chống đếm trùng khi driver báo lặp
+
 private SensorEventListener proxListener = new SensorEventListener() {
     @Override public void onSensorChanged(SensorEvent e) {
         boolean near = e.values[0] < proxSensor.getMaximumRange();
-        if (!near) return;
+        // [FIX] Chỉ tính là 1 lần vẫy khi THỰC SỰ chuyển từ xa -> gần
+        // (chặn driver báo lặp "gần" nhiều lần liên tiếp không có "xa" xen giữa)
+        if (!near) { lastProxNear = false; return; }
+        if (lastProxNear) return; // đang gần rồi báo gần tiếp -> bỏ qua, không phải vẫy mới
+        lastProxNear = true;
         if (pocketModeActive) return;
         long now = SystemClock.elapsedRealtime();
         if (waveWindowStart == 0 || (now - waveWindowStart) > WAVE_WINDOW_MS) {
@@ -2538,7 +2544,8 @@ private void refreshFingerprintRegistration() {
         }
     }
     sensorsRegistered = true;
-    pocketModeActive = false;
+pocketModeActive = false;
+lastProxNear = false; // [MỚI] reset trạng thái mỗi lần đăng ký lại sensor
 }
         private void unregisterScreenOffSensors() {
             if (!sensorsRegistered) return;
