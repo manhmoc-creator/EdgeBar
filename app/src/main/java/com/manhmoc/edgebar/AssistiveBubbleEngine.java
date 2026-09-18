@@ -27,10 +27,13 @@ public class AssistiveBubbleEngine {
     private LinearLayout panelCard;
 
     private final Handler idleFadeHandler = new Handler(Looper.getMainLooper());
-    private final Runnable idleFadeRunnable = () -> {
-        if (bubbleView != null && menuOverlay == null && circleView == null)
-            bubbleView.animate().alpha(0.35f).setDuration(400).start();
-    };
+    private final Runnable idleFadeRunnable = this::doIdleFade;
+
+private void doIdleFade() {
+    if (bubbleView != null && menuOverlay == null && circleView == null)
+        bubbleView.animate().alpha(0.35f).setDuration(400).start();
+}
+
     private void resetIdleFadeTimer() {
         if (bubbleView == null) return;
         idleFadeHandler.removeCallbacks(idleFadeRunnable);

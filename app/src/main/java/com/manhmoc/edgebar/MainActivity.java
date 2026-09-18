@@ -1825,8 +1825,12 @@ appliedPacks.sort((keyA, keyB) -> {
         optCol.setOrientation(LinearLayout.VERTICAL);
         optCol.setGravity(Gravity.CENTER);
         optCol.setPadding(0, 0, 15, 0);
-        String visIcon = visIdx == 0 ? "☠️" : (visIdx == 1 ? "👻" : "🕶️");
-        String priIcon = priIdx == 0 ? "👆" : "👇";
+        // THÊM 2 DÒNG NÀY NGAY TRƯỚC 2 dòng String visIcon/priIcon:
+int visIdx = prefs.getInt(packPrefix + id + "_vis_mode", 0);
+int priIdx = prefs.getInt(packPrefix + id + "_pri_mode", 0);
+String visIcon = visIdx == 0 ? "☠️" : (visIdx == 1 ? "👻" : "🕶️");
+String priIcon = priIdx == 0 ? "👆" : "👇";
+
         String shapeIcon = "";
         if (!isBar) {
             int shapeIdx = prefs.getInt(packPrefix + id + "_shape", 0);
@@ -2573,8 +2577,9 @@ private void openSensorPackEditor(String space, String editId) {
     final String id = isNew ? java.util.UUID.randomUUID().toString().substring(0, 8) : editId;
     String px = "sensor_" + space + "_pack_" + id + "_";
 
-    EditText etName = createEcoInput("Tên Data Pack", prefs.getString(prefix + id + "_name", ""));
-if (type == 2) content.addView(etName);
+    // THAY 2 dòng SAI bằng 2 dòng ĐÚNG này:
+EditText etName = createEcoInput("Tên Data Pack", prefs.getString(px + "name", ""));
+content.addView(etName);
 
     final String[] selectedGesture = { prefs.getString(px + "gesture", "wave1") };
     if (space.equals("prox")) {
@@ -7447,10 +7452,10 @@ renderRules[0] = () -> {
         optCol.setGravity(Gravity.CENTER);
         optCol.setPadding(0, 0, 15, 0);
         TextView tIcons = new TextView(this);
-            tIcons.setText((prefs.getBoolean(key+"_vib", true) ? "📳\n" : "") +
-                   (prefs.getBoolean(key+"_anim", true) ? "✨\n" : "") +
-                   (prefs.getBoolean(key+"_jump_on", true) ? "🦘\n" : "") +
-                   (prefs.getBoolean(key+"_os", false) ? "👻" : ""));
+    tIcons.setText((prefs.getBoolean(rId+"_vib", true) ? "📳\n" : "") +
+           (prefs.getBoolean(rId+"_anim", true) ? "✨\n" : "") +
+           (prefs.getBoolean(rId+"_jump_on", true) ? "🦘\n" : "") +
+           (prefs.getBoolean(rId+"_os", false) ? "👻" : ""));
         tIcons.setTextSize(15);
         tIcons.setGravity(Gravity.CENTER);
         optCol.addView(tIcons);
