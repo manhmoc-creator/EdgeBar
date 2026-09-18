@@ -91,22 +91,25 @@ private static final long WAVE_WINDOW_MS = 2500;
 private Runnable waveCommitRunnable;
 
 private boolean lastProxNear = false; // trạng thái near/far gần nhất, chống đếm trùng khi driver báo lặp
+private long lastWaveIncrementMs = 0;
+private static final long WAVE_MIN_GAP_MS = 120; // tối thiểu giữa 2 lần tính là 1 sóng mới
 
 private SensorEventListener proxListener = new SensorEventListener() {
     @Override public void onSensorChanged(SensorEvent e) {
         boolean near = e.values[0] < proxSensor.getMaximumRange();
-        // [FIX] Chỉ tính là 1 lần vẫy khi THỰC SỰ chuyển từ xa -> gần
-        // (chặn driver báo lặp "gần" nhiều lần liên tiếp không có "xa" xen giữa)
         if (!near) { lastProxNear = false; return; }
-        if (lastProxNear) return; // đang gần rồi báo gần tiếp -> bỏ qua, không phải vẫy mới
+        if (lastProxNear) return;
         lastProxNear = true;
         if (pocketModeActive) return;
+
         long now = SystemClock.elapsedRealtime();
-        if (waveWindowStart == 0 || (now - waveWindowStart) > WAVE_WINDOW_MS) {
-            waveCount = 0;
-            waveWindowStart = now;
-        }
+        // [FIX] chặn dội cảm biến: 1 lần vẫy thật không được tính 2 lần
+        if (now - lastWaveIncrementMs < WAVE_MIN_GAP_MS) return;
+        lastWaveIncrementMs = now;
+
+                // Không reset theo mốc "vẫy đầu tiên" nữa — waveCommitRunnable (im lặng 2.5s) đã tự chốt & reset.
         waveCount++;
+
         if (waveCommitRunnable != null) proxHandler.removeCallbacks(waveCommitRunnable);
         waveCommitRunnable = () -> {
             int count = Math.min(waveCount, 4);
@@ -117,13 +120,9 @@ private SensorEventListener proxListener = new SensorEventListener() {
     }
     @Override public void onAccuracyChanged(Sensor s, int a) {}
 };
-
 /** [MỚI] Đọc đúng Data Pack đang bật (chỉ 1 pack) và thực thi action của nó. */
 private void fireSensorWaveGesture(int waveCount) {
     String gestureKey = "wave" + waveCount;
-    String activeGesture = prefs.getString("sensor_prox_active_gesture", "");
-    if (!activeGesture.equals(gestureKey)) return;
-
     String csv = prefs.getString("sensor_prox_pack_ids", "");
     for (String id : csv.split(",")) {
         id = id.trim();
@@ -302,9 +301,11 @@ private long lastIconColorEventGateMs = 0;
 // 2 lệnh takeScreenshot() chồng lên nhau, gây tăng đột biến RAM đủ để bị OOM-kill.
 private volatile boolean isCapturingIconColorScreenshot = false;
 private volatile long iconColorCaptureStartMs = 0L;
-private static final long ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS = 4000; // quá thời gian này coi như kẹt, tự giải phóng
+private static final long ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS = 1500; // [FIX] rút từ 4000 xuống 1500 
 
-private static final long ICON_COLOR_EVENT_GATE_MS = 350; // giãn cách tối thiểu giữa 2 lần chụp khi cuộn
+private static final long ICON_COLOR_EVENT_GATE_MS = 1200;   // was 350
+private static final long ICON_COLOR_MIN_GAP_MS = 1500;      // MỚI: giãn cách tối thiểu giữa 2 lần takeScreenshot
+
 private static final long ICON_COLOR_INTERVAL_MIN_MS = 400;
 private static final long ICON_COLOR_INTERVAL_MAX_MS = 5000;
 private long iconColorCurrentIntervalMs = ICON_COLOR_INTERVAL_MIN_MS;
@@ -320,63 +321,55 @@ private boolean isAutoColorOff(String prefix, String barKey) {
     String off = prefs.getString(prefix + "bar_auto_icon_color_off", "");
     return ("," + off + ",").contains("," + barKey + ",");
 }
-
-private boolean barNeedsAutoColor(View[] arr, String prefix) {
-    if (arr == null) return false;
-    for (int i = 0; i < 12; i++) {
-        View v = arr[i];
-        if (v == null || v.getVisibility() != View.VISIBLE) continue;
-        if (prefs.getString(prefix + BARS[i] + "_icons", "").isEmpty()) continue;
-        if (isAutoColorOff(prefix, BARS[i])) continue;
-        return true;
+/** Gọi từ mọi nơi cần yêu cầu lấy mẫu lại màu (đổi app, cuộn nội dung...). Rẻ tới mức
+ *  gọi liên tục cũng không sao — tự dồn về tối đa 1 lần thực thi/ICON_COLOR_MIN_INTERVAL_MS. */
+private boolean anyAutoColorLayer() {
+    for (String k : iconLayers.keySet()) {
+        String prefix = k.startsWith("homacc_") ? "homacc_" : "lock_";
+        if (!isAutoColorOff(prefix, k.substring(prefix.length()))) return true;
     }
     return false;
 }
-
-/** Gọi từ mọi nơi cần yêu cầu lấy mẫu lại màu (đổi app, cuộn nội dung...). Rẻ tới mức
- *  gọi liên tục cũng không sao — tự dồn về tối đa 1 lần thực thi/ICON_COLOR_MIN_INTERVAL_MS. */
 private void requestIconColorSample() {
+    if (iconLayers.isEmpty() || !anyAutoColorLayer()) return; // không bar nào có icon -> zero cost
     doSampleIconColors(false);
 }
+
 private void doSampleIconColors(boolean isFollowUp) {
     if (Build.VERSION.SDK_INT < 30) return;
     if (MyPlaylistService.isRunning || VoiceRecorderService.isRunning || ScreenRecorderService.isRunning) return;
     android.os.PowerManager pmSample = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-    if (pmSample != null && !pmSample.isInteractive()) return; // [MỚI] màn tắt -> không chụp, không tốn pin
+    if (pmSample != null && !pmSample.isInteractive()) return;
 
-    // [FIX BUG 3] Chặn chồng lệnh chụp màn hình — nếu 1 lượt takeScreenshot() trước
-    // CHƯA đóng xong HardwareBuffer (vẫn còn trong iconColorExecutor xử lý), tuyệt
-    // đối không bắn lệnh mới, dù sự kiện cuộn/đổi app có dồn dập tới đâu.
     if (isCapturingIconColorScreenshot) {
-        if (System.currentTimeMillis() - iconColorCaptureStartMs > ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS) {
-            isCapturingIconColorScreenshot = false; // [FIX] watchdog: callback không về -> tự giải phóng, không để kẹt vĩnh viễn
-        } else {
-            return;
-        }
+        if (System.currentTimeMillis() - iconColorCaptureStartMs > ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS)
+            isCapturingIconColorScreenshot = false;
+        else return;
     }
-
-    final boolean needLock = barNeedsAutoColor(bars, "lock_");
-    final boolean needHomacc = barNeedsAutoColor(accHomeBars, "homacc_");
-    if (!needLock && !needHomacc) return;
-
-    // [FIX ANR] Đọc toạ độ/kích thước từng Bar (rẻ, chỉ đọc field) ngay trên main thread —
-    // phần NẶNG (cắt Bitmap, đo độ sáng) sẽ giao cho thread nền bên dưới.
-    final java.util.List<Object[]> lockJobs = needLock ? buildColorSampleJobs(bars, "lock_") : java.util.Collections.emptyList();
-    final java.util.List<Object[]> homaccJobs = needHomacc ? buildColorSampleJobs(accHomeBars, "homacc_") : java.util.Collections.emptyList();
+    final java.util.List<Object[]> lockJobs = buildColorSampleJobs("lock_");
+    final java.util.List<Object[]> homaccJobs = buildColorSampleJobs("homacc_");
     if (lockJobs.isEmpty() && homaccJobs.isEmpty()) return;
 
-    isCapturingIconColorScreenshot = true; // [FIX BUG 3] khoá lại NGAY trước khi gọi takeScreenshot()
-    iconColorCaptureStartMs = System.currentTimeMillis();
+    // Giãn cách: quá sát lần trước -> gộp thành đúng 1 lần chạy trễ (trailing)
+    long nowS = SystemClock.elapsedRealtime();
+    long since = nowS - lastIconColorSampleMs;
+    if (since < ICON_COLOR_MIN_GAP_MS) {
+        if (!iconColorSamplePending) {
+            iconColorSamplePending = true;
+            final boolean fu = isFollowUp;
+            iconColorHandler.postDelayed(() -> { iconColorSamplePending = false; doSampleIconColors(fu); },
+                ICON_COLOR_MIN_GAP_MS - since);
+        }
+        return;
+    }
+    lastIconColorSampleMs = nowS;
 
+    isCapturingIconColorScreenshot = true;
+    iconColorCaptureStartMs = System.currentTimeMillis();
     try {
         takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
             new AccessibilityService.TakeScreenshotCallback() {
                 @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
-                    // [FIX ANR/OOM QUAN TRỌNG] Trước đây cắt Bitmap + đo màu chạy NGAY
-                    // trên main thread (vì callback đăng ký qua getMainExecutor()), lặp
-                    // lại liên tục mỗi khi cuộn màn hình -> nghẽn main thread -> ANR ->
-                    // hệ thống giết CẢ TIẾN TRÌNH. Dời việc nặng sang thread nền, main
-                    // thread chỉ nhận lại danh sách màu để tô icon.
                     iconColorExecutor.execute(() -> {
                         java.util.List<Object[]> pendingTints = new java.util.ArrayList<>();
                         try {
@@ -391,48 +384,41 @@ private void doSampleIconColors(boolean isFollowUp) {
                             if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
                         }
                         iconColorHandler.post(() -> {
-                            // [FIX BUG 3] Chỉ mở khoá SAU KHI buffer đã chắc chắn đóng (đã
-                            // qua khỏi finally ở trên) — đảm bảo tại mọi thời điểm chỉ có
-                            // tối đa 1 buffer full màn hình sống trong RAM.
                             isCapturingIconColorScreenshot = false;
                             for (Object[] pair : pendingTints) {
-                                try { ((BarView) pair[0]).setIconTintColor((Integer) pair[1]); } catch (Exception ignored) {}
+                                IconLayerView l = (IconLayerView) pair[0];
+                                if (l.isAttachedToWindow()) l.setTint((Integer) pair[1]);
                             }
                         });
                     });
-                    iconColorCurrentIntervalMs = ICON_COLOR_INTERVAL_MIN_MS;
                     if (!isFollowUp && !iconColorFollowUpPending) {
                         iconColorFollowUpPending = true;
                         iconColorHandler.postDelayed(() -> {
                             iconColorFollowUpPending = false;
                             doSampleIconColors(true);
-                        }, 350);
+                        }, 400);
                     }
                 }
                 @Override public void onFailure(int errorCode) {
-                    isCapturingIconColorScreenshot = false; // [FIX BUG 3] mở khoá ngay khi hệ thống từ chối
-                    iconColorCurrentIntervalMs = Math.min(ICON_COLOR_INTERVAL_MAX_MS,
-                        iconColorCurrentIntervalMs * 2);
-                    iconColorHandler.postDelayed(() -> doSampleIconColors(false), iconColorCurrentIntervalMs);
+                    isCapturingIconColorScreenshot = false;
+                    // Retry đúng 1 lần (không còn vòng lặp vô hạn)
+                    if (!isFollowUp) iconColorHandler.postDelayed(() -> doSampleIconColors(true), 2000);
                 }
             });
     } catch (Exception e) {
-        isCapturingIconColorScreenshot = false; // [FIX BUG 3] gọi takeScreenshot() ném lỗi tức thì -> vẫn phải mở khoá
+        isCapturingIconColorScreenshot = false;
     }
 }
-// [MỚI] Đọc vị trí/kích thước Bar — BẮT BUỘC chạy trên main thread (View getter).
-private java.util.List<Object[]> buildColorSampleJobs(View[] arr, String prefix) {
+private java.util.List<Object[]> buildColorSampleJobs(String prefix) {
     java.util.List<Object[]> jobs = new java.util.ArrayList<>();
-    if (arr == null) return jobs;
     int[] loc = new int[2];
     for (int i = 0; i < 12; i++) {
-        View v = arr[i];
-        if (!(v instanceof BarView) || v.getVisibility() != View.VISIBLE) continue;
-        if (prefs.getString(prefix + BARS[i] + "_icons", "").isEmpty()) continue;
-        if (isAutoColorOff(prefix, BARS[i])) { ((BarView) v).setIconTintColor(null); continue; }
-        if (!v.isAttachedToWindow() || v.getWidth() <= 0 || v.getHeight() <= 0) continue;
+        String key = prefix + BARS[i];
+        IconLayerView v = iconLayers.get(key);
+        if (v == null || !v.isAttachedToWindow() || v.getWidth() <= 0 || v.getHeight() <= 0) continue;
+        if (isAutoColorOff(prefix, BARS[i])) { v.setTint(Color.WHITE); continue; }
         v.getLocationOnScreen(loc);
-        jobs.add(new Object[]{v, loc[0], loc[1], v.getWidth(), v.getHeight(), prefix + BARS[i]});
+        jobs.add(new Object[]{v, loc[0], loc[1], v.getWidth(), v.getHeight(), key});
     }
     return jobs;
 }
@@ -668,7 +654,7 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     qrScannerOverlayActive = i.getBooleanExtra("open", false);
     applyLockGateInstant();
 } else if ("com.manhmoc.edgebar.PAUSE_WM_OPS".equals(act)) {
-
+    removeAllIconLayers();
     for (int j=0;j<12;j++) if (bars[j]!=null) bars[j].setVisibility(View.GONE);
     for (int j=0;j<4;j++) if (corners[j]!=null) corners[j].setVisibility(View.GONE);
     for (int j=0;j<12;j++) if (accHomeBars[j]!=null) accHomeBars[j].setVisibility(View.GONE);
@@ -1053,106 +1039,123 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
         return null;
     }
     }
-    private class BarView extends View {
-    private int baseAlpha, hideDelay;
-    private boolean isAutoHiding = false, isInv = false;
-    private Handler autoHideHandler = new Handler();
-    private GradientDrawable gd = new GradientDrawable();
-    private java.util.List<android.graphics.Bitmap> icons = new java.util.ArrayList<>();
-    private Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    public BarView(Context c) { super(c); gd.setCornerRadius(24f); setBackground(gd); }
-    private int userIconAlpha = 255;
-    public void setIcons(java.util.List<android.graphics.Bitmap> newIcons, int alpha) {
-        this.icons = newIcons != null ? newIcons : new java.util.ArrayList<>();
-        userIconAlpha = alpha;
-        invalidate();
-    }
-    // [MỚI] Tô lại icon (vốn là bitmap trắng đơn sắc) sang đen/trắng theo nền —
-    // null = giữ nguyên màu gốc (trắng). Zero-alloc: chỉ đổi ColorFilter, không tạo Bitmap mới.
-    private Integer iconTintColor = null;
-    private int iconTintCurrentAnimated = Color.WHITE; // màu tint đang thực sự vẽ (đang tween)
-    private ValueAnimator iconTintAnim;
-    public void setIconTintColor(Integer color) {
-        int targetColor = (color == null) ? Color.WHITE : color;
-        if (iconTintColor != null && iconTintColor == targetColor) return;
-        iconTintColor = targetColor;
-        if (iconTintAnim != null) iconTintAnim.cancel();
-        // [FIX] Fade màu mượt như thanh nav Pixel — tween RGB thay vì đổi phắt.
-        iconTintAnim = ValueAnimator.ofObject(new android.animation.ArgbEvaluator(),
-            iconTintCurrentAnimated, targetColor);
-        iconTintAnim.setDuration(260);
-        iconTintAnim.addUpdateListener(a -> {
-            iconTintCurrentAnimated = (int) a.getAnimatedValue();
-            iconPaint.setColorFilter(new android.graphics.PorterDuffColorFilter(
-                iconTintCurrentAnimated, android.graphics.PorterDuff.Mode.SRC_IN));
+            private class BarView extends View {
+        private int baseAlpha, hideDelay;
+        private boolean isAutoHiding = false, isInv = false;
+        private Handler autoHideHandler = new Handler();
+        private GradientDrawable gd = new GradientDrawable();
+        public BarView(Context c) { super(c); gd.setCornerRadius(24f); setBackground(gd); }
+        public void updateProps(int alpha, boolean autoHide, int delay, boolean inv, float radius) {
+            this.baseAlpha = alpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
+            autoHideHandler.removeCallbacksAndMessages(null);
+            gd.setCornerRadius(radius);
+            gd.setColor(Color.argb((inv || autoHide) ? 0 : alpha, 96, 125, 139));
             invalidate();
-        });
-        iconTintAnim.start();
-    }
-    private int iconAlphaFactor = 255; // 0 = ẩn hoàn toàn icon, 255 = hiện đầy đủ
-
-    public void updateProps(int alpha, boolean autoHide, int delay, boolean inv, float radius) {
-        this.baseAlpha = alpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
-        autoHideHandler.removeCallbacksAndMessages(null);
-        gd.setCornerRadius(radius); // [MỚI] Độ bo tròn tuỳ chỉnh từ slider "bar_radius"
-        if (inv) { gd.setColor(Color.argb(0, 96, 125, 139)); iconAlphaFactor = 0; }
-        else if (!autoHide) { gd.setColor(Color.argb(alpha, 96, 125, 139)); iconAlphaFactor = 255; }
-        else { gd.setColor(Color.argb(0, 96, 125, 139)); iconAlphaFactor = 255; }
-        invalidate();
-    }
-    public void triggerFlash() {
-        if (!isAutoHiding || isInv) return;
-        autoHideHandler.removeCallbacksAndMessages(null);
-        gd.setColor(Color.argb(Math.min(255, baseAlpha + 50), 96, 125, 139));
-        invalidate();
-        autoHideHandler.postDelayed(() -> {
-            ValueAnimator a = ValueAnimator.ofFloat(1f, 0f);
-            a.setDuration(1500);
-            a.addUpdateListener(anim -> {
-                float val = (float) anim.getAnimatedValue();
-                gd.setColor(Color.argb((int) (baseAlpha * val), 96, 125, 139));
-                // icon KHÔNG mờ theo nền nữa — luôn giữ độ hiện rõ trong suốt lúc tàng hình
-                invalidate();
-            });
-            a.start();
-        }, hideDelay);
-    }
-    @Override protected void onDraw(Canvas canvas) {
-        super.onDraw(canvas);
-        iconPaint.setAlpha((int) (userIconAlpha * (iconAlphaFactor / 255f)));
-        if (icons.isEmpty()) return;
-        int w = getWidth(), h = getHeight();
-        if (w <= 0 || h <= 0) return;
-        int n = icons.size();
-        int gap = 8;
-        boolean horizontal = w >= h;
-        int mainDim = horizontal ? w : h;
-        int crossDim = horizontal ? h : w;
-        int userIconSize = icons.get(0).getWidth(); // kích thước user đã chọn ở slider
-
-        // [MỚI] Tự động lấp đầy thanh: nếu tổng chiều dài các icon (theo size user
-        // chọn) vượt quá chiều dài Bar, tự co đều lại để vừa khít — không tràn ra
-        // ngoài. Nếu đủ chỗ thì giữ nguyên kích thước user đã chọn (không phóng to
-        // thêm, tránh vỡ nét). Dùng drawBitmap(bitmap, null, destRect, paint) để co
-        // giãn ngay trên GPU khi vẽ — KHÔNG tạo Bitmap mới, Zero cấp phát thêm,
-        // tối ưu pin/RAM cho Pixel 2XL vì đây là hàm onDraw() gọi liên tục.
-        int maxFit = Math.max(8, (mainDim - (n - 1) * gap) / n);
-        int drawSize = Math.min(userIconSize, maxFit);
-        drawSize = Math.min(drawSize, crossDim); // không vượt bề dày thanh
-
-        int totalMain = n * drawSize + (n - 1) * gap;
-        int startMain = (mainDim - totalMain) / 2; // luôn căn giữa khối icon trong thanh
-        int crossOffset = (crossDim - drawSize) / 2;
-
-        for (int i = 0; i < n; i++) {
-            int pos = startMain + i * (drawSize + gap);
-            android.graphics.Rect dst = horizontal
-                ? new android.graphics.Rect(pos, crossOffset, pos + drawSize, crossOffset + drawSize)
-                : new android.graphics.Rect(crossOffset, pos, crossOffset + drawSize, pos + drawSize);
-            canvas.drawBitmap(icons.get(i), null, dst, iconPaint);
+        }
+        public void triggerFlash() {
+            if (!isAutoHiding || isInv) return;
+            autoHideHandler.removeCallbacksAndMessages(null);
+            gd.setColor(Color.argb(Math.min(255, baseAlpha + 50), 96, 125, 139));
+            invalidate();
+            autoHideHandler.postDelayed(() -> {
+                ValueAnimator a = ValueAnimator.ofFloat(1f, 0f);
+                a.setDuration(1500);
+                a.addUpdateListener(anim -> {
+                    gd.setColor(Color.argb((int) (baseAlpha * (float) anim.getAnimatedValue()), 96, 125, 139));
+                    invalidate();
+                });
+                a.start();
+            }, hideDelay);
         }
     }
-}
+
+    // ===== [MỚI] Cửa sổ icon RIÊNG — chỉ tồn tại cho bar có icon =====
+    private class IconLayerView extends View {
+        private java.util.List<Bitmap> icons = new java.util.ArrayList<>();
+        private final Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Rect dst = new android.graphics.Rect(); // tái dùng, không alloc mỗi frame
+        private int tintCur = Color.WHITE, tintTarget = Color.WHITE;
+        private ValueAnimator tintAnim;
+        IconLayerView(Context c) { super(c); }
+        void setIcons(java.util.List<Bitmap> l, int alpha) {
+            icons = l; iconPaint.setAlpha(alpha); invalidate();
+        }
+        void setTint(int target) {
+            if (target == tintTarget) return;
+            tintTarget = target;
+            if (tintAnim != null) tintAnim.cancel();
+            tintAnim = ValueAnimator.ofObject(new android.animation.ArgbEvaluator(), tintCur, target);
+            tintAnim.setDuration(220);
+            tintAnim.addUpdateListener(a -> {
+                tintCur = (int) a.getAnimatedValue();
+                iconPaint.setColorFilter(new android.graphics.PorterDuffColorFilter(tintCur, android.graphics.PorterDuff.Mode.SRC_IN));
+                invalidate();
+            });
+            tintAnim.start();
+        }
+        void release() { if (tintAnim != null) tintAnim.cancel(); }
+        @Override protected void onDraw(Canvas canvas) {
+            if (icons.isEmpty()) return;
+            int w = getWidth(), h = getHeight();
+            if (w <= 0 || h <= 0) return;
+            int n = icons.size(), gap = 8;
+            boolean horizontal = w >= h;
+            int mainDim = horizontal ? w : h, crossDim = horizontal ? h : w;
+            int maxFit = Math.max(8, (mainDim - (n - 1) * gap) / n);
+            int drawSize = Math.min(Math.min(icons.get(0).getWidth(), maxFit), crossDim);
+            int startMain = (mainDim - (n * drawSize + (n - 1) * gap)) / 2;
+            int crossOff = (crossDim - drawSize) / 2;
+            for (int i = 0; i < n; i++) {
+                int pos = startMain + i * (drawSize + gap);
+                if (horizontal) dst.set(pos, crossOff, pos + drawSize, crossOff + drawSize);
+                else dst.set(crossOff, pos, crossOff + drawSize, pos + drawSize);
+                canvas.drawBitmap(icons.get(i), null, dst, iconPaint);
+            }
+        }
+    }
+    private final java.util.Map<String, IconLayerView> iconLayers = new java.util.HashMap<>();
+
+    private void removeIconLayer(String key) {
+        IconLayerView v = iconLayers.remove(key);
+        if (v == null) return;
+        v.release();
+        lastLayoutSig.remove(v);
+        lastBarTintState.remove(key);
+        try { wm.removeView(v); } catch (Exception ignored) {}
+    }
+    private void removeAllIconLayers() {
+        for (String k : new java.util.ArrayList<>(iconLayers.keySet())) removeIconLayer(k);
+    }
+    /** Chỉ tạo layer khi bar đang hiện + có icon + không ở chế độ "Ẩn vô hình". Ngược lại gỡ hẳn. */
+    private void syncIconLayer(String prefix, int i, WindowManager.LayoutParams barLp, boolean visible) {
+        String key = prefix + BARS[i];
+        String csv = prefs.getString(key + "_icons", "");
+        if (!visible || csv.isEmpty() || prefs.getInt(key + "_vis_mode", 0) == 2) { removeIconLayer(key); return; }
+        int iconSize = prefs.getInt(key + "_icon_size", prefs.getInt(prefix + "bar_icon_size", 40));
+        int iconAlpha = prefs.getInt(key + "_icon_alpha", prefs.getInt(prefix + "bar_icon_alpha", 255));
+        java.util.List<Bitmap> bmps = resolveBarIcons(csv, iconSize);
+        if (bmps.isEmpty()) { removeIconLayer(key); return; }
+        IconLayerView layer = iconLayers.get(key);
+        boolean isNew = layer == null;
+        WindowManager.LayoutParams lp;
+        if (isNew) {
+            layer = new IconLayerView(this);
+            lp = new WindowManager.LayoutParams(barLp.width, barLp.height,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
+        } else {
+            lp = (WindowManager.LayoutParams) layer.getLayoutParams();
+        }
+        lp.width = barLp.width; lp.height = barLp.height; lp.x = barLp.x; lp.y = barLp.y; lp.gravity = barLp.gravity;
+        layer.setIcons(bmps, iconAlpha);
+        if (isNew) {
+            try { wm.addView(layer, lp); iconLayers.put(key, layer); } catch (Exception ignored) {}
+        } else {
+            updateLayoutIfChanged(layer, lp);
+        }
+    }
         private class CornerView extends View {
             private Paint pFill, pStroke; private int type; private String prefix;
             private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
@@ -2629,9 +2632,8 @@ setViewVisibilityAnimated(bars[i], shouldShowBar);
                 int visMode = prefs.getInt("lock_"+BARS[i]+"_vis_mode",0);
                 int barHideDur = prefs.getInt("lock_bar_hide_dur", 2500);
                 ((BarView)bars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2, prefs.getInt("lock_bar_radius", 24));
-                int iconSize = prefs.getInt("lock_"+BARS[i]+"_icon_size", prefs.getInt("lock_bar_icon_size", 40));
-int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", prefs.getInt("lock_bar_icon_alpha", 255));
-((BarView)bars[i]).setIcons(resolveBarIcons(prefs.getString("lock_"+BARS[i]+"_icons",""), iconSize), iconAlpha);
+
+
                                 int priMode = prefs.getInt("lock_"+BARS[i]+"_pri_mode",0);
                 int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                 // [MỚI] Đang xem trước ở Frontier -> chỉ hiển thị hình, KHÔNG nhận cử chỉ thật
@@ -2644,6 +2646,9 @@ int iconAlpha = prefs.getInt("lock_"+BARS[i]+"_icon_alpha", prefs.getInt("lock_b
         p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y + pushY; p.gravity = GRAV[i];
         updateLayoutIfChanged(bars[i], p);
         if (priMode==0) applyAntiTapjacking(bars[i], w, h);
+        syncIconLayer("lock_", i, p, shouldShowBar);
+        } else {
+        removeIconLayer("lock_" + BARS[i]);
     }
 }
         for (int i=0;i<4;i++) {
@@ -3115,6 +3120,7 @@ private void drawAccessibleHome() {
 private void removeAccessibleHome() {
     if (!isHomaccDrawn) return;
     for (int i = 0; i < 12; i++) {
+        removeIconLayer("homacc_" + BARS[i]);
         if (accHomeBars[i] != null) {
             try { wm.removeView(accHomeBars[i]); } catch (Exception ignored) {}
             accHomeBars[i] = null;
@@ -3146,7 +3152,7 @@ private void updateHomaccLive() {
         
         // Ép thêm điều kiện shouldShowHomacc
         v.setVisibility((en && !manualHidden && shouldShowHomacc) ? View.VISIBLE : View.GONE);
-        if (!en || manualHidden || !shouldShowHomacc) continue;
+        if (!en || manualHidden || !shouldShowHomacc) { removeIconLayer("homacc_" + BARS[i]); continue; }
         int alpha = prefs.getInt("homacc_" + BARS[i] + "_alpha", 50);
         int w = prefs.getInt("homacc_" + BARS[i] + "_w", 300);
         int h = prefs.getInt("homacc_" + BARS[i] + "_h", 60);
@@ -3155,9 +3161,6 @@ private void updateHomaccLive() {
         int visMode = prefs.getInt("homacc_" + BARS[i] + "_vis_mode", 0);
         int hideDur = prefs.getInt("homacc_bar_hide_dur", 2500);
         ((BarView) v).updateProps(alpha, visMode == 1, hideDur, visMode == 2, prefs.getInt("homacc_bar_radius", 24));
-        int iconSize = prefs.getInt("homacc_" + BARS[i] + "_icon_size", prefs.getInt("homacc_bar_icon_size", 40));
-        int iconAlpha = prefs.getInt("homacc_" + BARS[i] + "_icon_alpha", prefs.getInt("homacc_bar_icon_alpha", 255));
-        ((BarView) v).setIcons(resolveBarIcons(prefs.getString("homacc_" + BARS[i] + "_icons", ""), iconSize), iconAlpha);
         WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
         int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
@@ -3167,6 +3170,7 @@ private void updateHomaccLive() {
         p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i];
         updateLayoutIfChanged(v, p);
         if (priMode == 0) applyAntiTapjacking(v, w, h);
+        syncIconLayer("homacc_", i, p, true);
     }
     for (int i = 0; i < 4; i++) {
         View v = accHomeCorners[i];
@@ -3223,6 +3227,7 @@ public void onInterrupt() {}
 public boolean onUnbind(Intent intent) {
     try { getSystemService(NotificationManager.class).cancel(99); } catch (Exception ignored) {}
     try { stopForeground(true); } catch (Exception ignored) {}
+    removeAllIconLayers();
     stopSelf();
     return super.onUnbind(intent);
 }

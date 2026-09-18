@@ -73,6 +73,7 @@ private boolean pausedByFocusLoss = false;        // đánh dấu việc pause l
     private final List<Uri> tracks = new ArrayList<>();
     private final List<String> trackNames = new ArrayList<>();
     private int currentIndex = 0;
+    private int consecutiveFail = 0;
     private android.graphics.Bitmap currentArt; // [MỚI] ảnh bìa bài đang phát
     private final java.util.concurrent.ExecutorService albumArtExecutor =
     java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -225,13 +226,14 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build());
             player.setWakeMode(getApplicationContext(), PowerManager.PARTIAL_WAKE_LOCK);
             player.setOnCompletionListener(mp -> nextTrack());
-            player.setOnErrorListener((mp, what, extra) -> { nextTrack(); return true; });
+            player.setOnErrorListener((mp, what, extra) -> { onTrackFailed(); return true; });
         } else {
             try { player.reset(); } catch (Exception ignored) {}
         }
         final int idxForArt = idx;
         player.setOnPreparedListener(mp -> {
     mp.start();
+    consecutiveFail = 0;
     isRunning = true; isPaused = false;
 
     // [FIX ANR NGHIÊM TRỌNG] extractAlbumArt() dùng MediaMetadataRetriever với URI SAF
@@ -277,9 +279,7 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
         try {
             player.setDataSource(this, tracks.get(currentIndex));
             player.prepareAsync(); // không block main thread
-        } catch (Exception e) {
-            if (tracks.size() > 1) playIndex(currentIndex + 1); else stopPlayback();
-        }
+        } catch (Exception e) { onTrackFailed(); } 
     }
     private void nextTrack() { refreshTrackList(); playIndex(currentIndex + 1); }
     private void prevTrack() { refreshTrackList(); playIndex(currentIndex - 1); }
@@ -415,6 +415,17 @@ private void togglePause(boolean bySystem) {
         .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED, pos, playing ? 1f : 0f)
         .build());
 }
+private void onTrackFailed() {
+    consecutiveFail++;
+    if (consecutiveFail >= Math.max(1, tracks.size())) {
+        consecutiveFail = 0;
+        isRunning = false; isPaused = false;
+        if (player != null) { try { player.release(); } catch (Exception ignored) {} player = null; }
+        showErrorNotif("⚠️ Không phát được bài nào — kiểm tra lại My Playlist");
+        return;
+    }
+    playIndex(currentIndex + 1);
+}
         private void stopPlayback() {
     isRunning = false; isPaused = false;
     stopPosTicker();
@@ -496,7 +507,7 @@ private PendingIntent contentTapPI() {
             .setAutoCancel(true)
             .build();
         nm.notify(NOTIF_ID, n);
-        stopForeground(true);
+        stopForeground(Service.STOP_FOREGROUND_DETACH);
         stopSelf();
     }
 private android.graphics.Bitmap extractAlbumArt(Uri uri) {

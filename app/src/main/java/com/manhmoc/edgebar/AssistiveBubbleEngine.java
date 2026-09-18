@@ -23,19 +23,41 @@ import java.util.function.Supplier;
 public class AssistiveBubbleEngine {
     private Context ctx; private WindowManager wm; private SharedPreferences prefs; private boolean isAnyMode;
     private View bubbleView; private WindowManager.LayoutParams bubbleLp;
-    private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
+        private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
     private LinearLayout panelCard;
-    
+
+    private final Handler idleFadeHandler = new Handler(Looper.getMainLooper());
+    private final Runnable idleFadeRunnable = () -> {
+        if (bubbleView != null && menuOverlay == null && circleView == null)
+            bubbleView.animate().alpha(0.35f).setDuration(400).start();
+    };
+    private void resetIdleFadeTimer() {
+        if (bubbleView == null) return;
+        idleFadeHandler.removeCallbacks(idleFadeRunnable);
+        bubbleView.animate().alpha(1f).setDuration(120).start();
+        idleFadeHandler.postDelayed(idleFadeRunnable, 4000);
+    }
+
     private final FrameLayout[] nodeButtons = new FrameLayout[9];
     private Integer selectedMainIdx = null;
     private Integer selectedSubIdx = null;
     private String currentSubmenu = null;
-    private static List<String[]> cachedAppItems = null;
+    private List<String[]> cachedAllItems = null; private long cachedAllItemsTs = 0;
+private List<String[]> buildItemsAllCached() {
+    long now = System.currentTimeMillis();
+    if (cachedAllItems != null && now - cachedAllItemsTs < 30_000) return cachedAllItems;
+    cachedAllItems = buildItems("ALL"); cachedAllItemsTs = now;
+    return cachedAllItems;
+}
+
+private static List<String[]> cachedAppItems = null;
 private static long cachedAppItemsTs = 0;
-private static final long APP_ITEMS_CACHE_MS = 5 * 60 * 1000; // 5 phút, đồng bộ kiểu cache đã dùng ở MainActivity
-    private static final java.util.concurrent.ExecutorService bubbleIconExecutor =
-    new java.util.concurrent.ThreadPoolExecutor(2, 6, 30, java.util.concurrent.TimeUnit.SECONDS,
-        new java.util.concurrent.LinkedBlockingDeque<>()); // tăng từ fixed(4) lên 2-6 co giãn
+private static final long APP_ITEMS_CACHE_MS = 5 * 60 * 1000;
+
+    private static final java.util.concurrent.ThreadPoolExecutor bubbleIconExecutor =
+    new java.util.concurrent.ThreadPoolExecutor(2, 2, 20, java.util.concurrent.TimeUnit.SECONDS,
+        new java.util.concurrent.LinkedBlockingQueue<>());
+static { bubbleIconExecutor.allowCoreThreadTimeOut(true); }
     private static final int BUBBLE_ICON_CACHE_LIMIT = 60;
 private static final LinkedHashMap<String, Drawable> bubbleIconCache =
     new LinkedHashMap<String, Drawable>(16, 0.75f, true) {
@@ -159,12 +181,14 @@ public void setBubbleTouchable(boolean touchable) {
     } catch (Exception ignored) {}
 }
 
-        private void destroyAll() {
+            private void destroyAll() {
     closeMenu();
     closeCircleMenu();
     unregisterRotationWatcher();
+    idleFadeHandler.removeCallbacksAndMessages(null);
     if (bubbleView != null) { try { wm.removeView(bubbleView); } catch (Exception ignored) {} bubbleView = null; }
 }
+
     private void registerRotationWatcher() {
     if (configCallbacks != null) return;
     configCallbacks = new ComponentCallbacks() {
@@ -317,8 +341,9 @@ private void updateBubbleIcon() {
         bubbleLp.x = clampPx(prefs.getInt("bubble_x", 40), 0, dmInit.widthPixels - size);
         bubbleLp.y = clampPx(prefs.getInt("bubble_y", 600), 0, dmInit.heightPixels - size);
         try { wm.addView(iv, bubbleLp); bubbleView = iv; } catch (Exception e) { return; }
-        attachDragTouch();
-        registerRotationWatcher(); // [FIX] tự canh lại vị trí mỗi khi xoay màn, không còn "biến mất"
+                attachDragTouch();
+        registerRotationWatcher();
+        resetIdleFadeTimer();
     }
 
     private void attachDragTouch() {
@@ -340,9 +365,11 @@ private void updateBubbleIcon() {
 
         bubbleView.setOnTouchListener((v, e) -> {
             switch (e.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
+                                case MotionEvent.ACTION_DOWN:
+                    resetIdleFadeTimer();
                     longFiredFlag[0] = false;
                     tapHandler.postDelayed(longPressCheck, 500);
+
                     if (velocityTracker == null) velocityTracker = VelocityTracker.obtain();
                     else velocityTracker.clear();
                     velocityTracker.addMovement(e);
@@ -369,9 +396,11 @@ private void updateBubbleIcon() {
                     }
                     return true;
 
-                                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
+                    resetIdleFadeTimer();
                     tapHandler.removeCallbacks(longPressCheck);
+
                     if (!isDragging[0] && !longFiredFlag[0] && e.getActionMasked() == MotionEvent.ACTION_UP) {
                         long now = System.currentTimeMillis();
                         if (pendingSingleTap[0] != null) {
@@ -397,7 +426,8 @@ private void updateBubbleIcon() {
         } else moveToCenterAndOpenMenu();
     }
 };
-                            tapHandler.postDelayed(pendingSingleTap[0], DTAP_WINDOW_MS);
+if (hasDtapRule()) tapHandler.postDelayed(pendingSingleTap[0], DTAP_WINDOW_MS);
+else pendingSingleTap[0].run();
                         }
                     }
                     if (isDragging[0]) {
@@ -455,6 +485,15 @@ int startX = bubbleLp.x; int startY = bubbleLp.y;
             return false;
         });
     }
+private boolean hasDtapRule() {
+    for (String rId : csvToList(prefs.getString("bubble_pack_rules", ""))) {
+        if (!prefs.getBoolean("prule_" + rId + "_en", true)) continue;
+        if (!prefs.getString("prule_" + rId + "_gestures", "").contains("dtap")) continue;
+        String acts = prefs.getString("prule_" + rId + "_acts", "");
+        if (!acts.isEmpty() && !acts.equals("NONE")) return true;
+    }
+    return false;
+}
 
     private void fireGestureAction(String gesture) {
         String rulesCsv = prefs.getString("bubble_pack_rules", "");
@@ -677,19 +716,22 @@ jumpAnim.setInterpolator(new DecelerateInterpolator(1.6f)); // đồng bộ, kh�
                 bubbleLp.y = (int) (currentY + (restoreBubbleY - currentY) * val);
                 try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
             });
-            jumpAnim.start();
+                        jumpAnim.start();
         }
+        resetIdleFadeTimer();
     }
 private void closeMenuInstant() {
     if (menuOverlay != null) { try { wm.removeView(menuOverlay); } catch (Exception ignored) {} menuOverlay = null; }
     selectedMainIdx = null; selectedSubIdx = null; currentSubmenu = null;
     if (jumpAnim != null) jumpAnim.cancel();
-    if (restoreBubbleX != -1 && restoreBubbleY != -1) {
+        if (restoreBubbleX != -1 && restoreBubbleY != -1) {
         bubbleLp.x = restoreBubbleX; bubbleLp.y = restoreBubbleY;
         try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
     }
+    resetIdleFadeTimer();
 }
         private static final java.util.Set<String> VALID_MAIN_TYPES =
+
         new java.util.HashSet<>(java.util.Arrays.asList(DEFAULT_ORDER));
 
     private List<String> getMainOrder() {
@@ -726,6 +768,17 @@ private List<String> getSubItems(String type) {
     if (out.size() > 9) out = new ArrayList<>(out.subList(0, 9));
     return out;
 }
+private static java.util.Map<String, String> staticActLabels = null;
+private String staticActLabel(String ref) {
+    if (staticActLabels == null) {
+        java.util.Map<String, String> m = new java.util.HashMap<>();
+        for (String t : new String[]{"SYSTEM", "UTILITY", "TRIGGER"})
+            for (String[] it : buildItems(t)) m.put(it[1], it[0]);
+        staticActLabels = m;
+    }
+    String l = staticActLabels.get(ref);
+    return l != null ? l : "Action";
+}
 
     private String getLabelForType(String type) {
         switch (type) {
@@ -755,12 +808,9 @@ private List<String> getSubItems(String type) {
          } else if (ref.startsWith("act:PANEL_")) {
             return prefs.getString("pack_panel_" + ref.substring(10) + "_name", "Panel");
         } else if (ref.startsWith("act:")) {
-            List<String[]> allItems = buildItems("ALL");
-            for (String[] it : allItems) {
-                if (it[1].equals(ref)) return it[0];
-            }
-        }
-        return "Action";
+    return staticActLabel(ref);
+}
+return "Action";
     }
 
     private LinearLayout buildPanelCard() {
@@ -864,9 +914,11 @@ tv.setTextSize(12f);
                 selectedMainIdx = null;
                 refreshPanelCard();
             } else {
-                selectedSubIdx = null; // [FIX] đảm bảo submenu mới mở luôn sạch, không dính lựa chọn cũ 
+                                selectedSubIdx = null;
                 currentSubmenu = type;
-                refreshPanelCard();
+                if (panelCard != null) panelCard.post(AssistiveBubbleEngine.this::refreshPanelCard);
+                else refreshPanelCard();
+
             }
         });
         return box;
@@ -1029,7 +1081,7 @@ if (!ref.isEmpty()) tv.setTextSize(11f);
 
         List<String[]> items;
         if (type.equals("SEARCH")) {
-            items = buildItems("ALL"); 
+            items = buildItemsAllCached();
         } else {
             items = new ArrayList<>();
             List<String> selectedRefs = getSubItems(type);
@@ -1045,6 +1097,7 @@ if (!ref.isEmpty()) tv.setTextSize(11f);
         String q = query.toLowerCase(Locale.ROOT);
         List<String[]> shown = new ArrayList<>();
         for (String[] it : items) if (q.isEmpty() || it[0].toLowerCase(Locale.ROOT).contains(q)) shown.add(it);
+if (shown.size() > 40) shown = new ArrayList<>(shown.subList(0, 40));
 
         if (shown.isEmpty()) {
             TextView empty = new TextView(ctx);
@@ -1366,22 +1419,26 @@ private void fireQsTile(String tileId) {
                 bubbleLp.y = (int) (currentY + (restoreBubbleY - currentY) * val);
                 try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
             });
-            jumpAnim.start();
+                        jumpAnim.start();
         }
+        resetIdleFadeTimer();
     }
         private void closeCircleMenuInstant() {
+
     closeCircleSearchOverlay();
     if (circleView == null) return;
     try { wm.removeView(circleView); } catch (Exception ignored) {}
     circleView = null;
     circleSubmenuType = null;
     if (bubbleView != null) bubbleView.setVisibility(View.VISIBLE);
-    if (restoreBubbleX != -1 && restoreBubbleY != -1) {
+        if (restoreBubbleX != -1 && restoreBubbleY != -1) {
         bubbleLp.x = restoreBubbleX; bubbleLp.y = restoreBubbleY;
         try { wm.updateViewLayout(bubbleView, bubbleLp); } catch (Exception ignored) {}
     }
+    resetIdleFadeTimer();
 }
         private void loadCircleCenterIcon() {
+
         String ref = prefs.getString("bubble_circle_main_icon", "");
         if (ref.isEmpty()) ref = prefs.getString("bubble_main_icon", "");
         Drawable d = getCustomIcon(ref);
@@ -1544,9 +1601,12 @@ private void buildCircleSearchMenu(LinearLayout card) {
     refresh[0] = () -> {
         listContainer.removeAllViews();
 String q = et.getText().toString().trim().toLowerCase(Locale.ROOT);
-List<String[]> allItems = buildItems("ALL");
+List<String[]> allItems = buildItemsAllCached();
+int shownCount = 0;
 for (String[] item : allItems) {
+    if (++shownCount > 40) break;
     if (!q.isEmpty() && !item[0].toLowerCase(Locale.ROOT).contains(q)) continue;
+
     LinearLayout row = new LinearLayout(ctx);
     row.setOrientation(LinearLayout.HORIZONTAL);
     row.setGravity(Gravity.CENTER_VERTICAL);

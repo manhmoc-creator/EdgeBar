@@ -266,9 +266,33 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
         if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
         return out;
     }
+// Gọi trong rebuildOne(id) trước khi buildPanelBody
+private boolean pruneUninstalledFromPanel(String id) {
+    String px = "pack_panel_" + id + "_";
+    List<String> apps = csvToList(prefs.getString(px + "apps", ""));
+    List<String> alive = new ArrayList<>();
+    android.os.UserManager um = (android.os.UserManager) ctx.getSystemService(Context.USER_SERVICE);
+    for (String a : apps) {
+        boolean exists = isIslandRef(a)
+            ? (um != null && um.getUserForSerialNumber(islandRefSerial(a)) != null) // chỉ bỏ khi profile không còn tồn tại
+            : isPackageInstalled(a);
+        if (exists) alive.add(a);
+    }
+    if (alive.size() == apps.size()) return false;
+    List<String> order = csvToList(prefs.getString(px + "order", ""));
+    for (String a : apps) if (!alive.contains(a)) order.remove(a);
+    prefs.edit().putString(px + "apps", TextUtils.join(",", alive))
+                .putString(px + "order", TextUtils.join(",", order)).apply();
+    return true;
+}
+private boolean isPackageInstalled(String pkg) {
+    try { ctx.getPackageManager().getApplicationInfo(pkg, 0); return true; }
+    catch (Exception e) { return false; }
+}
     private void rebuildOne(String id) {
     String sig = computeSignature(id);
-    boolean sigChanged = !sig.equals(lastSignature.get(id));
+boolean sigChanged = !sig.equals(lastSignature.get(id));
+if (sigChanged && pruneUninstalledFromPanel(id)) sig = computeSignature(id); // [MỚI] chỉ prune khi cấu hình đổi, không chạy mỗi lần updateVisibility()
 
     boolean shouldPanel = shouldPanelBodyExistNow(id);
     boolean panelExists = panels.get(id) != null;
@@ -571,7 +595,10 @@ new Thread(() -> {
         class PanelItemObj { String type; String ref; int sortScore; int originalIndex; }
         List<PanelItemObj> allItems = new ArrayList<>();
         int seq = 0;
-        for (String pkg : apps) { PanelItemObj o = new PanelItemObj(); o.type = "APP"; o.ref = pkg; o.originalIndex = seq++; allItems.add(o); }
+        for (String pkg : apps) {
+    if (getCachedIcon(pkg) == null && !isIslandRef(pkg)) continue; // [FIX] app không còn cài -> bỏ khỏi hiển thị
+    PanelItemObj o = new PanelItemObj(); o.type = "APP"; o.ref = pkg; o.originalIndex = seq++; allItems.add(o);
+}
         for (String act : acts) { PanelItemObj o = new PanelItemObj(); o.type = "ACT"; o.ref = act; o.originalIndex = seq++; allItems.add(o); }
         for (String sc : shortcuts) { PanelItemObj o = new PanelItemObj(); o.type = "SC"; o.ref = sc; o.originalIndex = seq++; allItems.add(o); }
 
@@ -1147,6 +1174,11 @@ for (String s : csvToList(prefs.getString(px+"shortcuts",""))) validRefs.add("SC
 List<String> order = csvToList(prefs.getString(px + "order", ""));
 order.retainAll(validRefs);
 for (String ref : validRefs) if (!order.contains(ref)) order.add(ref);
+for (java.util.Iterator<String> it = order.iterator(); it.hasNext();) {
+    String r = it.next();
+    if (!r.startsWith("SC:") && r.contains(".") && getCachedIcon(r) == null) it.remove(); // app đã mất -> không vẽ ô trắng
+}
+
 prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
 
 LinearLayout row = null;
