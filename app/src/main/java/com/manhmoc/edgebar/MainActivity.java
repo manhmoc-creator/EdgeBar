@@ -5502,9 +5502,13 @@ private void renderMyPlaylistPackSongs(LinearLayout listContainer, String packId
     }
 }
 
+private void renderMyPlaylistList(LinearLayout listContainer, String query) {
+    List<String> ids = getDynamicIds("myplaylist_ids");
+    listContainer.removeAllViews();
     // [TỐI ƯU PIN/RAM] Lọc tại chỗ bằng string đã cache sẵn trong prefs - KHÔNG I/O,
     // KHÔNG Thread, KHÔNG re-query MediaStore mỗi lần gõ phím.
     String q = query == null ? "" : query.trim().toLowerCase();
+
     List<String> shownIds = new ArrayList<>();
     for (String id : ids) {
         if (q.isEmpty()) { shownIds.add(id); continue; }
