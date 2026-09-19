@@ -245,8 +245,7 @@ public class ProximityWaveService extends Service {
         stepCount = 0;
     };
 
-    // ---------- THỰC THI ACTION ----------
-    private void fireWave(int n) {
+        private void fireWave(int n) {
         final String want = "wave" + n;
         for (String rawId : prefs.getString("sensor_prox_pack_ids", "").split(",")) {
             String id = rawId.trim();
@@ -254,43 +253,59 @@ public class ProximityWaveService extends Service {
             final String px = "sensor_prox_pack_" + id + "_";
             if (!prefs.getBoolean(px + "en", false)) continue;
             if (!want.equals(prefs.getString(px + "gesture", ""))) continue;
+            
             String action = prefs.getString(px + "action", "NONE");
-if (action.equals("NONE")) return;
-// Multi-action: chạy tuần tự với delay 120ms
-final String[] acts = action.split(",");
-
+            if (action.equals("NONE")) return;
+            
+            // Multi-action: chạy tuần tự với delay 120ms
+            final String[] acts = action.split(",");
             boolean screenOff = pm != null && !pm.isInteractive();
-            boolean needScreen = SCREEN_REQUIRED.contains(act);
+            
+            // [FIX LỖI] Kiểm tra tất cả các action trong mảng thay vì biến 'act' chưa được khai báo
+            boolean needScreen = false;
+            boolean hasScreenOn = false;
+            for (String a : acts) {
+                String actClean = a.trim();
+                if (SCREEN_REQUIRED.contains(actClean)) needScreen = true;
+                if (actClean.equals("SCREEN_ON")) hasScreenOn = true;
+            }
+
             if (prefs.getBoolean(px + "vib", true)) vibrate(prefs.getInt("vib_dur", 30));
 
-            if (screenOff && (needScreen || act.equals("SCREEN_ON"))) {
+            if (screenOff && (needScreen || hasScreenOn)) {
                 try {
                     PowerManager.WakeLock w = pm.newWakeLock(
                         PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "EdgeBar:ProxWake");
                     w.acquire(3000);
                 } catch (Exception ignored) {}
-                if (act.equals("SCREEN_ON")) return; // bật màn là xong
+                
+                // Nếu chỉ có mỗi SCREEN_ON, không cần chạy tiếp IPC
+                if (hasScreenOn && acts.length == 1) return; 
             }
+            
             final boolean animOk = !screenOff || needScreen; // màn tắt mà vẽ Anima là phí pin
             Runnable doFire = () -> {
-    int delay = 0;
-    for (String actRaw : acts) {
-        final String act = actRaw.trim();
-        if (act.isEmpty()) continue;
-        final int d = delay;
-        h.postDelayed(() -> {
-            if (animOk && prefs.getBoolean(px + "anim", true))
-                sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName()));
-            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-            ipc.putExtra("act", act);
-            if ("LAUNCH_APP".equals(act)) ipc.putExtra("launch_pkg", prefs.getString(px + "launch_pkg", ""));
-            sendBroadcast(ipc);
-        }, d);
-        delay += 120;
-    }
-};
+                int delay = 0;
+                for (String actRaw : acts) {
+                    final String act = actRaw.trim();
+                    if (act.isEmpty()) continue;
+                    final int d = delay;
+                    h.postDelayed(() -> {
+                        if (animOk && prefs.getBoolean(px + "anim", true))
+                            sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName()));
+                        Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+                        ipc.putExtra("act", act);
+                        if ("LAUNCH_APP".equals(act)) ipc.putExtra("launch_pkg", prefs.getString(px + "launch_pkg", ""));
+                        sendBroadcast(ipc);
+                    }, d);
+                    delay += 120;
+                }
+            };
+            
             if (screenOff && needScreen) h.postDelayed(doFire, 350); else doFire.run();
-            Log.d(TAG, "FIRE " + want + " -> " + act);
+            
+            // [FIX LỖI] Log chuỗi 'action' gốc thay vì biến 'act' đơn lẻ không tồn tại
+            Log.d(TAG, "FIRE " + want + " -> " + action);
             return;
         }
     }
