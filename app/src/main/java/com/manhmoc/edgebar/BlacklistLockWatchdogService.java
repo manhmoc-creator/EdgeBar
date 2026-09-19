@@ -59,6 +59,9 @@ public class BlacklistLockWatchdogService extends Service {
     private boolean restoreDone = false;
     private boolean disabledByUs = false;
     private boolean receiverRegistered = false;
+    public static volatile boolean isRunning = false;
+private final java.util.Set<String> keepPkgs = new java.util.HashSet<>(); // mọi app thuộc "phiên" Blacklist (Blacklist + Dialer/Telecom)
+private final java.util.Set<String> fgKeep = new java.util.HashSet<>();   // app trong keepPkgs đang ở foreground
 
     private final Runnable pollRunnable = new Runnable() {
         @Override public void run() { poll(); }
@@ -99,6 +102,23 @@ public class BlacklistLockWatchdogService extends Service {
         targetBgTs = 0;
         otherFgTs = 0;
         lastQueryMs = startMs - 3000;
+        isRunning = true;
+keepPkgs.clear(); fgKeep.clear();
+keepPkgs.add(targetPkg);
+fgKeep.add(targetPkg); // coi như đang foreground từ lúc kích hoạt
+for (String p : prefs.getString("blacklist", "").split(",")) {
+    String t = p.trim();
+    if (!t.isEmpty()) keepPkgs.add(t);
+}
+try {
+    android.telecom.TelecomManager tm = (android.telecom.TelecomManager) getSystemService(TELECOM_SERVICE);
+    String d = tm != null ? tm.getDefaultDialerPackage() : null;
+    if (d != null) keepPkgs.add(d);
+} catch (Exception ignored) {}
+keepPkgs.add("com.android.server.telecom");
+keepPkgs.add("com.android.incallui");
+keepPkgs.add("com.google.android.dialer");
+keepPkgs.add("com.android.dialer");
 
         handler = new Handler(Looper.getMainLooper());
 
@@ -134,10 +154,14 @@ public class BlacklistLockWatchdogService extends Service {
                 // Tắt màn: nếu KHÔNG phải đang gọi/đổ chuông (áp tai làm tắt màn) -> trả Lock về ngay
                 if (!inCall) { finishAndRestore("screen_off"); return; }
             } else if (hasUsageAccess()) {
-                refreshUsageState(now);
-                if (now >= ignoreLeftUntilMs && hasLeftTarget()) leftStreak++; else leftStreak = 0;
-                if (leftStreak >= LEFT_CONFIRM_POLLS) { finishAndRestore("app_left"); return; }
-            } else if (elapsed > NO_USAGE_PERM_MAX_MS) {
+    refreshUsageState(now);
+    boolean left = now >= ignoreLeftUntilMs && hasLeftTarget();
+    if (inCall) left = false; // đang đổ chuông / đang gọi: TUYỆT ĐỐI không trả Trợ năng
+    leftStreak = left ? leftStreak + 1 : 0;
+    Log.d(TAG, "poll inCall=" + inCall + " fgKeep=" + fgKeep + " left=" + left + " streak=" + leftStreak);
+    if (leftStreak >= LEFT_CONFIRM_POLLS) { finishAndRestore("app_left"); return; }
+} else if (elapsed > NO_USAGE_PERM_MAX_MS) {
+
                 finishAndRestore("no_usage_permission");
                 return;
             }
@@ -147,39 +171,36 @@ public class BlacklistLockWatchdogService extends Service {
 
     /** Chỉ đọc sự kiện MỚI kể từ lần poll trước — rẻ hơn hẳn việc quét lại cả 4 giây mỗi lần. */
     private void refreshUsageState(long now) {
-        try {
-            UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-            UsageEvents events = usm.queryEvents(lastQueryMs, now);
-            UsageEvents.Event ev = new UsageEvents.Event();
-            while (events.hasNextEvent()) {
-                events.getNextEvent(ev);
-                long ts = ev.getTimeStamp();
-                if (ts <= startMs) continue;
-                String p = ev.getPackageName();
-                if (p == null) continue;
-                int type = ev.getEventType();
-                if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                    if (p.equals(targetPkg)) targetFgTs = Math.max(targetFgTs, ts);
-                    else if (!isIgnorablePkg(p)) otherFgTs = Math.max(otherFgTs, ts);
-                } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND) {
-                    if (p.equals(targetPkg)) targetBgTs = Math.max(targetBgTs, ts);
-                }
+    try {
+        UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+        UsageEvents events = usm.queryEvents(lastQueryMs, now);
+        UsageEvents.Event ev = new UsageEvents.Event();
+        while (events.hasNextEvent()) {
+            events.getNextEvent(ev);
+            if (ev.getTimeStamp() <= startMs) continue;
+            String p = ev.getPackageName();
+            if (p == null) continue;
+            int type = ev.getEventType();
+            boolean keep = keepPkgs.contains(p);
+            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                if (keep) fgKeep.add(p);
+                else if (!isIgnorablePkg(p)) fgKeep.clear(); // app lạ chiếm foreground -> đã rời phiên
+            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+                if (keep) fgKeep.remove(p);
             }
-            lastQueryMs = now - 300; // gối đầu 300ms phòng sự kiện đến trễ
-        } catch (Exception ignored) {}
-    }
+        }
+        lastQueryMs = now - 300;
+    } catch (Exception ignored) {}
+}
 
-    private boolean hasLeftTarget() {
-        if (targetBgTs > targetFgTs) return true;  // app xuống background và chưa quay lại
-        if (otherFgTs > targetFgTs) return true;   // app khác đã lên foreground sau app Blacklist
-        return false;
-    }
+/** Đã rời khi KHÔNG còn app nào của phiên (Blacklist/Dialer/Tammi) ở foreground. */
+private boolean hasLeftTarget() { return fgKeep.isEmpty(); }
 
-    // systemui/keyboard/chính EdgeBar không tính là "đã rời app"
-    private boolean isIgnorablePkg(String p) {
-        return p.equals(getPackageName()) || p.equals("android")
-            || p.contains("systemui") || p.contains("inputmethod");
-    }
+private boolean isIgnorablePkg(String p) {
+    return p.equals(getPackageName()) || p.equals("android")
+        || p.contains("systemui") || p.contains("inputmethod");
+}
+
 
     private boolean hasUsageAccess() {
         try {
@@ -270,6 +291,7 @@ public class BlacklistLockWatchdogService extends Service {
     }
 
     @Override public void onDestroy() {
+        isRunning = false;
         if (handler != null) handler.removeCallbacksAndMessages(null);
         if (receiverRegistered) {
             try { unregisterReceiver(screenReceiver); } catch (Exception ignored) {}

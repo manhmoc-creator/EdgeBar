@@ -389,6 +389,7 @@ private static final long LOCK_CHECK_THROTTLE_MS = 150; // riêng cho LockList, 
 private String lastEventPkg = "";
 private boolean lastIsKbd_cache = false;
 private String lastLockBlCheckedPkg = ""; // [MỚI] tránh check lại cùng 1 app nhiều lần liên tiếp
+private long lastBlWindowScanMs = 0;
 private int cachedKbdHeight = 0;
 private static final int KBD_HEIGHT_CHANGE_THRESHOLD = 20;
 private boolean lastIsBl_cache = false;
@@ -1365,16 +1366,23 @@ if ((eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
 // [TỐI ƯU] Bỏ qua ngay nếu vẫn là app y hệt lần kiểm tra trước — WINDOWS_CHANGED
 // có thể bắn liên tục cho cùng 1 app đang mở, tránh split(",")+contains() lặp
 // vô ích trên mỗi sự kiện đó (đỡ CPU/pin, đặc biệt lúc dồn sự kiện vì cuộc gọi).
-if (!pName.isEmpty() && !pName.equals(getPackageName()) && km != null && km.isKeyguardLocked()
+if (km != null && km.isKeyguardLocked()
     && prefs.getBoolean("blacklist_lock_revoke_acc_en", false)
-    && !prefs.getBoolean("blacklist_lock_active", false)
-    && !pName.equals(lastLockBlCheckedPkg)) {
-    lastLockBlCheckedPkg = pName;
+    && !isBlacklistLockReallyActive()
+    && System.currentTimeMillis() - prefs.getLong("blacklist_lock_restore_ts", 0) >= 3000) {
     String blCheck = prefs.getString("blacklist", "");
-    boolean isBlNow = !blCheck.isEmpty() && ("," + blCheck + ",").contains("," + pName + ",");
-    // Cooldown 3s sau khi Watchdog vừa trả Trợ năng -> chống vòng lặp tắt/bật liên tục
-    boolean inCooldown = System.currentTimeMillis() - prefs.getLong("blacklist_lock_restore_ts", 0) < 3000;
-    if (isBlNow && !inCooldown) triggerBlacklistLockRevokeAcc(pName);
+    if (!blCheck.isEmpty()) {
+        String hit = null;
+        if (!pName.isEmpty() && !pName.equals(getPackageName())
+                && ("," + blCheck + ",").contains("," + pName + ",")) {
+            hit = pName;
+        } else if (nowMs - lastBlWindowScanMs >= 400) {
+            // pName rỗng (event WINDOWS_CHANGED/overlay như popup Tammi) -> quét danh sách cửa sổ
+            lastBlWindowScanMs = nowMs;
+            hit = findBlacklistedPkgInWindows(blCheck);
+        }
+        if (hit != null) triggerBlacklistLockRevokeAcc(hit);
+    }
 }
 
     if (nowMs - lastEventMs < EVENT_THROTTLE_MS) return;
@@ -1600,6 +1608,32 @@ android.app.usage.UsageEvents events = usm.queryEvents(now - 24 * 60 * 60 * 1000
         } catch (Exception ignored) {}
     }, 700);
 }
+/** Cờ active chỉ hợp lệ nếu Watchdog thật sự đang sống; nếu kẹt thì tự dọn. */
+private boolean isBlacklistLockReallyActive() {
+    if (!prefs.getBoolean("blacklist_lock_active", false)) return false;
+    if (BlacklistLockWatchdogService.isRunning) return true;
+    if (System.currentTimeMillis() - prefs.getLong("blacklist_lock_start_ms", 0) < 5000) return true; // đang khởi động
+    prefs.edit().putBoolean("blacklist_lock_active", false)
+        .remove("blacklist_lock_pkg").remove("blacklist_lock_start_ms").apply();
+    return false;
+}
+
+private String findBlacklistedPkgInWindows(String bl) {
+    try {
+        java.util.List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
+        if (ws == null) return null;
+        for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
+            android.view.accessibility.AccessibilityNodeInfo r = w.getRoot();
+            if (r == null) continue;
+            String p = r.getPackageName() != null ? r.getPackageName().toString() : "";
+            r.recycle();
+            if (!p.isEmpty() && !p.equals(getPackageName()) && ("," + bl + ",").contains("," + p + ","))
+                return p;
+        }
+    } catch (Exception ignored) {}
+    return null;
+}
+
 /**
  * [MỚI] Blacklist tại Lock — Tạm thu hồi Trợ năng cho app Blacklist.
  *
@@ -1614,6 +1648,7 @@ android.app.usage.UsageEvents events = usm.queryEvents(now - 24 * 60 * 60 * 1000
  */
 // MỚI
 private void triggerBlacklistLockRevokeAcc(String pkg) {
+    android.util.Log.d("EB_BLWD", "TRIGGER pkg=" + pkg);
     if (pkg == null || pkg.isEmpty()) return;
 
     pauseAllOverlaysSync(); // ẩn bar/corner tức thì, không qua Broadcast
