@@ -109,6 +109,12 @@
     android:foregroundServiceType="mediaProjection" />
 <service android:name=".ScreenRecorderService" android:exported="false"
     android:foregroundServiceType="mediaProjection|mediaPlayback" />
+<service android:name=".LockEbService" android:exported="false"
+    android:foregroundServiceType="specialUse">
+    <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="edgebar_lockeb" />
+</service>
 <service android:name=".VolumeButtonService" android:exported="false"
     android:foregroundServiceType="mediaPlayback" />
 <service android:name=".ProximityWaveService" android:exported="false"

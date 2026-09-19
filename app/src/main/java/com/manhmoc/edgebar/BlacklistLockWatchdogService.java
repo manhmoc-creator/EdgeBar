@@ -1,6 +1,7 @@
       package com.manhmoc.edgebar;
 
 import android.app.AppOpsManager;
+import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -98,13 +99,23 @@ public class BlacklistLockWatchdogService extends Service {
             Intent wd = new Intent(c, BlacklistLockWatchdogService.class);
             if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(wd); else c.startService(wd);
         } catch (Exception e) {
-            // Không bật được watchdog -> TUYỆT ĐỐI không tắt Trợ năng (tránh kẹt vĩnh viễn)
             p.edit().putBoolean("blacklist_lock_active", false)
                 .remove("blacklist_lock_pkg").remove("blacklist_lock_start_ms")
                 .remove("blacklist_lock_seen_fg").apply();
             return false;
         }
-        revokeAccessibilityNow(c); // tắt NGAY, không chờ service khởi động xong -> thắng cuộc đua với app
+
+        // [MỚI] Đang ở màn khoá -> bật LockEb NGAY để lấp chỗ Lock bar trước khi
+        // Trợ năng bị tắt, tránh khoảng trống khiến app Blacklist bị giật lúc chuyển giao.
+        try {
+            KeyguardManager km = (KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE);
+            if (km != null && km.isKeyguardLocked()) {
+                Intent lockEb = new Intent(c, LockEbService.class);
+                if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(lockEb); else c.startService(lockEb);
+            }
+        } catch (Exception ignored) {}
+
+        revokeAccessibilityNow(c);
         return true;
     }
 
@@ -268,7 +279,12 @@ public class BlacklistLockWatchdogService extends Service {
         if (handler != null) handler.removeCallbacks(pollRunnable);
         Log.d(TAG, "RESTORE reason=" + reason);
 
+        // [MỚI] Gỡ LockEb TRƯỚC khi bật lại Trợ năng -> không bao giờ có 2 bộ Lock bar
+        // chồng nhau, và EdgeBarService.onServiceConnected() sẽ tự vẽ lại Lock sạch sẽ.
+        try { stopService(new Intent(this, LockEbService.class)); } catch (Exception ignored) {}
+
         prefs.edit()
+
             .putLong("blacklist_lock_restore_ts", System.currentTimeMillis())
             .putBoolean("blacklist_lock_active", false)
             .remove("blacklist_lock_pkg")
