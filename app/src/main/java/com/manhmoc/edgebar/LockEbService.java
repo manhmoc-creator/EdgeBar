@@ -14,6 +14,7 @@ import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
 import android.os.*;
 import android.provider.MediaStore;
+import android.provider.Settings; // <--- THÊM DÒNG NÀY
 import android.view.*;
 import android.widget.Toast;
 
