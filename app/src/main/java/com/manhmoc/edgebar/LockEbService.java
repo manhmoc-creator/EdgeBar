@@ -14,7 +14,7 @@ import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
 import android.os.*;
 import android.provider.MediaStore;
-import android.provider.Settings; // <--- THÊM DÒNG NÀY
+import android.provider.Settings; // ← THÊM DÒNG NÀY
 import android.view.*;
 import android.widget.Toast;
 
@@ -179,13 +179,16 @@ public class LockEbService extends Service {
     }
 
     // ===== Cử chỉ tối giản: Tap / DoubleTap / LongPress / 4-hướng vuốt =====
-    private class GestureListener implements View.OnTouchListener {
+        private class GestureListener implements View.OnTouchListener {
         final String keyBase; float sx, sy; long downMs; boolean longFired;
         long lastTapMs = 0; final Handler h = new Handler(Looper.getMainLooper());
-        Runnable pendingTap; Runnable longCheck = () -> { longFired = true; handleAction(keyBase + "_long"); };
+        Runnable pendingTap; Runnable longCheck;
         static final int SLOP = 60, DTAP_MS = 280;
 
-        GestureListener(String keyBase) { this.keyBase = keyBase; }
+        GestureListener(String keyBase) {
+            this.keyBase = keyBase;
+            this.longCheck = () -> { longFired = true; handleAction(keyBase + "_long"); };
+        }
 
         @Override public boolean onTouch(View v, MotionEvent e) {
             switch (e.getActionMasked()) {
