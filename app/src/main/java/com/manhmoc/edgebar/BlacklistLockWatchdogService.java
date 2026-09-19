@@ -6,9 +6,12 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
+
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -26,7 +29,11 @@ import java.util.LinkedHashSet;
  */
 public class BlacklistLockWatchdogService extends Service {
 
-    private static final long POLL_INTERVAL_MS = 500;
+    // [TỐI ƯU PIN] Tăng 500ms -> 800ms: case phổ biến nhất (tắt màn) giờ được
+    // screenOffReceiver xử lý tức thời, vòng poll này chỉ còn là lưới an toàn cho
+    // trường hợp chuyển sang app khác mà KHÔNG tắt màn hình.
+    private static final long POLL_INTERVAL_MS = 800;
+
     private static final long MAX_ACTIVE_MS = 5 * 60 * 1000; // 5 phút chốt an toàn
     private static final int NOTIF_ID = 97;
     private static final String CHANNEL_ID = "eb_bl_lock_watchdog";
@@ -36,6 +43,9 @@ public class BlacklistLockWatchdogService extends Service {
     private SharedPreferences prefs;
     private long startMs;
     private boolean restoreScheduled = false;
+    private BroadcastReceiver screenOffReceiver; // [MỚI] trả Lock về ngay khi tắt màn
+    private boolean screenReceiverRegistered = false;
+
 
     @Override public IBinder onBind(Intent i) { return null; }
 
@@ -47,7 +57,26 @@ public class BlacklistLockWatchdogService extends Service {
 
         startForegroundQuiet();
 
+        // [MỚI] Tắt màn = coi như đã xong việc với app Blacklist (dù tự khoá hay
+        // cuộc gọi kết thúc) -> trả Trợ năng về NGAY LẬP TỨC, không cần chờ vòng
+        // poll UsageStats kế tiếp. Rẻ hơn nhiều so với poll dồn dập.
+        screenOffReceiver = new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent i) {
+                if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
+                    restoreAccessibility();
+                    stopSelf();
+                }
+            }
+        };
+        try {
+            IntentFilter f = new IntentFilter(Intent.ACTION_SCREEN_OFF);
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(screenOffReceiver, f, Context.RECEIVER_NOT_EXPORTED);
+            else registerReceiver(screenOffReceiver, f);
+            screenReceiverRegistered = true;
+        } catch (Exception ignored) {}
+
         handler = new Handler(Looper.getMainLooper());
+
         pollRunnable = new Runnable() {
             @Override public void run() {
                 if (shouldRestoreNow()) {
@@ -151,8 +180,13 @@ public class BlacklistLockWatchdogService extends Service {
 
     @Override public void onDestroy() {
         if (handler != null && pollRunnable != null) handler.removeCallbacks(pollRunnable);
+        if (screenReceiverRegistered) {
+            try { unregisterReceiver(screenOffReceiver); } catch (Exception ignored) {}
+            screenReceiverRegistered = false;
+        }
         // Nếu service bị OS kill trước khi kịp restore → cố gắng restore lần cuối
         if (!restoreScheduled) restoreAccessibility();
         super.onDestroy();
     }
+
 }

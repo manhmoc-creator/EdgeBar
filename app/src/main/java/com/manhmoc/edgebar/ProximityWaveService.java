@@ -29,14 +29,19 @@ import android.util.Log;
 
 /**
  * Cảm biến vẫy tay (Proximity) — chạy ĐỘC LẬP với Trợ năng/Homeb.
- * Sensor CHỈ được đăng ký khi màn tắt. Không polling, không thread nền.
+ * Kiểu Wave Up: dùng sensor WAKE-UP (sensor hub tự đánh thức CPU), KHÔNG giữ WakeLock
+ * thường trực. Chỉ đăng ký sensor khi màn TẮT.
+ * Đếm 1 lần vẫy = tay che rồi RÚT RA trong <= MAX_NEAR_MS (che lâu = túi/áp mặt -> bỏ qua).
  */
 public class ProximityWaveService extends Service {
     public static boolean isRunning = false;
     private static final String TAG = "EdgeBar_Prox";
-    private static final long WAVE_WINDOW_MS = 2500;
-    private static final long WAVE_MIN_GAP_MS = 120;
+
+    private static final long MAX_NEAR_MS = 900;     // che lâu hơn = không phải vẫy
+    private static final long WAVE_GAP_MS = 650;     // im lặng bấy lâu sau nhịp cuối thì chốt số lần vẫy
+    private static final long ARM_GRACE_MS = 1000;   // bỏ qua nhiễu do tay/nút nguồn ngay lúc tắt màn
     private static final long POCKET_HOLD_MS = 20000;
+    private static final float NEAR_CM = 3f;
 
     private static final java.util.Set<String> SCREEN_REQUIRED = new java.util.HashSet<>(java.util.Arrays.asList(
         "CAMERA", "SCREENSHOT", "POWER_DIALOG", "NOTIFICATIONS", "QUICK_SETTINGS", "SCAN_QR"));
@@ -52,8 +57,10 @@ public class ProximityWaveService extends Service {
     private long wlUntilMs = 0;
 
     private int waveCount = 0;
+    private int maxWaveNeeded = 1;
     private boolean lastNear = false;
-    private long lastWaveMs = 0;
+    private long nearSinceMs = 0;
+    private long armedAtMs = 0;
 
     private long pocketBlockUntilMs = 0;
     private int stepCount = 0;
@@ -66,6 +73,20 @@ public class ProximityWaveService extends Service {
             if (p.getBoolean("sensor_prox_pack_" + t + "_en", false)) return true;
         }
         return false;
+    }
+
+    /** Số lần vẫy lớn nhất mà user đã gán (1..4). Đạt mức này là chạy ngay, khỏi chờ. */
+    private int computeMaxWave() {
+        int max = 1;
+        for (String rawId : prefs.getString("sensor_prox_pack_ids", "").split(",")) {
+            String id = rawId.trim();
+            if (id.isEmpty()) continue;
+            String px = "sensor_prox_pack_" + id + "_";
+            if (!prefs.getBoolean(px + "en", false)) continue;
+            try { max = Math.max(max, Integer.parseInt(prefs.getString(px + "gesture", "wave1").substring(4))); }
+            catch (Exception ignored) {}
+        }
+        return Math.min(max, 4);
     }
 
     @Override public IBinder onBind(Intent i) { return null; }
@@ -84,7 +105,8 @@ public class ProximityWaveService extends Service {
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(screenReceiver, f, Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(screenReceiver, f);
 
-        if (pm != null && !pm.isInteractive()) registerSensors(); // service sinh ra lúc màn đã tắt
+        Log.d(TAG, "Service created, interactive=" + (pm != null && pm.isInteractive()));
+        if (pm != null && !pm.isInteractive()) registerSensors();
     }
 
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
@@ -108,10 +130,13 @@ public class ProximityWaveService extends Service {
                 startForeground(96, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
             else startForeground(96, n);
             return true;
-        } catch (Exception e) { isRunning = false; stopSelf(); return false; }
+        } catch (Exception e) {
+            Log.e(TAG, "startForeground failed", e);
+            isRunning = false; stopSelf(); return false;
+        }
     }
 
-    // ---------- WAKELOCK CÓ HẠN (chỉ giữ CPU đúng lúc cần, KHÔNG giữ thường trực) ----------
+    // ---------- WAKELOCK NGẮN HẠN (chỉ giữ CPU đúng khoảng cần chạy timer) ----------
     private void holdCpu(long ms) {
         try {
             if (wl == null) {
@@ -133,18 +158,20 @@ public class ProximityWaveService extends Service {
     private void registerSensors() {
         if (registered || !hasAnyRule(prefs)) return;
         if (sm == null) sm = (SensorManager) getSystemService(SENSOR_SERVICE);
-        // Ưu tiên bản WAKE-UP: sensor tự đánh thức CPU khi có event, khỏi giữ wakelock
-        proxSensor = sm.getDefaultSensor(Sensor.TYPE_PROXIMITY, true);
+        proxSensor = sm.getDefaultSensor(Sensor.TYPE_PROXIMITY, true); // bản wake-up
         boolean wakeUp = proxSensor != null;
         if (proxSensor == null) proxSensor = sm.getDefaultSensor(Sensor.TYPE_PROXIMITY);
         if (proxSensor == null) { Log.w(TAG, "Máy không có cảm biến tiệm cận"); return; }
         proxMax = proxSensor.getMaximumRange();
+
+        boolean ok = false;
         try {
-            sm.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_NORMAL, h);
-        } catch (Exception e) { Log.w(TAG, "register prox failed", e); return; }
+            ok = sm.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_NORMAL, h);
+        } catch (Exception e) { Log.w(TAG, "register prox failed", e); }
+        if (!ok) { Log.w(TAG, "registerListener trả về false"); return; }
 
         if (!wakeUp) {
-            // Máy hiếm không có wake-up prox: buộc giữ wakelock thì mới nhận được event
+            // Sensor không-wake-up chỉ nhận event khi CPU thức -> bắt buộc giữ wakelock (tốn pin)
             try {
                 wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "EdgeBar:ProxWave");
                 wl.setReferenceCounted(false);
@@ -161,7 +188,9 @@ public class ProximityWaveService extends Service {
         }
         registered = true;
         lastNear = false; waveCount = 0; pocketBlockUntilMs = 0;
-        Log.d(TAG, "REGISTERED prox wakeUp=" + wakeUp + " max=" + proxMax);
+        maxWaveNeeded = computeMaxWave();
+        armedAtMs = SystemClock.elapsedRealtime() + ARM_GRACE_MS;
+        Log.d(TAG, "REGISTERED wakeUp=" + wakeUp + " max=" + proxMax + " maxWaveNeeded=" + maxWaveNeeded);
     }
 
     private void unregisterSensors() {
@@ -181,23 +210,41 @@ public class ProximityWaveService extends Service {
             || checkSelfPermission(android.Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED;
     }
 
-    // ---------- VẪY TAY ----------
+    // ---------- VẪY TAY: đếm khi tay RÚT RA ----------
     private final SensorEventListener proxListener = new SensorEventListener() {
         @Override public void onSensorChanged(SensorEvent e) {
             if (e.values.length == 0) return;
-            boolean near = e.values[0] < proxMax;
-            if (!near) { lastNear = false; return; }
-            if (lastNear) return;
-            lastNear = true;
-            if (SystemClock.elapsedRealtime() < pocketBlockUntilMs) return; // đang trong túi/đang đi
             long now = SystemClock.elapsedRealtime();
-            if (now - lastWaveMs < WAVE_MIN_GAP_MS) return;
-            lastWaveMs = now;
+            boolean near = e.values[0] < Math.min(proxMax, NEAR_CM);
+
+            if (near) {
+                if (!lastNear) {
+                    lastNear = true;
+                    nearSinceMs = now;
+                    h.removeCallbacks(commitRunnable); // đang vẫy tiếp -> hoãn chốt
+                }
+                return;
+            }
+            if (!lastNear) return;           // far -> far: bỏ qua
+            lastNear = false;
+            long dur = now - nearSinceMs;
+
+            // Không phải vẫy: che quá lâu / che từ lúc vừa tắt màn / đang trong túi hoặc đang đi
+            if (nearSinceMs < armedAtMs || dur > MAX_NEAR_MS || now < pocketBlockUntilMs) {
+                Log.d(TAG, "ignore near dur=" + dur);
+                waveCount = 0;
+                h.removeCallbacks(commitRunnable);
+                return;
+            }
             waveCount++;
-            Log.d(TAG, "near #" + waveCount);
-            holdCpu(WAVE_WINDOW_MS + 800); // GIỮ CPU để timer 2.5s chắc chắn chạy
+            Log.d(TAG, "wave #" + waveCount + " dur=" + dur);
             h.removeCallbacks(commitRunnable);
-            h.postDelayed(commitRunnable, WAVE_WINDOW_MS);
+            if (waveCount >= maxWaveNeeded) {     // đủ số lần tối đa đã gán -> chạy NGAY
+                commitRunnable.run();
+            } else {
+                holdCpu(WAVE_GAP_MS + 400);       // chỉ giữ CPU ~1 giây
+                h.postDelayed(commitRunnable, WAVE_GAP_MS);
+            }
         }
         @Override public void onAccuracyChanged(Sensor s, int a) {}
     };
@@ -205,10 +252,10 @@ public class ProximityWaveService extends Service {
     private final Runnable commitRunnable = () -> {
         int n = Math.min(waveCount, 4);
         waveCount = 0;
-        if (n > 0) { holdCpu(1500); fireWave(n); }
+        if (n > 0) fireWave(n);
     };
 
-    // ---------- POCKET MODE (tự hết hạn theo thời gian, không kẹt) ----------
+    // ---------- POCKET MODE ----------
     private void armSigMotion() {
         if (sm == null || sigSensor == null) return;
         try { sm.requestTriggerSensor(sigTrigger, sigSensor); } catch (Exception ignored) {}
@@ -218,9 +265,9 @@ public class ProximityWaveService extends Service {
             h.post(() -> {
                 if (!registered) return;
                 long now = SystemClock.elapsedRealtime();
-                if (now < pocketBlockUntilMs) pocketBlockUntilMs = now + POCKET_HOLD_MS; // đang đi -> gia hạn, khỏi đếm bước
+                if (now < pocketBlockUntilMs) pocketBlockUntilMs = now + POCKET_HOLD_MS;
                 else startStepWindow();
-                armSigMotion(); // one-shot -> phải gắn lại
+                armSigMotion();
             });
         }
     };
@@ -245,7 +292,8 @@ public class ProximityWaveService extends Service {
         stepCount = 0;
     };
 
-        private void fireWave(int n) {
+    // ---------- CHẠY HÀNH ĐỘNG ----------
+    private void fireWave(int n) {
         final String want = "wave" + n;
         for (String rawId : prefs.getString("sensor_prox_pack_ids", "").split(",")) {
             String id = rawId.trim();
@@ -253,23 +301,20 @@ public class ProximityWaveService extends Service {
             final String px = "sensor_prox_pack_" + id + "_";
             if (!prefs.getBoolean(px + "en", false)) continue;
             if (!want.equals(prefs.getString(px + "gesture", ""))) continue;
-            
+
             String action = prefs.getString(px + "action", "NONE");
             if (action.equals("NONE")) return;
-            
-            // Multi-action: chạy tuần tự với delay 120ms
+
             final String[] acts = action.split(",");
             boolean screenOff = pm != null && !pm.isInteractive();
-            
-            // [FIX LỖI] Kiểm tra tất cả các action trong mảng thay vì biến 'act' chưa được khai báo
-            boolean needScreen = false;
-            boolean hasScreenOn = false;
+            boolean needScreen = false, hasScreenOn = false;
             for (String a : acts) {
-                String actClean = a.trim();
-                if (SCREEN_REQUIRED.contains(actClean)) needScreen = true;
-                if (actClean.equals("SCREEN_ON")) hasScreenOn = true;
+                String t = a.trim();
+                if (SCREEN_REQUIRED.contains(t)) needScreen = true;
+                if (t.equals("SCREEN_ON")) hasScreenOn = true;
             }
 
+            holdCpu(2000 + acts.length * 120L); // đủ cho delay 350ms + chuỗi action
             if (prefs.getBoolean(px + "vib", true)) vibrate(prefs.getInt("vib_dur", 30));
 
             if (screenOff && (needScreen || hasScreenOn)) {
@@ -278,36 +323,33 @@ public class ProximityWaveService extends Service {
                         PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "EdgeBar:ProxWake");
                     w.acquire(3000);
                 } catch (Exception ignored) {}
-                
-                // Nếu chỉ có mỗi SCREEN_ON, không cần chạy tiếp IPC
-                if (hasScreenOn && acts.length == 1) return; 
+                if (hasScreenOn && acts.length == 1) { Log.d(TAG, "FIRE " + want + " -> SCREEN_ON"); return; }
             }
-            
-            final boolean animOk = !screenOff || needScreen; // màn tắt mà vẽ Anima là phí pin
+
+            final boolean animOk = !screenOff || needScreen;
             Runnable doFire = () -> {
                 int delay = 0;
                 for (String actRaw : acts) {
                     final String act = actRaw.trim();
                     if (act.isEmpty()) continue;
-                    final int d = delay;
                     h.postDelayed(() -> {
                         if (animOk && prefs.getBoolean(px + "anim", true))
                             sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName()));
                         Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
                         ipc.putExtra("act", act);
                         if ("LAUNCH_APP".equals(act)) ipc.putExtra("launch_pkg", prefs.getString(px + "launch_pkg", ""));
+                        if ("RUN_SHORTCUT".equals(act)) ipc.putExtra("shortcut_id", prefs.getString(px + "shortcut_id", ""));
                         sendBroadcast(ipc);
-                    }, d);
+                    }, delay);
                     delay += 120;
                 }
             };
-            
             if (screenOff && needScreen) h.postDelayed(doFire, 350); else doFire.run();
-            
-            // [FIX LỖI] Log chuỗi 'action' gốc thay vì biến 'act' đơn lẻ không tồn tại
+
             Log.d(TAG, "FIRE " + want + " -> " + action);
             return;
         }
+        Log.d(TAG, "Không có rule cho " + want);
     }
 
     private void vibrate(int ms) {

@@ -9,7 +9,11 @@ import android.os.Build;
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context c, Intent i) {
-        if (!Intent.ACTION_BOOT_COMPLETED.equals(i.getAction())) return;
+        String act = i.getAction();
+        boolean isBoot = Intent.ACTION_BOOT_COMPLETED.equals(act);
+        boolean isReplaced = Intent.ACTION_MY_PACKAGE_REPLACED.equals(act);
+        if (!isBoot && !isReplaced) return;
+
         SharedPreferences prefs = c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
         if (VolumeButtonService.hasAnyRule(prefs)) {
             Intent svc = new Intent(c, VolumeButtonService.class);
@@ -21,6 +25,7 @@ public class BootReceiver extends BroadcastReceiver {
     if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(px);
     else c.startService(px);
         }
+        if (isReplaced) return; // cài đè: chỉ cần khôi phục 2 service cảm biến/phím, không đụng Homeb
         // [AUTO-HOMEB] Máy vừa boot mà Trợ năng đang tắt sẵn -> tự bật Homeb
         // ngay từ đầu, không cần chờ user mở app lên mới phát hiện.
         if (!isAccEnabled(c) && !prefs.getBoolean("shortcut_home_on", false)) {

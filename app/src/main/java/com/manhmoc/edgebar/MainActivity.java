@@ -602,6 +602,7 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
         super.onResume();
         refreshPreview();
         checkPendingStorageScan();
+        syncProximityService(); // tự bật lại service nếu bị hệ thống kill (chỉ đọc vài biến static, gần như 0 chi phí)
         if (btnWriteSettings != null) {
             btnWriteSettings.setVisibility(android.provider.Settings.System.canWrite(this) ? View.GONE : View.VISIBLE);
         }

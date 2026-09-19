@@ -188,7 +188,7 @@ private volatile boolean isCapturingIconColorScreenshot = false;
 private volatile long iconColorCaptureStartMs = 0L;
 private static final long ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS = 1500; // [FIX] rút từ 4000 xuống 1500 
 
-private static final long ICON_COLOR_EVENT_GATE_MS = 1200;   // was 350
+private static final long ICON_COLOR_EVENT_GATE_MS = 2000;
 private static final long ICON_COLOR_MIN_GAP_MS = 1500;      // MỚI: giãn cách tối thiểu giữa 2 lần takeScreenshot
 
 private static final long ICON_COLOR_INTERVAL_MIN_MS = 400;
@@ -209,12 +209,20 @@ private boolean isAutoColorOff(String prefix, String barKey) {
 /** Gọi từ mọi nơi cần yêu cầu lấy mẫu lại màu (đổi app, cuộn nội dung...). Rẻ tới mức
  *  gọi liên tục cũng không sao — tự dồn về tối đa 1 lần thực thi/ICON_COLOR_MIN_INTERVAL_MS. */
 private boolean anyAutoColorLayer() {
-    for (String k : iconLayers.keySet()) {
+    for (java.util.Map.Entry<String, IconLayerView> e : iconLayers.entrySet()) {
+        if (e.getValue().getVisibility() != View.VISIBLE) continue; // layer đang ẩn -> không cần chụp
+        String k = e.getKey();
         String prefix = k.startsWith("homacc_") ? "homacc_" : "lock_";
         if (!isAutoColorOff(prefix, k.substring(prefix.length()))) return true;
     }
     return false;
 }
+/** Dùng cho sự kiện cuộn: 1 lần chụp, không chụp vét, không retry. */
+private void requestIconColorSampleLight() {
+    if (iconLayers.isEmpty() || !anyAutoColorLayer()) return;
+    doSampleIconColors(true);
+}
+
 private void requestIconColorSample() {
     if (iconLayers.isEmpty() || !anyAutoColorLayer()) return; // không bar nào có icon -> zero cost
     doSampleIconColors(false);
@@ -300,7 +308,9 @@ private java.util.List<Object[]> buildColorSampleJobs(String prefix) {
     for (int i = 0; i < 12; i++) {
         String key = prefix + BARS[i];
         IconLayerView v = iconLayers.get(key);
-        if (v == null || !v.isAttachedToWindow() || v.getWidth() <= 0 || v.getHeight() <= 0) continue;
+        if (v == null || !v.isAttachedToWindow() || v.getVisibility() != View.VISIBLE
+                || v.getWidth() <= 0 || v.getHeight() <= 0) continue;
+
         if (isAutoColorOff(prefix, BARS[i])) { v.setTint(Color.WHITE); continue; }
         v.getLocationOnScreen(loc);
         jobs.add(new Object[]{v, loc[0], loc[1], v.getWidth(), v.getHeight(), key});
@@ -1013,11 +1023,42 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
     private void removeAllIconLayers() {
         for (String k : new java.util.ArrayList<>(iconLayers.keySet())) removeIconLayer(k);
     }
-    /** Chỉ tạo layer khi bar đang hiện + có icon + không ở chế độ "Ẩn vô hình". Ngược lại gỡ hẳn. */
+    // [PIN] Chỉ theo dõi bouncer khi có bar/corner Lock đặt chế độ "Chỉ màn khoá gốc" (lockmode==0)
+    private boolean needBouncerTracking() {
+        for (int i = 0; i < 12; i++)
+            if (prefs.getBoolean("lock_" + BARS[i] + "_en", false)
+                    && prefs.getInt("lock_" + BARS[i] + "_lockmode", 1) == 0) return true;
+        for (int i = 0; i < 4; i++)
+            if (prefs.getBoolean("lock_corner_" + CORNERS[i] + "_en", false)
+                    && prefs.getInt("lock_corner_" + CORNERS[i] + "_lockmode", 1) == 0) return true;
+        return false;
+    }
+    private boolean needScrollSampling() { return !iconLayers.isEmpty() && anyAutoColorLayer(); }
+
+    private int lastAppliedEventMask = -1;
+    /** Chỉ đăng ký nhận event khi thật sự cần: CONTENT_CHANGED chỉ lúc khoá máy + có bar "only base",
+     *  VIEW_SCROLLED chỉ khi có icon bar đang hiện và bật auto-màu. Đổi mask mới gọi setServiceInfo(). */
+    private void refreshEventSubscription() {
+        try {
+            boolean locked = km != null && km.isKeyguardLocked();
+            int mask = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED | AccessibilityEvent.TYPE_WINDOWS_CHANGED;
+            if (locked && needBouncerTracking()) mask |= AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
+            if (needScrollSampling()) mask |= AccessibilityEvent.TYPE_VIEW_SCROLLED;
+            if (mask == lastAppliedEventMask) return;
+            AccessibilityServiceInfo info = getServiceInfo();
+            if (info == null) return;
+            info.eventTypes = mask;
+            setServiceInfo(info);
+            lastAppliedEventMask = mask;
+        } catch (Exception ignored) {}
+    }
+
+    /** Layer icon giờ LUÔN tồn tại song song với bar (chỉ ẩn/hiện, không tạo/xoá liên tục),
+     *  và ẩn/hiện ĐỒNG BỘ với bar -> bar và icon xuất hiện cùng lúc. */
     private void syncIconLayer(String prefix, int i, WindowManager.LayoutParams barLp, boolean visible) {
         String key = prefix + BARS[i];
         String csv = prefs.getString(key + "_icons", "");
-        if (!visible || csv.isEmpty() || prefs.getInt(key + "_vis_mode", 0) == 2) { removeIconLayer(key); return; }
+        if (csv.isEmpty() || prefs.getInt(key + "_vis_mode", 0) == 2) { removeIconLayer(key); return; }
         int iconSize = prefs.getInt(key + "_icon_size", prefs.getInt(prefix + "bar_icon_size", 40));
         int iconAlpha = prefs.getInt(key + "_icon_alpha", prefs.getInt(prefix + "bar_icon_alpha", 255));
         java.util.List<Bitmap> bmps = resolveBarIcons(csv, iconSize);
@@ -1027,6 +1068,8 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
         WindowManager.LayoutParams lp;
         if (isNew) {
             layer = new IconLayerView(this);
+            layer.setAlpha(0f);
+            layer.setVisibility(View.GONE);
             lp = new WindowManager.LayoutParams(barLp.width, barLp.height,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
@@ -1038,11 +1081,29 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
         lp.width = barLp.width; lp.height = barLp.height; lp.x = barLp.x; lp.y = barLp.y; lp.gravity = barLp.gravity;
         layer.setIcons(bmps, iconAlpha);
         if (isNew) {
-            try { wm.addView(layer, lp); iconLayers.put(key, layer); } catch (Exception ignored) {}
+            try { wm.addView(layer, lp); iconLayers.put(key, layer); } catch (Exception ignored) { return; }
         } else {
             updateLayoutIfChanged(layer, lp);
         }
+        // Lock: fade cùng thời lượng với bar. Homacc: bar hiện tức thì nên icon cũng tức thì.
+        if (prefix.equals("lock_")) setViewVisibilityAnimated(layer, visible);
+        else setIconLayerShown(key, visible);
     }
+    /** Ẩn/hiện tức thời, không animate (dùng cho đường phản ứng nhanh). */
+    private void setIconLayerShown(String key, boolean show) {
+        IconLayerView l = iconLayers.get(key);
+        if (l == null) return;
+        l.animate().cancel();
+        l.setAlpha(1f);
+        l.setVisibility(show ? View.VISIBLE : View.GONE);
+    }
+    private void hideIconLayer(String key) {
+        IconLayerView l = iconLayers.get(key);
+        if (l == null || l.getVisibility() == View.GONE) return;
+        l.animate().cancel();
+        l.setVisibility(View.GONE);
+    }
+
         private class CornerView extends View {
             private Paint pFill, pStroke; private int type; private String prefix;
             private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
@@ -1251,7 +1312,10 @@ try {
 } catch (Exception e) {}
 
 refreshFingerprintRegistration();
+lastAppliedEventMask = -1;
+refreshEventSubscription();
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
+
 @Override public void onAccessibilityEvent(AccessibilityEvent event) {
 int eventType = event.getEventType();
 // [MỚI - FIX 1/3 BOUNCER] typeWindowContentChanged bắt được đúng lúc bouncer
@@ -1262,8 +1326,9 @@ int eventType = event.getEventType();
 if ((eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         || eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         || eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
-        && km != null && km.isKeyguardLocked()) {
+        && km != null && needBouncerTracking() && km.isKeyguardLocked()) {
     String evPkg = event.getPackageName() != null ? event.getPackageName().toString() : "";
+
     long nowBouncer = android.os.SystemClock.elapsedRealtime();
     if (nowBouncer - lastBouncerCheckMs >= BOUNCER_CHECK_THROTTLE_MS) {
         lastBouncerCheckMs = nowBouncer;
@@ -1278,8 +1343,9 @@ if ((eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         long nowEv = android.os.SystemClock.elapsedRealtime();
         if (nowEv - lastIconColorEventGateMs >= ICON_COLOR_EVENT_GATE_MS) {
             lastIconColorEventGateMs = nowEv;
-            requestIconColorSample();
+            requestIconColorSampleLight();
         }
+
         return;
     }
     if (eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
@@ -1327,8 +1393,9 @@ if (newIsBl && !lastIsBl_cache && prefs.getBoolean("blacklist_auto_homeb_en", fa
     triggerBlacklistAutoHomeb();
 }
 boolean prevBouncerState = isBouncerVisible;
-if (km != null && km.isKeyguardLocked()) {
+if (km != null && needBouncerTracking() && km.isKeyguardLocked()) {
     checkBouncerVisible(pName);
+
 } else {
     isBouncerVisible = false;
 }
@@ -1532,6 +1599,11 @@ android.app.usage.UsageEvents events = usm.queryEvents(now - 24 * 60 * 60 * 1000
  */
 private void triggerBlacklistLockRevokeAcc(String pkg) {
     if (pkg == null || pkg.isEmpty()) return;
+
+    // [MỚI] Ẩn NGAY Bar/Corner/Icon layer — tái dùng đúng cơ chế PAUSE_WM_OPS đã
+    // có sẵn cho lúc ToggleReceiver bật/tắt Trợ năng. App Blacklist hiện ra tức thì,
+    // mượt như Homeb, không phải đợi 300ms tắt Trợ năng thật ở dưới mới hết bị che.
+    sendBroadcast(new Intent("com.manhmoc.edgebar.PAUSE_WM_OPS"));
 
     prefs.edit()
         .putBoolean("blacklist_lock_active", true)
@@ -2174,6 +2246,8 @@ private void dispatchTwoFingerAccMenuGesture() {
             } else {
                 int idx = java.util.Arrays.asList(BARS).indexOf(tt);
                 if (idx >= 0 && barArr[idx] != null) barArr[idx].setVisibility(View.GONE);
+                setIconLayerShown(prefix + tt, false);
+
             }
         }
         if (changed) ed.apply();
@@ -2480,9 +2554,11 @@ setViewVisibilityAnimated(bars[i], shouldShowBar);
         if (priMode==0) applyAntiTapjacking(bars[i], w, h);
         syncIconLayer("lock_", i, p, shouldShowBar);
         } else {
-        removeIconLayer("lock_" + BARS[i]);
+        if (!en) removeIconLayer("lock_" + BARS[i]);   // tắt bar hẳn -> gỡ layer
+        else hideIconLayer("lock_" + BARS[i]);         // chỉ đang mở khoá -> giữ layer, chỉ ẩn
     }
 }
+
         for (int i=0;i<4;i++) {
             if (corners[i]==null) continue;
             boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", false);
@@ -2525,7 +2601,9 @@ if (panelEngine != null) panelEngine.rebuildAll();
         // [FIX BUG LOGIC] Luôn đồng bộ cả Homacc khi có lệnh cập nhật hiển thị chung, 
         // phòng trường hợp trạng thái Lock thay đổi khiến Homacc cần được ẩn/hiện.
         updateHomaccLive();
+        refreshEventSubscription();
     }
+
 private void setViewVisibilityAnimated(View v, boolean show) {
     if (v == null) return;
     int dur = prefs.getInt("lock_anim_dur", 100);
@@ -2557,7 +2635,9 @@ private void applyLockGateInstant() {
         bars[i].animate().cancel();
         bars[i].setAlpha(1f);
         bars[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
+        setIconLayerShown("lock_" + BARS[i], shouldShow);   // icon đi cùng bar, cùng khung hình
     }
+
     for (int i = 0; i < 4; i++) {
         if (corners[i] == null) continue;
         int lockMode = prefs.getInt("lock_corner_" + CORNERS[i] + "_lockmode", 1);
@@ -2678,13 +2758,16 @@ private void checkAndYieldOS(String actionKey) {
                     String hideKey = prefKeyBase + "_manual_hide";
                     myView.postOnAnimation(() -> {
                         myView.setVisibility(View.GONE);
+                        setIconLayerShown(prefKeyBase, false);
                         prefs.edit().putBoolean(hideKey, true).apply();
                     });
 
                     lpHandler.postDelayed(() -> {
                         myView.setVisibility(View.VISIBLE);
+                        setIconLayerShown(prefKeyBase, true);
                         prefs.edit().putBoolean(hideKey, false).apply();
                     }, prefs.getInt("os_yield_dur", 3000));
+
                 } catch (Exception ignored) {}
             }
         }
@@ -2984,7 +3067,11 @@ private void updateHomaccLive() {
         
         // Ép thêm điều kiện shouldShowHomacc
         v.setVisibility((en && !manualHidden && shouldShowHomacc) ? View.VISIBLE : View.GONE);
-        if (!en || manualHidden || !shouldShowHomacc) { removeIconLayer("homacc_" + BARS[i]); continue; }
+        if (!en || manualHidden || !shouldShowHomacc) {
+            if (!en) removeIconLayer("homacc_" + BARS[i]); else hideIconLayer("homacc_" + BARS[i]);
+            continue;
+        }
+
         int alpha = prefs.getInt("homacc_" + BARS[i] + "_alpha", 50);
         int w = prefs.getInt("homacc_" + BARS[i] + "_w", 300);
         int h = prefs.getInt("homacc_" + BARS[i] + "_h", 60);
@@ -3037,6 +3124,7 @@ private void updateHomaccLive() {
         updateLayoutIfChanged(v, p);
         if (priMode == 0) applyAntiTapjacking(v, p.width, p.height);
     }
+    refreshEventSubscription(); 
     // [MỚI] Lưới an toàn: nếu Homacc đang thực sự chạy nhưng overlay lại chưa
     // được vẽ (do 1 lần removeAccessibleHome/drawAccessibleHome bị lệch nhịp,
     // hoặc do sự cố tạm thời khi lấy mẫu màu), tự vẽ lại NGAY — không chờ event

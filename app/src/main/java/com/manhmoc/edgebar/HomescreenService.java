@@ -141,13 +141,20 @@ private boolean recIndicatorTestPaused = false;
     private static final long APPLOCK_POLL_MS = 400; // đủ nhanh, không tốn pin đáng kể
 
     private void startAppLockPolling() {
+        appLockPollHandler.removeCallbacks(appLockPollRunnable);
         appLockPollHandler.postDelayed(appLockPollRunnable, APPLOCK_POLL_MS);
     }
+    private void stopAppLockPolling() { appLockPollHandler.removeCallbacks(appLockPollRunnable); }
     private final Runnable appLockPollRunnable = new Runnable() {
         @Override public void run() {
+            boolean listEmpty = true;
             try {
                 String lockList = prefs.getString("applock_list", "");
-                if (!lockList.isEmpty()) {
+                listEmpty = lockList.isEmpty();
+                android.os.PowerManager pmP = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+                // Chỉ dò khi màn sáng + đã mở khoá + có app trong LockList
+                boolean active = pmP != null && pmP.isInteractive() && km != null && !km.isKeyguardLocked();
+                if (!listEmpty && active) {
                     android.app.usage.UsageStatsManager usm =
                         (android.app.usage.UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
                     long now = System.currentTimeMillis();
@@ -166,9 +173,11 @@ private boolean recIndicatorTestPaused = false;
                     }
                 }
             } catch (Exception ignored) {}
-            appLockPollHandler.postDelayed(this, APPLOCK_POLL_MS);
+            // LockList rỗng -> thưa hẳn (3s) thay vì đánh thức handler 400ms/lần
+            appLockPollHandler.postDelayed(this, listEmpty ? 3000 : APPLOCK_POLL_MS);
         }
     };
+
     private static final long SYNC_THROTTLE_MS = 150;
     private long accCheckTimestamp = 0;
     private static final int KBD_HEIGHT_CHANGE_THRESHOLD = 20;
@@ -830,10 +839,14 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
             if (Intent.ACTION_SCREEN_OFF.equals(action)) {
     removeYtdlOverlay(); 
     removeRippleViewIfIdle();
+    stopAppLockPolling();
+
     // [FIX] KHÔNG tự bật lại Trợ năng ở đây nữa — đã dời sang ACTION_SCREEN_ON bên dưới,
     // chỉ bật khi màn BẬT LẠI và đang ở màn khoá, thay vì bật ngay lúc vừa tắt màn.
 
 } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
+    startAppLockPolling();
+
     // [MỚI] Màn vừa bật lại. Nếu máy đang khoá (chưa mở khoá) thì cần Trợ năng/Homacc
     // để vẽ Lock bar ngay — còn nếu không có khoá thì cứ để Homeb tiếp tục, khỏi bật
     // Trợ năng làm gì cho tốn thêm 1 lần chuyển đổi vô ích.
