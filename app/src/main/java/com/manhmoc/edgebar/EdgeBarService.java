@@ -1365,14 +1365,16 @@ if ((eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
 // [TỐI ƯU] Bỏ qua ngay nếu vẫn là app y hệt lần kiểm tra trước — WINDOWS_CHANGED
 // có thể bắn liên tục cho cùng 1 app đang mở, tránh split(",")+contains() lặp
 // vô ích trên mỗi sự kiện đó (đỡ CPU/pin, đặc biệt lúc dồn sự kiện vì cuộc gọi).
-if (!pName.isEmpty() && km != null && km.isKeyguardLocked()
+if (!pName.isEmpty() && !pName.equals(getPackageName()) && km != null && km.isKeyguardLocked()
     && prefs.getBoolean("blacklist_lock_revoke_acc_en", false)
     && !prefs.getBoolean("blacklist_lock_active", false)
     && !pName.equals(lastLockBlCheckedPkg)) {
     lastLockBlCheckedPkg = pName;
     String blCheck = prefs.getString("blacklist", "");
     boolean isBlNow = !blCheck.isEmpty() && ("," + blCheck + ",").contains("," + pName + ",");
-    if (isBlNow) triggerBlacklistLockRevokeAcc(pName);
+    // Cooldown 3s sau khi Watchdog vừa trả Trợ năng -> chống vòng lặp tắt/bật liên tục
+    boolean inCooldown = System.currentTimeMillis() - prefs.getLong("blacklist_lock_restore_ts", 0) < 3000;
+    if (isBlNow && !inCooldown) triggerBlacklistLockRevokeAcc(pName);
 }
 
     if (nowMs - lastEventMs < EVENT_THROTTLE_MS) return;
@@ -1393,9 +1395,12 @@ if (!pName.isEmpty() && km != null && km.isKeyguardLocked()
 String bl = prefs.getString("blacklist", "");
 boolean newIsBl = !pName.isEmpty() && bl.contains(pName);
 // [MỚI] Blacklist Auto-Homeb: app blacklist vừa mở (false→true)
-if (newIsBl && !lastIsBl_cache && prefs.getBoolean("blacklist_auto_homeb_en", false)) {
+if (newIsBl && !lastIsBl_cache && prefs.getBoolean("blacklist_auto_homeb_en", false)
+    && !prefs.getBoolean("blacklist_lock_active", false)
+    && !(km != null && km.isKeyguardLocked() && prefs.getBoolean("blacklist_lock_revoke_acc_en", false))) {
     triggerBlacklistAutoHomeb();
 }
+
 boolean prevBouncerState = isBouncerVisible;
 if (km != null && needBouncerTracking() && km.isKeyguardLocked()) {
     checkBouncerVisible(pName);
@@ -1548,6 +1553,12 @@ private boolean containsText(android.view.accessibility.AccessibilityNodeInfo no
  */
 private void checkAndKickBlacklistOnAccEnable() {
     if (!prefs.getBoolean("blacklist_auto_homeb_en", false)) return;
+// Trợ năng vừa được Watchdog trả về sau khi app Blacklist chạy ở màn khoá -> KHÔNG được đá/kill app
+if (prefs.getBoolean("blacklist_lock_active", false)) return;
+if (System.currentTimeMillis() - prefs.getLong("blacklist_lock_restore_ts", 0) < 30_000) return;
+// Đang khoá máy thì không đá (hàm này chỉ dành cho việc user tự bật Trợ năng lúc đang mở app Blacklist)
+if (km != null && km.isKeyguardLocked()) return;
+
     String bl = prefs.getString("blacklist", "");
     if (bl.isEmpty()) return;
     new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
@@ -1605,9 +1616,7 @@ android.app.usage.UsageEvents events = usm.queryEvents(now - 24 * 60 * 60 * 1000
 private void triggerBlacklistLockRevokeAcc(String pkg) {
     if (pkg == null || pkg.isEmpty()) return;
 
-    // [FIX] Gọi trực tiếp — xem giải thích ở pauseAllOverlaysSync(). Ẩn tức thời,
-    // không còn phụ thuộc độ trễ của hệ thống Broadcast lúc máy đang bận.
-    pauseAllOverlaysSync();
+    pauseAllOverlaysSync(); // ẩn bar/corner tức thì, không qua Broadcast
 
     prefs.edit()
         .putBoolean("blacklist_lock_active", true)
@@ -1615,37 +1624,20 @@ private void triggerBlacklistLockRevokeAcc(String pkg) {
         .putLong("blacklist_lock_start_ms", System.currentTimeMillis())
         .apply();
 
-    // Bước 1: Khởi động Watchdog FGS trước khi mất quyền (accessibility service
-    // được hệ thống miễn trừ giới hạn FGS từ background, nên startForegroundService
-    // từ đây luôn thành công trên Android 12+).
+    // Watchdog tự tắt Trợ năng SAU KHI đã lên FGS. Nếu không khởi động được
+    // thì TUYỆT ĐỐI không tắt Trợ năng (tránh kẹt vĩnh viễn).
     try {
         Intent wd = new Intent(this, BlacklistLockWatchdogService.class);
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(wd);
         else startService(wd);
-    } catch (Exception ignored) {}
-
-    // Bước 2: Đợi FGS lên notification rồi mới tắt Trợ năng.
-    // 300ms đủ để `startForeground()` trong service hoàn tất — nếu tắt ngay
-    // lập tức, hệ thống có thể kill cả process trước khi service kịp lên FGS,
-    // và Watchdog sẽ không bao giờ chạy → app Blacklist bị kẹt vĩnh viễn.
-    new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-        try {
-            String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
-            String cur = Settings.Secure.getString(getContentResolver(),
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            if (cur == null) cur = "";
-            if (cur.contains(mySvc)) {
-                LinkedHashSet<String> set = new LinkedHashSet<>();
-                for (String part : cur.split(":")) {
-                    String t = part.trim();
-                    if (!t.isEmpty() && !t.equals(mySvc)) set.add(t);
-                }
-                Settings.Secure.putString(getContentResolver(),
-                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-                    android.text.TextUtils.join(":", set));
-            }
-        } catch (Exception ignored) {}
-    }, 300);
+    } catch (Exception e) {
+        prefs.edit()
+            .putBoolean("blacklist_lock_active", false)
+            .remove("blacklist_lock_pkg")
+            .remove("blacklist_lock_start_ms")
+            .apply();
+        updateVisibility();
+    }
 }
 
 private void triggerBlacklistAutoHomeb() {
@@ -3168,6 +3160,40 @@ public boolean onUnbind(Intent intent) {
     stopSelf();
     return super.onUnbind(intent);
 }
+@Override
+public void onDestroy() {
+    try { if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(prefListener); } catch (Exception ignored) {}
+    try { unregisterReceiver(stateReceiver); } catch (Exception ignored) {}
+    try { unregisterReceiver(ipcReceiver); } catch (Exception ignored) {}
+    try { if (accHomeReceiver != null) unregisterReceiver(accHomeReceiver); } catch (Exception ignored) {}
+
+    debounceHandler.removeCallbacksAndMessages(null);
+    homaccDebounceHandler.removeCallbacksAndMessages(null);
+    panelDebounceHandler.removeCallbacksAndMessages(null);
+    sliderPrefHandler.removeCallbacksAndMessages(null);
+    iconColorHandler.removeCallbacksAndMessages(null);
+    syntheticGuardHandler.removeCallbacksAndMessages(null);
+    iconColorExecutor.shutdownNow(); // tránh mỗi lần bật Trợ năng lại đẻ thêm 1 thread
+
+    try {
+        if (fpRegistered && fpController != null && fpCallback != null)
+            fpController.unregisterFingerprintGestureCallback(fpCallback);
+    } catch (Exception ignored) {}
+    fpRegistered = false;
+
+    try { removeAllIconLayers(); } catch (Exception ignored) {}
+    try { removeAccessibleHome(); } catch (Exception ignored) {}
+    try { removeYtdlOverlay(); } catch (Exception ignored) {}
+    try { removeRippleViewIfIdle(); } catch (Exception ignored) {}
+    if (recBlinkAnim != null) recBlinkAnim.cancel();
+    if (recIndicatorView != null) { try { wm.removeView(recIndicatorView); } catch (Exception ignored) {} recIndicatorView = null; }
+    for (int i = 0; i < 12; i++) if (bars[i] != null) { try { wm.removeView(bars[i]); } catch (Exception ignored) {} bars[i] = null; }
+    for (int i = 0; i < 4; i++) if (corners[i] != null) { try { wm.removeView(corners[i]); } catch (Exception ignored) {} corners[i] = null; }
+    if (fV != null) { try { wm.removeView(fV); } catch (Exception ignored) {} fV = null; }
+    if (bubbleEngine != null) { try { bubbleEngine.destroy(); } catch (Exception ignored) {} bubbleEngine = null; }
+    super.onDestroy();
+}
+
 // ===== CHỈ BÁO GHI ÂM (chấm đỏ + mm:ss) — bản dành cho EdgeBarService =====
 private void ensureRecIndicator() {
     if (recIndicatorView != null) return;
