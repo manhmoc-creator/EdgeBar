@@ -105,7 +105,7 @@ public class BlacklistLockWatchdogService extends Service {
             return false;
         }
 
-        // [MỚI] Đang ở màn khoá -> bật LockEb NGAY để lấp chỗ Lock bar trước khi
+                // [MỚI] Đang ở màn khoá -> bật LockEb NGAY để lấp chỗ Lock bar trước khi
         // Trợ năng bị tắt, tránh khoảng trống khiến app Blacklist bị giật lúc chuyển giao.
         try {
             KeyguardManager km = (KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE);
@@ -115,8 +115,12 @@ public class BlacklistLockWatchdogService extends Service {
             }
         } catch (Exception ignored) {}
 
-        revokeAccessibilityNow(c);
+        // [FIX] Trì hoãn việc thu hồi Trợ năng 500ms để LockEbService kịp khởi động hoàn tất.
+        // Nhờ việc tách tiến trình (android:process=":lockeb"), LockEbService sẽ không bị kill
+        // khi tiến trình chính chứa EdgeBarService bị hệ thống dừng lại.
+        new Handler(Looper.getMainLooper()).postDelayed(() -> revokeAccessibilityNow(c), 500);
         return true;
+
     }
 
     /** Gỡ EdgeBarService khỏi danh sách Trợ năng. Idempotent. */
@@ -279,8 +283,10 @@ public class BlacklistLockWatchdogService extends Service {
         if (handler != null) handler.removeCallbacks(pollRunnable);
         Log.d(TAG, "RESTORE reason=" + reason);
 
-        // [MỚI] Gỡ LockEb TRƯỚC khi bật lại Trợ năng -> không bao giờ có 2 bộ Lock bar
+                // [MỚI] Gỡ LockEb TRƯỚC khi bật lại Trợ năng -> không bao giờ có 2 bộ Lock bar
         // chồng nhau, và EdgeBarService.onServiceConnected() sẽ tự vẽ lại Lock sạch sẽ.
+        // Gửi broadcast để LockEbService tự dọn dẹp View và thoát êm, tránh rò rỉ bộ nhớ.
+        sendBroadcast(new Intent("com.manhmoc.edgebar.STOP_LOCK_EB"));
         try { stopService(new Intent(this, LockEbService.class)); } catch (Exception ignored) {}
 
         prefs.edit()

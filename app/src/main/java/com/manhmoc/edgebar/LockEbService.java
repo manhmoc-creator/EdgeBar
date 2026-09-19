@@ -55,6 +55,7 @@ public class LockEbService extends Service {
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
 
     private BroadcastReceiver userPresentReceiver;
+    private BroadcastReceiver stopReceiver; // [MỚI]
 
     // ===== BarView / CornerView tối giản — chỉ đủ vẽ khối màu bo góc, không auto-hide =====
     private class SimpleBar extends View {
@@ -92,12 +93,21 @@ public class LockEbService extends Service {
         createBars();
         updateVisibility();
 
-        userPresentReceiver = new BroadcastReceiver() {
+                userPresentReceiver = new BroadcastReceiver() {
             @Override public void onReceive(Context c, Intent i) {
                 if (Intent.ACTION_USER_PRESENT.equals(i.getAction())) stopSelf();
             }
         };
         registerReceiver(userPresentReceiver, new IntentFilter(Intent.ACTION_USER_PRESENT));
+
+        // [MỚI] Lắng nghe lệnh dừng từ BlacklistLockWatchdogService để thoát êm, tránh rò rỉ View.
+        stopReceiver = new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent i) {
+                stopSelf();
+            }
+        };
+        registerReceiver(stopReceiver, new IntentFilter("com.manhmoc.edgebar.STOP_LOCK_EB"));
+
     }
 
     private void startForegroundQuiet() {
@@ -319,6 +329,7 @@ public class LockEbService extends Service {
 
     @Override public void onDestroy() {
         if (userPresentReceiver != null) { try { unregisterReceiver(userPresentReceiver); } catch (Exception ignored) {} }
+        if (stopReceiver != null) { try { unregisterReceiver(stopReceiver); } catch (Exception ignored) {} } // [MỚI]
         for (int i = 0; i < 12; i++) if (bars[i] != null) { try { wm.removeView(bars[i]); } catch (Exception ignored) {} }
         for (int i = 0; i < 4; i++) if (corners[i] != null) { try { wm.removeView(corners[i]); } catch (Exception ignored) {} }
         super.onDestroy();
