@@ -29,12 +29,6 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
-import android.hardware.Sensor;
-import android.hardware.SensorManager;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.TriggerEvent;
-import android.hardware.TriggerEventListener;
 import android.os.Build;
 import android.os.Handler;
 import android.os.SystemClock;
@@ -71,121 +65,6 @@ private boolean lastPreviewHomaccState = false;
 private FingerprintGestureController fpController;
 private FingerprintGestureController.FingerprintGestureCallback fpCallback;
 private boolean fpRegistered = false;
-
-// ===== [MỚI] CẢM BIẾN KHI MÀN TẮT: Proximity + Significant Motion + Step Detector =====
-private SensorManager sensorManager;
-private Sensor proxSensor, sigMotionSensor, stepSensor;
-private boolean sensorsRegistered = false;
-private android.os.PowerManager.WakeLock sensorWakeLock;   // ← THÊM DÒNG NÀY
-
-private long lastProxTapMs = 0;
-private boolean proxPendingSingle = false;
-private static final long PROX_DTAP_WINDOW_MS = 500;
-private boolean pocketModeActive = false; // true = nghi đang trong túi/đang chạy -> chặn wave nhầm
-private final Handler proxHandler = new Handler(android.os.Looper.getMainLooper());
-private Runnable proxSingleRunnable;
-private int stepCountWindow = 0;
-
-// [MỚI] Đếm sóng vẫy tay — gom nhiều lần near trong cửa sổ 2.5s
-private int waveCount = 0;
-private long waveWindowStart = 0;
-private static final long WAVE_WINDOW_MS = 2500;
-private Runnable waveCommitRunnable;
-
-private boolean lastProxNear = false; // trạng thái near/far gần nhất, chống đếm trùng khi driver báo lặp
-private long lastWaveIncrementMs = 0;
-private static final long WAVE_MIN_GAP_MS = 120; // tối thiểu giữa 2 lần tính là 1 sóng mới
-
-private SensorEventListener proxListener = new SensorEventListener() {
-    @Override public void onSensorChanged(SensorEvent e) {
-        boolean near = e.values[0] < proxSensor.getMaximumRange();
-        if (!near) { lastProxNear = false; return; }
-        if (lastProxNear) return;
-        lastProxNear = true;
-        if (pocketModeActive) return;
-
-        long now = SystemClock.elapsedRealtime();
-        // [FIX] chặn dội cảm biến: 1 lần vẫy thật không được tính 2 lần
-        if (now - lastWaveIncrementMs < WAVE_MIN_GAP_MS) return;
-        lastWaveIncrementMs = now;
-
-                // Không reset theo mốc "vẫy đầu tiên" nữa — waveCommitRunnable (im lặng 2.5s) đã tự chốt & reset.
-        waveCount++;
-
-        if (waveCommitRunnable != null) proxHandler.removeCallbacks(waveCommitRunnable);
-        waveCommitRunnable = () -> {
-            int count = Math.min(waveCount, 4);
-            waveCount = 0; waveWindowStart = 0;
-            fireSensorWaveGesture(count);
-        };
-        proxHandler.postDelayed(waveCommitRunnable, WAVE_WINDOW_MS);
-    }
-    @Override public void onAccuracyChanged(Sensor s, int a) {}
-};
-/** [MỚI] Đọc đúng Data Pack đang bật (chỉ 1 pack) và thực thi action của nó. */
-private void fireSensorWaveGesture(int waveCount) {
-    String gestureKey = "wave" + waveCount;
-    String csv = prefs.getString("sensor_prox_pack_ids", "");
-    for (String id : csv.split(",")) {
-        id = id.trim();
-        if (id.isEmpty()) continue;
-        String px = "sensor_prox_pack_" + id + "_";
-        if (!prefs.getBoolean(px + "en", false)) continue;
-        String g = prefs.getString(px + "gesture", "");
-        if (!g.equals(gestureKey)) continue;
-
-        String action = prefs.getString(px + "action", "NONE");
-        if (action.equals("NONE")) return;
-
-        boolean vibOn = prefs.getBoolean(px + "vib", true);
-        boolean animOn = prefs.getBoolean(px + "anim", true);
-        if (vibOn) doVibrate(prefs.getInt("vib_dur", 30));
-        if (animOn) playAnim();
-
-        String primaryAct = action.split(",")[0].trim();
-        if (primaryAct.equals("SCREEN_ON")) { exec("SCREEN_ON"); return; }
-        if (SENSOR_SCREEN_REQUIRED_ACTS.contains(primaryAct)) {
-            try {
-                android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
-                if (pm != null && !pm.isInteractive()) {
-                    android.os.PowerManager.WakeLock wl = pm.newWakeLock(
-                        android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                        "EdgeBar:SensorWake");
-                    wl.acquire(3000);
-                }
-            } catch (Exception ignored) {}
-            new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> exec(primaryAct), 350);
-        } else {
-            exec(primaryAct);
-        }
-        return;
-    }
-}
-
-private TriggerEventListener sigMotionTrigger = new TriggerEventListener() {
-    @Override public void onTrigger(TriggerEvent event) {
-        // [FIX] KHÔNG khoá ngay lập tức nữa — chỉ bắt đầu đếm bước để XÁC NHẬN
-        // có đang đi/chạy (bỏ túi) hay không. Khoá ngay như trước khiến MỌI thao
-        // tác cầm máy lên để vẫy tay cũng bị chặn oan suốt cả cửa sổ dò (mặc định
-        // 8 giây) — đây chính là lý do cử chỉ Proximity gần như không bao giờ nhận.
-        // pocketModeActive chỉ được bật lại (nếu có) bên trong pocketExitRunnable,
-        // SAU KHI đã đếm đủ số bước thật sự trong khoảng thời gian dò.
-        armStepDetectorTemporarily();
-        armSignificantMotion(); // TYPE_SIGNIFICANT_MOTION là one-shot -> phải tự gắn lại
-    }
-};
-
-private SensorEventListener stepListener = new SensorEventListener() {
-    @Override public void onSensorChanged(SensorEvent e) { stepCountWindow++; }
-    @Override public void onAccuracyChanged(Sensor s, int a) {}
-};
-
-private final Runnable pocketExitRunnable = () -> {
-    if (sensorManager != null && stepSensor != null) sensorManager.unregisterListener(stepListener);
-    int threshold = this.prefs.getInt("sensor_pocket_step_threshold", 3);
-    pocketModeActive = stepCountWindow >= threshold;
-    stepCountWindow = 0;
-};
 
 // [MỚI] AppLock — lưu mốc thời gian unlock gần nhất theo RAM, không ghi prefs
     public static void markPackageUnlocked(String pkg) { AppLockHelper.markUnlocked(pkg); }
@@ -534,28 +413,10 @@ private static final long LOCK_DEBOUNCE_MS = 400;
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     // TẦNG 1: Whitelist tuyệt đối — bỏ qua mọi key không thuộc EdgeBar
     if (!isOurKey(k)) return;
-    // [FIX SENSOR] Bật/tắt 1 Data Pack sensor tiệm cận giữa chừng -> ép đăng ký lại
-// ngay ở lần tắt màn tiếp theo. Nếu không, vì sensorsRegistered đang true từ lần
-// tắt màn trước (khi pack chưa bật), registerScreenOffSensors() sẽ return sớm
-// và sensor "câm" mãi dù user đã bật rule.
-if (k != null && k.startsWith("sensor_prox_") && k.endsWith("_en")) {
-    boolean screenOff = false;
-    try {
-        android.os.PowerManager pmS = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-        screenOff = pmS != null && !pmS.isInteractive();
-    } catch (Exception ignored) {}
-    // Nếu màn ĐANG TẮT (hiếm khi xảy ra vì user phải mở app để bật Switch),
-    // ép đăng ký lại ngay. Nếu màn đang sáng, chỉ cần set cờ sensorsRegistered
-    // = false để lần ACTION_SCREEN_OFF kế tiếp chắc chắn đăng ký lại.
-    if (screenOff) {
-        unregisterScreenOffSensors();
-        registerScreenOffSensors();
-    } else {
-        // Đánh dấu để lần tắt màn tới chắc chắn re-register
-        unregisterScreenOffSensors();
-    }
-    return;
-}
+
+
+    if (k != null && k.startsWith("sensor_")) return; // ProximityWaveService tự đọc prefs khi cần, đỡ debounce updateVisibility() vô ích
+
 
     // TẦNG 1.5: bubble_ → Bong bóng chat AssistiveTouch, xử lý riêng
     if (k != null && k.startsWith("bubble_")) {
@@ -637,7 +498,6 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             removeYtdlOverlay(); 
             removeRippleViewIfIdle(); 
             AppLockHelper.clearAll(); 
-            registerScreenOffSensors(); // [MỚI] chỉ sống khi màn tắt — 0 pin lúc màn sáng
             if (fpRegistered && fpController != null && fpCallback != null) {
 
                 try { fpController.unregisterFingerprintGestureCallback(fpCallback); } catch (Exception e) {}
@@ -655,7 +515,6 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             ed.apply();
 
                 } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
-            unregisterScreenOffSensors(); // [MỚI] huỷ ngay khi mở khoá — tuyệt đối không sống lúc dùng máy
             if (AccessibleHomeService.isRunning) drawAccessibleHome();
             refreshFingerprintRegistration();
 
@@ -2471,156 +2330,6 @@ private void refreshFingerprintRegistration() {
         fpRegistered = false;
     }
 }
-        // ===== [MỚI] Hàm điều khiển cảm biến khi màn tắt =====
-        private void armSignificantMotion() {
-            if (sensorManager == null || sigMotionSensor == null) return;
-            // [FIX BOOTLOOP] bọc try-catch: requestTriggerSensor có thể ném lỗi trên
-            // vài ROM/thiết bị nếu sensor bị hệ thống thu hồi giữa chừng -> tuyệt đối
-            // không được để crash lan lên AccessibilityService (gây bootloop).
-            try { sensorManager.requestTriggerSensor(sigMotionTrigger, sigMotionSensor); }
-            catch (Exception e) { android.util.Log.w("EdgeBar_Sensor", "armSignificantMotion failed", e); }
-        }
-
-        private void armStepDetectorTemporarily() {
-    if (sensorManager == null || stepSensor == null || !hasActivityRecognitionPermission()) {
-        // Không thể đếm bước để xác nhận "đang trong túi" -> đừng chặn Proximity oan,
-        // coi như không phải trong túi và trả trạng thái về bình thường ngay lập tức.
-        pocketModeActive = false;
-        return;
-    }
-    proxHandler.removeCallbacks(pocketExitRunnable);
-    stepCountWindow = 0;
-    try {
-        sensorManager.registerListener(stepListener, stepSensor, SensorManager.SENSOR_DELAY_NORMAL);
-        int windowSec = prefs.getInt("sensor_pocket_window_sec", 8);
-        proxHandler.postDelayed(pocketExitRunnable, windowSec * 1000L);
-    } catch (Exception e) {
-        android.util.Log.w("EdgeBar_Sensor", "armStepDetectorTemporarily failed", e);
-        pocketModeActive = false; // đăng ký thất bại -> không giữ trạng thái chặn treo
-    }
-}
-
-        private boolean hasActivityRecognitionPermission() {
-            // API < 29 không cần quyền này cho step sensor -> luôn coi như OK
-            if (Build.VERSION.SDK_INT < 29) return true;
-            return checkSelfPermission(android.Manifest.permission.ACTIVITY_RECOGNITION)
-                == android.content.pm.PackageManager.PERMISSION_GRANTED;
-        }
-
-        private boolean hasAnyProxRule() {
-    String csv = prefs.getString("sensor_prox_pack_ids", "");
-    if (csv.isEmpty()) return false;
-    for (String id : csv.split(",")) {
-        String t = id.trim();
-        if (t.isEmpty()) continue;
-        if (prefs.getBoolean("sensor_prox_pack_" + t + "_en", false)) return true;
-    }
-    return false;
-}
-
-                // [MỚI] 3 cảm biến (Proximity/SigMotion/Step) CHỈ hoạt động khi màn hình TẮT.
-        // Một số action (Camera, Chụp màn hình, Menu nguồn, Quét QR...) cần màn sáng
-        // mới có ý nghĩa/thực thi được; action khác (Đèn pin, Bật/tắt ghi âm...) thì
-        // không cần. Đồng bộ đúng danh sách + hành vi đã có sẵn ở VolumeButtonService.
-        private static final java.util.Set<String> SENSOR_SCREEN_REQUIRED_ACTS = new java.util.HashSet<>(java.util.Arrays.asList(
-            "CAMERA", "SCREENSHOT", "POWER_DIALOG", "NOTIFICATIONS", "QUICK_SETTINGS", "SCAN_QR"
-        ));
-
-        private void fireSensorGesture(String gesture) {
-            String key = "sensor_" + gesture;
-            String action = prefs.getString(key, "NONE");
-            if (action.equals("NONE") || !prefs.getBoolean(key + "_on", true)) return;
-            String primaryAct = action.split(",")[0].trim();
-
-            if (primaryAct.equals("SCREEN_ON")) {
-                handleAction(key); // exec("SCREEN_ON") đã tự lo việc bật màn + wakelock
-                return;
-            }
-            if (SENSOR_SCREEN_REQUIRED_ACTS.contains(primaryAct)) {
-                try {
-                    android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
-                    if (pm != null && !pm.isInteractive()) {
-                        android.os.PowerManager.WakeLock wl = pm.newWakeLock(
-                            android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                            "EdgeBar:SensorWake");
-                        wl.acquire(3000);
-                    }
-                } catch (Exception ignored) {}
-                // Đợi màn hình kịp bật ổn định rồi mới chạy action thật, tránh action
-                // chạy trước khi overlay/app kịp vẽ ra màn hình vừa sáng.
-                new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> handleAction(key), 350);
-                return;
-            }
-            handleAction(key); // FLASH, TOGGLE_RECORD, PLAY_MY_PLAYLIST... không cần màn sáng -> chạy ngay
-        }
-
-        private void registerScreenOffSensors() {
-    if (sensorsRegistered) return;
-    if (!hasAnyProxRule()) return; // [TIẾT KIỆM PIN] user chưa gán rule -> không đăng ký gì cả
-    if (sensorManager == null) sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-    try {
-        proxSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
-        if (proxSensor != null) sensorManager.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_NORMAL);
-    } catch (Exception e) {
-        android.util.Log.w("EdgeBar_Sensor", "register proximity failed", e);
-    }
-    // [FIX BOOTLOOP] Pocket Mode giờ chỉ bật khi ĐÃ có quyền ACTIVITY_RECOGNITION —
-    // nếu chưa cấp, bỏ qua êm (cử chỉ vẫy tay ở cảm biến tiệm cận vẫn hoạt động
-    // bình thường, chỉ mất khả năng chống chạm nhầm khi bỏ túi).
-    if (prefs.getBoolean("sensor_pocketmode_en", true) && hasActivityRecognitionPermission()) {
-        try {
-            sigMotionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION);
-            stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
-            if (sigMotionSensor != null) armSignificantMotion();
-        } catch (Exception e) {
-            android.util.Log.w("EdgeBar_Sensor", "register pocket-mode sensors failed", e);
-        }
-    }
-            sensorsRegistered = true;
-        pocketModeActive = false;
-        lastProxNear = false;
-
-                // [FIX WAVEUP v2 - TỐI ƯU PIN] Nếu máy có wake-up proximity sensor,
-        // KHÔNG cần giữ wakelock — sensor tự đánh thức CPU khi có event, tiết
-        // kiệm pin gần như hoàn toàn (chỉ tốn ~baseline idle). Chỉ fallback
-        // về wakelock khi máy không có wake-up sensor.
-        try {
-            boolean isWakeUpProx = (proxSensor != null)
-                && (Build.VERSION.SDK_INT >= 21) && proxSensor.isWakeUpSensor();
-            if (!isWakeUpProx) {
-                // Máy cũ / ROM không hỗ trợ wake-up prox -> giữ wakelock như cũ
-                android.os.PowerManager pmWL = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-                if (sensorWakeLock == null) {
-                    sensorWakeLock = pmWL.newWakeLock(
-                        android.os.PowerManager.PARTIAL_WAKE_LOCK,
-                        "EdgeBar:ProxSensor");
-                    sensorWakeLock.setReferenceCounted(false);
-                }
-                if (!sensorWakeLock.isHeld()) sensorWakeLock.acquire();
-            }
-            // Nếu isWakeUpProx=true: bỏ qua wakelock — pin tiết kiệm như WaveUp.
-        } catch (Exception ignored) {}
-
-    }
-
-        private void unregisterScreenOffSensors() {
-            if (!sensorsRegistered) return;
-            if (sensorManager != null) {
-                try { sensorManager.unregisterListener(proxListener); } catch (Exception ignored) {}
-                try { sensorManager.unregisterListener(stepListener); } catch (Exception ignored) {}
-                try { if (sigMotionSensor != null) sensorManager.cancelTriggerSensor(sigMotionTrigger, sigMotionSensor); }
-                catch (Exception ignored) {}
-            }
-                        proxHandler.removeCallbacksAndMessages(null);
-            // [FIX WAVEUP] Nhả wakelock khi màn sáng lại — CPU ngủ bình thường trở lại,
-            // không tốn pin dư thừa. setReferenceCounted(false) ở Fix B đảm bảo
-            // gọi release() dù chưa acquire cũng không ném exception.
-            try {
-                if (sensorWakeLock != null && sensorWakeLock.isHeld()) sensorWakeLock.release();
-            } catch (Exception ignored) {}
-            sensorsRegistered = false;
-            pocketModeActive = false;
-        }
 
         private void createFloatingBars() {
         fV = new FlashView(this);

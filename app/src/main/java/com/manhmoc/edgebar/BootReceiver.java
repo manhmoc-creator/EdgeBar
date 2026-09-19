@@ -16,6 +16,11 @@ public class BootReceiver extends BroadcastReceiver {
             if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(svc);
             else c.startService(svc);
         }
+        if (ProximityWaveService.hasAnyRule(prefs)) {
+    Intent px = new Intent(c, ProximityWaveService.class);
+    if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(px);
+    else c.startService(px);
+        }
         // [AUTO-HOMEB] Máy vừa boot mà Trợ năng đang tắt sẵn -> tự bật Homeb
         // ngay từ đầu, không cần chờ user mở app lên mới phát hiện.
         if (!isAccEnabled(c) && !prefs.getBoolean("shortcut_home_on", false)) {

@@ -321,7 +321,7 @@ private void updateNotif(long sec, boolean paused) {
             .setState(paused ? android.media.session.PlaybackState.STATE_PAUSED : android.media.session.PlaybackState.STATE_PLAYING, sec * 1000, paused ? 0f : 1f).build());
     }
         Notification n = new Notification.Builder(this, cid)
-            .setContentTitle((paused ? "⏸️ Đã tạm dừng — " : "🔴 Đang ghi âm — ") + time)
+            .setContentTitle((paused ? "🔵 Đã tạm dừng — " : "🔴 Đang ghi âm — ") + time)
             .setContentText("EdgeBar Voice")
             .setSmallIcon(android.R.drawable.presence_audio_online)
             .addAction(android.R.drawable.ic_media_previous, "Dừng", actionPI(ACTION_STOP)) // Nút Trái

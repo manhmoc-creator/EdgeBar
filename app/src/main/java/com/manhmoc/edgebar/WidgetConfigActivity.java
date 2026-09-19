@@ -19,7 +19,7 @@ public class WidgetConfigActivity extends Activity {
     private int widgetId = AppWidgetManager.INVALID_APPWIDGET_ID;
     private SharedPreferences prefs;
     private String[] KEYS, LABS;
-    private Button btnTap, btnDtap;
+    private TextView btnTap, btnDtap;
     private CheckBox cbVib, cbAnim;
     private String tapAct = "NONE", dtapAct = "NONE";
     private String tapPkg = "", dtapPkg = "";
@@ -78,29 +78,14 @@ public class WidgetConfigActivity extends Activity {
         note.setTextColor(Color.parseColor("#9AA0A6")); note.setTextSize(12);
         note.setPadding(0, 0, 0, 30); root.addView(note);
 
-        TextView labelTap = new TextView(this);
-        labelTap.setText("👆 TAP (1 chạm)");
-        labelTap.setTextColor(Color.parseColor("#FFC107")); labelTap.setTextSize(14);
-        labelTap.setPadding(0, 10, 0, 10); root.addView(labelTap);
-
-        btnTap = new Button(this);
-        btnTap.setTextColor(Color.WHITE);
-        btnTap.setBackgroundColor(Color.parseColor("#202124"));
+        LinearLayout packRow = new LinearLayout(this);
+        packRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnTap = new TextView(this); btnDtap = new TextView(this);
         btnTap.setText(buildLabel(tapAct, tapPkg, tapScId));
-        btnTap.setOnClickListener(v -> picker(true));
-        root.addView(btnTap);
-
-        TextView labelDtap = new TextView(this);
-        labelDtap.setText("✌️ DOUBLE-TAP (2 chạm)");
-        labelDtap.setTextColor(Color.parseColor("#FFC107")); labelDtap.setTextSize(14);
-        labelDtap.setPadding(0, 30, 0, 10); root.addView(labelDtap);
-
-        btnDtap = new Button(this);
-        btnDtap.setTextColor(Color.WHITE);
-        btnDtap.setBackgroundColor(Color.parseColor("#202124"));
         btnDtap.setText(buildLabel(dtapAct, dtapPkg, dtapScId));
-        btnDtap.setOnClickListener(v -> picker(false));
-        root.addView(btnDtap);
+        packRow.addView(buildGestureCard("👆 TAP", btnTap, true));
+        packRow.addView(buildGestureCard("✌️ DOUBLE-TAP", btnDtap, false));
+        root.addView(packRow);
 
         TextView labelOpt = new TextView(this);
         labelOpt.setText("⚙️ TÙY CHỌN");
@@ -134,6 +119,24 @@ public class WidgetConfigActivity extends Activity {
         cancel.setOnClickListener(v -> finish()); root.addView(cancel);
 
         sc.addView(root); setContentView(sc);
+    }
+    private LinearLayout buildGestureCard(String title, TextView actView, boolean isTap) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(Color.parseColor("#202124")); bg.setCornerRadius(24f);
+        card.setBackground(bg);
+        card.setPadding(24, 24, 24, 24);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+        lp.setMargins(6, 6, 6, 6);
+        card.setLayoutParams(lp);
+        TextView t = new TextView(this);
+        t.setText(title); t.setTextColor(Color.parseColor("#9AA0A6")); t.setTextSize(12);
+        actView.setTextColor(Color.parseColor("#8AB4F8")); actView.setTextSize(16);
+        actView.setMaxLines(2); actView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        card.addView(t); card.addView(actView);
+        card.setOnClickListener(v -> picker(isTap));
+        return card;
     }
 
     private String buildLabel(String act, String pkg, String scId) {

@@ -53,10 +53,9 @@ public class MyPlaylistService extends Service {
     public static final String ACTION_NEXT = "com.manhmoc.edgebar.MYPLAYLIST_NEXT";
     public static final String ACTION_PREV = "com.manhmoc.edgebar.MYPLAYLIST_PREV";
     public static final String ACTION_STOP = "com.manhmoc.edgebar.MYPLAYLIST_STOP";
-public static final String ACTION_SEEK_BACK = "com.manhmoc.edgebar.MYPLAYLIST_SEEK_BACK";
-public static final String ACTION_SEEK_FWD  = "com.manhmoc.edgebar.MYPLAYLIST_SEEK_FWD";
+public static final String ACTION_PREV_PLAYLIST = "com.manhmoc.edgebar.MYPLAYLIST_PREV_PACK";
+public static final String ACTION_NEXT_PLAYLIST = "com.manhmoc.edgebar.MYPLAYLIST_NEXT_PACK";
 public static final String ACTION_OPEN_CURRENT = "com.manhmoc.edgebar.MYPLAYLIST_OPEN_CURRENT";
-private static final long SEEK_STEP_MS = 10000;
 
 private final android.os.Handler posHandler = new android.os.Handler(android.os.Looper.getMainLooper());
 private Runnable posTicker;
@@ -142,8 +141,8 @@ private boolean pausedByFocusLoss = false;        // đánh dấu việc pause l
         if (ACTION_STOP.equals(action)) { stopPlayback(); return START_NOT_STICKY; }
 if (ACTION_NEXT.equals(action)) { nextTrack(); return START_NOT_STICKY; }
 if (ACTION_PREV.equals(action)) { prevTrack(); return START_NOT_STICKY; }
-if (ACTION_SEEK_BACK.equals(action)) { seekBy(-SEEK_STEP_MS); return START_NOT_STICKY; }
-if (ACTION_SEEK_FWD.equals(action)) { seekBy(SEEK_STEP_MS); return START_NOT_STICKY; }
+if (ACTION_PREV_PLAYLIST.equals(action)) { switchPlaylist(false); return START_NOT_STICKY; }
+if (ACTION_NEXT_PLAYLIST.equals(action)) { switchPlaylist(true); return START_NOT_STICKY; }
 if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_NOT_STICKY; }
         if (ACTION_TOGGLE.equals(action) || action == null) {
             if (isRunning) togglePause();
@@ -153,7 +152,7 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
     }
 
     // ==================== NẠP PLAYLIST & PHÁT BÀI ĐẦU TIÊN ====================
-    private void loadPlaylistAndStart() {
+        private void loadPlaylistAndStart() {
         if (!requestAudioFocusNow()) {
             showErrorNotif("⚠️ App khác đang giữ quyền phát âm thanh, thử lại sau");
             return;
@@ -162,37 +161,106 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
         refreshTrackList();
 
         if (tracks.isEmpty()) {
-            showErrorNotif("⚠️ My Playlist trống — mở EdgeBar > Sound & Media > My Playlist để thêm bài");
+            showErrorNotif("⚠️ Playlist trống — mở EdgeBar > Sound & Media > My Playlist để thêm bài");
             return;
         }
         ensureSession();
-        playIndex(0); // LUÔN bắt đầu từ bài đầu tiên theo đúng thứ tự user đã sắp xếp
+        SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+        String packId = getCurrentPackId(prefs);
+        String lastSongId = prefs.getString("pack_myplaylist_" + packId + "_last_song", "");
+        int resumeIdx = 0;
+        if (!lastSongId.isEmpty()) {
+            String lastUri = prefs.getString("myplaylist_" + lastSongId + "_uri", "");
+            for (int i = 0; i < tracks.size(); i++) if (tracks.get(i).toString().equals(lastUri)) { resumeIdx = i; break; }
+        }
+        playIndex(resumeIdx); // tiếp tục đúng bài đang nghe dở, hoặc bài đầu nếu chưa nghe
     }
 
     // Đọc danh sách bài hát THEO ĐÚNG THỨ TỰ user đã kéo-thả trong MainActivity
     // (key "myplaylist_ids"), bỏ qua bài nào bị xoá file gốc trong Files by Google.
-    private void refreshTrackList() {
-        SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        String csv = prefs.getString("myplaylist_ids", "");
-        String currentUri = (currentIndex >= 0 && currentIndex < tracks.size()) ? tracks.get(currentIndex).toString() : null;
-        tracks.clear(); trackNames.clear();
-        if (csv.isEmpty()) return;
-        for (String id : csv.split(",")) {
-            String t = id.trim(); if (t.isEmpty()) continue;
-            String uriStr = prefs.getString("myplaylist_" + t + "_uri", "");
-            if (uriStr.isEmpty()) continue;
-            Uri u = Uri.parse(uriStr);
-            try { getContentResolver().takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION); }
-            catch (Exception ignored) {} // đã cấp trước đó, hoặc file không còn -> vẫn thử phát, lỗi sẽ tự next
-            tracks.add(u);
-            trackNames.add(prefs.getString("myplaylist_" + t + "_name", "Song"));
-        }
-        if (currentUri != null) {
-            int newPos = -1;
-            for (int i = 0; i < tracks.size(); i++) if (tracks.get(i).toString().equals(currentUri)) { newPos = i; break; }
-            if (newPos >= 0) currentIndex = newPos;
-        }
+    private static List<String> csvToListStatic(String csv) {
+    List<String> out = new ArrayList<>();
+    if (csv == null || csv.isEmpty()) return out;
+    for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
+    return out;
+}
+
+private String getCurrentPackId(SharedPreferences prefs) {
+    String cur = prefs.getString("myplaylist_current_pack_id", "");
+    List<String> packs = csvToListStatic(prefs.getString("myplaylist_pack_ids", ""));
+    if (!cur.isEmpty() && packs.contains(cur)) return cur;
+    return packs.isEmpty() ? "" : packs.get(0);
+}
+
+private String getCurrentPackName() {
+    SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+    String id = getCurrentPackId(prefs);
+    if (id.isEmpty()) return "My Playlist";
+    return prefs.getString("pack_myplaylist_" + id + "_name", "Playlist");
+}
+
+private String findSongIdForUri(SharedPreferences prefs, String packId, Uri uri) {
+    for (String sid : csvToListStatic(prefs.getString("pack_myplaylist_" + packId + "_songs", "")))
+        if (prefs.getString("myplaylist_" + sid + "_uri", "").equals(uri.toString())) return sid;
+    return null;
+}
+
+private void refreshTrackList() {
+    SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+    String packId = getCurrentPackId(prefs);
+    String currentUri = (currentIndex >= 0 && currentIndex < tracks.size()) ? tracks.get(currentIndex).toString() : null;
+    tracks.clear(); trackNames.clear();
+    if (packId.isEmpty()) return;
+    for (String sid : csvToListStatic(prefs.getString("pack_myplaylist_" + packId + "_songs", ""))) {
+        String uriStr = prefs.getString("myplaylist_" + sid + "_uri", "");
+        if (uriStr.isEmpty()) continue;
+        Uri u = Uri.parse(uriStr);
+        try { getContentResolver().takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION); }
+        catch (Exception ignored) {}
+        tracks.add(u);
+        trackNames.add(prefs.getString("myplaylist_" + sid + "_name", "Song"));
     }
+    if (currentUri != null) {
+        int newPos = -1;
+        for (int i = 0; i < tracks.size(); i++) if (tracks.get(i).toString().equals(currentUri)) { newPos = i; break; }
+        currentIndex = newPos >= 0 ? newPos : 0;
+    }
+}
+
+/** [MỚI] Chuyển sang Playlist trước/sau — nhớ đúng bài đang nghe dở của Playlist cũ
+ *  để lần sau quay lại nghe tiếp, Playlist mới thì tự tiếp tục từ chỗ dở trước đó
+ *  (hoặc bài đầu nếu chưa nghe bao giờ). Zero-thread: chỉ đọc/ghi prefs + gọi playIndex(). */
+private void switchPlaylist(boolean toNext) {
+    SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+    List<String> packs = csvToListStatic(prefs.getString("myplaylist_pack_ids", ""));
+    if (packs.size() < 2) { Toast.makeText(this, "Chưa có Playlist khác để chuyển", Toast.LENGTH_SHORT).show(); return; }
+
+    String curId = getCurrentPackId(prefs);
+    if (!curId.isEmpty() && currentIndex >= 0 && currentIndex < tracks.size()) {
+        String sid = findSongIdForUri(prefs, curId, tracks.get(currentIndex));
+        if (sid != null) prefs.edit().putString("pack_myplaylist_" + curId + "_last_song", sid).apply();
+    }
+
+    int idx = Math.max(0, packs.indexOf(curId));
+    int newIdx = toNext ? (idx + 1) % packs.size() : (idx - 1 + packs.size()) % packs.size();
+    String newPackId = packs.get(newIdx);
+    prefs.edit().putString("myplaylist_current_pack_id", newPackId).apply();
+
+    refreshTrackList();
+    if (tracks.isEmpty()) {
+        showErrorNotif("⚠️ Playlist \"" + prefs.getString("pack_myplaylist_" + newPackId + "_name", "?") + "\" trống");
+        return;
+    }
+    if (!isRunning || session == null) { ensureSession(); if (!requestAudioFocusNow()) return; }
+
+    String lastSongId = prefs.getString("pack_myplaylist_" + newPackId + "_last_song", "");
+    int resumeIdx = 0;
+    if (!lastSongId.isEmpty()) {
+        String lastUri = prefs.getString("myplaylist_" + lastSongId + "_uri", "");
+        for (int i = 0; i < tracks.size(); i++) if (tracks.get(i).toString().equals(lastUri)) { resumeIdx = i; break; }
+    }
+    playIndex(resumeIdx);
+}
     private void ensureSession() {
         if (session != null) return;
         session = new MediaSession(this, "EdgeBarMyPlaylist");
@@ -202,8 +270,9 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
     @Override public void onSkipToNext() { playIndex(currentIndex + 1); }
     @Override public void onSkipToPrevious() { playIndex(currentIndex - 1); }
     @Override public void onStop() { stopPlayback(); }
-    @Override public void onRewind() { seekBy(-SEEK_STEP_MS); }
-    @Override public void onFastForward() { seekBy(SEEK_STEP_MS); }
+@Override public void onRewind() { switchPlaylist(false); }
+@Override public void onFastForward() { switchPlaylist(true); }
+
     @Override public void onSeekTo(long pos) {
         if (player == null) return;
         try { player.seekTo((int) pos); updateSessionState(!isPaused); } catch (Exception ignored) {}
@@ -218,6 +287,12 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
         if (idx < 0) idx = tracks.size() - 1;
         if (idx >= tracks.size()) idx = 0; // hết playlist -> lặp lại từ đầu
         currentIndex = idx;
+        SharedPreferences prefsSave = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+        String curPackForSave = getCurrentPackId(prefsSave);
+        if (!curPackForSave.isEmpty()) {
+            String songId = findSongIdForUri(prefsSave, curPackForSave, tracks.get(currentIndex));
+            if (songId != null) prefsSave.edit().putString("pack_myplaylist_" + curPackForSave + "_last_song", songId).apply();
+        }
 
         if (player == null) {
             player = new MediaPlayer();
@@ -247,7 +322,7 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
     if (session != null) {
         MediaMetadata.Builder meta = new MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, trackNames.get(idxForArt))
-            .putString(MediaMetadata.METADATA_KEY_ARTIST, "My Playlist")
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, getCurrentPackName())
             .putLong(MediaMetadata.METADATA_KEY_DURATION, mp.getDuration());
         session.setMetadata(meta.build());
     }
@@ -267,7 +342,7 @@ if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentTrackFile(); return START_N
             if (session != null) {
                 MediaMetadata.Builder meta2 = new MediaMetadata.Builder()
                     .putString(MediaMetadata.METADATA_KEY_TITLE, trackNames.get(idxForArt))
-                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "My Playlist")
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, getCurrentPackName())
                     .putLong(MediaMetadata.METADATA_KEY_DURATION, player != null ? player.getDuration() : 0)
                     .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art);
                 session.setMetadata(meta2.build());
@@ -467,22 +542,22 @@ private PendingIntent contentTapPI() {
     // Bộ nút giống media notification chuẩn của hệ thống: Lùi 10s - Trước - Play/Pause - Tiếp - Tới 10s,
     // nút Dừng đổi icon nguồn (power) để không còn giống dấu X gây hiểu nhầm.
         Notification.Builder b = new Notification.Builder(this, CHANNEL_ID)
-        .setContentTitle(paused ? "⏸️ " + title : "🎵 " + title)
-        .setContentText("My Playlist")
+        .setContentTitle(paused ? "🎵 " + title : "🎵 " + title)
+        .setContentText(getCurrentPackName())
         .setSmallIcon(android.R.drawable.ic_media_play)
         .setLargeIcon(currentArt)
         .setVisibility(Notification.VISIBILITY_PUBLIC)
         .setOngoing(isRunning && !paused) // đang phát: khoá vuốt xoá; đang dừng: cho vuốt xoá để huỷ hẳn
         .setContentIntent(contentTapPI())
 
-        .setDeleteIntent(actionPI(ACTION_STOP))
-        .addAction(android.R.drawable.ic_media_rew, "Lùi 10s", actionPI(ACTION_SEEK_BACK))
-        .addAction(android.R.drawable.ic_media_previous, "Trước", actionPI(ACTION_PREV))
-        .addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
-            paused ? "Phát" : "Tạm Dừng", actionPI(ACTION_TOGGLE))
-        .addAction(android.R.drawable.ic_media_next, "Tiếp", actionPI(ACTION_NEXT))
-        .addAction(android.R.drawable.ic_media_ff, "Tới 10s", actionPI(ACTION_SEEK_FWD))
-        .addAction(android.R.drawable.ic_lock_power_off, "Dừng", actionPI(ACTION_STOP));
+        .setDeleteIntent(actionPI(ACTION_STOP))   // vuốt xoá noti = dừng hẳn, không cần nút riêng nữa
+.addAction(android.R.drawable.ic_media_previous, "Playlist trước", actionPI(ACTION_PREV_PLAYLIST))
+.addAction(android.R.drawable.ic_media_rew, "Trước", actionPI(ACTION_PREV))
+.addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
+    paused ? "Phát" : "Tạm Dừng", actionPI(ACTION_TOGGLE))
+.addAction(android.R.drawable.ic_media_ff, "Tiếp", actionPI(ACTION_NEXT))
+.addAction(android.R.drawable.ic_media_next, "Playlist sau", actionPI(ACTION_NEXT_PLAYLIST));
+
     if (session != null) b.setStyle(new Notification.MediaStyle()
         .setMediaSession(session.getSessionToken())
         .setShowActionsInCompactView(1, 2, 3)); // Trước - Play/Pause - Tiếp trong khung thu gọn
@@ -533,16 +608,6 @@ private android.graphics.Bitmap extractAlbumArt(Uri uri) {
         }
         return a.length() - b.length();
     }
-private void seekBy(long deltaMs) {
-    if (player == null || !isRunning) return;
-    try {
-        int dur = player.getDuration();
-        int pos = player.getCurrentPosition();
-        int target = (int) Math.max(0, Math.min(dur, pos + deltaMs));
-        player.seekTo(target);
-        updateSessionState(!isPaused);
-    } catch (Exception ignored) {}
-}
 
 private void startPosTicker() {
     stopPosTicker();
