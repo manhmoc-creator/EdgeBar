@@ -5612,9 +5612,6 @@ private void renderMyPlaylistList(LinearLayout listContainer, String query) {
         listContainer.addView(card);
     }
 }
-// [MỚI] Đổi vị trí bằng cách HOÁN ĐỔI (swap) — bài ở vị trí đích nhảy về đúng
-// vị trí cũ của bài đang sửa, các bài khác giữ nguyên chỗ. Ví dụ: đổi bài #1
-// thành số 8 -> bài đang ở #8 tự động đổi thành #1 (lên đầu), bài #1 cũ xuống #8.
 
 // [FIX CRASH] KHÔNG được rebuild View (removeAllViews) ngay trong callback
 // onEditorAction/onFocusChange của EditText — lúc đó hệ Focus/IME đang thao
@@ -5626,6 +5623,86 @@ private final Handler ecoDeferHandler = new Handler(android.os.Looper.getMainLoo
 private void deferRenderEcosystem() {
     ecoDeferHandler.post(this::renderEcosystem);
 }
+
+// ==================== [BỔ SUNG] 2 helper mà renderMyPlaylistList gọi tới ====================
+private LinearLayout buildMyPlaylistSelectionToolbar(List<String> ids) {
+    LinearLayout bar = new LinearLayout(this);
+    bar.setOrientation(LinearLayout.HORIZONTAL);
+    bar.setGravity(Gravity.CENTER_VERTICAL);
+    bar.setPadding(0, 0, 0, 20);
+
+    TextView tvCount = new TextView(this);
+    tvCount.setText(myPlSelectedItems.size() + " " + T("selected", "đã chọn"));
+    tvCount.setTextColor(Color.parseColor("#8AB4F8"));
+    tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    Button btnAll = new Button(this); btnAll.setText(T("All", "Tất cả"));
+    btnAll.setBackground(getRounded("#333333", 20f));
+    btnAll.setTextColor(Color.WHITE); btnAll.setTextSize(12.5f);
+    LinearLayout.LayoutParams allLp = new LinearLayout.LayoutParams(-2, -2);
+    allLp.setMargins(10, 0, 10, 0);
+    btnAll.setLayoutParams(allLp);
+    btnAll.setOnClickListener(v -> {
+        java.util.Set<String> allKeys = new java.util.LinkedHashSet<>(ids);
+        if (myPlSelectedItems.equals(allKeys)) myPlSelectedItems.clear();
+        else { myPlSelectedItems.clear(); myPlSelectedItems.addAll(allKeys); }
+        renderEcosystem();
+    });
+
+    Button btnDelete = new Button(this); btnDelete.setText("🗑️ " + T("Delete", "Xóa"));
+    btnDelete.setBackground(getRounded("#D32F2F", 20f));
+    btnDelete.setTextColor(Color.WHITE); btnDelete.setTextSize(12.5f);
+    btnDelete.setOnClickListener(v -> {
+        new AlertDialog.Builder(this)
+            .setTitle(T("Delete selected songs?", "Xoá các bài hát đã chọn?"))
+            .setPositiveButton(T("DELETE", "XOÁ"), (d, w) -> {
+                for (String sid : new java.util.ArrayList<>(myPlSelectedItems)) {
+                    prefs.edit()
+                        .remove("myplaylist_" + sid + "_uri")
+                        .remove("myplaylist_" + sid + "_name")
+                        .apply();
+                    for (String packId : getDynamicIds("myplaylist_pack_ids")) {
+                        List<String> songs = getDynamicIds("pack_myplaylist_" + packId + "_songs");
+                        if (songs.remove(sid))
+                            prefs.edit().putString("pack_myplaylist_" + packId + "_songs",
+                                TextUtils.join(",", songs)).apply();
+                    }
+                }
+                myPlSelectMode = false; myPlSelectedItems.clear();
+                renderEcosystem();
+            })
+            .setNegativeButton(T("CANCEL", "HỦY"), null).show();
+    });
+
+    bar.addView(tvCount); bar.addView(btnAll); bar.addView(btnDelete);
+    return bar;
+}
+
+private void applyMyPlaylistReorder(String songId, String newOrderStr) {
+    int newPos;
+    try { newPos = Integer.parseInt(newOrderStr.trim()) - 1; }
+    catch (Exception e) { ecoDeferHandler.post(this::renderEcosystem); return; }
+
+    for (String packId : getDynamicIds("myplaylist_pack_ids")) {
+        String key = "pack_myplaylist_" + packId + "_songs";
+        List<String> cur = getDynamicIds(key);
+        int oldPos = cur.indexOf(songId);
+        if (oldPos < 0) continue;
+        int clamped = Math.max(0, Math.min(cur.size() - 1, newPos));
+        if (clamped != oldPos) {
+            java.util.Collections.swap(cur, oldPos, clamped);
+            prefs.edit().putString(key, TextUtils.join(",", cur)).apply();
+        }
+    }
+    // [FIX CRASH] Không rebuild View ngay trong callback onFocusChange/onEditorAction
+    // của EditText — post vào hàng đợi UI thread để chạy SAU khi dispatch sự kiện
+    // hiện tại kết thúc hẳn, tránh NPE trong hệ Focus/IME.
+    ecoDeferHandler.post(this::renderEcosystem);
+}
+
+// [MỚI] Đổi vị trí bằng cách HOÁN ĐỔI (swap) — bài ở vị trí đích nhảy về đúng
+// vị trí cũ của bài đang sửa, các bài khác giữ nguyên chỗ. Ví dụ: đổi bài #1
+// thành số 8 -> bài đang ở #8 tự động đổi thành #1 (lên đầu), bài #1 cũ xuống #8.
 
 // Kiểm tra Uri có còn truy cập được không — nếu app quản lý file kia đã xoá file
 // gốc, ContentResolver.query() sẽ ném lỗi hoặc trả về con trỏ rỗng. Chỉ chạy khi

@@ -21,8 +21,10 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.provider.MediaStore;
+import android.widget.Toast;                     // ← THÊM DÒNG NÀY
 
 import java.util.ArrayList;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
