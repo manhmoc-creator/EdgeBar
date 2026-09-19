@@ -346,22 +346,155 @@ private LinearLayout buildOptIcons(boolean vib, boolean anim, boolean jump, bool
     for (int i = 0; i < 4; i++) if (on[i]) col.addView(makeMenuIcon(names[i], 34));
     return col;
 }
-// Card chọn 1 hành động, cập nhật nhãn ngay + lưu prefs. Dùng cho Circle spin và Sensor
+// [MỚI] Format nhãn từ 1 chuỗi CSV action — dùng lại logic của formatPruleActionLabel
+// để mọi Data Pack đều hiển thị đẹp như Frontier (tên app/shortcut/panel + dấu +).
+private String formatActionCsvLabel(String actsCsv, String launchPkg, String shortcutId) {
+    if (actsCsv == null || actsCsv.isEmpty()) return T("None","Không có");
+    StringBuilder sb = new StringBuilder();
+    for (String a : actsCsv.split(",")) {
+        String at = a.trim();
+        if (at.isEmpty() || at.equals("NONE")) continue;
+        if (sb.length() > 0) sb.append(" + ");
+        if (at.equals("LAUNCH_APP")) { sb.append(getAppLabelCached(launchPkg)); continue; }
+        if (at.equals("RUN_SHORTCUT")) {
+            sb.append("🔗 " + prefs.getString("shortcut_" + shortcutId + "_name", "Shortcut")); continue;
+        }
+        if (at.startsWith("PANEL_")) { sb.append("📦 " + prefs.getString("pack_panel_" + at.substring(6) + "_name", "Panel")); continue; }
+        if (at.startsWith("INTENT_")) { sb.append("⚡ " + prefs.getString("intent_" + at.substring(7) + "_name", "Intent")); continue; }
+        if (at.startsWith("MACRO_")) { sb.append("🤖 " + prefs.getString("macro_" + at.substring(6) + "_name", "Macro")); continue; }
+        for (int i = 0; i < ACT_KEYS.length; i++) {
+            if (ACT_KEYS[i] != null && ACT_KEYS[i].equals(at)) { sb.append(ACT_LABS[i]); break; }
+        }
+    }
+    return sb.length() == 0 ? T("Error","Lỗi") : sb.toString();
+}
+
 private View buildActionPickCard(String title, String prefKey, List<String[]> items) {
-    final String[] act = { prefs.getString(prefKey, "NONE") };
-    final String[] pkg = { "" }, sc = { "" };
+    final String[] actCsv = { prefs.getString(prefKey + "_acts",
+                                 prefs.getString(prefKey, "NONE")) };
     final LinearLayout[] holder = new LinearLayout[1];
-    Button pick = singleActionCategoryBtn(title, ACCENT_COLOR, items, act, pkg, sc, () -> {
-        prefs.edit().putString(prefKey, act[0]).apply();
-        TextView t = holder[0].findViewWithTag("line3");
-        if (t != null) t.setText(getActionLabel(act[0]));
-    });
+
+    Runnable openPicker = () -> {
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.parseColor("#121212"));
+        root.setPadding(30, 80, 30, 30);
+
+        TextView tvT = new TextView(this);
+        tvT.setText(title); tvT.setTextColor(Color.parseColor("#8AB4F8"));
+        tvT.setTextSize(18); tvT.setPadding(0, 0, 0, 20);
+        root.addView(tvT);
+
+        java.util.LinkedHashSet<String> working = new java.util.LinkedHashSet<>();
+        for (String s : actCsv[0].split(",")) if (!s.trim().isEmpty() && !s.trim().equals("NONE")) working.add(s.trim());
+
+        // Hiển thị list multi-select
+        EditText etSearch = new EditText(this);
+        etSearch.setHint(" " + T("Search","Tìm kiếm"));
+        etSearch.setHintTextColor(Color.GRAY); etSearch.setTextColor(Color.WHITE);
+        etSearch.setBackground(getRounded("#2C2C2C", 20f));
+        etSearch.setPadding(30, 25, 30, 25);
+        root.addView(etSearch);
+
+        ListView lv = new ListView(this);
+        lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+        root.addView(lv);
+
+        final List<String[]> shown = new ArrayList<>();
+        BaseAdapter ad = new BaseAdapter() {
+            public int getCount(){ return shown.size(); }
+            public Object getItem(int p){ return shown.get(p); }
+            public long getItemId(int p){ return p; }
+            public View getView(int p, View cv, ViewGroup parent){
+                LinearLayout row = new LinearLayout(MainActivity.this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(20, 22, 20, 22);
+                String[] it = shown.get(p);
+                CheckBox cb = new CheckBox(MainActivity.this);
+                cb.setChecked(working.contains(it[1]));
+                cb.setClickable(false);
+                TextView tv = new TextView(MainActivity.this);
+                tv.setText(it[0]); tv.setTextColor(Color.WHITE);
+                tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+                row.addView(cb); row.addView(tv);
+                row.setOnClickListener(v -> {
+                    if (working.contains(it[1])) working.remove(it[1]);
+                    else working.add(it[1]);
+                    notifyDataSetChanged();
+                });
+                return row;
+            }
+        };
+        lv.setAdapter(ad);
+
+        Runnable refill = () -> {
+            String q = etSearch.getText().toString().trim().toLowerCase();
+            shown.clear();
+            for (String[] it : items) if (q.isEmpty() || it[0].toLowerCase().contains(q)) shown.add(it);
+            ad.notifyDataSetChanged();
+        };
+        refill.run();
+        etSearch.addTextChangedListener(new android.text.TextWatcher() {
+            public void afterTextChanged(android.text.Editable s){ refill.run(); }
+            public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+            public void onTextChanged(CharSequence s,int a,int b,int c){}
+        });
+
+        // Options vib/anim
+        CheckBox cbVib = new CheckBox(this);
+        cbVib.setText(T("Haptic Feedback", "Bật Rung")); cbVib.setTextColor(Color.WHITE);
+        cbVib.setChecked(prefs.getBoolean(prefKey + "_vib", true));
+        cbVib.setOnCheckedChangeListener((v2, c) -> prefs.edit().putBoolean(prefKey + "_vib", c).apply());
+        root.addView(cbVib);
+
+        CheckBox cbAnim = new CheckBox(this);
+        cbAnim.setText(T("Show Animation", "Bật Hiệu ứng Ánh sáng")); cbAnim.setTextColor(Color.WHITE);
+        cbAnim.setChecked(prefs.getBoolean(prefKey + "_anim", true));
+        cbAnim.setOnCheckedChangeListener((v2, c) -> prefs.edit().putBoolean(prefKey + "_anim", c).apply());
+        root.addView(cbAnim);
+
+        LinearLayout footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0, 20, 0, 0);
+        Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY"));
+        bCancel.setBackground(getRounded("#333333",20f)); bCancel.setTextColor(Color.WHITE);
+        bCancel.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
+        Button bSave = new Button(this); bSave.setText(T("SAVE","LƯU"));
+        bSave.setBackground(getRounded("#4CAF50",20f)); bSave.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0,-2,1f); slp.setMargins(20,0,0,0);
+        bSave.setLayoutParams(slp);
+        footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
+
+        bCancel.setOnClickListener(v -> d.dismiss());
+        bSave.setOnClickListener(v -> {
+            actCsv[0] = android.text.TextUtils.join(",", working);
+            String first = working.isEmpty() ? "NONE" : working.iterator().next();
+            prefs.edit()
+                .putString(prefKey + "_acts", actCsv[0])
+                .putString(prefKey, first)  // key cũ = action đầu, backend cũ vẫn chạy
+                .apply();
+            TextView t = holder[0].findViewWithTag("line3");
+            if (t != null) t.setText(formatActionCsvLabel(actCsv[0], "", ""));
+            d.dismiss();
+        });
+        d.setContentView(root); d.show();
+    };
+
     Button test = stdCardBtn("TEST", "#FFC107", Color.BLACK);
-    test.setOnClickListener(v -> fireTestAction(act[0], "", ""));
-    holder[0] = buildStdPackCard(null, title, null, getActionLabel(act[0]), test);
-    holder[0].setOnClickListener(v -> pick.performClick()); // Button không gắn vào cây View, chỉ mượn dialog
+    test.setOnClickListener(v -> fireTestActions(
+        java.util.Arrays.asList(actCsv[0].split(",")), "", ""));
+
+    holder[0] = buildStdPackCard(
+        buildOptIcons(
+            prefs.getBoolean(prefKey + "_vib", true),
+            prefs.getBoolean(prefKey + "_anim", true),
+            false, false),
+        title, null, formatActionCsvLabel(actCsv[0], "", ""), test);
+    holder[0].setOnClickListener(v -> openPicker.run());
     return wrapPackCard(holder[0], prefKey);
 }
+
 // Card Rule của Bubble (dùng cho cả renderBubbleSettings lẫn openBubbleGestureSpace)
 private View buildBubbleRuleCard(String rId, Runnable rerender) {
     final String px = "prule_" + rId + "_";
@@ -1359,6 +1492,25 @@ private void openEco(int type, boolean showSubNav) {
     if (ecoMenuContainer != null) ecoMenuContainer.setVisibility(View.GONE);
     if (ecoSubHeader != null) ecoSubHeader.setVisibility(View.VISIBLE);
     if (ecoContainer != null) ecoContainer.setVisibility(View.VISIBLE);
+
+    // [FIX] Set đúng tiêu đề theo ecoType — trước đây không set nên tiêu đề
+    // bị "kế thừa" từ lần mở tab Custom Actions trước (VD: vào Storage vẫn
+    // còn chữ "QS Tiles").
+    if (tvEcoSubTitle != null) {
+        String t;
+        switch (type) {
+            case 0: t = "Intents"; break;
+            case 1: t = "QS Tiles"; break;
+            case 2: t = "Macros"; break;
+            case 3: t = T("Storage", "Bộ nhớ"); break;
+            case 4: t = T("Sound & Media", "Âm thanh & Media"); break;
+            case 5: t = T("Security", "Bảo mật"); break;
+            case 6: t = T("Trash", "Kho cũ"); break;
+            default: t = ""; break;
+        }
+        tvEcoSubTitle.setText(t);
+    }
+
     updateFabVisibility();
     renderEcosystem();
 }
@@ -4962,6 +5114,18 @@ cardWrap.addView(selDot);
     cbAutoHomeb.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("blacklist_auto_homeb_en", c).apply());
     cbAutoHomeb.setPadding(0, 20, 0, 0);
     cardBlacklist.addView(cbAutoHomeb);
+        CheckBox cbLockRevokeAcc = new CheckBox(this);
+    cbLockRevokeAcc.setText(T(
+        "Revoke Accessibility at Lock for Blacklist apps (Viettel Tammi, etc.)",
+        "Tạm thu hồi Trợ năng khi app Blacklist mở ở màn khoá (Viettel Tammi, ...)"));
+    cbLockRevokeAcc.setTextColor(Color.parseColor("#FFC107"));
+    cbLockRevokeAcc.setTextSize(12.5f);
+    cbLockRevokeAcc.setChecked(prefs.getBoolean("blacklist_lock_revoke_acc_en", false));
+    cbLockRevokeAcc.setOnCheckedChangeListener((v, c) ->
+        prefs.edit().putBoolean("blacklist_lock_revoke_acc_en", c).apply());
+    cbLockRevokeAcc.setPadding(0, 20, 0, 0);
+    cardBlacklist.addView(cbLockRevokeAcc);
+
     ecoContainer.addView(wrapCard(cardBlacklist));
 
     // Thẻ 2: LockList
@@ -5229,61 +5393,50 @@ private void renderMyPlaylistPackList() {
         String name = prefs.getString("pack_myplaylist_" + id + "_name", "Playlist");
         int songCount = getDynamicIds("pack_myplaylist_" + id + "_songs").size();
 
-        FrameLayout cardWrap = new FrameLayout(this);
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setBackground(getRounded("#202124", 24f));
-        card.setPadding(15, 24, 10, 24);
+        // optCol: icon 🎵 / ▶ (đang phát)
+        LinearLayout optCol = new LinearLayout(this);
+        optCol.setOrientation(LinearLayout.VERTICAL);
+        optCol.setGravity(Gravity.CENTER);
+        optCol.setPadding(0, 0, 15, 0);
+        TextView tIcon = new TextView(this);
+        tIcon.setText(id.equals(curPlayingId) ? "▶" : "🎵");
+        tIcon.setTextSize(24);
+        optCol.addView(tIcon);
 
-        LinearLayout iconCol = new LinearLayout(this);
-        iconCol.setGravity(Gravity.CENTER);
-        iconCol.setPadding(0, 0, 15, 0);
-        TextView tIcon = new TextView(this); tIcon.setText("🎵"); tIcon.setTextSize(22);
-        iconCol.addView(tIcon);
-
-        LinearLayout infoCol = new LinearLayout(this);
-        infoCol.setOrientation(LinearLayout.VERTICAL);
-        infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        TextView tName = new TextView(this);
-        tName.setText((id.equals(curPlayingId) ? "▶ " : "") + name);
-        tName.setTextColor(Color.parseColor("#E8EAED")); tName.setTextSize(15f);
-        tName.setMaxLines(1); tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        TextView tCount = new TextView(this);
-        tCount.setText(songCount + " " + T("songs","bài hát"));
-        tCount.setTextColor(Color.parseColor("#8AB4F8")); tCount.setTextSize(11.5f); tCount.setPadding(0,4,0,0);
-        infoCol.addView(tName); infoCol.addView(tCount);
-
-        Button btnOpen = new Button(this);
-        btnOpen.setText(T("SONGS","BÀI HÁT"));
-        btnOpen.setBackground(getRounded("#8AB4F8", 14f));
-        btnOpen.setTextColor(Color.BLACK); btnOpen.setTextSize(11f);
-        btnOpen.setPadding(14,8,14,8);
-        btnOpen.setMinimumHeight(64);
+        Button btnOpen = stdCardBtn(T("SONGS", "BÀI HÁT"), ACCENT_COLOR, Color.BLACK);
         btnOpen.setOnClickListener(v -> openMyPlaylistPackEditor(id));
 
-        card.addView(iconCol); card.addView(infoCol); card.addView(btnOpen);
-        cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
-        cardWrap.setTag(id);
+        LinearLayout card = buildStdPackCard(
+            optCol,
+            (id.equals(curPlayingId) ? "▶ " : "") + name,
+            songCount + " " + T("songs", "bài hát"),
+            null,
+            btnOpen);
+
+        FrameLayout cardWrap = wrapPackCard(card, id);
 
         if (myPlPackSelectMode) {
             TextView selDot = new TextView(this);
             boolean sel = myPlPackSelectedItems.contains(id);
             selDot.setText(sel ? "🔵" : "⚪"); selDot.setTextSize(18);
-            FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-            dotLp.gravity = Gravity.BOTTOM | Gravity.START; dotLp.setMargins(10,0,0,6);
+            FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+            dotLp.gravity = Gravity.BOTTOM | Gravity.START; dotLp.setMargins(10, 0, 0, 6);
             selDot.setLayoutParams(dotLp);
             cardWrap.addView(selDot);
             card.setOnClickListener(v -> {
-                if (myPlPackSelectedItems.contains(id)) myPlPackSelectedItems.remove(id); else myPlPackSelectedItems.add(id);
+                if (myPlPackSelectedItems.contains(id)) myPlPackSelectedItems.remove(id);
+                else myPlPackSelectedItems.add(id);
                 renderEcosystem();
             });
             card.setOnLongClickListener(v -> true);
         } else {
             card.setOnClickListener(v -> openMyPlaylistPackEditor(id));
-            // Nhấn giữ: giống Frontier/Lenap — chọn 1/2/3 pack mỗi hàng, hoặc bật chọn nhiều
             card.setOnLongClickListener(v -> {
                 showPackLongPressMenu(v, spanKey, () -> {
-                    myPlPackSelectMode = true; myPlPackSelectedItems.clear(); myPlPackSelectedItems.add(id);
+                    myPlPackSelectMode = true;
+                    myPlPackSelectedItems.clear();
+                    myPlPackSelectedItems.add(id);
                     renderEcosystem();
                 }, this::renderEcosystem);
                 return true;
@@ -5387,17 +5540,31 @@ private void openMyPlaylistPackEditor(String packId) {
     bLp.setMargins(40, 0, 40, 60);
     bottomBar.setLayoutParams(bLp);
 
-    ImageButton btnBack = createIconCircleBtn(customIconRes("cycle_24px"), "#333333");
+        ImageButton btnBack = createIconCircleBtn(customIconRes("cycle_24px"), "#333333");
     btnBack.setOnClickListener(v -> d.dismiss());
 
-    View spacer = new View(this);
-    spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+    // [MỚI] Nút LƯU ở giữa Nav Bar — tên Playlist đã được lưu auto qua TextWatcher,
+    // nút này chốt lại + đóng dialog + toast xác nhận cho user yên tâm.
+    Button btnSave = new Button(this);
+    btnSave.setText(T("SAVE", "LƯU"));
+    btnSave.setBackground(getRounded("#4CAF50", 20f));
+    btnSave.setTextColor(Color.WHITE);
+    btnSave.setTextSize(15f);
+    btnSave.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    btnSave.setPadding(40, 20, 40, 20);
+    LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(0, -2, 1f);
+    saveLp.setMargins(20, 0, 20, 0);
+    btnSave.setLayoutParams(saveLp);
+    btnSave.setOnClickListener(v -> {
+        Toast.makeText(this, T("Playlist saved!", "Đã lưu Playlist!"), Toast.LENGTH_SHORT).show();
+        d.dismiss();
+    });
 
     ImageButton fabAdd = createIconCircleBtn(customIconRes("bubble_chart_24px"), "#333333");
     fabAdd.setPadding(22,22,22,22);
     fabAdd.setOnClickListener(v -> pickSongsForMyPlaylist(packId));
 
-    bottomBar.addView(btnBack); bottomBar.addView(spacer); bottomBar.addView(fabAdd);
+    bottomBar.addView(btnBack); bottomBar.addView(btnSave); bottomBar.addView(fabAdd);
     root.addView(bottomBar);
 
     d.setOnDismissListener(dd -> renderEcosystem());

@@ -117,6 +117,12 @@
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
         android:value="edgebar_proximity_wave" />
 </service>
+<service android:name=".BlacklistLockWatchdogService" android:exported="false"
+    android:foregroundServiceType="specialUse">
+    <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="edgebar_blacklist_lock_watchdog" />
+</service>
 <service android:name=".MyPlaylistService" android:exported="false"
     android:foregroundServiceType="mediaPlayback" />
 <service android:name=".VoiceRecorderService" android:exported="false"

@@ -255,8 +255,9 @@ public class ProximityWaveService extends Service {
             if (!prefs.getBoolean(px + "en", false)) continue;
             if (!want.equals(prefs.getString(px + "gesture", ""))) continue;
             String action = prefs.getString(px + "action", "NONE");
-            if (action.equals("NONE")) return;
-            final String act = action.split(",")[0].trim();
+if (action.equals("NONE")) return;
+// Multi-action: chạy tuần tự với delay 120ms
+final String[] acts = action.split(",");
 
             boolean screenOff = pm != null && !pm.isInteractive();
             boolean needScreen = SCREEN_REQUIRED.contains(act);
@@ -272,13 +273,22 @@ public class ProximityWaveService extends Service {
             }
             final boolean animOk = !screenOff || needScreen; // màn tắt mà vẽ Anima là phí pin
             Runnable doFire = () -> {
-                if (animOk && prefs.getBoolean(px + "anim", true))
-                    sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName()));
-                Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-                ipc.putExtra("act", act);
-                if ("LAUNCH_APP".equals(act)) ipc.putExtra("launch_pkg", prefs.getString(px + "launch_pkg", ""));
-                sendBroadcast(ipc);
-            };
+    int delay = 0;
+    for (String actRaw : acts) {
+        final String act = actRaw.trim();
+        if (act.isEmpty()) continue;
+        final int d = delay;
+        h.postDelayed(() -> {
+            if (animOk && prefs.getBoolean(px + "anim", true))
+                sendBroadcast(new Intent("com.manhmoc.edgebar.TEST_ANIM").setPackage(getPackageName()));
+            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+            ipc.putExtra("act", act);
+            if ("LAUNCH_APP".equals(act)) ipc.putExtra("launch_pkg", prefs.getString(px + "launch_pkg", ""));
+            sendBroadcast(ipc);
+        }, d);
+        delay += 120;
+    }
+};
             if (screenOff && needScreen) h.postDelayed(doFire, 350); else doFire.run();
             Log.d(TAG, "FIRE " + want + " -> " + act);
             return;

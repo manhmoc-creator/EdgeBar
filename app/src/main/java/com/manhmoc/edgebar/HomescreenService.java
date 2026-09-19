@@ -1152,6 +1152,13 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
      */
     private void updateVisibility() {
         if (panelEngine != null) panelEngine.rebuildAll();
+        // [MỚI] Đang trong chế độ Blacklist-Lock → không vẽ bar/corner Homeb
+        // lên trên app Blacklist đang chạy full-screen.
+        if (prefs.getBoolean("blacklist_lock_active", false)) {
+            for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
+            for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
+            return;
+        }
 
         boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);

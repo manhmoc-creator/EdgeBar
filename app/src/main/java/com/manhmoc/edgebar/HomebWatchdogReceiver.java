@@ -15,6 +15,8 @@ public class HomebWatchdogReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context c, Intent i) {
         SharedPreferences p = c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
         if (isAccEnabled(c)) return; // Accessibility đang bật -> không cần Homeb tự động
+               // [MỚI] Đang trong chế độ Blacklist-Lock → KHÔNG bật Homeb (sẽ đè app Blacklist)
+        if (p.getBoolean("blacklist_lock_active", false)) return;
 
         // Accessibility TẮT -> Homacc không thể hoạt động -> dừng hẳn để tiết kiệm RAM/pin
         if (AccessibleHomeService.isRunning) {

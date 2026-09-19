@@ -47,8 +47,7 @@ import android.view.accessibility.AccessibilityEvent;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-
-
+import java.util.LinkedHashSet;
 public class EdgeBarService extends AccessibilityService {
 
     // === CHÈN CODE BIẾN TOÀN CỤC CỦA BẠN VÀO ĐÂY ===
@@ -1295,6 +1294,16 @@ if ((eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         lastLockCheckMs = nowMs;
         checkAppLock(pName);
     }
+   // [MỚI] Blacklist tại Lock — phát hiện app Blacklist mở khi đang khoá máy
+// thì tạm thu hồi Trợ năng (case Viettel Tammi).
+if (!pName.isEmpty() && km != null && km.isKeyguardLocked()
+    && prefs.getBoolean("blacklist_lock_revoke_acc_en", false)) {
+    String blCheck = prefs.getString("blacklist", "");
+    boolean isBlNow = !blCheck.isEmpty() && ("," + blCheck + ",").contains("," + pName + ",");
+    if (isBlNow && !prefs.getBoolean("blacklist_lock_active", false)) {
+        triggerBlacklistLockRevokeAcc(pName);
+    }
+}
 
     if (nowMs - lastEventMs < EVENT_THROTTLE_MS) return;
     lastEventMs = nowMs;
@@ -1509,6 +1518,60 @@ android.app.usage.UsageEvents events = usm.queryEvents(now - 24 * 60 * 60 * 1000
         } catch (Exception ignored) {}
     }, 700);
 }
+/**
+ * [MỚI] Blacklist tại Lock — Tạm thu hồi Trợ năng cho app Blacklist.
+ *
+ * Luồng:
+ *   1. Lưu flag + pkg vào prefs (nguồn sự thật duy nhất).
+ *   2. Bật Watchdog FGS trước (không phụ thuộc vòng đời AccessibilityService).
+ *   3. Đợi 300ms để FGS kịp lên foreground notification.
+ *   4. Ghi Secure Settings để TẮT Trợ năng — lúc này EdgeBarService tự chết,
+ *      nhưng Watchdog FGS vẫn sống độc lập và sẽ tự bật lại Trợ năng khi app đóng.
+ *
+ * Zero chi phí khi tính năng không được bật (chỉ 1 lệnh đọc prefs ở caller).
+ */
+private void triggerBlacklistLockRevokeAcc(String pkg) {
+    if (pkg == null || pkg.isEmpty()) return;
+
+    prefs.edit()
+        .putBoolean("blacklist_lock_active", true)
+        .putString("blacklist_lock_pkg", pkg)
+        .putLong("blacklist_lock_start_ms", System.currentTimeMillis())
+        .apply();
+
+    // Bước 1: Khởi động Watchdog FGS trước khi mất quyền (accessibility service
+    // được hệ thống miễn trừ giới hạn FGS từ background, nên startForegroundService
+    // từ đây luôn thành công trên Android 12+).
+    try {
+        Intent wd = new Intent(this, BlacklistLockWatchdogService.class);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(wd);
+        else startService(wd);
+    } catch (Exception ignored) {}
+
+    // Bước 2: Đợi FGS lên notification rồi mới tắt Trợ năng.
+    // 300ms đủ để `startForeground()` trong service hoàn tất — nếu tắt ngay
+    // lập tức, hệ thống có thể kill cả process trước khi service kịp lên FGS,
+    // và Watchdog sẽ không bao giờ chạy → app Blacklist bị kẹt vĩnh viễn.
+    new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+        try {
+            String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
+            String cur = Settings.Secure.getString(getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (cur == null) cur = "";
+            if (cur.contains(mySvc)) {
+                LinkedHashSet<String> set = new LinkedHashSet<>();
+                for (String part : cur.split(":")) {
+                    String t = part.trim();
+                    if (!t.isEmpty() && !t.equals(mySvc)) set.add(t);
+                }
+                Settings.Secure.putString(getContentResolver(),
+                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                    android.text.TextUtils.join(":", set));
+            }
+        } catch (Exception ignored) {}
+    }, 300);
+}
+
 private void triggerBlacklistAutoHomeb() {
     try {
         String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();

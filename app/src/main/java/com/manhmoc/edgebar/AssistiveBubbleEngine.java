@@ -596,15 +596,24 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
     }
     private void fireCircleSpinAction(boolean clockwise) {
     String key = clockwise ? "bubble_circle_spin_cw_act" : "bubble_circle_spin_ccw_act";
-    String act = prefs.getString(key, "NONE");
-    if (act.equals("NONE") || act.isEmpty()) return;
+    String acts = prefs.getString(key, "NONE");
+    if (acts.equals("NONE") || acts.isEmpty()) return;
     try {
         Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
         if (Build.VERSION.SDK_INT >= 26) v.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE));
         else v.vibrate(40);
     } catch (Exception ignored) {}
-    runItem("act:" + act);
+
+    final String[] arr = acts.split(",");
+    for (int i = 0; i < arr.length; i++) {
+        final String act = arr[i].trim();
+        if (act.isEmpty()) continue;
+        final long delay = i * 120L;
+        if (delay == 0) runItem("act:" + act);
+        else new Handler(Looper.getMainLooper()).postDelayed(() -> runItem("act:" + act), delay);
+    }
 }
+
     private void moveToCenterAndOpenMenu() {
         DisplayMetrics dm = getRealMetrics();
         int bSize = prefs.getInt("bubble_size", 120);
