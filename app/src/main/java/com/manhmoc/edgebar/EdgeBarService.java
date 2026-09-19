@@ -588,7 +588,7 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             }
             if ("LAUNCH_APP".equals(act)) {
                 String pkg = i.getStringExtra("launch_pkg");
-                if (pkg != null && !pkg.isEmpty()) {
+                if (pkg != null && !pkg.isEmpty() && !launchWithBlacklistRevoke(pkg)) {
                     try {
                         Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
                         if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
@@ -1634,45 +1634,32 @@ private String findBlacklistedPkgInWindows(String bl) {
     return null;
 }
 
-/**
- * [MỚI] Blacklist tại Lock — Tạm thu hồi Trợ năng cho app Blacklist.
- *
- * Luồng:
- *   1. Lưu flag + pkg vào prefs (nguồn sự thật duy nhất).
- *   2. Bật Watchdog FGS trước (không phụ thuộc vòng đời AccessibilityService).
- *   3. Đợi 300ms để FGS kịp lên foreground notification.
- *   4. Ghi Secure Settings để TẮT Trợ năng — lúc này EdgeBarService tự chết,
- *      nhưng Watchdog FGS vẫn sống độc lập và sẽ tự bật lại Trợ năng khi app đóng.
- *
- * Zero chi phí khi tính năng không được bật (chỉ 1 lệnh đọc prefs ở caller).
- */
-// MỚI
 private void triggerBlacklistLockRevokeAcc(String pkg) {
-    android.util.Log.d("EB_BLWD", "TRIGGER pkg=" + pkg);
     if (pkg == null || pkg.isEmpty()) return;
-
-    pauseAllOverlaysSync(); // ẩn bar/corner tức thì, không qua Broadcast
-
-    prefs.edit()
-        .putBoolean("blacklist_lock_active", true)
-        .putString("blacklist_lock_pkg", pkg)
-        .putLong("blacklist_lock_start_ms", System.currentTimeMillis())
-        .apply();
-
-    // Watchdog tự tắt Trợ năng SAU KHI đã lên FGS. Nếu không khởi động được
-    // thì TUYỆT ĐỐI không tắt Trợ năng (tránh kẹt vĩnh viễn).
-    try {
-        Intent wd = new Intent(this, BlacklistLockWatchdogService.class);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(wd);
-        else startService(wd);
-    } catch (Exception e) {
-        prefs.edit()
-            .putBoolean("blacklist_lock_active", false)
-            .remove("blacklist_lock_pkg")
-            .remove("blacklist_lock_start_ms")
-            .apply();
-        updateVisibility();
+    pauseAllOverlaysSync(); // ẩn bar/corner tức thì
+    // true = app Blacklist ĐÃ ở foreground (đường phản ứng)
+    if (!BlacklistLockWatchdogService.begin(this, pkg, true)) {
+        if (!prefs.getBoolean("blacklist_lock_active", false)) updateVisibility();
     }
+}
+
+/** Cử chỉ mở app Blacklist khi đang khoá: tắt Trợ năng TRƯỚC rồi mới mở app sau 400ms.
+ *  Trả về true nếu đã tự xử lý việc mở app (nơi gọi không mở lần nữa). */
+private boolean launchWithBlacklistRevoke(String pkg) {
+    if (pkg == null || pkg.isEmpty()) return false;
+    if (km == null || !km.isKeyguardLocked()) return false;
+    if (!prefs.getBoolean("blacklist_lock_revoke_acc_en", false)) return false;
+    if (!("," + prefs.getString("blacklist", "") + ",").contains("," + pkg + ",")) return false;
+    final Context app = getApplicationContext(); // giữ lại vì service này sắp bị hệ thống unbind
+    pauseAllOverlaysSync();
+    if (!BlacklistLockWatchdogService.begin(this, pkg, false)) return false;
+    new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+        try {
+            Intent li = app.getPackageManager().getLaunchIntentForPackage(pkg);
+            if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); app.startActivity(li); }
+        } catch (Exception ignored) {}
+    }, 400);
+    return true;
 }
 
 private void triggerBlacklistAutoHomeb() {
@@ -2764,7 +2751,7 @@ private static final int MAX_TRIGGER_DEPTH = 3;
                 }
             } else if (at.equals("LAUNCH_APP")) {
                 String pkg = prefs.getString(key + "_launch_pkg", "");
-                if (!pkg.isEmpty()) {
+                if (!pkg.isEmpty() && !launchWithBlacklistRevoke(pkg)) {
                     try {
                         Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
                         if (li != null) { 

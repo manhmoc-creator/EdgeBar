@@ -25,23 +25,23 @@ import android.util.Log;
 import java.util.LinkedHashSet;
 
 /**
- * Watchdog Blacklist-tại-Lock (bản ổn định):
- *  - CHÍNH service này tắt Trợ năng SAU KHI đã lên FGS -> không bao giờ kẹt Trợ năng ở trạng thái tắt.
- *  - Theo dõi app Blacklist bằng UsageEvents TĂNG DẦN (mỗi lần chỉ query ~0.7s gần nhất, không quét lại 4s).
- *  - Chỉ khôi phục khi: (a) app đã rời đi 2 lần poll liên tiếp, (b) tắt màn hình và KHÔNG trong cuộc gọi,
- *    (c) quá timeout. Có thời gian giữ tối thiểu để không "nháy rồi khôi phục".
- *  - Khôi phục xong ghi mốc blacklist_lock_restore_ts để EdgeBarService KHÔNG "đá/kill" app.
+ * Watchdog Blacklist-tại-Lock (bản chủ động):
+ *  - begin(): gọi từ EdgeBarService / NotificationListener / cử chỉ -> bật FGS rồi TẮT Trợ năng NGAY.
+ *  - pkgAlreadyForeground=false (cuộc gọi đến, cử chỉ mở app): app CHƯA hiện -> chỉ coi là "đã rời"
+ *    khi app từng hiện rồi biến mất, hoặc quá APP_APPEAR_TIMEOUT_MS mà không hiện.
+ *  - Khôi phục Trợ năng khi: app đã rời (2 lần poll liên tiếp) / tắt màn hình mà không trong cuộc gọi / timeout.
  */
 public class BlacklistLockWatchdogService extends Service {
 
     private static final String TAG = "EB_BLWD";
     private static final long POLL_INTERVAL_MS = 700;
-    private static final long POLL_INTERVAL_SCREEN_OFF_MS = 3000;   // màn tắt: poll thưa để tiết kiệm pin
-    private static final long MIN_HOLD_MS = 2500;                   // giữ tối thiểu, chống "nháy"
-    private static final int  LEFT_CONFIRM_POLLS = 2;               // phải "đã rời app" 2 lần liên tiếp
+    private static final long POLL_INTERVAL_SCREEN_OFF_MS = 3000;
+    private static final long MIN_HOLD_MS = 2500;
+    private static final int  LEFT_CONFIRM_POLLS = 2;
     private static final long MAX_ACTIVE_MS = 10 * 60 * 1000L;
-    private static final long MAX_ACTIVE_CALL_MS = 3 * 60 * 60 * 1000L; // đang gọi: cho phép rất lâu
-    private static final long NO_USAGE_PERM_MAX_MS = 90 * 1000L;    // chưa cấp Usage Access: chỉ giữ 90s
+    private static final long MAX_ACTIVE_CALL_MS = 3 * 60 * 60 * 1000L;
+    private static final long NO_USAGE_PERM_MAX_MS = 90 * 1000L;
+    private static final long APP_APPEAR_TIMEOUT_MS = 20 * 1000L; // chờ app hiện (đổ chuông / chờ mở khoá)
     private static final int NOTIF_ID = 97;
     private static final String CHANNEL_ID = "eb_bl_lock_watchdog";
 
@@ -53,15 +53,16 @@ public class BlacklistLockWatchdogService extends Service {
     private String targetPkg = "";
     private long startMs;
     private long lastQueryMs;
-    private long targetFgTs, targetBgTs, otherFgTs;
+    private boolean seenFgAtStart = true;
+    private boolean everSawKeepFg = false;
     private int leftStreak = 0;
     private long ignoreLeftUntilMs = 0;
     private boolean restoreDone = false;
     private boolean disabledByUs = false;
     private boolean receiverRegistered = false;
     public static volatile boolean isRunning = false;
-private final java.util.Set<String> keepPkgs = new java.util.HashSet<>(); // mọi app thuộc "phiên" Blacklist (Blacklist + Dialer/Telecom)
-private final java.util.Set<String> fgKeep = new java.util.HashSet<>();   // app trong keepPkgs đang ở foreground
+    private final java.util.Set<String> keepPkgs = new java.util.HashSet<>();
+    private final java.util.Set<String> fgKeep = new java.util.HashSet<>();
 
     private final Runnable pollRunnable = new Runnable() {
         @Override public void run() { poll(); }
@@ -71,7 +72,6 @@ private final java.util.Set<String> fgKeep = new java.util.HashSet<>();   // app
         @Override public void onReceive(Context c, Intent i) {
             if (handler == null || restoreDone) return;
             if (Intent.ACTION_SCREEN_ON.equals(i.getAction())) {
-                // Màn vừa sáng lại: cho app kịp resume, tránh đọc nhầm trạng thái "background"
                 ignoreLeftUntilMs = System.currentTimeMillis() + 1500;
                 leftStreak = 0;
             }
@@ -80,10 +80,61 @@ private final java.util.Set<String> fgKeep = new java.util.HashSet<>();   // app
         }
     };
 
+    // ==================== API DÙNG CHUNG ====================
+    /** Bắt đầu phiên revoke. Trả về false nếu đang có phiên khác hoặc không khởi động được FGS. */
+    public static boolean begin(Context c, String pkg, boolean pkgAlreadyForeground) {
+        if (pkg == null || pkg.isEmpty()) return false;
+        SharedPreferences p = c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
+        long now = System.currentTimeMillis();
+        if (p.getBoolean("blacklist_lock_active", false)
+                && (isRunning || now - p.getLong("blacklist_lock_start_ms", 0) < 5000)) return false;
+
+        p.edit().putBoolean("blacklist_lock_active", true)
+            .putString("blacklist_lock_pkg", pkg)
+            .putLong("blacklist_lock_start_ms", now)
+            .putBoolean("blacklist_lock_seen_fg", pkgAlreadyForeground)
+            .apply();
+        try {
+            Intent wd = new Intent(c, BlacklistLockWatchdogService.class);
+            if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(wd); else c.startService(wd);
+        } catch (Exception e) {
+            // Không bật được watchdog -> TUYỆT ĐỐI không tắt Trợ năng (tránh kẹt vĩnh viễn)
+            p.edit().putBoolean("blacklist_lock_active", false)
+                .remove("blacklist_lock_pkg").remove("blacklist_lock_start_ms")
+                .remove("blacklist_lock_seen_fg").apply();
+            return false;
+        }
+        revokeAccessibilityNow(c); // tắt NGAY, không chờ service khởi động xong -> thắng cuộc đua với app
+        return true;
+    }
+
+    /** Gỡ EdgeBarService khỏi danh sách Trợ năng. Idempotent. */
+    public static void revokeAccessibilityNow(Context c) {
+        try {
+            String mySvc = c.getPackageName() + "/" + EdgeBarService.class.getName();
+            String cur = Settings.Secure.getString(c.getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (cur == null) cur = "";
+            if (cur.contains(mySvc)) {
+                LinkedHashSet<String> set = new LinkedHashSet<>();
+                for (String part : cur.split(":")) {
+                    String t = part.trim();
+                    if (!t.isEmpty() && !t.equals(mySvc)) set.add(t);
+                }
+                Settings.Secure.putString(c.getContentResolver(),
+                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, TextUtils.join(":", set));
+                // Không còn dịch vụ nào -> báo tắt hẳn để app "ghét trợ năng" không đọc nhầm cờ cũ
+                if (set.isEmpty()) Settings.Secure.putString(c.getContentResolver(),
+                    Settings.Secure.ACCESSIBILITY_ENABLED, "0");
+            }
+        } catch (Exception e) { Log.w(TAG, "revoke acc failed", e); }
+        try { c.stopService(new Intent(c, AccessibleHomeService.class)); } catch (Exception ignored) {}
+    }
+
     @Override public IBinder onBind(Intent i) { return null; }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        if (handler != null) return START_NOT_STICKY; // đã chạy rồi
+        if (handler != null) return START_NOT_STICKY;
 
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
         pm = (PowerManager) getSystemService(POWER_SERVICE);
@@ -98,27 +149,27 @@ private final java.util.Set<String> fgKeep = new java.util.HashSet<>();   // app
         }
 
         startMs = prefs.getLong("blacklist_lock_start_ms", System.currentTimeMillis());
-        targetFgTs = startMs;      // coi như app đang foreground từ lúc kích hoạt
-        targetBgTs = 0;
-        otherFgTs = 0;
+        seenFgAtStart = prefs.getBoolean("blacklist_lock_seen_fg", true);
+        everSawKeepFg = seenFgAtStart;
         lastQueryMs = startMs - 3000;
         isRunning = true;
-keepPkgs.clear(); fgKeep.clear();
-keepPkgs.add(targetPkg);
-fgKeep.add(targetPkg); // coi như đang foreground từ lúc kích hoạt
-for (String p : prefs.getString("blacklist", "").split(",")) {
-    String t = p.trim();
-    if (!t.isEmpty()) keepPkgs.add(t);
-}
-try {
-    android.telecom.TelecomManager tm = (android.telecom.TelecomManager) getSystemService(TELECOM_SERVICE);
-    String d = tm != null ? tm.getDefaultDialerPackage() : null;
-    if (d != null) keepPkgs.add(d);
-} catch (Exception ignored) {}
-keepPkgs.add("com.android.server.telecom");
-keepPkgs.add("com.android.incallui");
-keepPkgs.add("com.google.android.dialer");
-keepPkgs.add("com.android.dialer");
+
+        keepPkgs.clear(); fgKeep.clear();
+        keepPkgs.add(targetPkg);
+        if (seenFgAtStart) fgKeep.add(targetPkg); // reactive: app đang ở foreground thật
+        for (String p : prefs.getString("blacklist", "").split(",")) {
+            String t = p.trim();
+            if (!t.isEmpty()) keepPkgs.add(t);
+        }
+        try {
+            android.telecom.TelecomManager tm = (android.telecom.TelecomManager) getSystemService(TELECOM_SERVICE);
+            String d = tm != null ? tm.getDefaultDialerPackage() : null;
+            if (d != null) keepPkgs.add(d);
+        } catch (Exception ignored) {}
+        keepPkgs.add("com.android.server.telecom");
+        keepPkgs.add("com.android.incallui");
+        keepPkgs.add("com.google.android.dialer");
+        keepPkgs.add("com.android.dialer");
 
         handler = new Handler(Looper.getMainLooper());
 
@@ -131,9 +182,9 @@ keepPkgs.add("com.android.dialer");
             receiverRegistered = true;
         } catch (Exception ignored) {}
 
-        // FGS đã lên -> mới an toàn để thu hồi Trợ năng
-        disableAccessibilityNow();
-        Log.d(TAG, "START target=" + targetPkg);
+        revokeAccessibilityNow(this); // idempotent (begin() thường đã tắt rồi)
+        disabledByUs = true;
+        Log.d(TAG, "START target=" + targetPkg + " seenFg=" + seenFgAtStart);
 
         handler.postDelayed(pollRunnable, POLL_INTERVAL_MS);
         return START_NOT_STICKY;
@@ -151,17 +202,15 @@ keepPkgs.add("com.android.dialer");
 
         if (elapsed >= MIN_HOLD_MS) {
             if (!interactive) {
-                // Tắt màn: nếu KHÔNG phải đang gọi/đổ chuông (áp tai làm tắt màn) -> trả Lock về ngay
                 if (!inCall) { finishAndRestore("screen_off"); return; }
             } else if (hasUsageAccess()) {
-    refreshUsageState(now);
-    boolean left = now >= ignoreLeftUntilMs && hasLeftTarget();
-    if (inCall) left = false; // đang đổ chuông / đang gọi: TUYỆT ĐỐI không trả Trợ năng
-    leftStreak = left ? leftStreak + 1 : 0;
-    Log.d(TAG, "poll inCall=" + inCall + " fgKeep=" + fgKeep + " left=" + left + " streak=" + leftStreak);
-    if (leftStreak >= LEFT_CONFIRM_POLLS) { finishAndRestore("app_left"); return; }
-} else if (elapsed > NO_USAGE_PERM_MAX_MS) {
-
+                refreshUsageState(now);
+                boolean left = now >= ignoreLeftUntilMs && hasLeftTarget(now);
+                if (inCall) left = false; // đang đổ chuông/đang gọi: tuyệt đối không trả Trợ năng
+                leftStreak = left ? leftStreak + 1 : 0;
+                Log.d(TAG, "poll inCall=" + inCall + " fgKeep=" + fgKeep + " seen=" + everSawKeepFg + " streak=" + leftStreak);
+                if (leftStreak >= LEFT_CONFIRM_POLLS) { finishAndRestore("app_left"); return; }
+            } else if (elapsed > NO_USAGE_PERM_MAX_MS) {
                 finishAndRestore("no_usage_permission");
                 return;
             }
@@ -169,38 +218,41 @@ keepPkgs.add("com.android.dialer");
         handler.postDelayed(pollRunnable, interactive ? POLL_INTERVAL_MS : POLL_INTERVAL_SCREEN_OFF_MS);
     }
 
-    /** Chỉ đọc sự kiện MỚI kể từ lần poll trước — rẻ hơn hẳn việc quét lại cả 4 giây mỗi lần. */
     private void refreshUsageState(long now) {
-    try {
-        UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-        UsageEvents events = usm.queryEvents(lastQueryMs, now);
-        UsageEvents.Event ev = new UsageEvents.Event();
-        while (events.hasNextEvent()) {
-            events.getNextEvent(ev);
-            if (ev.getTimeStamp() <= startMs) continue;
-            String p = ev.getPackageName();
-            if (p == null) continue;
-            int type = ev.getEventType();
-            boolean keep = keepPkgs.contains(p);
-            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                if (keep) fgKeep.add(p);
-                else if (!isIgnorablePkg(p)) fgKeep.clear(); // app lạ chiếm foreground -> đã rời phiên
-            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND) {
-                if (keep) fgKeep.remove(p);
+        try {
+            UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+            UsageEvents events = usm.queryEvents(lastQueryMs, now);
+            UsageEvents.Event ev = new UsageEvents.Event();
+            // app chưa hiện lúc bắt đầu: nhận cả sự kiện foreground xảy ra ngay TRƯỚC startMs (chạy đua)
+            long floor = startMs - (seenFgAtStart ? 0 : 2500);
+            while (events.hasNextEvent()) {
+                events.getNextEvent(ev);
+                if (ev.getTimeStamp() <= floor) continue;
+                String p = ev.getPackageName();
+                if (p == null) continue;
+                int type = ev.getEventType();
+                boolean keep = keepPkgs.contains(p);
+                if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                    if (keep) { fgKeep.add(p); everSawKeepFg = true; }
+                    else if (!isIgnorablePkg(p)) fgKeep.clear();
+                } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+                    if (keep) fgKeep.remove(p);
+                }
             }
-        }
-        lastQueryMs = now - 300;
-    } catch (Exception ignored) {}
-}
+            lastQueryMs = now - 300;
+        } catch (Exception ignored) {}
+    }
 
-/** Đã rời khi KHÔNG còn app nào của phiên (Blacklist/Dialer/Tammi) ở foreground. */
-private boolean hasLeftTarget() { return fgKeep.isEmpty(); }
+    /** Đã rời khi: từng hiện rồi không còn app nào của phiên ở foreground; hoặc quá hạn mà app không hề hiện. */
+    private boolean hasLeftTarget(long now) {
+        if (everSawKeepFg) return fgKeep.isEmpty();
+        return fgKeep.isEmpty() && (now - startMs) > APP_APPEAR_TIMEOUT_MS;
+    }
 
-private boolean isIgnorablePkg(String p) {
-    return p.equals(getPackageName()) || p.equals("android")
-        || p.contains("systemui") || p.contains("inputmethod");
-}
-
+    private boolean isIgnorablePkg(String p) {
+        return p.equals(getPackageName()) || p.equals("android")
+            || p.contains("systemui") || p.contains("inputmethod");
+    }
 
     private boolean hasUsageAccess() {
         try {
@@ -210,42 +262,18 @@ private boolean isIgnorablePkg(String p) {
         } catch (Exception e) { return false; }
     }
 
-    // ==================== TẮT / BẬT TRỢ NĂNG ====================
-    private void disableAccessibilityNow() {
-        try {
-            String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
-            String cur = Settings.Secure.getString(getContentResolver(),
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            if (cur == null) cur = "";
-            if (cur.contains(mySvc)) {
-                LinkedHashSet<String> set = new LinkedHashSet<>();
-                for (String part : cur.split(":")) {
-                    String t = part.trim();
-                    if (!t.isEmpty() && !t.equals(mySvc)) set.add(t);
-                }
-                Settings.Secure.putString(getContentResolver(),
-                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, TextUtils.join(":", set));
-            }
-            disabledByUs = true;
-        } catch (Exception e) {
-            Log.w(TAG, "disable acc failed", e);
-        }
-        // Homacc gắn liền vòng đời Trợ năng: dừng luôn để đỡ tốn RAM/pin (onServiceConnected sẽ bật lại)
-        try { stopService(new Intent(this, AccessibleHomeService.class)); } catch (Exception ignored) {}
-    }
-
     private void finishAndRestore(String reason) {
         if (restoreDone) return;
         restoreDone = true;
         if (handler != null) handler.removeCallbacks(pollRunnable);
         Log.d(TAG, "RESTORE reason=" + reason);
 
-        // Ghi mốc TRƯỚC khi bật Trợ năng để EdgeBarService biết đây là lần khôi phục nội bộ -> không "đá" app
         prefs.edit()
             .putLong("blacklist_lock_restore_ts", System.currentTimeMillis())
             .putBoolean("blacklist_lock_active", false)
             .remove("blacklist_lock_pkg")
             .remove("blacklist_lock_start_ms")
+            .remove("blacklist_lock_seen_fg")
             .apply();
 
         try {
@@ -297,7 +325,6 @@ private boolean isIgnorablePkg(String p) {
             try { unregisterReceiver(screenReceiver); } catch (Exception ignored) {}
             receiverRegistered = false;
         }
-        // Bị OS kill giữa chừng mà ĐÃ tắt Trợ năng -> bắt buộc trả lại
         if (disabledByUs && !restoreDone) finishAndRestore("service_destroyed");
         super.onDestroy();
     }

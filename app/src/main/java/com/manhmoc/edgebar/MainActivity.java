@@ -1369,7 +1369,7 @@ if (Build.VERSION.SDK_INT >= 29 &&
 
         // --- NOTIFICATION LISTENER ACCESS (để dùng PLAY_LAST_MUSIC) ---
         btnNotifListener = new Button(this);
-        btnNotifListener.setText("⚠️ CẤP QUYỀN TRUY CẬP THÔNG BÁO\nĐể phát nhạc gần nhất từ Files by Google");
+        btnNotifListener.setText("⚠️ CẤP QUYỀN TRUY CẬP THÔNG BÁO\nĐể nhận cuộc gọi app Blacklist (Tammi...) ở màn khoá");
         btnNotifListener.setBackground(getRounded("#009688", 25f));
         btnNotifListener.setTextColor(Color.WHITE);
         LinearLayout.LayoutParams notifLp = new LinearLayout.LayoutParams(-1, -2);
