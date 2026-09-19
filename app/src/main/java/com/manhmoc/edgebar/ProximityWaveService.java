@@ -124,7 +124,7 @@ public class ProximityWaveService extends Service {
             getSystemService(NotificationManager.class).createNotificationChannel(c);
             Notification n = new Notification.Builder(this, cid)
                 .setContentTitle("Proximity")
-                .setSmallIcon(android.R.drawable.ic_menu_compass)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setOngoing(true).build();
             if (Build.VERSION.SDK_INT >= 34)
                 startForeground(96, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);

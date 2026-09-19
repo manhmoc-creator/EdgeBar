@@ -388,6 +388,7 @@ private long lastLockCheckMs = 0;
 private static final long LOCK_CHECK_THROTTLE_MS = 150; // riêng cho LockList, không bị nuốt bởi throttle chung
 private String lastEventPkg = "";
 private boolean lastIsKbd_cache = false;
+private String lastLockBlCheckedPkg = ""; // [MỚI] tránh check lại cùng 1 app nhiều lần liên tiếp
 private int cachedKbdHeight = 0;
 private static final int KBD_HEIGHT_CHANGE_THRESHOLD = 20;
 private boolean lastIsBl_cache = false;
@@ -550,13 +551,11 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
 } else if ("com.manhmoc.edgebar.QR_SCAN_STATE".equals(act)) {
     qrScannerOverlayActive = i.getBooleanExtra("open", false);
     applyLockGateInstant();
+// MỚI
 } else if ("com.manhmoc.edgebar.PAUSE_WM_OPS".equals(act)) {
-    removeAllIconLayers();
-    for (int j=0;j<12;j++) if (bars[j]!=null) bars[j].setVisibility(View.GONE);
-    for (int j=0;j<4;j++) if (corners[j]!=null) corners[j].setVisibility(View.GONE);
-    for (int j=0;j<12;j++) if (accHomeBars[j]!=null) accHomeBars[j].setVisibility(View.GONE);
-    for (int j=0;j<4;j++) if (accHomeCorners[j]!=null) accHomeCorners[j].setVisibility(View.GONE);
+    pauseAllOverlaysSync();
 } else if ("com.manhmoc.edgebar.RESUME_WM_OPS".equals(act)) {
+
     updateVisibility();
 } else if (VoiceRecorderService.TICK_ACTION.equals(act)) {
     String state = i.getStringExtra("state");
@@ -1362,13 +1361,18 @@ if ((eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
     }
    // [MỚI] Blacklist tại Lock — phát hiện app Blacklist mở khi đang khoá máy
 // thì tạm thu hồi Trợ năng (case Viettel Tammi).
+// MỚI
+// [TỐI ƯU] Bỏ qua ngay nếu vẫn là app y hệt lần kiểm tra trước — WINDOWS_CHANGED
+// có thể bắn liên tục cho cùng 1 app đang mở, tránh split(",")+contains() lặp
+// vô ích trên mỗi sự kiện đó (đỡ CPU/pin, đặc biệt lúc dồn sự kiện vì cuộc gọi).
 if (!pName.isEmpty() && km != null && km.isKeyguardLocked()
-    && prefs.getBoolean("blacklist_lock_revoke_acc_en", false)) {
+    && prefs.getBoolean("blacklist_lock_revoke_acc_en", false)
+    && !prefs.getBoolean("blacklist_lock_active", false)
+    && !pName.equals(lastLockBlCheckedPkg)) {
+    lastLockBlCheckedPkg = pName;
     String blCheck = prefs.getString("blacklist", "");
     boolean isBlNow = !blCheck.isEmpty() && ("," + blCheck + ",").contains("," + pName + ",");
-    if (isBlNow && !prefs.getBoolean("blacklist_lock_active", false)) {
-        triggerBlacklistLockRevokeAcc(pName);
-    }
+    if (isBlNow) triggerBlacklistLockRevokeAcc(pName);
 }
 
     if (nowMs - lastEventMs < EVENT_THROTTLE_MS) return;
@@ -1597,13 +1601,13 @@ android.app.usage.UsageEvents events = usm.queryEvents(now - 24 * 60 * 60 * 1000
  *
  * Zero chi phí khi tính năng không được bật (chỉ 1 lệnh đọc prefs ở caller).
  */
+// MỚI
 private void triggerBlacklistLockRevokeAcc(String pkg) {
     if (pkg == null || pkg.isEmpty()) return;
 
-    // [MỚI] Ẩn NGAY Bar/Corner/Icon layer — tái dùng đúng cơ chế PAUSE_WM_OPS đã
-    // có sẵn cho lúc ToggleReceiver bật/tắt Trợ năng. App Blacklist hiện ra tức thì,
-    // mượt như Homeb, không phải đợi 300ms tắt Trợ năng thật ở dưới mới hết bị che.
-    sendBroadcast(new Intent("com.manhmoc.edgebar.PAUSE_WM_OPS"));
+    // [FIX] Gọi trực tiếp — xem giải thích ở pauseAllOverlaysSync(). Ẩn tức thời,
+    // không còn phụ thuộc độ trễ của hệ thống Broadcast lúc máy đang bận.
+    pauseAllOverlaysSync();
 
     prefs.edit()
         .putBoolean("blacklist_lock_active", true)
@@ -2511,6 +2515,19 @@ private void syncHomaccPreviewState() {
         if (!AccessibleHomeService.isRunning && isHomaccDrawn) removeAccessibleHome();
     }
 }
+/** [TỐI ƯU] Tách riêng để gọi TRỰC TIẾP thay vì sendBroadcast tới chính
+ *  EdgeBarService — broadcast dù "gửi cho bản thân" vẫn tốn 1 lượt Binder
+ *  round-trip qua ActivityManager, dễ bị trễ đúng lúc hệ thống đang bận
+ *  (VD: cuộc gọi đến dồn dập sự kiện). Gọi thẳng hàm = ẩn overlay ngay 0ms,
+ *  đồng thời đỡ tốn pin vì bớt hẳn 1 giao dịch IPC. */
+private void pauseAllOverlaysSync() {
+    removeAllIconLayers();
+    for (int j=0;j<12;j++) if (bars[j]!=null) bars[j].setVisibility(View.GONE);
+    for (int j=0;j<4;j++) if (corners[j]!=null) corners[j].setVisibility(View.GONE);
+    for (int j=0;j<12;j++) if (accHomeBars[j]!=null) accHomeBars[j].setVisibility(View.GONE);
+    for (int j=0;j<4;j++) if (accHomeCorners[j]!=null) accHomeCorners[j].setVisibility(View.GONE);
+}
+
     private void updateVisibility() {
     syncHomaccPreviewState(); // THÊM DÒNG NÀY — đồng bộ preview Homacc, zero cost nếu không đổi
 boolean isPreview = prefs.getBoolean("preview_lock", false);
