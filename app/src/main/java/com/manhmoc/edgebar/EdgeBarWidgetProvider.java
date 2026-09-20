@@ -137,7 +137,7 @@ public class EdgeBarWidgetProvider extends AppWidgetProvider {
               .remove("widget_" + id + "_tap_shortcut_id")
               .remove("widget_" + id + "_dtap_shortcut_id")
               .remove("widget_" + id + "_vib")
-              .remove("widget_" + id + "_snd");
+              .remove("widget_" + id + "_snd")
               .remove("widget_" + id + "_anim");
         }
         ed.apply();
