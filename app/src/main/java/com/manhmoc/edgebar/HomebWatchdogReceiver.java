@@ -43,10 +43,16 @@ public class HomebWatchdogReceiver extends BroadcastReceiver {
     }
 
     private boolean isAccEnabled(Context c) {
-        String s = android.provider.Settings.Secure.getString(c.getContentResolver(),
-            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        return s != null && s.contains(c.getPackageName() + "/" + EdgeBarService.class.getName());
+    if (EdgeBarService.isConnected) return true;
+    String s = android.provider.Settings.Secure.getString(c.getContentResolver(),
+        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+    if (s == null) return false;
+    android.content.ComponentName me = new android.content.ComponentName(c, EdgeBarService.class);
+    for (String part : s.split(":")) {
+        if (me.equals(android.content.ComponentName.unflattenFromString(part.trim()))) return true;
     }
+    return false;
+}
 
     /** Kiểm tra gần như tức thì (300ms) — gọi ngay khi vừa phát hiện Accessibility tắt. */
     public static void scheduleImmediate(Context c) {

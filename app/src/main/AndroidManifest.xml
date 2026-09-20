@@ -110,7 +110,6 @@
 <service android:name=".ScreenRecorderService" android:exported="false"
     android:foregroundServiceType="mediaProjection|mediaPlayback" />
 <service android:name=".LockEbService" android:exported="false"
-    android:process=":lockeb"
     android:foregroundServiceType="specialUse">
     <property
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"

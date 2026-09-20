@@ -2,7 +2,6 @@ package com.manhmoc.edgebar;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.os.Handler;
@@ -10,20 +9,22 @@ import android.os.Looper;
 import android.os.SystemClock;
 
 /**
- * Âm chạm ĐỘC LẬP — dùng ToneGenerator route qua STREAM_MUSIC để không bị
- * Do Not Disturb / chặn sonification của ROM làm câm.
- *
- * V19.12.3.6.44 FIX:
- *  - Bỏ AudioTrack MODE_STATIC (stop() throw IllegalStateException khi track
- *    chưa từng play -> câm vĩnh viễn dù vol=100).
- *  - ToneGenerator có sẵn cache nội bộ, chỉ cần setVolume() + startTone(),
- *    không phải write/reload PCM thủ công.
- *  - Auto-release sau 30s không dùng để nhả codec.
+ * V19.12.3.6.44 FIX — Âm chạm độc lập route qua STREAM_MUSIC:
+ *  (1) KHÔNG dùng tg.setVolume() — API đó KHÔNG tồn tại trên ToneGenerator,
+ *      đây là nguyên nhân lỗi build "cannot find symbol method setVolume(int)".
+ *      Muốn đổi volume -> PHẢI release() rồi new ToneGenerator() lại.
+ *  (2) Đổi tone từ TONE_PROP_BEEP (sắc, "bíp") sang TONE_PROP_ACK (mềm, "tách"
+ *      nhẹ như soft-key của điện thoại cũ) — nghe êm hơn hẳn.
+ *  (3) Rút ngắn TONE_MS từ 30ms -> 18ms, volume mặc định 40 -> 25 để "mềm chút".
+ *  (4) Cache ToneGenerator theo giá trị volume đã tạo — chỉ release/new khi
+ *      user thực sự đổi slider. Bình thường = chỉ startTone() = 0 chi phí thêm.
+ *  (5) Auto-release sau 30s idle để nhả codec — Zero RAM khi không dùng.
  */
 public class TouchSoundHelper {
     private static final long MIN_GAP_MS = 35;         // chống double-fire
     private static final long IDLE_RELEASE_MS = 30_000;
-    private static final int TONE_MS = 30;             // độ dài tiếng "tách"
+    private static final int TONE_MS = 18;             // [FIX] ngắn hơn 30 -> 18ms
+    private static final int DEFAULT_VOL = 25;         // [FIX] mặc định dịu hơn 40
 
     private static ToneGenerator tg;
     private static int lastVol = -1;
@@ -32,16 +33,15 @@ public class TouchSoundHelper {
     private static final Runnable idleRelease = TouchSoundHelper::release;
 
     public static synchronized void play(Context c, SharedPreferences prefs) {
-        int vol = prefs.getInt("touch_sound_vol", 40);
+        int vol = prefs.getInt("touch_sound_vol", DEFAULT_VOL);
         if (vol <= 0) return;
 
         long now = SystemClock.elapsedRealtime();
         if (now - lastPlayMs < MIN_GAP_MS) return;
         lastPlayMs = now;
+
         try {
-            // ToneGenerator KHÔNG có setVolume() — muốn đổi âm lượng BẮT BUỘC
-            // phải release() instance cũ rồi new lại với volume mới.
-            // Đây là API thật của Android (constructor là nơi duy nhất nhận volume).
+            // [FIX] Không còn setVolume() — chỉ tái tạo khi volume thực sự đổi.
             if (tg == null || vol != lastVol) {
                 if (tg != null) {
                     try { tg.release(); } catch (Exception ignored) {}
@@ -50,7 +50,9 @@ public class TouchSoundHelper {
                 tg = new ToneGenerator(AudioManager.STREAM_MUSIC, clampVol(vol));
                 lastVol = vol;
             }
-            tg.startTone(ToneGenerator.TONE_PROP_BEEP, TONE_MS);
+            // [FIX] TONE_PROP_ACK: tiếng "tách" mềm của soft-key, KHÔNG phải
+            // TONE_PROP_BEEP (bíp sắc như lỗi máy). Đây là nguyên nhân "nghe sắc".
+            tg.startTone(ToneGenerator.TONE_PROP_ACK, TONE_MS);
 
             h.removeCallbacks(idleRelease);
             h.postDelayed(idleRelease, IDLE_RELEASE_MS);
@@ -68,7 +70,6 @@ public class TouchSoundHelper {
         }
     }
 
-    /** ToneGenerator nhận volume trong [0, 100], không phải [0.0, 1.0]. */
     private static int clampVol(int v) {
         return Math.max(1, Math.min(100, v));
     }

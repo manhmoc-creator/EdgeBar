@@ -21,7 +21,7 @@ import java.util.*;
 import java.util.function.Supplier; 
 
 public class AssistiveBubbleEngine {
-    private Context ctx; private WindowManager wm; private SharedPreferences prefs; private boolean isAnyMode;
+    private Context ctx; private WindowManager wm; private SharedPreferences prefs; private boolean isAnyMode; private boolean showLocked = false; 
     private View bubbleView; private WindowManager.LayoutParams bubbleLp;
         private FrameLayout menuOverlay; private WindowManager.LayoutParams menuLp;
     private LinearLayout panelCard;
@@ -170,6 +170,10 @@ private boolean isCircleModeActive() { return prefs.getBoolean("bubble_circle_en
     public AssistiveBubbleEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode) {
         this.ctx = ctx; this.wm = wm; this.prefs = prefs; this.isAnyMode = isAnyMode;
     }
+       public AssistiveBubbleEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode, boolean showLocked) {
+       this(ctx, wm, prefs, isAnyMode);
+       this.showLocked = showLocked;
+   }
 
     public void rebuild() {
     boolean want = prefs.getBoolean("bubble_en", false) || prefs.getBoolean("bubble_circle_en", false);
@@ -363,7 +367,7 @@ bg.setColor(Color.argb(alphaByte, 32, 33, 36)); // nền #202124
         int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         bubbleLp = new WindowManager.LayoutParams(size, size, wmType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+            | ((isAnyMode || showLocked) ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
             PixelFormat.TRANSLUCENT);
         bubbleLp.gravity = Gravity.TOP | Gravity.LEFT;
         DisplayMetrics dmInit = ctx.getResources().getDisplayMetrics();
@@ -531,17 +535,22 @@ private boolean hasDtapRule() {
             if (!prefs.getBoolean("prule_" + rId + "_en", true)) continue;
             String g = prefs.getString("prule_" + rId + "_gestures", "");
             if (g.contains(gesture)) {
-                if (prefs.getBoolean("prule_" + rId + "_vib", true)) {
-                    try {
-                        Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
-                        if (Build.VERSION.SDK_INT >= 26) v.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE));
-                        else v.vibrate(30);
-                    } catch (Exception ignored) {}
-                }
-                if (prefs.getBoolean("prule_" + rId + "_anim", true)) {
-                    Intent anim = new Intent("com.manhmoc.edgebar.TEST_ANIM");
-                    anim.setPackage(ctx.getPackageName()); ctx.sendBroadcast(anim);
-                }
+            if (prefs.getBoolean("prule_" + rId + "_vib", true)) {
+    try {
+        Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+        if (Build.VERSION.SDK_INT >= 26) v.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE));
+        else v.vibrate(30);
+    } catch (Exception ignored) {}
+}
+// [FIX] Bổ sung âm chạm — trước đây Bubble hoàn toàn thiếu nhánh này
+// khiến tick "Âm chạm" trong editor Bong bóng không có tác dụng gì.
+if (prefs.getBoolean("prule_" + rId + "_snd", false)) {
+    TouchSoundHelper.play(ctx, prefs);
+}
+if (prefs.getBoolean("prule_" + rId + "_anim", true)) {
+    Intent anim = new Intent("com.manhmoc.edgebar.TEST_ANIM");
+    anim.setPackage(ctx.getPackageName()); ctx.sendBroadcast(anim);
+}
                 if (prefs.getBoolean("prule_" + rId + "_jump_on", true)) {
                     int jumpDist = 120;
                     ValueAnimator jump = ValueAnimator.ofFloat(0f, 1f, 0f);
@@ -658,7 +667,7 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
             prefs.getInt("bubble_bg_w", 800), WindowManager.LayoutParams.WRAP_CONTENT, wmType,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+            | ((isAnyMode || showLocked) ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
             PixelFormat.TRANSLUCENT);
         
         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
@@ -1454,7 +1463,7 @@ private void fireQsTile(String tileId) {
     circleLp = new WindowManager.LayoutParams(size, size, wmType,
         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+        | ((isAnyMode || showLocked) ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
         PixelFormat.TRANSLUCENT);
     circleLp.gravity = Gravity.CENTER;
     circleView.setAlpha(0f);
@@ -1601,7 +1610,7 @@ private void openCircleSearchOverlay() {
     ringSize, ringSize, wmType,
     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
     | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-    | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+    | ((isAnyMode || showLocked) ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
     PixelFormat.TRANSLUCENT);
     circleSearchLp.gravity = Gravity.CENTER;
 

@@ -847,42 +847,21 @@ if (Intent.ACTION_SCREEN_OFF.equals(action)) {
     // Nếu không, lúc SCREEN_ON tự bật lại Trợ năng cho Lock (nhánh dưới) sẽ đụng độ
     // với app Blacklist vẫn còn đứng foreground -> Homacc/Homeb lẫn lộn khi mở khoá
     // lại gần như ngay sau đó.
-    String fgPkg = liveForegroundPkg;
-    if (fgPkg != null && !fgPkg.isEmpty() && prefs.getBoolean("blacklist_auto_homeb_en", false)) {
-        String bl = prefs.getString("blacklist", "");
-        if (!bl.isEmpty() && ("," + bl + ",").contains("," + fgPkg + ",")) {
-            Intent home = new Intent(Intent.ACTION_MAIN);
-            home.addCategory(Intent.CATEGORY_HOME);
-            home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(home);
-        }
-    }
+        if (prefs.getBoolean("blacklist_auto_homeb_en", false) && isBlacklisted(queryForegroundPkgNow()))
+        goHomeNow();
+    if (BlacklistLockWatchdogService.shouldPreempt(prefs))
+        BlacklistLockWatchdogService.beginPreempt(HomescreenService.this);
+
     // [FIX] KHÔNG tự bật lại Trợ năng ở đây nữa — đã dời sang ACTION_SCREEN_ON bên dưới,
     // chỉ bật khi màn BẬT LẠI và đang ở màn khoá, thay vì bật ngay lúc vừa tắt màn.
 
 } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
     startAppLockPolling();
-
-    // [MỚI] Màn vừa bật lại. Nếu máy đang khoá (chưa mở khoá) thì cần Trợ năng/Homacc
-    // để vẽ Lock bar ngay — còn nếu không có khoá thì cứ để Homeb tiếp tục, khỏi bật
-    // Trợ năng làm gì cho tốn thêm 1 lần chuyển đổi vô ích.
-    if (km != null && km.isKeyguardLocked()) {
-        try {
-            String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
-            String cur = android.provider.Settings.Secure.getString(c.getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            if (cur == null) cur = "";
-            if (!cur.contains(mySvc)) {
-                prefs.edit().putBoolean("shortcut_home_on", false).apply();
-                String newVal = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
-                android.provider.Settings.Secure.putString(c.getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
-                android.provider.Settings.Secure.putString(c.getContentResolver(), android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
-                SharedPreferences.Editor ed = prefs.edit();
-                for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
-                for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
-                ed.apply();
-                stopSelf();
-            }
-        } catch (Exception ignored) {}
+    if (km != null && km.isKeyguardLocked() && !prefs.getBoolean("blacklist_lock_active", false)) {
+        final boolean inBl = prefs.getBoolean("blacklist_auto_homeb_en", false)
+            && isBlacklisted(queryForegroundPkgNow());
+        if (inBl) goHomeNow(); // về Home trước, rồi mới bật Trợ năng
+        appLockPollHandler.postDelayed(() -> enableAccForLockNow(c), inBl ? 450 : 0);
     }
 
 } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
@@ -994,6 +973,53 @@ if (Intent.ACTION_SCREEN_OFF.equals(action)) {
             }
         }
     };
+        private boolean isBlacklisted(String pkg) {
+        if (pkg == null || pkg.isEmpty()) return false;
+        String bl = prefs.getString("blacklist", "");
+        return !bl.isEmpty() && ("," + bl + ",").contains("," + pkg + ",");
+    }
+    /** 1 lần query duy nhất khi bật/tắt màn — không polling, không tốn pin. */
+    private String queryForegroundPkgNow() {
+        try {
+            android.app.usage.UsageStatsManager usm = (android.app.usage.UsageStatsManager)
+                getSystemService(Context.USAGE_STATS_SERVICE);
+            long now = System.currentTimeMillis();
+            android.app.usage.UsageEvents evs = usm.queryEvents(now - 3 * 60 * 60 * 1000L, now);
+            android.app.usage.UsageEvents.Event ev = new android.app.usage.UsageEvents.Event();
+            String fg = "";
+            while (evs.hasNextEvent()) {
+                evs.getNextEvent(ev);
+                if (ev.getEventType() == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND)
+                    fg = ev.getPackageName();
+            }
+            return fg;
+        } catch (Exception e) { return ""; }
+    }
+    private void goHomeNow() {
+        try {
+            Intent home = new Intent(Intent.ACTION_MAIN);
+            home.addCategory(Intent.CATEGORY_HOME);
+            home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(home);
+        } catch (Exception ignored) {}
+    }
+    private void enableAccForLockNow(Context c) {
+        try {
+            String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
+            String cur = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (cur == null) cur = "";
+            if (cur.contains(mySvc)) return;
+            prefs.edit().putBoolean("shortcut_home_on", false).apply();
+            Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                cur.isEmpty() ? mySvc : cur + ":" + mySvc);
+            Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, "1");
+            SharedPreferences.Editor ed = prefs.edit();
+            for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
+            for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
+            ed.apply();
+            stopSelf();
+        } catch (Exception ignored) {}
+    }
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         isRunning = true;
@@ -1001,15 +1027,40 @@ if (Intent.ACTION_SCREEN_OFF.equals(action)) {
         return START_STICKY;
     }
 
-    /**
-     * [MỤC 1/3/7] Kiểm tra điều kiện sống còn của service.
-     * Service chỉ cần chạy khi: old Home overlay ON, HOẶC MorseLock ON.
-     * Nếu cả hai đều OFF → tự dừng để giải phóng RAM (Pixel 2XL opt).
-     */
-    private boolean isAccEnabled() {
+
+/**
+ * [FIX MỤC 1 — Watchdog hiểu nhầm Trợ năng đã tắt]
+ * Bản cũ dùng String.contains("pkg/Class") — framework có thể ghi Settings ở dạng
+ * rút gọn "pkg/.Class" (bỏ tên package khỏi phần class), khiến contains() trả về
+ * false dù Trợ năng ĐANG BẬT. Hệ quả: HomebWatchdogReceiver / HomaccWatchdogReceiver
+ * tưởng Acc đã tắt → tự bật Homeb / dừng Homacc giữa chừng.
+ *
+ * [TỐI ƯU PIXEL 2XL — Zero IPC]
+ * Dòng đầu tiên rút ngắn toàn bộ đường đi: nếu EdgeBarService đang connect (biến
+ * static volatile, đọc trực tiếp từ RAM, không IPC, không Settings query) thì biết
+ * chắc chắn Acc đang bật → return true ngay, KHÔNG cần đọc Settings.Secure.getString()
+ * (đây là 1 Binder round-trip qua system_server, tốn CPU/wakeup).
+ * Hàm này được gọi cực kỳ thường xuyên trong updateVisibility() mỗi khi có bất kỳ
+ * sự kiện màn hình/khoá — tiết kiệm được hàng nghìn lượt IPC mỗi ngày.
+ *
+ * Khi Acc thực sự tắt (isConnected = false), mới fallback về đọc Settings và
+ * so sánh bằng ComponentName.unflattenFromString() — xử lý đúng CẢ HAI dạng chuỗi
+ * "pkg/Full.Class" và "pkg/.Class" mà framework có thể ghi.
+ */
+private boolean isAccEnabled() {
+    if (EdgeBarService.isConnected) return true; // fast path: zero IPC
     String s = android.provider.Settings.Secure.getString(getContentResolver(),
         android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-    return s != null && s.contains(getPackageName() + "/" + EdgeBarService.class.getName());
+    if (s == null) return false;
+    android.content.ComponentName me =
+        new android.content.ComponentName(this, EdgeBarService.class);
+    for (String part : s.split(":")) {
+        String t = part.trim();
+        if (t.isEmpty()) continue;
+        // unflattenFromString() tự chuẩn hoá cả "pkg/Class" lẫn "pkg/.Class" về cùng ComponentName
+        if (me.equals(android.content.ComponentName.unflattenFromString(t))) return true;
+    }
+    return false;
 }
     private void sendSyncState() { Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
 

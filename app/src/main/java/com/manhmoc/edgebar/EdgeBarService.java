@@ -55,6 +55,9 @@ public class EdgeBarService extends AccessibilityService {
 private android.view.View[] accHomeBars = new android.view.View[12];
 private android.view.View[] accHomeCorners = new android.view.View[4];
 private android.content.BroadcastReceiver accHomeReceiver;
+public static volatile boolean isConnected = false;
+private long lastHomaccHealMs = 0;
+
 private boolean isHomaccDrawn = false; // Guard chặn vẽ lại khi đã có view
 // THÊM MỚI — cache trạng thái preview để tránh gọi drawAccessibleHome()/removeAccessibleHome()
 // lặp lại mỗi lần updateVisibility() chạy (event này bắn khá thường xuyên).
@@ -505,7 +508,12 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         if ("com.manhmoc.edgebar.TEST_ANIM".equals(act)) {
             playAnim();
                 } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
-            if (isHomaccDrawn) removeAccessibleHome();
+            for (int j = 0; j < 12; j++) {
+    if (accHomeBars[j] != null) accHomeBars[j].setVisibility(View.GONE);
+    hideIconLayer("homacc_" + BARS[j]);
+}
+for (int j = 0; j < 4; j++) if (accHomeCorners[j] != null) accHomeCorners[j].setVisibility(View.GONE);
+
             removeYtdlOverlay(); 
             removeRippleViewIfIdle(); 
             AppLockHelper.clearAll(); 
@@ -524,6 +532,10 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
             for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
             ed.apply();
+                        // [MỚI] Chủ động thu hồi Trợ năng ngay khi tắt màn hình
+            if (BlacklistLockWatchdogService.shouldPreempt(prefs)) {
+                BlacklistLockWatchdogService.beginPreempt(EdgeBarService.this);
+            }
 
                 } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
             if (AccessibleHomeService.isRunning) drawAccessibleHome();
@@ -1200,6 +1212,7 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
     @Override protected void onServiceConnected() {
         super.onServiceConnected();
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        isConnected = true;
         km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
 
@@ -1254,7 +1267,8 @@ filter.addAction("com.manhmoc.edgebar.PAUSE_WM_OPS");
                 if ("com.manhmoc.edgebar.ACC_HOME_DRAW".equals(act)) {
                     drawAccessibleHome();
                 } else if ("com.manhmoc.edgebar.ACC_HOME_REMOVE".equals(act)) {
-                    removeAccessibleHome();
+    if (!AccessibleHomeService.isRunning) removeAccessibleHome(); // chặn race xoá nhầm bản mới
+
                 } else if ("com.manhmoc.edgebar.ACC_HOME_SLEEP".equals(act)) {
                     // [MỤC 5] Deep sleep: chỉ ẩn view, GIỮ service sống — đỡ tốn pin re-init
                     for (int i=0;i<12;i++) if (accHomeBars[i]!=null) accHomeBars[i].setVisibility(View.GONE);
@@ -1388,11 +1402,12 @@ if (km != null && km.isKeyguardLocked()
     if (nowMs - lastEventMs < EVENT_THROTTLE_MS) return;
     lastEventMs = nowMs;
     boolean accShouldRun = AccessibleHomeService.isRunning;
-    if (accShouldRun != lastAccHomeRunningState) {
-        lastAccHomeRunningState = accShouldRun;
-        if (accShouldRun && accHomeBars[0] == null) drawAccessibleHome();
-        else if (!accShouldRun && accHomeBars[0] != null) removeAccessibleHome();
-    }
+if (accShouldRun != lastAccHomeRunningState) {
+    lastAccHomeRunningState = accShouldRun;
+    if (!accShouldRun && isHomaccDrawn) removeAccessibleHome();
+}
+if (accShouldRun) healHomaccIfNeeded(); // tự hồi sinh, sự kiện đã throttle 200ms nên gần như 0 chi phí
+
     // [FIX PUSH-AWAY BÀN PHÍM] Không gating theo tên gói/class của sự kiện hiện tại
     // nữa — sự kiện kích hoạt hàm này gần như luôn đến từ app đang mở chứ KHÔNG
     // phải từ chính cửa sổ bàn phím, nên điều kiện cũ hầu như luôn sai. Quét thẳng
@@ -3045,21 +3060,40 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
             return true;
         }
     }
+private boolean homaccViewsMissing() {
+    for (int i = 0; i < 12; i++)
+        if (accHomeBars[i] == null || accHomeBars[i].getParent() == null) return true;
+    for (int i = 0; i < 4; i++)
+        if (accHomeCorners[i] == null || accHomeCorners[i].getParent() == null) return true;
+    return false;
+}
+
+private void healHomaccIfNeeded() {
+    boolean shouldExist = AccessibleHomeService.isRunning || prefs.getBoolean("preview_homacc", false);
+    if (!shouldExist || !homaccViewsMissing()) return;
+    long now = SystemClock.elapsedRealtime();
+    if (now - lastHomaccHealMs < 2000) return; // backoff, tránh vòng lặp tốn pin
+    lastHomaccHealMs = now;
+    drawAccessibleHome();
+}
+
 private void drawAccessibleHome() {
-    if (isHomaccDrawn) return; // đã vẽ rồi, tránh addView() 2 lần gây crash
+    if (wm == null) return;
     for (int i = 0; i < 12; i++) {
+        if (accHomeBars[i] != null && accHomeBars[i].getParent() != null) continue; // đã có
         View bar = new BarView(this);
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
-        try { wm.addView(bar, p); } catch (Exception e) { continue; }
+        try { wm.addView(bar, p); } catch (Exception e) { accHomeBars[i] = null; continue; }
         bar.setOnTouchListener(new SidebarTouchListener("homacc_" + BARS[i], bar));
         accHomeBars[i] = bar;
     }
     for (int i = 0; i < 4; i++) {
+        if (accHomeCorners[i] != null && accHomeCorners[i].getParent() != null) continue;
         View corner = new CornerView(this, i, "homacc_");
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
-        try { wm.addView(corner, p); } catch (Exception e) { continue; }
+        try { wm.addView(corner, p); } catch (Exception e) { accHomeCorners[i] = null; continue; }
         corner.setOnTouchListener(new SidebarTouchListener("homacc_corner_" + CORNERS[i], corner));
         accHomeCorners[i] = corner;
     }
@@ -3068,17 +3102,22 @@ private void drawAccessibleHome() {
 }
 
 private void removeAccessibleHome() {
-    if (!isHomaccDrawn) return;
+    // Log tuỳ chọn để biết AI đã xoá: adb logcat -s EB_HOMACC
+    // android.util.Log.w("EB_HOMACC", "removeAccessibleHome", new Throwable());
     for (int i = 0; i < 12; i++) {
         removeIconLayer("homacc_" + BARS[i]);
-        if (accHomeBars[i] != null) {
-            try { wm.removeView(accHomeBars[i]); } catch (Exception ignored) {}
+        View v = accHomeBars[i];
+        if (v != null) {
+            lastLayoutSig.remove(v); // chống rò RAM
+            try { wm.removeView(v); } catch (Exception ignored) {}
             accHomeBars[i] = null;
         }
     }
     for (int i = 0; i < 4; i++) {
-        if (accHomeCorners[i] != null) {
-            try { wm.removeView(accHomeCorners[i]); } catch (Exception ignored) {}
+        View v = accHomeCorners[i];
+        if (v != null) {
+            lastLayoutSig.remove(v);
+            try { wm.removeView(v); } catch (Exception ignored) {}
             accHomeCorners[i] = null;
         }
     }
@@ -3086,8 +3125,9 @@ private void removeAccessibleHome() {
 }
 
 private void updateHomaccLive() {
+    if (!isHomaccDrawn || homaccViewsMissing()) healHomaccIfNeeded();
     if (!isHomaccDrawn) return;
-    
+ 
     // [FIX BUG LOGIC] Kiểm tra cờ xem trước và trạng thái khóa màn hình.
     // Homacc chỉ được hiện khi: Đang KHÔNG ở màn hình khóa, HOẶC đang bật xem trước Homacc.
     boolean isPreviewHomacc = prefs.getBoolean("preview_homacc", false);
@@ -3159,14 +3199,9 @@ private void updateHomaccLive() {
         updateLayoutIfChanged(v, p);
         if (priMode == 0) applyAntiTapjacking(v, p.width, p.height);
     }
-    refreshEventSubscription(); 
-    // [MỚI] Lưới an toàn: nếu Homacc đang thực sự chạy nhưng overlay lại chưa
-    // được vẽ (do 1 lần removeAccessibleHome/drawAccessibleHome bị lệch nhịp,
-    // hoặc do sự cố tạm thời khi lấy mẫu màu), tự vẽ lại NGAY — không chờ event
-    // kế tiếp mới phát hiện ra.
-    if (AccessibleHomeService.isRunning && !isHomaccDrawn) {
-        new Handler(android.os.Looper.getMainLooper()).post(this::drawAccessibleHome);
-    }
+    refreshEventSubscription();
+
+
 }
 // [BẮT BUỘC] AccessibilityService yêu cầu override hàm này
 @Override
@@ -3180,6 +3215,7 @@ public void onInterrupt() {}
 // là nguồn gốc hiện tượng "biến mất rồi tự hồi lại".
 @Override
 public boolean onUnbind(Intent intent) {
+    isConnected = false;
     try { getSystemService(NotificationManager.class).cancel(99); } catch (Exception ignored) {}
     try { stopForeground(true); } catch (Exception ignored) {}
     removeAllIconLayers();
@@ -3188,6 +3224,7 @@ public boolean onUnbind(Intent intent) {
 }
 @Override
 public void onDestroy() {
+    isConnected = false;
     try { if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(prefListener); } catch (Exception ignored) {}
     try { unregisterReceiver(stateReceiver); } catch (Exception ignored) {}
     try { unregisterReceiver(ipcReceiver); } catch (Exception ignored) {}

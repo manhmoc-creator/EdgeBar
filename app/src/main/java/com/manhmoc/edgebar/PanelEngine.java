@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class PanelEngine {
     private Context ctx; private WindowManager wm; private SharedPreferences prefs;
     private boolean isAnyMode; // true = EdgeBarService (Lock+Homacc), false = HomescreenService (Homeb)
+    private boolean showLocked = false;
     private KeyguardManager km;
     // [THAY] Map theo UUID thay vì mảng cố định 3 phần tử — số Panel không giới hạn,
     // RAM chỉ tốn đúng bằng số Panel THẬT SỰ đang bật (không cấp phát dư slot rỗng).
@@ -234,6 +235,15 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
     }
     if (hasLegacy) cleanup.apply();
 }
+       public PanelEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode, boolean showLocked) {
+       this(ctx, wm, prefs, isAnyMode);
+       this.showLocked = showLocked;
+   }
+   public void destroy() {
+       for (String id : new ArrayList<>(panels.keySet())) removePanelBody(id);
+       for (String id : new ArrayList<>(handles.keySet())) removeHandle(id);
+   }
+
     /** Gọi mỗi khi lock state / accessibility state đổi — decide xem instance này
      *  (Lock hay Homacc, tùy trạng thái) có được phép giữ panel hay không. */
     public void rebuildAll() {
@@ -429,9 +439,9 @@ private boolean shouldPanelBodyExistNow(String id) {
     boolean locked = km != null && km.isKeyguardLocked();
     if (isAnyMode) {
         if (!locked && !AccessibleHomeService.isRunning) return false;
-    } else {
-        if (locked) return false;
-    }
+       } else if (!showLocked) {
+           if (locked) return false;
+       }
     return true;
 }
 // HANDLE: Cục Bộ chỉ hiện trong Design; Toàn Cục hiện như panel
@@ -492,7 +502,7 @@ public void setForceTest(String id, boolean on) {
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+        | ((isAnyMode || showLocked) ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
         PixelFormat.TRANSLUCENT);
     hp.gravity = gravity;
     try { wm.addView(handle, hp); handles.put(id, handle); } catch (Exception e) { return; }
@@ -548,7 +558,7 @@ int itemCount = csvToList(prefs.getString(px+"apps","")).size() +
         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-        | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+        | ((isAnyMode || showLocked) ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
         PixelFormat.TRANSLUCENT);
     pp.gravity = edge.equals("left") ? (Gravity.LEFT|Gravity.CENTER_VERTICAL)
                : edge.equals("right") ? (Gravity.RIGHT|Gravity.CENTER_VERTICAL)

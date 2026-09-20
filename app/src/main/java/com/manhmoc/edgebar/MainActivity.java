@@ -338,14 +338,20 @@ private void addSelDot(FrameLayout wrap, boolean sel) {
     wrap.addView(dot, lp);
 }
 // Icon tuỳ chọn Rung/Sáng/Nhảy/Ẩn — thay emoji 📳✨🦘👻 bằng icon trong bộ 100 icon custom
+// Overload 4-tham-số giữ để không phải sửa hàng loạt chỗ gọi — mặc định snd=false
 private LinearLayout buildOptIcons(boolean vib, boolean anim, boolean jump, boolean hide) {
+    return buildOptIcons(vib, anim, jump, hide, false);
+}
+// [FIX] Bản đầy đủ 5 cờ — thêm "snd" để báo hiệu Âm chạm ngay trên card Data Pack.
+private LinearLayout buildOptIcons(boolean vib, boolean anim, boolean jump, boolean hide, boolean snd) {
     LinearLayout col = new LinearLayout(this);
     col.setOrientation(LinearLayout.VERTICAL); col.setGravity(Gravity.CENTER); col.setPadding(0, 0, 15, 0);
-    String[] names = {"notifications_active_24px", "flare_24px", "rocket_launch_24px", "visibility_24px"};
-    boolean[] on = {vib, anim, jump, hide};
-    for (int i = 0; i < 4; i++) if (on[i]) col.addView(makeMenuIcon(names[i], 34));
+    String[] names = {"notifications_active_24px", "flare_24px", "rocket_launch_24px", "visibility_24px", "volume_up_24px"};
+    boolean[] on = {vib, anim, jump, hide, snd};
+    for (int i = 0; i < 5; i++) if (on[i]) col.addView(makeMenuIcon(names[i], 34));
     return col;
 }
+
 // [MỚI] Format nhãn từ 1 chuỗi CSV action — dùng lại logic của formatPruleActionLabel
 // để mọi Data Pack đều hiển thị đẹp như Frontier (tên app/shortcut/panel + dấu +).
 private String formatActionCsvLabel(String actsCsv, String launchPkg, String shortcutId) {
@@ -492,11 +498,14 @@ root.addView(cbSnd);
         java.util.Arrays.asList(actCsv[0].split(",")), "", ""));
 
     holder[0] = buildStdPackCard(
-        buildOptIcons(
-            prefs.getBoolean(prefKey + "_vib", true),
-            prefs.getBoolean(prefKey + "_anim", true),
-            false, false),
-        title, null, formatActionCsvLabel(actCsv[0], "", ""), test);
+    buildOptIcons(
+        prefs.getBoolean(prefKey + "_vib", true),
+        prefs.getBoolean(prefKey + "_anim", true),
+        false, false,
+        prefs.getBoolean(prefKey + "_snd", false)),   // [FIX] thêm cờ snd
+    title, null, formatActionCsvLabel(actCsv[0], "", ""), test);
+
+
     holder[0].setOnClickListener(v -> openPicker.run());
     return wrapPackCard(holder[0], prefKey);
 }
@@ -511,9 +520,14 @@ private View buildBubbleRuleCard(String rId, Runnable rerender) {
     btnTest.setOnClickListener(v -> fireTestActions(java.util.Arrays.asList(prefs.getString(px + "acts", "").split(",")),
         prefs.getString(px + "launch_pkg", ""), prefs.getString(px + "shortcut_id", "")));
     LinearLayout card = buildStdPackCard(
-        buildOptIcons(prefs.getBoolean(px + "vib", true), prefs.getBoolean(px + "anim", true),
-            prefs.getBoolean(px + "jump_on", true), false),
-        formatPruleGestureLabel(rId), null, formatPruleActionLabel(rId), swOn, btnTest);
+    buildOptIcons(
+        prefs.getBoolean(px + "vib", true),
+        prefs.getBoolean(px + "anim", true),
+        prefs.getBoolean(px + "jump_on", true),
+        false,
+        prefs.getBoolean(px + "snd", false)),   // [FIX] thêm cờ snd
+    formatPruleGestureLabel(rId), null, formatPruleActionLabel(rId), swOn, btnTest);
+
     card.setOnClickListener(v -> openBubbleRuleEditor(rId, rerender));
     return wrapPackCard(card, rId);
 }
@@ -1682,14 +1696,17 @@ private String getSpacePrefix() {
     optCol.setOrientation(LinearLayout.VERTICAL);
     optCol.setGravity(Gravity.CENTER);
     optCol.setPadding(0, 0, 15, 0);
-        TextView tIcons = new TextView(this);
-    tIcons.setText((prefs.getBoolean(key+"_jump_on", true) ? "🦘\n" : "") +
-                   (prefs.getBoolean(key+"_vib", true) ? "📳\n" : "") +
-                   (prefs.getBoolean(key+"_snd", false) ? "🔊\n" : "") +
-                   (prefs.getBoolean(key+"_anim", true) ? "✨\n" : "") +
-                   (prefs.getBoolean(key+"_os", false) ? "👻" : ""));
-    tIcons.setTextSize(15);
-    optCol.addView(tIcons);
+    // [FIX] Dùng icon vector đồng bộ với Data Pack, thay emoji rời rạc
+boolean v = prefs.getBoolean(key+"_vib", true);
+boolean a = prefs.getBoolean(key+"_anim", true);
+boolean j = prefs.getBoolean(key+"_jump_on", true);
+boolean s = prefs.getBoolean(key+"_snd", false);
+boolean o = prefs.getBoolean(key+"_os", false);
+if (j) optCol.addView(makeMenuIcon("rocket_launch_24px", 34));
+if (v) optCol.addView(makeMenuIcon("notifications_active_24px", 34));
+if (s) optCol.addView(makeMenuIcon("volume_up_24px", 34));
+if (a) optCol.addView(makeMenuIcon("flare_24px", 34));
+if (o) optCol.addView(makeMenuIcon("visibility_24px", 34));
 
     // Cột 2 (Giữa): Thông tin Component, Gesture, Action
     LinearLayout infoCol = new LinearLayout(this);
@@ -1992,25 +2009,47 @@ private void renderVolKeyRules() {
         "Nhấn Volume Up (2 Lần)", "Nhấn Volume Down (2 Lần)", 
         "Combo: Vol Up rồi Down", "Combo: Vol Down rồi Up"
     };
-    for (int idx=0; idx<vKeys.length; idx++) {
-        final String key = "volkey_" + vKeys[idx];
-        final String vName = vNames[idx]; 
-        String action = prefs.getString(key, "NONE");
-        LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(getRounded("#1E1E1E", 25f)); card.setPadding(35,35,35,35);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(15,15,15,15); card.setLayoutParams(lp);
-        TextView t1 = new TextView(this); t1.setText(vName); t1.setTextColor(Color.parseColor("#FFC107")); t1.setTextSize(15);
-        TextView t2 = new TextView(this); t2.setText(getActionLabelSmart(action, prefs.getString(key + "_launch_pkg", ""))); t2.setTextColor(Color.parseColor("#8AB4F8")); t2.setTextSize(13); t2.setPadding(0,10,0,10);
-        card.addView(t1); card.addView(t2);
-        card.setOnClickListener(v -> openVolKeyActionPicker(key, vName)); 
-        card.setOnLongClickListener(v -> {
-            new AlertDialog.Builder(this).setTitle("Xoá?").setPositiveButton("XOÁ", (d,w)->{
-                prefs.edit().putString(key, "NONE").apply(); syncVolumeService(); renderVolKeyRules();
-            }).setNegativeButton("HỦY", null).show();
-            return true;
-        });
-        listRules.addView(card);
-    }
+for (int idx=0; idx<vKeys.length; idx++) {
+    final String key = "volkey_" + vKeys[idx];
+    final String vName = vNames[idx];
+    String action = prefs.getString(key, "NONE");
+    LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
+    card.setBackground(getRounded("#1E1E1E", 25f)); card.setPadding(35,35,35,35);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(15,15,15,15); card.setLayoutParams(lp);
+    TextView t1 = new TextView(this); t1.setText(vName); t1.setTextColor(Color.parseColor("#FFC107")); t1.setTextSize(15);
+    TextView t2 = new TextView(this); t2.setText(getActionLabelSmart(action, prefs.getString(key + "_launch_pkg", ""))); t2.setTextColor(Color.parseColor("#8AB4F8")); t2.setTextSize(13); t2.setPadding(0,10,0,10);
+    card.addView(t1); card.addView(t2);
+
+    // [FIX] Thêm 2 CheckBox Rung/Âm chạm — trước đây chỉ Rule thường mới có,
+    // khiến VolumeButtonService.fire() đọc _snd/_vib mà user không tick được.
+    LinearLayout optRow = new LinearLayout(this);
+    optRow.setOrientation(LinearLayout.HORIZONTAL);
+    optRow.setPadding(0, 8, 0, 8);
+
+    CheckBox cbVib = new CheckBox(this);
+    cbVib.setText(T("Vibrate", "Rung"));
+    cbVib.setTextColor(Color.WHITE); cbVib.setTextSize(12.5f);
+    cbVib.setChecked(prefs.getBoolean(key + "_vib", true));
+    cbVib.setOnCheckedChangeListener((vv, cc) -> prefs.edit().putBoolean(key + "_vib", cc).apply());
+
+    CheckBox cbSnd = new CheckBox(this);
+    cbSnd.setText(T("Sound", "Âm chạm"));
+    cbSnd.setTextColor(Color.WHITE); cbSnd.setTextSize(12.5f);
+    cbSnd.setChecked(prefs.getBoolean(key + "_snd", false));
+    cbSnd.setOnCheckedChangeListener((vv, cc) -> prefs.edit().putBoolean(key + "_snd", cc).apply());
+
+    optRow.addView(cbVib); optRow.addView(cbSnd);
+    card.addView(optRow);
+
+    card.setOnClickListener(v -> openVolKeyActionPicker(key, vName)); 
+    card.setOnLongClickListener(v -> {
+        new AlertDialog.Builder(this).setTitle("Xoá?").setPositiveButton("XOÁ", (d,w)->{
+            prefs.edit().putString(key, "NONE").apply(); syncVolumeService(); renderVolKeyRules();
+        }).setNegativeButton("HỦY", null).show();
+        return true;
+    });
+    listRules.addView(card);
+}
     TextView note = new TextView(this);
     note.setText("⚠ Chỉ hoạt động khi MÀN HÌNH TẮT. Khi màn sáng, phím Âm lượng hoạt động bình thường.\nMỗi phím chỉ chạy 1 hành động.");
     note.setTextColor(Color.GRAY); note.setTextSize(12); note.setPadding(20,20,20,20);
@@ -2611,11 +2650,12 @@ private View createSensorPackCard(String space, String id) {
 
     // Dùng chung card chuẩn Frontier — hết lệch màu/padding/info layout
     LinearLayout card = buildStdPackCard(
-        buildOptIcons(prefs.getBoolean(px + "vib", true), prefs.getBoolean(px + "anim", true), false, false),
-        "[" + gesture.replace("wave", "") + "👋] " + name,
-        "🖐️ " + getSensorGestureLabel(gesture),
-        "▶ " + getActionLabelSmart(action, prefs.getString(px + "launch_pkg", "")),
-        swEn, btnTest, btnEdit);
+    buildOptIcons(prefs.getBoolean(px + "vib", true), prefs.getBoolean(px + "anim", true), false, false,
+        prefs.getBoolean(px + "snd", false)),   // [FIX] thêm cờ snd
+    "[" + gesture.replace("wave", "") + "👋] " + name,
+    "🖐️ " + getSensorGestureLabel(gesture),
+    "▶ " + getActionLabelSmart(action, prefs.getString(px + "launch_pkg", "")),
+    swEn, btnTest, btnEdit);
 
     FrameLayout wrap = wrapPackCard(card, id);
     card.setOnClickListener(v -> openSensorPackEditor(space, id));
@@ -2993,9 +3033,10 @@ private void ensureHomeServiceForPreview() {
                     prefs.getString(px + "launch_pkg", ""), prefs.getString(px + "shortcut_id", "")));
 
                 LinearLayout card = buildStdPackCard(
-                    buildOptIcons(prefs.getBoolean(px + "vib", true), prefs.getBoolean(px + "anim", true),
-                        prefs.getBoolean(px + "jump_on", true), prefs.getBoolean(px + "os", false)),
-                    formatPruleGestureLabel(rId), null, formatPruleActionLabel(rId), swOn, btnTest);
+    buildOptIcons(prefs.getBoolean(px + "vib", true), prefs.getBoolean(px + "anim", true),
+        prefs.getBoolean(px + "jump_on", true), prefs.getBoolean(px + "os", false),
+        prefs.getBoolean(px + "snd", false)),   // [FIX] thêm cờ snd
+    formatPruleGestureLabel(rId), null, formatPruleActionLabel(rId), swOn, btnTest);
                 FrameLayout cardWrap = wrapPackCard(card, rId);
 
                 if (prulesSelectMode) {
@@ -3946,7 +3987,10 @@ prefs.getBoolean(editKey+"_vib", true)); vTrig.addView(cbVib);
 CheckBox cbSnd = new CheckBox(this);
 cbSnd.setText(T("Touch Sound", "Âm chạm (Touch Sound)"));
 cbSnd.setTextColor(Color.WHITE);
-cbSnd.setChecked(editKey != null && prefs.getBoolean(editKey + "_snd", false));
+// [FIX] editKey == null (tạo rule mới) -> mặc định BẬT âm chạm,
+// tránh user tưởng "âm chạm không hoạt động" chỉ vì chưa tick.
+// Khi SỬA rule cũ -> đọc đúng giá trị đã lưu.
+cbSnd.setChecked(editKey == null || prefs.getBoolean(editKey + "_snd", false));
 vTrig.addView(cbSnd);
 
 cbAnim.setText(T("Show Animation", "Bật Hiệu ứng Ánh sáng (Animation)"));
@@ -5157,6 +5201,17 @@ cardWrap.addView(selDot);
         prefs.edit().putBoolean("blacklist_lock_revoke_acc_en", c).apply());
     cbLockRevokeAcc.setPadding(0, 20, 0, 0);
     cardBlacklist.addView(cbLockRevokeAcc);
+        CheckBox cbLockPreempt = new CheckBox(this);
+    cbLockPreempt.setText(T(
+        "Pre-emptive: revoke Accessibility as soon as the screen turns off/locks (calls from Tammi won't be killed)",
+        "Chủ động tắt Trợ năng NGAY khi tắt màn hình/khoá (cuộc gọi Tammi không bị kill; mở khoá xong tự bật lại)"));
+    cbLockPreempt.setTextColor(Color.parseColor("#FFC107"));
+    cbLockPreempt.setTextSize(12.5f);
+    cbLockPreempt.setChecked(prefs.getBoolean("blacklist_lock_preempt_en", false));
+    cbLockPreempt.setOnCheckedChangeListener((v, c) ->
+        prefs.edit().putBoolean("blacklist_lock_preempt_en", c).apply());
+    cbLockPreempt.setPadding(0, 20, 0, 0);
+    cardBlacklist.addView(cbLockPreempt);
 
     ecoContainer.addView(wrapCard(cardBlacklist));
 
