@@ -1634,10 +1634,11 @@ private String findBlacklistedPkgInWindows(String bl) {
     return null;
 }
 
+// CODE MỚI:
 private void triggerBlacklistLockRevokeAcc(String pkg) {
     if (pkg == null || pkg.isEmpty()) return;
-    pauseAllOverlaysSync(); // ẩn bar/corner tức thì
-    // true = app Blacklist ĐÃ ở foreground (đường phản ứng)
+    // [FIX] Bỏ pauseAllOverlaysSync() — để LockEbService vẽ đè đúng lúc, tránh
+    // khoảng trống không overlay nào trước khi Trợ năng bị thu hồi.
     if (!BlacklistLockWatchdogService.begin(this, pkg, true)) {
         if (!prefs.getBoolean("blacklist_lock_active", false)) updateVisibility();
     }
@@ -1650,9 +1651,11 @@ private boolean launchWithBlacklistRevoke(String pkg) {
     if (km == null || !km.isKeyguardLocked()) return false;
     if (!prefs.getBoolean("blacklist_lock_revoke_acc_en", false)) return false;
     if (!("," + prefs.getString("blacklist", "") + ",").contains("," + pkg + ",")) return false;
-    final Context app = getApplicationContext(); // giữ lại vì service này sắp bị hệ thống unbind
-    pauseAllOverlaysSync();
-    if (!BlacklistLockWatchdogService.begin(this, pkg, false)) return false;
+    // CODE MỚI:
+final Context app = getApplicationContext(); // giữ lại vì service này sắp bị hệ thống unbind
+// [FIX] Bỏ pauseAllOverlaysSync() — lý do xem chú thích trong begin() ở trên.
+if (!BlacklistLockWatchdogService.begin(this, pkg, false)) return false;
+
     new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
         try {
             Intent li = app.getPackageManager().getLaunchIntentForPackage(pkg);

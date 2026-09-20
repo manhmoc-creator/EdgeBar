@@ -214,10 +214,17 @@ public class BlacklistLockWatchdogService extends Service {
 
         if (elapsed > (inCall ? MAX_ACTIVE_CALL_MS : MAX_ACTIVE_MS)) { finishAndRestore("timeout"); return; }
 
-        if (elapsed >= MIN_HOLD_MS) {
-            if (!interactive) {
-                if (!inCall) { finishAndRestore("screen_off"); return; }
-            } else if (hasUsageAccess()) {
+// CODE MỚI:
+if (elapsed >= MIN_HOLD_MS) {
+    if (!interactive) {
+        // [FIX] Chỉ coi "màn hình tự tắt" là tín hiệu ĐÃ XONG nếu app Blacklist
+        // từng được xác nhận lên foreground ít nhất 1 lần (everSawKeepFg). Nếu
+        // chưa từng thấy nó (đang trong lúc đổ chuông, app không giữ wakelock nên
+        // màn tự tối) thì KHÔNG được phục hồi Trợ năng — để timeout/app_left phía
+        // dưới xử lý an toàn hơn.
+        if (!inCall && everSawKeepFg) { finishAndRestore("screen_off"); return; }
+    } else if (hasUsageAccess()) {
+
                 refreshUsageState(now);
                 boolean left = now >= ignoreLeftUntilMs && hasLeftTarget(now);
                 if (inCall) left = false; // đang đổ chuông/đang gọi: tuyệt đối không trả Trợ năng

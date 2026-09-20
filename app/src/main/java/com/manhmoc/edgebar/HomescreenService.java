@@ -836,11 +836,27 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
         @Override
         public void onReceive(Context c, Intent i) {
             String action = i.getAction();
-            if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+// CODE MỚI:
+if (Intent.ACTION_SCREEN_OFF.equals(action)) {
     removeYtdlOverlay(); 
     removeRippleViewIfIdle();
     stopAppLockPolling();
 
+    // [MỚI] Đang đứng trong 1 app Blacklist (Homeb đã tự thay Homacc nhờ
+    // blacklist_auto_homeb_en) mà bị khoá máy -> đẩy về Home NGAY cùng lúc tắt màn.
+    // Nếu không, lúc SCREEN_ON tự bật lại Trợ năng cho Lock (nhánh dưới) sẽ đụng độ
+    // với app Blacklist vẫn còn đứng foreground -> Homacc/Homeb lẫn lộn khi mở khoá
+    // lại gần như ngay sau đó.
+    String fgPkg = liveForegroundPkg;
+    if (fgPkg != null && !fgPkg.isEmpty() && prefs.getBoolean("blacklist_auto_homeb_en", false)) {
+        String bl = prefs.getString("blacklist", "");
+        if (!bl.isEmpty() && ("," + bl + ",").contains("," + fgPkg + ",")) {
+            Intent home = new Intent(Intent.ACTION_MAIN);
+            home.addCategory(Intent.CATEGORY_HOME);
+            home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(home);
+        }
+    }
     // [FIX] KHÔNG tự bật lại Trợ năng ở đây nữa — đã dời sang ACTION_SCREEN_ON bên dưới,
     // chỉ bật khi màn BẬT LẠI và đang ở màn khoá, thay vì bật ngay lúc vừa tắt màn.
 
