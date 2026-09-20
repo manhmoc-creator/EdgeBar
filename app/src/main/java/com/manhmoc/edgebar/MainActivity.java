@@ -1726,8 +1726,8 @@ if (o) optCol.addView(makeMenuIcon("visibility_24px", 34));
     TextView tAct = new TextView(this); 
     String[] acts = action.split(",");
     StringBuilder actName = new StringBuilder();
-    for(String a : acts) {
-        String at = a.trim();
+            for(String actStr : acts) {
+                String at = actStr.trim();
         if (at.equals("LAUNCH_APP")) {
             if(actName.length() > 0) actName.append(" + ");
             actName.append(getAppLabelCached(prefs.getString(key + "_launch_pkg", "")));
@@ -1777,7 +1777,7 @@ ctrlCol.setOrientation(LinearLayout.VERTICAL);
 ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
 Switch swOn = new Switch(this);
 swOn.setChecked(prefs.getBoolean(key + "_on", true));
-swOn.setOnCheckedChangeListener((v, chk) -> prefs.edit().putBoolean(key + "_on", chk).apply());
+        swOn.setOnCheckedChangeListener((swView, chk) -> prefs.edit().putBoolean(key + "_on", chk).apply());
 swOn.setPadding(0, 0, 0, 10);
 final int finalC = c; final int finalG = g; final String finalActs = action;
 
@@ -1792,18 +1792,19 @@ LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(LinearLayout.Lay
 btnLp.setMargins(0, 8, 0, 0); btnCopy.setLayoutParams(btnLp);
 btnCopy.setMinimumHeight(88);
 final String finalKeyForTest = key;
-btnCopy.setOnClickListener(v -> fireTestActions(java.util.Arrays.asList(action.split(",")),
+btnCopy.setOnClickListener(btnView -> fireTestActions(java.util.Arrays.asList(action.split(",")),
     prefs.getString(finalKeyForTest + "_launch_pkg", ""), prefs.getString(finalKeyForTest + "_shortcut_id", "")));
+
 ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
     card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
     card.setTag(key);
 
     // THUẬT TOÁN UX: CHẠM 1 LẦN -> MỞ EDIT DIALOG
-    card.setOnClickListener(v -> openRuleBuilderDialog(key, finalC, finalG, ""));
+    card.setOnClickListener(cardView -> openRuleBuilderDialog(key, finalC, finalG, ""));
     attachDragReorder(card, ruleOrderKeys, "rule_order_" + prefix, this::renderRulesList);
         // CHẠM GIỮ -> XOÁ QUY TẮC NÀY
-                card.setOnLongClickListener(v -> {
-            showPackLongPressMenu(v, "ui_span_rule_order_" + prefix + "_" + key, null, this::renderRulesList, () ->
+        card.setOnLongClickListener(longPressView -> {
+            showPackLongPressMenu(longPressView, "ui_span_rule_order_" + prefix + "_" + key, null, this::renderRulesList, () ->
                 new AlertDialog.Builder(this).setTitle(T("Delete this rule?", "Xoá quy tắc này?"))
                     .setPositiveButton(T("DELETE", "XOÁ"), (d, w) -> {
                         prefs.edit().putString(key, "NONE").apply();
