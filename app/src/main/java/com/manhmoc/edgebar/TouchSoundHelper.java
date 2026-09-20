@@ -38,15 +38,16 @@ public class TouchSoundHelper {
         long now = SystemClock.elapsedRealtime();
         if (now - lastPlayMs < MIN_GAP_MS) return;
         lastPlayMs = now;
-
         try {
-            if (tg == null) {
-                // Route qua STREAM_MUSIC: KHÔNG bị DND chặn, KHÔNG phụ thuộc
-                // cài đặt "Touch sounds" của hệ thống.
+            // ToneGenerator KHÔNG có setVolume() — muốn đổi âm lượng BẮT BUỘC
+            // phải release() instance cũ rồi new lại với volume mới.
+            // Đây là API thật của Android (constructor là nơi duy nhất nhận volume).
+            if (tg == null || vol != lastVol) {
+                if (tg != null) {
+                    try { tg.release(); } catch (Exception ignored) {}
+                    tg = null;
+                }
                 tg = new ToneGenerator(AudioManager.STREAM_MUSIC, clampVol(vol));
-                lastVol = vol;
-            } else if (vol != lastVol) {
-                tg.setVolume(clampVol(vol));
                 lastVol = vol;
             }
             tg.startTone(ToneGenerator.TONE_PROP_BEEP, TONE_MS);
