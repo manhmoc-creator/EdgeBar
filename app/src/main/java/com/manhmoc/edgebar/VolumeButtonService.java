@@ -200,6 +200,7 @@ private void fire(String key) {
             else v.vibrate(25);
         } catch (Exception ignored) {}
     }
+    if (prefs.getBoolean(key + "_snd", false)) TouchSoundHelper.play(this, prefs);
     String act = action.split(",")[0].trim();
 
     Runnable doFire = () -> {

@@ -122,6 +122,15 @@ public class WidgetConfigActivity extends Activity {
             renderGestureCards();
         });
         root.addView(cbVib);
+        CheckBox cbSnd = new CheckBox(this);
+cbSnd.setText("Âm chạm (Touch Sound)");
+cbSnd.setTextColor(Color.WHITE);
+cbSnd.setChecked(prefs.getBoolean("widget_" + widgetId + "_snd", false));
+cbSnd.setOnCheckedChangeListener((v, c) -> {
+    prefs.edit().putBoolean("widget_" + widgetId + "_snd", c).apply();
+    renderGestureCards();
+});
+root.addView(cbSnd);
 
         CheckBox cbAnim = new CheckBox(this);
         cbAnim.setText("Hiệu ứng ánh sáng (Animation)");
@@ -132,7 +141,7 @@ public class WidgetConfigActivity extends Activity {
             renderGestureCards();
         });
         root.addView(cbAnim);
-
+        
         // ─── FOOTER ───
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.HORIZONTAL);
@@ -208,10 +217,12 @@ public class WidgetConfigActivity extends Activity {
 
         boolean vib = prefs.getBoolean("widget_" + widgetId + "_vib", true);
         boolean anim = prefs.getBoolean("widget_" + widgetId + "_anim", true);
-        if (vib || anim) {
+        boolean snd = prefs.getBoolean("widget_" + widgetId + "_snd", false);
+        if (vib || anim || snd) {
             TextView tOpts = new TextView(this);
             StringBuilder sb = new StringBuilder();
             if (vib) sb.append("📳");
+            if (snd) sb.append("🔊");
             if (anim) sb.append("✨");
             tOpts.setText(sb.toString());
             tOpts.setTextSize(10);

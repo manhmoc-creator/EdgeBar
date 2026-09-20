@@ -85,8 +85,10 @@ public class LockEbService extends Service {
         cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         try { camId = cm.getCameraIdList()[0]; } catch (Exception ignored) {}
 
-        // An toàn: nếu máy không còn khoá nữa thì không có việc gì để làm
-        if (km == null || !km.isKeyguardLocked()) { stopSelf(); return; }
+                // [FIX] BỎ điều kiện bắt buộc đang khoá máy. LockEb giờ chạy xuyên suốt cả phiên
+        // Blacklist-tại-khoá, kể cả khi app gọi điện đã tự dismiss màn khoá để hiện full
+        // screen UI riêng của nó — trước đây bắt buộc isKeyguardLocked()==true khiến LockEb
+        // tự thoát ngay từ trứng nước, để lại khoảng trống không Trợ năng lẫn không overlay.
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return; }
 
         startForegroundQuiet();
@@ -240,6 +242,7 @@ public class LockEbService extends Service {
         String action = prefs.getString(key, "NONE");
         if (action.equals("NONE") || !prefs.getBoolean(key + "_on", true)) return;
         if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
+        if (prefs.getBoolean(key + "_snd", false)) TouchSoundHelper.play(this, prefs);
         for (String a : action.split(",")) exec(a.trim());
     }
 

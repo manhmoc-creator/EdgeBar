@@ -1379,6 +1379,7 @@ private void applyLockGateInstant() {
         boolean hasTriggerAction = action.contains("TRIGGER_");
         if (applyVibAnim) {
             if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
+            if (prefs.getBoolean(key + "_snd", false)) TouchSoundHelper.play(this, prefs);
             if (prefs.getBoolean(key + "_anim", true)) {
                 if (hasTriggerAction) {
                     int animDelay = prefs.getInt("sim_gesture_delay", 10) + 25;

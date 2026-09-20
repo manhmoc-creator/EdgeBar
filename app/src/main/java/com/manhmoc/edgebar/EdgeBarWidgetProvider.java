@@ -97,6 +97,7 @@ public class EdgeBarWidgetProvider extends AppWidgetProvider {
                 }
             } catch (Exception ignored) {}
         }
+        if (prefs.getBoolean("widget_" + wid + "_snd", false)) TouchSoundHelper.play(ctx, prefs);
         if (prefs.getBoolean("widget_" + wid + "_anim", true)) {
             Intent anim = new Intent("com.manhmoc.edgebar.TEST_ANIM");
             anim.setPackage(ctx.getPackageName());
@@ -136,6 +137,7 @@ public class EdgeBarWidgetProvider extends AppWidgetProvider {
               .remove("widget_" + id + "_tap_shortcut_id")
               .remove("widget_" + id + "_dtap_shortcut_id")
               .remove("widget_" + id + "_vib")
+              .remove("widget_" + id + "_snd");
               .remove("widget_" + id + "_anim");
         }
         ed.apply();

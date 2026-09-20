@@ -603,7 +603,7 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
         if (Build.VERSION.SDK_INT >= 26) v.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE));
         else v.vibrate(40);
     } catch (Exception ignored) {}
-
+    if (prefs.getBoolean(key + "_snd", false)) TouchSoundHelper.play(ctx, prefs);
     final String[] arr = acts.split(",");
     for (int i = 0; i < arr.length; i++) {
         final String act = arr[i].trim();

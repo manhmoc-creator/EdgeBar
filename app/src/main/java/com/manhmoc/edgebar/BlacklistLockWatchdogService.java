@@ -105,20 +105,19 @@ public class BlacklistLockWatchdogService extends Service {
             return false;
         }
 
-                // [MỚI] Đang ở màn khoá -> bật LockEb NGAY để lấp chỗ Lock bar trước khi
-        // Trợ năng bị tắt, tránh khoảng trống khiến app Blacklist bị giật lúc chuyển giao.
+                // [FIX] LUÔN bật LockEb, KHÔNG còn kiểm tra isKeyguardLocked() — app gọi điện
+        // Blacklist hay tự dismiss màn khoá ngay khi chuông reo, nên đúng lúc gọi tới đây
+        // khoá có thể đã mất dù bản chất vẫn là phiên "Blacklist-tại-khoá". Bỏ điều kiện
+        // để LockEb không bao giờ bị bỏ sót -> không còn khoảng trống "0 overlay".
         try {
-            KeyguardManager km = (KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE);
-            if (km != null && km.isKeyguardLocked()) {
-                Intent lockEb = new Intent(c, LockEbService.class);
-                if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(lockEb); else c.startService(lockEb);
-            }
+            Intent lockEb = new Intent(c, LockEbService.class);
+            if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(lockEb); else c.startService(lockEb);
         } catch (Exception ignored) {}
 
-        // [FIX] Trì hoãn việc thu hồi Trợ năng 500ms để LockEbService kịp khởi động hoàn tất.
-        // Nhờ việc tách tiến trình (android:process=":lockeb"), LockEbService sẽ không bị kill
-        // khi tiến trình chính chứa EdgeBarService bị hệ thống dừng lại.
-        new Handler(Looper.getMainLooper()).postDelayed(() -> revokeAccessibilityNow(c), 500);
+        // [FIX] Rút 500ms -> 150ms: LockEb chạy process riêng (:lockeb), khởi động rất
+        // nhanh, không cần chờ lâu. Giữ Trợ năng sống thêm 500ms chính là khoảng thời gian
+        // 2 tầng cảm ứng (EdgeBarService + LockEb) có thể tranh chấp, gây giật/kill cuộc gọi.
+        new Handler(Looper.getMainLooper()).postDelayed(() -> revokeAccessibilityNow(c), 150);
         return true;
 
     }

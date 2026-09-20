@@ -1149,6 +1149,7 @@ private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnabl
 
         currentSwapPanelId = null;
         currentSwapRefKey = null;
+        if (prefs.getInt("pack_panel_" + panelId + "_snd", 0) == 1) TouchSoundHelper.play(ctx, prefs);
         originalAction.run();
     });
     return cell;

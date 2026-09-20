@@ -448,13 +448,19 @@ private View buildActionPickCard(String title, String prefKey, List<String[]> it
         cbVib.setChecked(prefs.getBoolean(prefKey + "_vib", true));
         cbVib.setOnCheckedChangeListener((v2, c) -> prefs.edit().putBoolean(prefKey + "_vib", c).apply());
         root.addView(cbVib);
+        CheckBox cbSnd = new CheckBox(this);
+cbSnd.setText(T("Touch Sound", "Âm chạm"));
+cbSnd.setTextColor(Color.WHITE);
+cbSnd.setChecked(prefs.getBoolean(prefKey + "_snd", false));
+cbSnd.setOnCheckedChangeListener((v2, c) -> prefs.edit().putBoolean(prefKey + "_snd", c).apply());
+root.addView(cbSnd);
 
         CheckBox cbAnim = new CheckBox(this);
         cbAnim.setText(T("Show Animation", "Bật Hiệu ứng Ánh sáng")); cbAnim.setTextColor(Color.WHITE);
         cbAnim.setChecked(prefs.getBoolean(prefKey + "_anim", true));
         cbAnim.setOnCheckedChangeListener((v2, c) -> prefs.edit().putBoolean(prefKey + "_anim", c).apply());
         root.addView(cbAnim);
-
+        
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0, 20, 0, 0);
         Button bCancel = new Button(this); bCancel.setText(T("CANCEL","HỦY"));
@@ -1676,10 +1682,11 @@ private String getSpacePrefix() {
     optCol.setOrientation(LinearLayout.VERTICAL);
     optCol.setGravity(Gravity.CENTER);
     optCol.setPadding(0, 0, 15, 0);
-    TextView tIcons = new TextView(this);
-    tIcons.setText((prefs.getBoolean(key+"_vib", true) ? "📳\n" : "") +
+        TextView tIcons = new TextView(this);
+    tIcons.setText((prefs.getBoolean(key+"_jump_on", true) ? "🦘\n" : "") +
+                   (prefs.getBoolean(key+"_vib", true) ? "📳\n" : "") +
+                   (prefs.getBoolean(key+"_snd", false) ? "🔊\n" : "") +
                    (prefs.getBoolean(key+"_anim", true) ? "✨\n" : "") +
-                   (prefs.getBoolean(key+"_jump_on", true) ? "🦘\n" : "") +
                    (prefs.getBoolean(key+"_os", false) ? "👻" : ""));
     tIcons.setTextSize(15);
     optCol.addView(tIcons);
@@ -2690,6 +2697,11 @@ content.addView(etName);
     cbVib.setTextColor(Color.WHITE);
     cbVib.setChecked(isNew || prefs.getBoolean(px + "vib", true));
     content.addView(cbVib);
+    CheckBox cbSnd = new CheckBox(this);
+cbSnd.setText(T("Touch Sound", "Âm chạm (Touch Sound)"));
+cbSnd.setTextColor(Color.WHITE);
+cbSnd.setChecked(prefs.getBoolean(px + "snd", false));
+content.addView(cbSnd);
 
     CheckBox cbAnim = new CheckBox(this);
     cbAnim.setText(T("Show Animation", "Bật Hiệu ứng Ánh sáng"));
@@ -2802,6 +2814,7 @@ ed.putString(px + "action", chosenAct[0]);
 ed.putString(px + "launch_pkg", chosenPkg[0]);
 ed.putString(px + "shortcut_id", chosenScId[0]);
 ed.putBoolean(px + "vib", cbVib.isChecked());
+ed.putBoolean(px + "snd", cbSnd.isChecked());
 ed.putBoolean(px + "anim", cbAnim.isChecked());
 ed.apply();
 
@@ -3218,6 +3231,7 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
                     .putString("prule_" + newId + "_launch_pkg", prefs.getString("prule_" + rId + "_launch_pkg", ""))
                     .putString("prule_" + newId + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
                     .putBoolean("prule_" + newId + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
+                      .putBoolean("prule_" + newId + "_snd", prefs.getBoolean("prule_" + rId + "_snd", false))
                     .putBoolean("prule_" + newId + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
                     .putBoolean("prule_" + newId + "_jump_on", prefs.getBoolean("prule_" + rId + "_jump_on", true))
                     .putBoolean("prule_" + newId + "_os", prefs.getBoolean("prule_" + rId + "_os", false))
@@ -3270,6 +3284,7 @@ btnDupP.setOnClickListener(v -> {
             .putString("prule_" + newRuleId + "_launch_pkg", prefs.getString("prule_" + rId + "_launch_pkg", ""))
             .putString("prule_" + newRuleId + "_shortcut_id", prefs.getString("prule_" + rId + "_shortcut_id", ""))
             .putBoolean("prule_" + newRuleId + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
+             .putBoolean("prule_" + newRuleId + "_snd", prefs.getBoolean("prule_" + rId + "_snd", false))
             .putBoolean("prule_" + newRuleId + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
             .putBoolean("prule_" + newRuleId + "_jump_on", prefs.getBoolean("prule_" + rId + "_jump_on", true))
             .putBoolean("prule_" + newRuleId + "_os", prefs.getBoolean("prule_" + rId + "_os", false))
@@ -3458,6 +3473,12 @@ private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, Stri
     cbVib.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_vib", true));
     vTrig.addView(cbVib);
 
+        CheckBox cbSnd = new CheckBox(this);
+    cbSnd.setText(T("Touch Sound", "Âm chạm (Touch Sound)"));
+    cbSnd.setTextColor(Color.WHITE);
+    cbSnd.setChecked(sourceId != null && prefs.getBoolean("prule_" + sourceId + "_snd", false));
+    vTrig.addView(cbSnd);
+
     CheckBox cbAnim = new CheckBox(this);
     cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)");
     cbAnim.setTextColor(Color.WHITE);
@@ -3538,6 +3559,7 @@ vTrig.addView(cbOs);
             .putString("prule_" + targetId + "_shortcut_id", shortcutId[0])
             .putBoolean("prule_" + targetId + "_jump_on", cbJump.isChecked()) // MỚI
             .putBoolean("prule_" + targetId + "_vib", cbVib.isChecked())
+            .putBoolean("prule_" + targetId + "_snd", cbSnd.isChecked())
             .putBoolean("prule_" + targetId + "_anim", cbAnim.isChecked())
             .putBoolean("prule_" + targetId + "_os", cbOs.isChecked()) // THÊM DÒNG NÀY
             .putBoolean("prule_" + targetId + "_en", true)
@@ -3569,6 +3591,7 @@ private void applyPackRulesToSpace(String itemKey, String targetPrefix, String c
             prefs.edit()
                 .putString(finalKey, acts)
                 .putBoolean(finalKey + "_vib", prefs.getBoolean("prule_" + rId + "_vib", true))
+                .putBoolean(finalKey + "_snd", prefs.getBoolean("prule_" + rId + "_snd", false))
                 .putBoolean(finalKey + "_anim", prefs.getBoolean("prule_" + rId + "_anim", true))
                 .putBoolean(finalKey + "_jump_on", prefs.getBoolean("prule_" + rId + "_jump_on", true))
                 .putBoolean(finalKey + "_os", prefs.getBoolean("prule_" + rId + "_os", false))
@@ -3919,6 +3942,13 @@ vTrig.addView(cbJump);
 cbVib.setText(T("Haptic Feedback", "Bật Rung (Haptic Feedback)"));
 cbVib.setTextColor(Color.WHITE); cbVib.setChecked(editKey == null ||
 prefs.getBoolean(editKey+"_vib", true)); vTrig.addView(cbVib);
+
+CheckBox cbSnd = new CheckBox(this);
+cbSnd.setText(T("Touch Sound", "Âm chạm (Touch Sound)"));
+cbSnd.setTextColor(Color.WHITE);
+cbSnd.setChecked(editKey != null && prefs.getBoolean(editKey + "_snd", false));
+vTrig.addView(cbSnd);
+
 cbAnim.setText(T("Show Animation", "Bật Hiệu ứng Ánh sáng (Animation)"));
 cbAnim.setTextColor(Color.WHITE); cbAnim.setChecked(editKey == null ||
 prefs.getBoolean(editKey+"_anim", true));
@@ -4003,6 +4033,7 @@ prefs.edit()
      .putString(finalKey, joinedActions)
      .putBoolean(finalKey+"_jump_on", cbJump.isChecked()) // MỚI
      .putBoolean(finalKey+"_vib", cbVib.isChecked())
+     .putBoolean(finalKey+"_snd", cbSnd.isChecked())
      .putBoolean(finalKey+"_anim", cbAnim.isChecked())
      .putBoolean(finalKey+"_os", cbOs.isChecked()) // THÊM DÒNG NÀY
      .putString(finalKey+"_launch_pkg", launchAppPkg[0])
@@ -6922,6 +6953,14 @@ if (designTabState == 6) { renderBubbleSettings(); return; }
 dOpt.addView(createSlider("Tốc độ chuyển cảnh Bar/Corner ở Lock (ms)", "lock_anim_dur", 300, 100));
 dOpt.addView(createSlider("Thời gian hồi phục Overlay này (ms)", "os_yield_dur", 60000, 3000)); // THÊM DÒNG NÀY
     dOpt.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30));
+    dOpt.addView(createSlider(T("Touch Sound Volume","Cường độ Âm chạm (0 = tắt hẳn)"), "touch_sound_vol", 100, 40));
+Button btnTestSnd = new Button(this);
+btnTestSnd.setText("🔊 " + T("TEST TOUCH SOUND", "THỬ ÂM CHẠM"));
+btnTestSnd.setBackground(getRounded("#FFC107", 20f));
+btnTestSnd.setTextColor(Color.BLACK);
+btnTestSnd.setOnClickListener(v -> TouchSoundHelper.play(this, prefs));
+dOpt.addView(btnTestSnd);
+
     // [MỚI] Tinh chỉnh Cử chỉ giả lập (dùng cho TRIGGER_* / Nhường OS)
     dOpt.addView(createSlider("Độ trễ khởi động Cử chỉ giả lập (ms)", "sim_gesture_delay", 50, 10));
     dOpt.addView(createSlider("Thời lượng Vuốt giả lập (ms)", "sim_gesture_dur", 100, 20));
@@ -7649,11 +7688,17 @@ private void openBubbleRuleEditor(String editId, Runnable onRefresh) {
         cbJump.setChecked(editId == null || prefs.getBoolean("prule_" + editId + "_jump_on", true));
         vTrig.addView(cbJump);
 
-        CheckBox cbVib = new CheckBox(this);
+                CheckBox cbVib = new CheckBox(this);
         cbVib.setText("Bật Rung (Haptic Feedback)");
         cbVib.setTextColor(Color.WHITE);
         cbVib.setChecked(editId == null || prefs.getBoolean("prule_" + editId + "_vib", true));
         vTrig.addView(cbVib);
+
+        CheckBox cbSnd = new CheckBox(this);
+        cbSnd.setText(T("Touch Sound", "Âm chạm (Touch Sound)"));
+        cbSnd.setTextColor(Color.WHITE);
+        cbSnd.setChecked(editId != null && prefs.getBoolean("prule_" + editId + "_snd", false));
+        vTrig.addView(cbSnd);
 
         CheckBox cbAnim = new CheckBox(this);
         cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)");
@@ -7790,17 +7835,18 @@ private void openBubbleRuleEditor(String editId, Runnable onRefresh) {
                 prefs.edit().putString("bubble_pack_rules", android.text.TextUtils.join(",", curRules)).apply();
             }
             
-            prefs.edit()
+                        prefs.edit()
                 .putString("prule_" + targetId + "_gestures", android.text.TextUtils.join(",", gestures))
                 .putString("prule_" + targetId + "_acts", android.text.TextUtils.join(",", acts))
                 .putString("prule_" + targetId + "_launch_pkg", launchAppPkg[0])
                 .putString("prule_" + targetId + "_shortcut_id", shortcutId[0])
                 .putBoolean("prule_" + targetId + "_jump_on", cbJump.isChecked())
                 .putBoolean("prule_" + targetId + "_vib", cbVib.isChecked())
+                .putBoolean("prule_" + targetId + "_snd", cbSnd.isChecked())
                 .putBoolean("prule_" + targetId + "_anim", cbAnim.isChecked())
                 .putBoolean("prule_" + targetId + "_en", true)
                 .apply();
-            
+
             if (onRefresh != null) onRefresh.run();
             d.dismiss();
         });
@@ -8127,6 +8173,7 @@ panelCfgHeader.setOnClickListener(v -> {
         panelCfgBody.addView(createCycleRow("Icon Style", prefix + id +
 "_icon_shape", new String[]{"Circle", "Squircle", "Pebble", "Rough", "Pentacle", "System"}));
         panelCfgBody.addView(createCycleRow("Show Name (Hiện tên)", prefix + id + "_show_name", new String[]{"Không", "Có"}));
+        panelCfgBody.addView(createCycleRow(T("Touch Sound","Âm chạm"), prefix + id + "_snd", new String[]{"Tắt", "Bật"}));
         panelCfgBody.addView(createSlider("Opacity (Độ trong suốt)", prefix + id + "_alpha", 255, 200));
         panelCfgBody.addView(createSlider("Length (Chiều dài)", prefix + id + "_panel_length", 3000, 700));
         panelCfgBody.addView(createSlider("Width (Bề dày)", prefix + id + "_size", 2500, 700));

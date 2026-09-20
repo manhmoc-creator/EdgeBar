@@ -316,7 +316,7 @@ public class ProximityWaveService extends Service {
 
             holdCpu(2000 + acts.length * 120L); // đủ cho delay 350ms + chuỗi action
             if (prefs.getBoolean(px + "vib", true)) vibrate(prefs.getInt("vib_dur", 30));
-
+            if (prefs.getBoolean(px + "snd", false)) TouchSoundHelper.play(this, prefs);
             if (screenOff && (needScreen || hasScreenOn)) {
                 try {
                     PowerManager.WakeLock w = pm.newWakeLock(
