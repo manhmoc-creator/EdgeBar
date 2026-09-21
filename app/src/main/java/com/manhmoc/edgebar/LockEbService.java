@@ -169,7 +169,7 @@ public class LockEbService extends Service {
             applyVisibility(); // LOCKEB_FG / SCREEN_ON / USER_PRESENT
             if (Intent.ACTION_USER_PRESENT.equals(a)) {
                 // dự phòng: watchdog đã kết thúc mà LockEb còn sót -> tự tắt
-                h.postDelayed(() -> { if (!prefs.getBoolean("blacklist_lock_active", false)) stopSelf(); }, 3000);
+                h.postDelayed(() -> { if (!prefs.getBoolean("blacklist_lock_active", false)) stopSelf(); }, 500);
             }
         }
     };
@@ -230,20 +230,24 @@ public class LockEbService extends Service {
     }
 
     /** Chế độ "Chỉ màn khoá gốc": ẩn khi máy đã mở khoá hoặc app Blacklist đang ở foreground. */
-    private boolean secureNow() {
-        return (km != null && !km.isKeyguardLocked()) || prefs.getBoolean("blacklist_lock_fg", false);
-    }
+    /** Có app Blacklist đang ở foreground không (cờ do Watchdog cập nhật). */
+    private boolean blFg() { return prefs.getBoolean("blacklist_lock_fg", false); }
 
     private void applyVisibility() {
-        boolean secure = secureNow();
+        boolean locked = km != null && km.isKeyguardLocked();
+        boolean fg = blFg();
+        // Đã mở khoá và không có app Blacklist ở foreground = đang ở Home/app thường
+        // -> LockEb nhường hẳn cho Homacc/Homeb, ẩn TẤT CẢ (kể cả bar "Luôn xuyên suốt")
+        boolean show = locked || fg;
+        boolean secure = !locked || fg;  // only-base: ẩn khi mở khoá hoặc app Blacklist che màn
         for (int i = 0; i < 12; i++) {
             if (bars[i] == null) continue;
-            boolean gate = prefs.getInt("lock_" + BARS[i] + "_lockmode", 1) == 1 || !secure;
+            boolean gate = show && (prefs.getInt("lock_" + BARS[i] + "_lockmode", 1) == 1 || !secure);
             bars[i].setVisibility(gate && !hiddenKeys.contains(BARS[i]) ? View.VISIBLE : View.GONE);
         }
         for (int i = 0; i < 4; i++) {
             if (corners[i] == null) continue;
-            boolean gate = prefs.getInt("lock_corner_" + CORNERS[i] + "_lockmode", 1) == 1 || !secure;
+            boolean gate = show && (prefs.getInt("lock_corner_" + CORNERS[i] + "_lockmode", 1) == 1 || !secure);
             corners[i].setVisibility(gate && !hiddenKeys.contains("corner_" + CORNERS[i]) ? View.VISIBLE : View.GONE);
         }
     }

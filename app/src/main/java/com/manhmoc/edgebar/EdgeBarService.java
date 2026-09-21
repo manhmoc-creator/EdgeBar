@@ -1228,6 +1228,8 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
         isConnected = true;
         km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+        prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false)
+            .putBoolean("preview_home", false).apply();
 
         // =========================================================
         // [MỚI] ĐẨY ICON EB LACCK LÊN STATUS BAR

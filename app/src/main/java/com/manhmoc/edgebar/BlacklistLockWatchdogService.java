@@ -96,12 +96,11 @@ public class BlacklistLockWatchdogService extends Service {
                 ignoreLeftUntilMs = System.currentTimeMillis() + 1500;
                 leftStreak = 0;
                 if (preempt) {
-                if (preempt) {
                     if (km != null && !km.isKeyguardLocked()) handler.postDelayed(unlockCheck, 2500);
                     else screenOnDecide.run();   // quyết định tức thì
                 }
-
             } else if (Intent.ACTION_USER_PRESENT.equals(a)) {
+
                 if (preempt) { handleUnlock(); return; }
             }
             handler.removeCallbacks(pollRunnable);
