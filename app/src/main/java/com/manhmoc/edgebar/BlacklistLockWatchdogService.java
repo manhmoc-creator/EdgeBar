@@ -301,7 +301,7 @@ public class BlacklistLockWatchdogService extends Service {
         return p.equals("android") || p.contains("systemui")
             || p.contains("inputmethod") || p.contains("launcher");
     }
-
+    private boolean isLauncherPkg(String p) { return p.contains("launcher") || p.contains("quickstep"); }
     private void refreshUsageState(long now) {
         try {
             UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
@@ -316,7 +316,12 @@ public class BlacklistLockWatchdogService extends Service {
                 int type = ev.getEventType();
                 boolean keep = keepPkgs.contains(p);
                 if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                    if (!isBasePkg(p)) coverFg.add(p);          // [MỚI] camera/assistant/calculator/app gọi...
+    // [FIX] Launcher lên foreground + đã mở khoá = user về Home -> xoá sạch cờ "app che màn khoá"
+    if (isLauncherPkg(p) && km != null && !km.isKeyguardLocked()) {
+        coverFg.clear(); fgKeep.clear();
+        continue;
+    }
+    if (!isBasePkg(p)) coverFg.add(p);
                     if (keep) { fgKeep.add(p); everSawKeepFg = true; }
                     else if (!isIgnorablePkg(p)) fgKeep.clear();
                 } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND) {

@@ -167,7 +167,7 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
     static Bitmap normalizeIconBitmap(Drawable d, int targetSize, float contentScale) {
         if (d == null) return null;
         try {
-            int srcSize = targetSize * 3;
+            int srcSize = targetSize * 5;
             Bitmap raw = Bitmap.createBitmap(srcSize, srcSize, Bitmap.Config.ARGB_8888);
             Canvas rawCanvas = new Canvas(raw);
             Drawable dm = d.mutate();

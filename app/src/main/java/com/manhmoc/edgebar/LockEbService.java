@@ -25,6 +25,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.MediaStore;
@@ -60,6 +61,9 @@ public class LockEbService extends Service {
     private PanelEngine panelEngine;
     private AssistiveBubbleEngine bubbleEngine;
     private boolean rxOn = false;
+    private long unlockGraceUntil = 0;
+private static final long UNLOCK_GRACE_MS = 2500;
+private final Runnable reapplyRunnable = this::applyVisibility;
 
     // ---------- View ----------
     private static class BarView extends View {
@@ -156,26 +160,34 @@ public class LockEbService extends Service {
         f.addAction("com.manhmoc.edgebar.STOP_LOCK_EB");
         f.addAction("com.manhmoc.edgebar.LOCKEB_FG");
         f.addAction("com.manhmoc.edgebar.IPC_ACTION");
+        f.addAction(Intent.ACTION_SCREEN_OFF);
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(rx, f, Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(rx, f);
         rxOn = true;
     }
 
     private final BroadcastReceiver rx = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) {
-            String a = i.getAction();
-            if ("com.manhmoc.edgebar.STOP_LOCK_EB".equals(a)) { stopSelf(); return; }
-            if ("com.manhmoc.edgebar.IPC_ACTION".equals(a)) { handleIpc(i); return; }
-            if (Intent.ACTION_USER_PRESENT.equals(a)) {
-                // [FIX TỐC ĐỘ] USER_PRESENT = chắc chắn đã mở khoá -> ẩn NGAY, không
-                // qua applyVisibility() (phụ thuộc km.isKeyguardLocked() có thể báo trễ).
-                forceHideInstant();
-                h.postDelayed(() -> { if (!prefs.getBoolean("blacklist_lock_active", false)) stopSelf(); }, 500);
-                return;
-            }
-            applyVisibility(); // LOCKEB_FG / SCREEN_ON
+    @Override public void onReceive(Context c, Intent i) {
+        String a = i.getAction();
+        if ("com.manhmoc.edgebar.STOP_LOCK_EB".equals(a)) { stopSelf(); return; }
+        if ("com.manhmoc.edgebar.IPC_ACTION".equals(a)) { handleIpc(i); return; }
+        if (Intent.ACTION_SCREEN_OFF.equals(a)) {
+            unlockGraceUntil = 0;
+            h.removeCallbacks(reapplyRunnable);
+            applyVisibility();
+            return;
         }
-    };
+        if (Intent.ACTION_USER_PRESENT.equals(a)) {
+            unlockGraceUntil = SystemClock.elapsedRealtime() + UNLOCK_GRACE_MS;
+            forceHideInstant();
+            h.removeCallbacks(reapplyRunnable);
+            h.postDelayed(reapplyRunnable, UNLOCK_GRACE_MS + 100);
+            h.postDelayed(() -> { if (!prefs.getBoolean("blacklist_lock_active", false)) stopSelf(); }, 500);
+            return;
+        }
+        applyVisibility(); // LOCKEB_FG / SCREEN_ON
+    }
+};
 
     /** [MỚI] Ẩn toàn bộ bar/corner LockEb ngay lập tức, bỏ qua điều kiện keyguard. */
     private void forceHideInstant() {
@@ -244,6 +256,7 @@ public class LockEbService extends Service {
 
     private void applyVisibility() {
         boolean locked = km != null && km.isKeyguardLocked();
+        if (!locked && SystemClock.elapsedRealtime() < unlockGraceUntil) { forceHideInstant(); return; }
         boolean fg = blFg();
         // Đã mở khoá và không có app Blacklist ở foreground = đang ở Home/app thường
         // -> LockEb nhường hẳn cho Homacc/Homeb, ẩn TẤT CẢ (kể cả bar "Luôn xuyên suốt")

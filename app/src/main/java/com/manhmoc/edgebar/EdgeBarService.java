@@ -58,6 +58,13 @@ private android.content.BroadcastReceiver accHomeReceiver;
 public static volatile boolean isConnected = false;
 private long lastHomaccHealMs = 0;
 private volatile long forceUnlockedUntilMs = 0; // [MỚI] chống flicker Lock lúc vừa mở khoá
+private boolean lockLayerShown = false; // true nếu đang có Bar/Corner Lock VISIBLE (để hạ nhanh khi Home hiện)
+private void refreshLockShownFlag() {
+    boolean any = false;
+    for (int i = 0; i < 12 && !any; i++) if (bars[i] != null && bars[i].getVisibility() == View.VISIBLE) any = true;
+    for (int i = 0; i < 4 && !any; i++) if (corners[i] != null && corners[i].getVisibility() == View.VISIBLE) any = true;
+    lockLayerShown = any;
+}
 
 private boolean isHomaccDrawn = false; // Guard chặn vẽ lại khi đã có view
 // THÊM MỚI — cache trạng thái preview để tránh gọi drawAccessibleHome()/removeAccessibleHome()
@@ -509,21 +516,22 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         if ("com.manhmoc.edgebar.TEST_ANIM".equals(act)) {
             playAnim();
                 } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
-            for (int j = 0; j < 12; j++) {
-    if (accHomeBars[j] != null) accHomeBars[j].setVisibility(View.GONE);
-    hideIconLayer("homacc_" + BARS[j]);
-}
-for (int j = 0; j < 4; j++) if (accHomeCorners[j] != null) accHomeCorners[j].setVisibility(View.GONE);
+    forceUnlockedUntilMs = 0; // tắt màn rồi thì Lock phải được phép hiện lại ngay
+    if (recentsBlur != null) recentsBlur.hide(); // [FIX 2B] gỡ lớp phủ Recents + reset phiên khi tắt màn
+    for (int j = 0; j < 12; j++) {
+        if (accHomeBars[j] != null) accHomeBars[j].setVisibility(View.GONE);
+        hideIconLayer("homacc_" + BARS[j]);
+    }
+    for (int j = 0; j < 4; j++) if (accHomeCorners[j] != null) accHomeCorners[j].setVisibility(View.GONE);
 
-            removeYtdlOverlay(); 
-            removeRippleViewIfIdle(); 
-            AppLockHelper.clearAll(); 
-            if (fpRegistered && fpController != null && fpCallback != null) {
+    removeYtdlOverlay();
+    removeRippleViewIfIdle();
+    AppLockHelper.clearAll();
+    if (fpRegistered && fpController != null && fpCallback != null) {
+        try { fpController.unregisterFingerprintGestureCallback(fpCallback); } catch (Exception e) {}
+        fpRegistered = false;
+    }
 
-                try { fpController.unregisterFingerprintGestureCallback(fpCallback); } catch (Exception e) {}
-                fpRegistered = false;
-            }
-            
             // [MỚI] Hồi sinh hoàn toàn: Hủy mọi cờ xuyên thấu/giả lập đang kẹt
             isDispatchingSyntheticGesture = false;
             setTransientUntouchable(false);
@@ -539,7 +547,7 @@ for (int j = 0; j < 4; j++) if (accHomeCorners[j] != null) accHomeCorners[j].set
             }
 
 } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
-    forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 400;
+    forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 800;
     instantSwitchLockToHomacc();
     if (AccessibleHomeService.isRunning) drawAccessibleHome();
     refreshFingerprintRegistration();
@@ -1353,6 +1361,15 @@ refreshEventSubscription();
 @Override public void onAccessibilityEvent(AccessibilityEvent event) {
 int eventType = event.getEventType();
 if (recentsBlur != null) recentsBlur.onEvent(event);
+// [FIX NHÁY LOCK Ở HOME] Máy đã mở khoá mà Lock vẫn còn hiện -> hạ NGAY, không chờ USER_PRESENT
+if ((eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        || eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
+        && lockLayerShown && km != null && !km.isKeyguardLocked()
+        && !prefs.getBoolean("preview_lock", false)) {
+    forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 800;
+    instantSwitchLockToHomacc();
+}
+
 if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         && km != null && km.isKeyguardLocked()) {
     CharSequence _ep = event.getPackageName();
@@ -2710,9 +2727,10 @@ if (panelEngine != null) panelEngine.rebuildAll();
 
         // [FIX BUG LOGIC] Luôn đồng bộ cả Homacc khi có lệnh cập nhật hiển thị chung, 
         // phòng trường hợp trạng thái Lock thay đổi khiến Homacc cần được ẩn/hiện.
-        updateHomaccLive();
-        refreshEventSubscription();
-    }
+  updateHomaccLive();
+  refreshLockShownFlag();
+  refreshEventSubscription();
+  }
 
 private void setViewVisibilityAnimated(View v, boolean show) {
     if (v == null) return;
@@ -2759,11 +2777,13 @@ private void applyLockGateInstant() {
         corners[i].setAlpha(1f);
         corners[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
     }
+refreshLockShownFlag(); 
 }
 /** [MỚI] Chuyển tức thời Lock -> Homacc ngay lúc ACTION_USER_PRESENT — không animate,
  *  không chờ accessibility event kế tiếp, để mắt thường không kịp thấy Lock/LockEb
  *  còn sót lại trên Home dù chỉ đúng 1 khung hình. */
 private void instantSwitchLockToHomacc() {
+    lockLayerShown = false; 
     for (int i = 0; i < 12; i++) {
         if (bars[i] == null) continue;
         bars[i].animate().cancel();

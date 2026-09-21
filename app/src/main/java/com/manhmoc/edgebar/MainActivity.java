@@ -543,7 +543,7 @@ private View buildBubbleRuleCard(String rId, Runnable rerender) {
 private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int targetSize, float contentScale) {
     if (d == null) return null;
     try {
-        int srcSize = targetSize * 3;
+        int srcSize = targetSize * 5;
         Bitmap raw = Bitmap.createBitmap(srcSize, srcSize, Bitmap.Config.ARGB_8888);
         Canvas rawCanvas = new Canvas(raw);
         android.graphics.drawable.Drawable dm = d.mutate();
@@ -622,8 +622,6 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     }
     @Override protected void onResume() {
         super.onResume();
-        try { registerReceiver(screenOffKillRecents, new IntentFilter(Intent.ACTION_SCREEN_OFF)); }
-catch (Exception ignored) {}
 
                 // [FIX] Xoá mọi notification không phải Foreground Service (FGS) của
         // accessibility — tránh launcher tự chèn entry "Thông báo" vào menu
@@ -694,29 +692,7 @@ catch (Exception ignored) {}
     }
     @Override protected void onPause() { super.onPause();
 
-try { unregisterReceiver(screenOffKillRecents); } catch (Exception ignored) {}
-
 prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
-    // [MỚI] User nhấn nút Home / Recents → đây là lúc "rời app chủ động".
-// onUserLeaveHint() KHÔNG bị gọi khi mở dialog / permission request / đổi cấu
-// hình — chính xác đúng trường hợp cần xoá recents.
-private BroadcastReceiver screenOffKillRecents = new BroadcastReceiver() {
-    @Override public void onReceive(Context c, Intent i) {
-        if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())
-            && prefs.getBoolean("appicon_kill_recents", false)
-            && Build.VERSION.SDK_INT >= 21) {
-            try { finishAndRemoveTask(); } catch (Exception ignored) {}
-        }
-    }
-};
-
-@Override protected void onUserLeaveHint() {
-    super.onUserLeaveHint();
-    if (prefs.getBoolean("appicon_kill_recents", false) && Build.VERSION.SDK_INT >= 21) {
-        try { finishAndRemoveTask(); } catch (Exception ignored) {}
-    }
-}
-
     private void reloadActionLabels() {
 // [XÓA] OPEN_PANEL_1/2/3 — Panel giờ liệt kê động qua nút "PANEL" (buildDynamicPackItems).
 String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "SCREEN_ON",
@@ -964,10 +940,6 @@ private String[] getVolKeyActLabs() {
         || (pageEcoShowcase != null && pageEcoShowcase.getVisibility() == View.VISIBLE)
         || (pageSystemSpace != null && pageSystemSpace.getVisibility() == View.VISIBLE)) {
         showMainMenu(); return;
-    }
-        // [MỚI] Nếu user bật checkbox "Luôn tắt Recents" → xoá task hẳn khỏi Đa nhiệm
-    if (prefs.getBoolean("appicon_kill_recents", false) && Build.VERSION.SDK_INT >= 21) {
-        try { finishAndRemoveTask(); return; } catch (Exception ignored) {}
     }
     finish();
 }
@@ -1245,16 +1217,14 @@ if (currentMainTab == 0) {
     fab.setVisibility(View.VISIBLE);
     fab.setImageDrawable(getDrawable(customIconRes("mobile_lock_portrait_24px") != 0
         ? customIconRes("mobile_lock_portrait_24px") : android.R.drawable.ic_menu_compass));
-        fab.setOnClickListener(v -> {
-        // [MỚI] Xoá task khỏi Recents trước khi về Home (nếu user bật checkbox)
-        if (prefs.getBoolean("appicon_kill_recents", false) && Build.VERSION.SDK_INT >= 21) {
-            try { finishAndRemoveTask(); } catch (Exception ignored) {}
-        }
+            fab.setOnClickListener(v -> {
         Intent home = new Intent(Intent.ACTION_MAIN);
         home.addCategory(Intent.CATEGORY_HOME);
         home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(home);
     });
+
+
 } else if (currentMainTab == -2 || currentMainTab == -3) { 
     fab.setVisibility(View.VISIBLE);
     fab.setOnClickListener(v -> showPremiumDialog());
@@ -1291,7 +1261,17 @@ if (currentMainTab == 0) {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+    // [FIX RECENTS] Nếu user bật checkbox "Luôn tắt Recents Edge Bar" → gắn flag
+// FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS ngay từ Intent khởi tạo. Flag này làm
+// cho TASK KHÔNG BAO GIỜ được ghi vào Recents, không phải "xoá sau" — nên
+// hoạt động chắc chắn 100%, không có độ trễ hiển thị như finishAndRemoveTask().
+// Chỉ cần dọn 1 lần nếu task cũ đã lỡ vào Recents từ phiên trước khi bật checkbox.
+if (prefs.getBoolean("appicon_kill_recents", false)) {
+    getIntent().addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+    if (Build.VERSION.SDK_INT >= 21) {
+        try { finishAndRemoveTask(); recreate(); return; } catch (Exception ignored) {}
+    }
+}
 
     // [MỚI] Nếu user đã gán 1 Slot làm hành động "1 chạm" VÀ đây đúng là cú chạm
     // icon ngoài Home (có CATEGORY_LAUNCHER) -> chạy Slot đó rồi thoát ngay, KHÔNG
@@ -5434,7 +5414,7 @@ cardWrap.addView(selDot);
     cbBlurLock.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("recents_blur_locklist_en", c).apply());
     cbBlurLock.setPadding(0, 20, 0, 0);
     cardRecentsBlur.addView(cbBlurLock);
-    cardRecentsBlur.addView(createSlider(T("Cover opacity", "Độ đậm lớp che"), "recents_blur_alpha", 300, 235));
+    cardRecentsBlur.addView(createSlider(T("Cover opacity", "Độ đậm lớp che"), "recents_blur_alpha", 255, 235));
     ecoContainer.addView(wrapCard(cardRecentsBlur));
 
     // Thẻ 3: Keyboard (Nút ẩn)
@@ -7895,8 +7875,15 @@ cbKillRecents.setText(T("Always remove Edge Bar from Recents on exit",
 cbKillRecents.setTextColor(Color.parseColor("#FFC107"));
 cbKillRecents.setTextSize(12.5f);
 cbKillRecents.setChecked(prefs.getBoolean("appicon_kill_recents", false));
-cbKillRecents.setOnCheckedChangeListener((v, c) ->
-    prefs.edit().putBoolean("appicon_kill_recents", c).apply());
+cbKillRecents.setOnCheckedChangeListener((v, c) -> {
+    prefs.edit().putBoolean("appicon_kill_recents", c).apply();
+    if (c) {
+        // User vừa bật → xoá task hiện tại khỏi Recents NGAY (nếu có)
+        if (Build.VERSION.SDK_INT >= 21) {
+            try { finishAndRemoveTask(); recreate(); return; } catch (Exception ignored) {}
+        }
+    }
+});
 LinearLayout.LayoutParams cbKillLp = new LinearLayout.LayoutParams(-1, -2);
 cbKillLp.setMargins(0, 20, 0, 20);
 cbKillRecents.setLayoutParams(cbKillLp);
@@ -10123,13 +10110,16 @@ private android.graphics.drawable.Icon loadShortcutIcon(String ref, float iconSc
     Drawable ov = resolveAppIconOverrideDrawable(ref);
     if (ov != null) {
         Bitmap bmp;
-        if (ref.startsWith("app:")) {
-            // Icon app thật → giữ nguyên màu gốc, chỉ normalize
-            bmp = PanelEngine.normalizeIconBitmap(ov, 108, iconScale);
-        } else {
-            // Icon từ pool/poolc → nền trắng + glyph gradient Midnight Neon
-            bmp = buildNeonEdgeIcon(ov, 108, iconScale);
-        }
+        // [FIX RĂNG CƯA] Build ở 192px thay vì 108px — dư sức cho launcher hiển
+// thị shortcut ở bất kỳ mật độ nào trên Pixel 2XL (xxxhdpi 640dpi cần tối đa
+// ~192px cho 48dp icon). Bitmap lớn hơn 1 chút nhưng ShortcutManager chỉ giữ
+// reference → không tốn thêm RAM đáng kể.
+final int ICON_PX = 192;
+if (ref.startsWith("app:")) {
+    bmp = PanelEngine.normalizeIconBitmap(ov, ICON_PX, iconScale);
+} else {
+    bmp = buildNeonEdgeIcon(ov, ICON_PX, iconScale);
+}
         if (bmp != null) return Build.VERSION.SDK_INT >= 26
             ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(bmp)
             : android.graphics.drawable.Icon.createWithBitmap(bmp);
@@ -10179,11 +10169,16 @@ private Bitmap buildNeonEdgeIcon(Drawable icon, int size, float contentScale) {
         // Bước 3: phủ gradient SRC_IN — dải màu y hệt ic_launcher_fg.xml
         Canvas gc = new Canvas(glyph);
         Paint gp = new Paint(Paint.ANTI_ALIAS_FLAG);
-        gp.setShader(new android.graphics.LinearGradient(
-            0, 0, size, size,
-            new int[]{ 0xFF1A237E, 0xFF7B1FA2, 0xFF03A9F4 },  // Deep Blue → Purple → Neon Blue
-            new float[]{ 0f, 0.5f, 1f },
-            android.graphics.Shader.TileMode.CLAMP));
+        // [FIX MÀU] Gradient phải trải TRONG vùng có glyph, không phải toàn khung.
+// Glyph chỉ chiếm contentScale của khung → nếu gradient trải full khung,
+// phần đầu (Deep Blue) và cuối (Neon Blue) rơi vào vùng trong suốt → bị cắt,
+// chỉ còn khúc giữa Purple hiển thị. Co gradient theo đúng pad của contentScale.
+float pad = size * (1f - contentScale) / 2f;
+gp.setShader(new android.graphics.LinearGradient(
+    pad, pad, size - pad, size - pad,
+    new int[]{ 0xFF1A237E, 0xFF7B1FA2, 0xFF03A9F4 },
+    new float[]{ 0f, 0.45f, 1f },   // đẩy mốc tím lên 45% để Deep Blue chiếm nhiều hơn
+    android.graphics.Shader.TileMode.CLAMP));
         gp.setXfermode(new android.graphics.PorterDuffXfermode(
             android.graphics.PorterDuff.Mode.SRC_IN));
         gc.drawRect(0, 0, size, size, gp);

@@ -2,17 +2,17 @@ package com.manhmoc.edgebar;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
-
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
@@ -20,44 +20,53 @@ import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
-import java.util.ArrayList;
+import android.view.accessibility.AccessibilityWindowInfo;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-/** Phủ lớp mờ lên thẻ app trong Recents (Quickstep TaskView). Event-driven, 1 cửa sổ duy nhất. */
+/**
+ * V2 — "Recents Guard": KHÔNG blur, KHÔNG screenshot, KHÔNG bám theo thẻ.
+ * Mở Recents từ app thuộc Blurlist/Locklist -> phủ 1 cửa sổ tĩnh (ảnh/màu) toàn màn hình.
+ * Chạm vào thẻ (app lên foreground) hoặc về Home -> gỡ. Recents từ app thường -> không làm gì.
+ */
 public class RecentsBlurHelper {
+    private static final long SCAN_STEP_MS = 100;
+    private static final int  SCAN_RETRIES = 6;          // ~600ms chờ thẻ Recents dựng xong
+    private static final int  MISS_TO_HIDE = 3;          // 3 lần quét liên tiếp không thấy Recents -> gỡ
+    private static final long BITMAP_FREE_DELAY_MS = 20000;
+
     private final AccessibilityService svc;
     private final WindowManager wm;
     private final SharedPreferences prefs;
     private final Runnable onSubscriptionChanged;
     private final Handler h = new Handler(Looper.getMainLooper());
-    private final Runnable scanRunnable = this::scan;
-    // [MỚI] Runnable chạy sau khi user dừng scroll — tách khỏi scanRunnable để
-// có thể huỷ riêng khi user scroll tiếp. Zero-RAM: chỉ là 1 reference Runnable.
-private final Runnable scrollEndRunnable = () -> requestScan(0);
-private static final long SCROLL_END_DEBOUNCE_MS = 350;
 
+    private final Map<String, String> pkgToLabel = new HashMap<>();
+    private String lastSig = "";
+
+    private String lastAppPkg = "";      // app thường ở foreground gần nhất
+    private String originPkg = "";       // app đứng trước khi vào launcher
+    private boolean launcherActive = false;
+    private boolean sessionActive = false; // origin thuộc danh sách -> đang theo dõi
+    private boolean covered = false;
+    private boolean scanScheduled = false;
+    private int retriesLeft = 0, missCount = 0;
 
     private CoverView cover;
-    private boolean recentsVisible = false;
-    private String lastSig = "";
-    private final Map<String, String> pkgToLabel = new HashMap<>();
-    private final Map<String, Drawable> iconCache = new HashMap<>();
-    private final List<Object[]> hits = new ArrayList<>(); // {RectF, pkg}
-    private final java.util.Map<String, Bitmap> blurCache = new java.util.HashMap<>();
-private long lastBlurCaptureMs = 0;
-// [FIX NÓNG MÁY] Trước đây 900ms vẫn còn quá dày — 1 lần scroll nhanh có thể kích
-// 2-3 lần chụp liên tiếp gây spike CPU/GPU + tăng nhiệt. Nâng lên 1500ms: lần chụp
-// đầu tiên khi vừa vào Recents chạy ngay, còn lại user phải scroll xong + dừng
-// >= 1500ms mới chụp lại. Giảm ~40% số lần takeScreenshot() mỗi phiên Recents.
-private static final long BLUR_CAPTURE_MIN_GAP_MS = 1500;
+    private Bitmap coverBmp;
+    private String coverBmpKey = "";
+    private boolean decoding = false;
+    private final ExecutorService decodeExec = Executors.newSingleThreadExecutor();
 
-// [TỐI ƯU PIXEL 2XL] 1 thread nền duy nhất, allowCoreThreadTimeOut để nhả thread khi rảnh
-private final java.util.concurrent.ExecutorService blurExecutor =
-    java.util.concurrent.Executors.newSingleThreadExecutor();
-private volatile boolean isCapturingBlur = false; // chặn chồng 2 lần chụp
+    private final Runnable scanRunnable = () -> { scanScheduled = false; scan(); };
+    private final Runnable freeBmpRunnable = () -> {
+        if (!covered) { coverBmp = null; coverBmpKey = ""; }
+    };
 
     public RecentsBlurHelper(AccessibilityService svc, WindowManager wm, SharedPreferences prefs, Runnable onSubscriptionChanged) {
         this.svc = svc; this.wm = wm; this.prefs = prefs; this.onSubscriptionChanged = onSubscriptionChanged;
@@ -68,15 +77,23 @@ private volatile boolean isCapturingBlur = false; // chặn chồng 2 lần ch�
         return prefs.getBoolean("recents_blur_locklist_en", false) && !prefs.getString("applock_list", "").isEmpty();
     }
 
-// [FIX] Subscribe ngay khi feature bật — không chờ recentsVisible=true nữa
-public boolean wantsScrollEvents() { return isEnabled(); }
+    /** Chỉ nhận CONTENT_CHANGED/SCROLLED trong lúc có phiên Recents của app Blurlist. */
+    public boolean wantsScrollEvents() { return sessionActive && isEnabled(); }
+
+    private boolean isLauncherPkg(String p) {
+        return p.contains("launcher") || p.contains("quickstep") || p.contains("recents");
+    }
+    private boolean isNoise(String p) {
+        return p.isEmpty() || p.contains("systemui") || p.contains("inputmethod")
+            || p.equals("android") || p.equals(svc.getPackageName());
+    }
 
     private void rebuildLabelsIfNeeded() {
         String a = prefs.getString("recents_blur_list", "");
         String b = prefs.getBoolean("recents_blur_locklist_en", false) ? prefs.getString("applock_list", "") : "";
         String sig = a + "|" + b;
         if (sig.equals(lastSig)) return;
-        lastSig = sig; pkgToLabel.clear(); iconCache.clear();
+        lastSig = sig; pkgToLabel.clear();
         PackageManager pm = svc.getPackageManager();
         for (String csv : new String[]{a, b}) {
             for (String pk : csv.split(",")) {
@@ -89,64 +106,120 @@ public boolean wantsScrollEvents() { return isEnabled(); }
             }
         }
     }
-    private boolean scanPending = false;
-    private int discoveryRetries = 0;
 
-    private boolean isLauncherPkg(String p) {
-        return p.contains("launcher") || p.contains("quickstep") || p.contains("recents");
-    }
-
-    private void requestScan(long delayMs) {
-        if (scanPending) return;          // throttle, không debounce -> cover bám theo khi vuốt
-        scanPending = true;
-        h.postDelayed(scanRunnable, delayMs);
-    }
-
+    // ==================== SỰ KIỆN ====================
     public void onEvent(AccessibilityEvent ev) {
-        if (!isEnabled()) { if (cover != null || recentsVisible) hide(); return; }
+        if (!isEnabled()) { if (cover != null || sessionActive || launcherActive) reset(); return; }
         int t = ev.getEventType();
-        String p = ev.getPackageName() != null ? ev.getPackageName().toString() : "";
-        boolean launcher = isLauncherPkg(p);
-        if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || t == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
-            if (launcher || p.isEmpty()) {
-                discoveryRetries = 4;
-                requestScan(0);              // [FIX] quét ngay khung hình đầu tiên
-                h.postDelayed(scanRunnable, 220); // rồi bù thêm 1 lần cho content-description nạp trễ
-            } else if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-                    && !p.contains("systemui") && !p.contains("inputmethod")
-                    && !p.equals(svc.getPackageName())) {
-                // [FIX] App khác lên foreground (tap từ Recents / mở app mới) -> gỡ NGAY,
-                // không chờ debounce -> hết cảm giác "mất đi dần".
-                h.removeCallbacks(scanRunnable);
-                scanPending = false;
-                hide();
+        CharSequence pc = ev.getPackageName();
+        String p = pc != null ? pc.toString() : "";
+
+        if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            if (isLauncherPkg(p)) {
+                if (!launcherActive) {              // app -> launcher: chốt "app xuất phát"
+                    launcherActive = true;
+                    originPkg = lastAppPkg;
+                    lastAppPkg = "";
+                    rebuildLabelsIfNeeded();
+                    setSession(pkgToLabel.containsKey(originPkg));
+                }
+                if (sessionActive) { retriesLeft = SCAN_RETRIES; missCount = 0; scheduleScan(0); }
+            } else if (!isNoise(p)) {               // 1 app thật lên foreground -> gỡ NGAY
+                launcherActive = false;
+                lastAppPkg = p;
+                originPkg = "";
+                if (sessionActive || cover != null) endSession();
             }
-} else if (launcher && (t == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-        || t == AccessibilityEvent.TYPE_VIEW_SCROLLED
-        || t == AccessibilityEvent.TYPE_VIEW_CLICKED)) {
-    if (t == AccessibilityEvent.TYPE_VIEW_CLICKED) {
-        removeCover();
-    } else if (t == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
-        // [FIX "OVERLAY CHẠY THEO SAU"] Khi scroll, ẩn HẲN cover khỏi WindowManager
-        // (removeView, không phải setVisibility GONE). Trước đây chỉ empty list rồi
-        // requestScan(0) ngay → overlay đứng yên tại vị trí cũ trong khi card trượt
-        // đi, tạo cảm giác "bóng ma chạy theo sau". Giờ cover biến mất hoàn toàn
-        // trong lúc kéo, chỉ vẽ lại sau khi user NGỪNG kéo 350ms — không còn gì
-        // đứng sau card nữa để "chạy theo".
-        removeCover();
-        h.removeCallbacks(scanRunnable);
-        scanPending = false;
-        // Huỷ hết mọi lần chụp đang chờ để tránh screenshot chồng chéo khi kéo nhanh
-        h.removeCallbacks(scrollEndRunnable);
-        // Đợi user dừng scroll hẳn mới scan lại — 350ms đủ để OS ngừng bắn VIEW_SCROLLED
-        h.postDelayed(scrollEndRunnable, SCROLL_END_DEBOUNCE_MS);
-    } else {
-        // WINDOW_CONTENT_CHANGED — debounce ngắn, gộp nhiều event liên tiếp thành 1 scan
-        h.removeCallbacks(scrollEndRunnable);
-        h.postDelayed(scrollEndRunnable, 120);
+        } else if (sessionActive
+                && ((t == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && isLauncherPkg(p))
+                    || t == AccessibilityEvent.TYPE_WINDOWS_CHANGED)) {
+            scheduleScan(covered ? 250 : 150);      // dùng để phát hiện "đã thoát Recents về Home"
+        }
     }
-  }
-}
+
+    private void setSession(boolean on) {
+        if (sessionActive == on) return;
+        sessionActive = on;
+        if (onSubscriptionChanged != null) onSubscriptionChanged.run();
+    }
+
+    private void endSession() {
+        originPkg = "";
+        setSession(false);
+        removeCover();
+    }
+
+    private void scheduleScan(long delay) {
+        if (scanScheduled) return;
+        scanScheduled = true;
+        h.postDelayed(scanRunnable, delay);
+    }
+
+    // ==================== QUÉT: ĐANG Ở RECENTS HAY Ở HOME? ====================
+    private void scan() {
+        if (!sessionActive || !isEnabled()) return;
+        android.os.PowerManager pw = (android.os.PowerManager) svc.getSystemService(Context.POWER_SERVICE);
+        if (pw != null && !pw.isInteractive()) { endSession(); return; }
+
+        if (findRecentsCard()) {
+            missCount = 0;
+            if (!covered) showCover();
+            return;
+        }
+        if (covered) {
+            if (++missCount >= MISS_TO_HIDE) endSession(); else scheduleScan(180);
+        } else if (retriesLeft-- > 0) {
+            scheduleScan(SCAN_STEP_MS);
+        } else {
+            endSession();                           // launcher nhưng không có thẻ = Home, không phải Recents
+        }
+    }
+
+    private boolean findRecentsCard() {
+        android.util.DisplayMetrics dm = svc.getResources().getDisplayMetrics();
+        int minCard = Math.round(Math.min(dm.widthPixels, dm.heightPixels) * 0.30f);
+        Rect r = new Rect();
+        try {
+            List<AccessibilityWindowInfo> ws = svc.getWindows();
+            if (ws == null) return false;
+            for (AccessibilityWindowInfo w : ws) {
+                if (w.getType() != AccessibilityWindowInfo.TYPE_APPLICATION) continue;
+                AccessibilityNodeInfo root = w.getRoot();
+                if (root == null) continue;
+                boolean hit = false;
+                CharSequence rp = root.getPackageName();
+                if (rp != null && isLauncherPkg(rp.toString())) {
+                    String originLabel = pkgToLabel.get(originPkg);
+                    hit = originLabel != null && matchCard(root, originLabel, dm, minCard, r);
+                    if (!hit) for (String lb : pkgToLabel.values()) {
+                        if (matchCard(root, lb, dm, minCard, r)) { hit = true; break; }
+                    }
+                }
+                root.recycle();
+                if (hit) return true;
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private boolean matchCard(AccessibilityNodeInfo root, String label, android.util.DisplayMetrics dm, int minCard, Rect r) {
+        List<AccessibilityNodeInfo> found = root.findAccessibilityNodeInfosByText(label);
+        if (found == null) return false;
+        boolean hit = false;
+        for (AccessibilityNodeInfo nd : found) {
+            if (!hit) {
+                CharSequence cs = nd.getContentDescription();
+                if (cs == null || cs.length() == 0) cs = nd.getText();
+                if (matchesLabel(cs, label)) {
+                    nd.getBoundsInScreen(r);
+                    boolean full = r.width() >= dm.widthPixels * 0.95f && r.height() >= dm.heightPixels * 0.9f;
+                    if (r.width() > 80 && r.height() >= minCard && !full) hit = true;
+                }
+            }
+            nd.recycle();
+        }
+        return hit;
+    }
 
     private boolean matchesLabel(CharSequence cs, String label) {
         if (cs == null || cs.length() == 0) return false;
@@ -163,263 +236,106 @@ public boolean wantsScrollEvents() { return isEnabled(); }
         }
     }
 
-    private void addHit(RectF r, String pkg) {
-        for (Object[] it : hits) {
-            if (!pkg.equals(it[1])) continue;
-            RectF ex = (RectF) it[0];
-            if (ex.contains(r)) return;
-            if (r.contains(ex)) { it[0] = r; return; }
-        }
-        hits.add(new Object[]{r, pkg});
-    }
-
-    private void scan() {
-        scanPending = false;
-        if (!isEnabled()) { hide(); return; }
-        rebuildLabelsIfNeeded();
-        if (pkgToLabel.isEmpty()) { hide(); return; }
-        android.os.PowerManager pw = (android.os.PowerManager) svc.getSystemService(Context.POWER_SERVICE);
-        if (pw != null && !pw.isInteractive()) { removeCover(); return; }
-
-        hits.clear();
-        android.util.DisplayMetrics dm = svc.getResources().getDisplayMetrics();
-        int minCard = Math.round(Math.min(dm.widthPixels, dm.heightPixels) * 0.30f); // thẻ Recents cao >> icon
-        Rect r = new Rect();
-        try {
-            List<android.view.accessibility.AccessibilityWindowInfo> windows = svc.getWindows();
-            if (windows != null) {
-                for (android.view.accessibility.AccessibilityWindowInfo w : windows) {
-                    if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION) continue;
-                    AccessibilityNodeInfo root = w.getRoot();
-                    if (root == null) continue;
-                    CharSequence rp = root.getPackageName();
-                    if (rp != null && isLauncherPkg(rp.toString())) {
-                        for (Map.Entry<String, String> e : pkgToLabel.entrySet()) {
-                            List<AccessibilityNodeInfo> found = root.findAccessibilityNodeInfosByText(e.getValue());
-                            if (found == null) continue;
-                            for (AccessibilityNodeInfo nd : found) {
-                                CharSequence cs = nd.getContentDescription();
-                                if (cs == null || cs.length() == 0) cs = nd.getText();
-                                if (matchesLabel(cs, e.getValue())) {
-                                    nd.getBoundsInScreen(r);
-                                    boolean full = r.width() >= dm.widthPixels * 0.95f
-                                                && r.height() >= dm.heightPixels * 0.9f;
-                                    if (r.width() > 80 && r.height() >= minCard && !full)
-                                        addHit(new RectF(r), e.getKey());
-                                }
-                                nd.recycle();
-                            }
-                        }
-                    }
-                    root.recycle();
-                }
-            }
-        } catch (Exception ignored) {}
-
-        boolean nowVisible = !hits.isEmpty();
-        if (nowVisible != recentsVisible) {
-            recentsVisible = nowVisible;
-            if (onSubscriptionChanged != null) onSubscriptionChanged.run();
-        }
-// MỚI
-if (hits.isEmpty()) {
-    removeCover();
-    if (discoveryRetries > 0) { discoveryRetries--; requestScan(150); }
-} else {
-    showCover();
-    refreshBlurSnapshots();
-    }
-}
-private void refreshBlurSnapshots() {
-    if (android.os.Build.VERSION.SDK_INT < 30) return;
-    if (isCapturingBlur) return;
-    long now = System.currentTimeMillis();
-    if (now - lastBlurCaptureMs < BLUR_CAPTURE_MIN_GAP_MS) return;
-    lastBlurCaptureMs = now;
-    isCapturingBlur = true;
-    // Chụp snapshot của hits NGAY tại thời điểm gọi — tránh race với lần scan() kế tiếp
-    final List<Object[]> hitsSnap = new ArrayList<>(hits);
-    try {
-        svc.takeScreenshot(android.view.Display.DEFAULT_DISPLAY, svc.getMainExecutor(),
-            new AccessibilityService.TakeScreenshotCallback() {
-                @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
-                    // [TỐI ƯU] Đẩy hết copy + blur xuống thread nền — main thread chỉ nhận invalidate()
-                    blurExecutor.execute(() -> {
-                        Bitmap soft = null;
-                        try {
-                            Bitmap full = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
-                            if (full != null) {
-                                soft = full.copy(Bitmap.Config.ARGB_8888, false);
-                                for (Object[] it : hitsSnap) {
-                                    RectF r = (RectF) it[0]; String pkg = (String) it[1];
-                                    int x = Math.max(0, (int) r.left), y = Math.max(0, (int) r.top);
-                                    int w = Math.min(soft.getWidth() - x, (int) r.width());
-                                    int hh = Math.min(soft.getHeight() - y, (int) r.height());
-                                    if (w <= 0 || hh <= 0) continue;
-                                    // [FIX] .copy() để tách hẳn bản sao, tránh recycle nhầm soft
-                                    Bitmap crop = Bitmap.createBitmap(soft, x, y, w, hh)
-                                        .copy(Bitmap.Config.ARGB_8888, false);
-                                    blurCache.put(pkg, cheapBoxBlur(crop, 8));
-                                }
-                            }
-                        } catch (Exception ignored) {
-                        } finally {
-                            if (soft != null) soft.recycle();
-                            try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
-                            isCapturingBlur = false;
-                            h.post(() -> { if (cover != null) cover.invalidate(); });
-                        }
-                    });
-                }
-                @Override public void onFailure(int errorCode) { isCapturingBlur = false; }
-            });
-    } catch (Exception e) { isCapturingBlur = false; }
-}
-
-private Bitmap cheapBoxBlur(Bitmap src, int factor) {
-    int w = Math.max(1, src.getWidth() / factor), hh = Math.max(1, src.getHeight() / factor);
-    Bitmap small = Bitmap.createScaledBitmap(src, w, hh, true);
-    Bitmap big = Bitmap.createScaledBitmap(small, src.getWidth(), src.getHeight(), true);
-    small.recycle(); src.recycle();
-    return big;
-}
-
+    // ==================== LỚP PHỦ TĨNH ====================
     private void showCover() {
         if (cover == null) {
             cover = new CoverView(svc);
             WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE // chạm xuyên xuống Recents
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
             lp.gravity = Gravity.TOP | Gravity.LEFT;
             try { wm.addView(cover, lp); } catch (Exception e) { cover = null; return; }
         }
-        cover.setItems(hits);
+        covered = true;
+        h.removeCallbacks(freeBmpRunnable);
+        ensureBitmap();
+        cover.invalidate();
     }
 
     private void removeCover() {
-        if (cover == null) return;
-        try { wm.removeView(cover); } catch (Exception ignored) {}
-        cover = null;
+        covered = false;
+        if (cover != null) { try { wm.removeView(cover); } catch (Exception ignored) {} cover = null; }
+        h.removeCallbacks(freeBmpRunnable);
+        if (coverBmp != null) h.postDelayed(freeBmpRunnable, BITMAP_FREE_DELAY_MS); // nhả RAM ảnh sau 20s
     }
 
-    public void hide() {
-h.removeCallbacks(scanRunnable);
-scanPending = false; discoveryRetries = 0;
-
-removeCover();
-blurCache.clear();   // [FIX] nhả RAM ảnh blur ngay khi rời Recents
-
-        if (recentsVisible) {
-            recentsVisible = false;
-            if (onSubscriptionChanged != null) onSubscriptionChanged.run();
-        }
-    }
-
-public void destroy() {
-    hide();
-    iconCache.clear();
-    pkgToLabel.clear();
-    try { blurExecutor.shutdownNow(); } catch (Exception ignored) {}
-}
-    private Bitmap loadedBlurBmp;
-    private String loadedBlurBmpKey = "";
-
-    private Bitmap getCustomBlurBitmap() {
+    private void ensureBitmap() {
         String uriStr = prefs.getString("recents_blur_image_uri", "");
-        if (uriStr.isEmpty()) { loadedBlurBmp = null; loadedBlurBmpKey = ""; return null; }
-        if (uriStr.equals(loadedBlurBmpKey) && loadedBlurBmp != null) return loadedBlurBmp;
-        try {
-            android.net.Uri uri = android.net.Uri.parse(uriStr);
-            if (android.os.Build.VERSION.SDK_INT >= 28) {
-                android.graphics.ImageDecoder.Source src =
-                    android.graphics.ImageDecoder.createSource(svc.getContentResolver(), uri);
-                loadedBlurBmp = android.graphics.ImageDecoder.decodeBitmap(src, (decoder, info, s) ->
-                    decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE));
-            } else {
-                loadedBlurBmp = android.provider.MediaStore.Images.Media.getBitmap(svc.getContentResolver(), uri);
-            }
-            loadedBlurBmpKey = uriStr;
-        } catch (Exception e) { loadedBlurBmp = null; loadedBlurBmpKey = ""; }
-        return loadedBlurBmp;
+        if (uriStr.isEmpty()) { coverBmp = null; coverBmpKey = ""; return; }
+        if (uriStr.equals(coverBmpKey) && coverBmp != null) return;
+        if (decoding) return;
+        decoding = true;
+        final String key = uriStr;
+        decodeExec.execute(() -> {
+            Bitmap b = decodeScaled(Uri.parse(key));
+            h.post(() -> {
+                decoding = false;
+                coverBmp = b; coverBmpKey = b != null ? key : "";
+                if (cover != null) cover.invalidate();
+            });
+        });
     }
 
-    private Drawable getIcon(String pkg) {
-        Drawable d = iconCache.get(pkg);
-        if (d != null) return d;
-        try { d = svc.getPackageManager().getApplicationIcon(pkg); iconCache.put(pkg, d); } catch (Exception ignored) {}
-        return d;
+    /** Giải mã ở ~1/3 độ phân giải màn hình + RGB_565 -> ~1.5MB, đủ cho lớp phủ. */
+    private Bitmap decodeScaled(Uri uri) {
+        try {
+            android.util.DisplayMetrics dm = svc.getResources().getDisplayMetrics();
+            int target = Math.max(dm.widthPixels, dm.heightPixels) / 3;
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            try (InputStream is = svc.getContentResolver().openInputStream(uri)) { BitmapFactory.decodeStream(is, null, o); }
+            int s = 1, maxSide = Math.max(o.outWidth, o.outHeight);
+            while (maxSide / (s * 2) >= target) s *= 2;
+            BitmapFactory.Options o2 = new BitmapFactory.Options();
+            o2.inSampleSize = s;
+            o2.inPreferredConfig = Bitmap.Config.RGB_565;
+            try (InputStream is2 = svc.getContentResolver().openInputStream(uri)) {
+                return BitmapFactory.decodeStream(is2, null, o2);
+            }
+        } catch (Exception e) { return null; }
     }
 
     private class CoverView extends View {
-        private final List<Object[]> items = new ArrayList<>();
-        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint dimPaint = new Paint();
-        private final RectF tmp = new RectF();
+        private final Paint base = new Paint();
+        private final Paint img = new Paint(Paint.FILTER_BITMAP_FLAG);
         private final RectF dst = new RectF();
-        private final android.graphics.Path clipPath = new android.graphics.Path();
-        private final int[] loc = new int[2];
-        private final Paint circleCoverPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        CoverView(android.content.Context c) { super(c); }
-        void setItems(List<Object[]> src) { items.clear(); items.addAll(src); invalidate(); }
+        CoverView(Context c) { super(c); }
         @Override protected void onDraw(Canvas c) {
-            getLocationOnScreen(loc);
-            Bitmap customBmp = getCustomBlurBitmap();
-            int alpha = prefs.getInt("recents_blur_alpha", 235);
-            p.setColor(Color.argb(alpha, 32, 33, 36));
-            for (Object[] it : items) {
-                RectF r = (RectF) it[0];
-                tmp.set(r.left - loc[0], r.top - loc[1], r.right - loc[0], r.bottom - loc[1]);
-Bitmap blurBmp = blurCache.get((String) it[1]);
-if (blurBmp != null) {
-    clipPath.reset();
-    clipPath.addRoundRect(tmp, 36f, 36f, android.graphics.Path.Direction.CW);
-    c.save();
-    c.clipPath(clipPath);
-    dst.set(tmp);
-    c.drawBitmap(blurBmp, null, dst, null);
-    if (alpha < 255) {
-        dimPaint.setColor(Color.argb(255 - alpha, 0, 0, 0));
-        c.drawRect(tmp, dimPaint);
-    }
-    c.restore();
-} else if (customBmp != null) {
-    clipPath.reset();
-    clipPath.addRoundRect(tmp, 36f, 36f, android.graphics.Path.Direction.CW);
-    c.save();
-    c.clipPath(clipPath);
-    float scale = Math.max(tmp.width() / customBmp.getWidth(), tmp.height() / customBmp.getHeight());
-    float bw = customBmp.getWidth() * scale, bh = customBmp.getHeight() * scale;
-    float bx = tmp.centerX() - bw / 2f, by = tmp.centerY() - bh / 2f;
-    dst.set(bx, by, bx + bw, by + bh);
-    c.drawBitmap(customBmp, null, dst, null);
-    if (alpha < 255) {
-        dimPaint.setColor(Color.argb(255 - alpha, 0, 0, 0));
-        c.drawRect(tmp, dimPaint);
-    }
-    c.restore();
-} else {
-    c.drawRoundRect(tmp, 36f, 36f, p);
-}
-
-                Drawable d = getIcon((String) it[1]);
-if (d != null) {
-    // [FIX "MỜ LUÔN ICON APP"] Vì bitmap blur vốn được crop từ screenshot
-    // (đã chứa cả icon gốc trong đó), nếu chỉ vẽ icon mới lên trên mà không
-    // che vệt cũ thì khi factor blur nhỏ, vệt icon mờ mờ vẫn còn nhìn thấy —
-    // trông như "icon bị lem". Giải pháp: vẽ 1 đĩa tròn cùng màu nền Recents
-    // để DỌN SẠCH vệt icon cũ, rồi mới vẽ icon sắc nét lên. Zero-alloc:
-    // Paint + Rect tái sử dụng, không tạo Bitmap mới.
-    int s = (int) Math.min(160f, Math.min(tmp.width(), tmp.height()) * 0.35f);
-    int cx = (int) tmp.centerX(), cy = (int) tmp.centerY();
-    circleCoverPaint.setColor(Color.argb(235, 28, 28, 30)); // sát màu nền Recents
-    c.drawCircle(cx, cy, s * 0.62f, circleCoverPaint);
-    d.setBounds(cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2);
-    d.draw(c);
-               }
+            int w = getWidth(), hh = getHeight();
+            if (w <= 0 || hh <= 0) return;
+            int a = Math.max(0, Math.min(255, prefs.getInt("recents_blur_alpha", 235)));
+            base.setColor(Color.argb(a, 24, 24, 26));
+            c.drawRect(0, 0, w, hh, base);
+            Bitmap b = coverBmp;
+            if (b != null && !b.isRecycled()) {
+                float s = Math.max(w / (float) b.getWidth(), hh / (float) b.getHeight()); // center-crop
+                float bw = b.getWidth() * s, bh = b.getHeight() * s;
+                dst.set((w - bw) / 2f, (hh - bh) / 2f, (w + bw) / 2f, (hh + bh) / 2f);
+                img.setAlpha(a);
+                c.drawBitmap(b, null, dst, img);
             }
         }
+    }
+
+    // ==================== DỌN DẸP ====================
+    private void reset() {
+        h.removeCallbacksAndMessages(null);
+        scanScheduled = false;
+        launcherActive = false; lastAppPkg = ""; originPkg = "";
+        boolean was = sessionActive;
+        sessionActive = false;
+        removeCover();
+        if (was && onSubscriptionChanged != null) onSubscriptionChanged.run();
+    }
+
+    public void hide() { reset(); }
+
+    public void destroy() {
+        reset();
+        coverBmp = null; coverBmpKey = "";
+        try { decodeExec.shutdownNow(); } catch (Exception ignored) {}
     }
 }

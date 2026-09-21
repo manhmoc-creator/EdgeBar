@@ -25,25 +25,34 @@ if (shortcutId == null) shortcutId = "";
         String act = prefs.getString("appicon_" + shortcutId + "_act", "NONE");
 
         if (!act.equals("NONE") && !act.isEmpty()) {
-            Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-            if (act.equals("LAUNCH_APP")) {
-                ipc.putExtra("act", "LAUNCH_APP");
-                ipc.putExtra("launch_pkg", prefs.getString("appicon_" + shortcutId + "_launch_pkg", ""));
-            } else if (act.startsWith("RUN_SHORTCUT_")) {
-                ipc.putExtra("act", "RUN_SHORTCUT");
-                ipc.putExtra("shortcut_id", act.substring("RUN_SHORTCUT_".length()));
-            } else {
-                ipc.putExtra("act", act);
-            }
-            sendBroadcast(ipc);
-
-            if (Build.VERSION.SDK_INT >= 25) {
-                try {
-                    ShortcutManager sm = getSystemService(ShortcutManager.class);
-                    if (sm != null) sm.reportShortcutUsed(shortcutId);
-                } catch (Exception ignored) {}
-            }
+    // [FIX BUG] OPEN_APP_UI xử lý TRỰC TIẾP tại đây — không gửi qua broadcast
+    // vì không receiver nào handle action này, broadcast sẽ bị bỏ qua.
+    // Đây chính là lý do "bấm slot Mở Edge Bar trong menu long-press không mở app".
+    if (act.equals("OPEN_APP_UI")) {
+        Intent open = new Intent(this, MainActivity.class);
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        startActivity(open);
+    } else {
+        Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+        if (act.equals("LAUNCH_APP")) {
+            ipc.putExtra("act", "LAUNCH_APP");
+            ipc.putExtra("launch_pkg", prefs.getString("appicon_" + shortcutId + "_launch_pkg", ""));
+        } else if (act.startsWith("RUN_SHORTCUT_")) {
+            ipc.putExtra("act", "RUN_SHORTCUT");
+            ipc.putExtra("shortcut_id", act.substring("RUN_SHORTCUT_".length()));
+        } else {
+            ipc.putExtra("act", act);
         }
+        sendBroadcast(ipc);
+    }
+
+    if (Build.VERSION.SDK_INT >= 25) {
+        try {
+            ShortcutManager sm = getSystemService(ShortcutManager.class);
+            if (sm != null) sm.reportShortcutUsed(shortcutId);
+        } catch (Exception ignored) {}
+    }
+}
         finish();
         overridePendingTransition(0, 0);
     }
