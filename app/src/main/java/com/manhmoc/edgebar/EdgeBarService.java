@@ -313,18 +313,21 @@ try {
                             doSampleIconColors(true);
                         }, 400);
                     }
+                    } catch (java.util.concurrent.RejectedExecutionException ree) {
+                        // [FIX] Race: executor đã shutdownNow() trong onDestroy() ngay
+                        // trước khi onSuccess() kịp gọi execute() — bắt riêng để KHÔNG
+                        // nuốt mất lỗi khác. Nhớ nhả HardwareBuffer tránh rò native memory.
+                        isCapturingIconColorScreenshot = false;
+                        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+                    } catch (Exception e) {
+                        isCapturingIconColorScreenshot = false;
+                    }
                 }
                 @Override public void onFailure(int errorCode) {
                     isCapturingIconColorScreenshot = false;
                     if (!isFollowUp) iconColorHandler.postDelayed(() -> doSampleIconColors(true), 2000);
                 }
             });
-    } catch (java.util.concurrent.RejectedExecutionException ree) {
-        // [FIX] Race: executor đã shutdownNow() trong onDestroy() ngay trước khi
-        // onSuccess() kịp gọi execute() — bắt riêng để KHÔNG nuốt mất lỗi khác.
-        // Nhớ nhả HardwareBuffer để không rò native memory.
-        isCapturingIconColorScreenshot = false;
-        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
     } catch (Exception e) {
         isCapturingIconColorScreenshot = false;
     }
