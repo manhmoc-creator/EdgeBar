@@ -5,9 +5,11 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.KeyguardManager;
 import android.app.NotificationManager;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -10120,11 +10122,19 @@ private void syncAppShortcutLabels() {
 private android.graphics.drawable.Icon loadShortcutIcon(String ref, float iconScale) {
     Drawable ov = resolveAppIconOverrideDrawable(ref);
     if (ov != null) {
-        Bitmap bmp = PanelEngine.normalizeIconBitmap(ov, 108, iconScale);
+        Bitmap bmp;
+        if (ref.startsWith("app:")) {
+            // Icon app thật → giữ nguyên màu gốc, chỉ normalize
+            bmp = PanelEngine.normalizeIconBitmap(ov, 108, iconScale);
+        } else {
+            // Icon từ pool/poolc → nền trắng + glyph gradient Midnight Neon
+            bmp = buildNeonEdgeIcon(ov, 108, iconScale);
+        }
         if (bmp != null) return Build.VERSION.SDK_INT >= 26
             ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(bmp)
             : android.graphics.drawable.Icon.createWithBitmap(bmp);
     }
+    // Fallback: icon Edge Bar gốc
     try {
         Drawable fg = getDrawable(R.drawable.ic_launcher_fg);
         Bitmap fallbackBmp = PanelEngine.normalizeIconBitmap(fg, 108, iconScale);
@@ -10136,6 +10146,56 @@ private android.graphics.drawable.Icon loadShortcutIcon(String ref, float iconSc
     } catch (Exception e) {
         return android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_launcher_fg);
     }
+}
+
+/**
+ * [MỚI] Tái hiện đúng dải màu "Midnight Neon" của icon Edge Bar cho bất kỳ glyph nào:
+ *   nền TRẮNG tinh khiết + glyph tô gradient Deep Blue → Purple → Neon Blue.
+ *
+ * Thuật toán 4 bước (Zero-alloc ngoài lần gọi):
+ *   1) Tint glyph trắng đơn sắc để chuẩn hoá alpha mask.
+ *   2) normalizeIconBitmap() crop + scale glyph về đúng contentScale.
+ *   3) Phủ gradient rect với PorterDuff.SRC_IN → chỉ pixel alpha>0 của glyph
+ *      nhận màu gradient (pixel trong suốt giữ nguyên transparent).
+ *   4) Composite glyph đã tô màu lên nền trắng → out cuối cùng.
+ *
+ * Zero-RAM: chỉ 2 Bitmap tạm (glyph + out) sống trong scope, recycle ngay khi
+ * xong. Không Thread, không Handler, không Service. Cache ở tầng trên
+ * (ShortcutManager) giữ Icon.createWithBitmap nên không vẽ lại nữa.
+ */
+private Bitmap buildNeonEdgeIcon(Drawable icon, int size, float contentScale) {
+    if (icon == null) return null;
+    try {
+        // Bước 1: tint trắng để chuẩn hoá
+        Drawable tinted = icon.mutate();
+        tinted.setTint(Color.WHITE);
+
+        // Bước 2: crop + scale glyph
+        Bitmap normalized = PanelEngine.normalizeIconBitmap(tinted, size, contentScale);
+        if (normalized == null) return null;
+        Bitmap glyph = normalized.copy(Bitmap.Config.ARGB_8888, true);
+        normalized.recycle();
+
+        // Bước 3: phủ gradient SRC_IN — dải màu y hệt ic_launcher_fg.xml
+        Canvas gc = new Canvas(glyph);
+        Paint gp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        gp.setShader(new android.graphics.LinearGradient(
+            0, 0, size, size,
+            new int[]{ 0xFF1A237E, 0xFF7B1FA2, 0xFF03A9F4 },  // Deep Blue → Purple → Neon Blue
+            new float[]{ 0f, 0.5f, 1f },
+            android.graphics.Shader.TileMode.CLAMP));
+        gp.setXfermode(new android.graphics.PorterDuffXfermode(
+            android.graphics.PorterDuff.Mode.SRC_IN));
+        gc.drawRect(0, 0, size, size, gp);
+
+        // Bước 4: composite lên nền trắng
+        Bitmap out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas oc = new Canvas(out);
+        oc.drawColor(Color.WHITE);
+        oc.drawBitmap(glyph, 0, 0, null);
+        glyph.recycle();
+        return out;
+    } catch (Exception e) { return null; }
 }
 
 // Gọi 1 lần lúc mở app — đồng bộ lại đúng trạng thái bật/tắt của cả 30 slot
