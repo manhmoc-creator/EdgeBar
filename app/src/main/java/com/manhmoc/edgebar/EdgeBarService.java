@@ -539,30 +539,21 @@ for (int j = 0; j < 4; j++) if (accHomeCorners[j] != null) accHomeCorners[j].set
                 BlacklistLockWatchdogService.beginPreempt(EdgeBarService.this);
             }
 
-                } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
-            // [FIX TỐC ĐỘ MỞ KHOÁ] Ép "đã mở khoá" trong 400ms tới, chặn hẳn khả năng
-            // Lock bị updateVisibility() vẽ lại do keyguard báo trễ.
-            forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 400;
-            instantSwitchLockToHomacc(); // ẩn Lock / hiện Homacc NGAY, không chờ animate hay event kế tiếp
-
-            if (AccessibleHomeService.isRunning) drawAccessibleHome();
-            refreshFingerprintRegistration();
-
-            // [MỚI] Hồi sinh hoàn toàn: Hủy mọi cờ xuyên thấu/giả lập đang kẹt
-            isDispatchingSyntheticGesture = false;
-            setTransientUntouchable(false);
-            
-            // [THAY BẰNG CODE HỒI SINH HOMACC Ở ĐÂY]
-            SharedPreferences.Editor ed = prefs.edit();
-            for (String b : BARS) ed.putBoolean("homacc_" + b + "_manual_hide", false);
-            for (String cn : CORNERS) ed.putBoolean("homacc_corner_" + cn + "_manual_hide", false);
-            ed.apply();
-            
-            updateVisibility();
-            // [MỚI] Chốt lại 2 lần trong lúc forceUnlocked còn hiệu lực, phòng Homacc
-            // vừa được khởi động lại chưa kịp add đủ View ngay lượt đầu.
-            new Handler(android.os.Looper.getMainLooper()).postDelayed(this::updateVisibility, 60);
-            new Handler(android.os.Looper.getMainLooper()).postDelayed(this::updateVisibility, 220);
+} else if (Intent.ACTION_USER_PRESENT.equals(act)) {
+    forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 400;
+    instantSwitchLockToHomacc();
+    if (AccessibleHomeService.isRunning) drawAccessibleHome();
+    refreshFingerprintRegistration();
+    isDispatchingSyntheticGesture = false;
+    setTransientUntouchable(false);
+    SharedPreferences.Editor ed = prefs.edit();
+    for (String b : BARS) ed.putBoolean("homacc_" + b + "_manual_hide", false);
+    for (String cn : CORNERS) ed.putBoolean("homacc_corner_" + cn + "_manual_hide", false);
+    ed.apply();
+    updateVisibility();
+    // ✅ Dùng qualified-this trỏ đúng ra class ngoài
+    new Handler(android.os.Looper.getMainLooper()).postDelayed(EdgeBarService.this::updateVisibility, 60);
+    new Handler(android.os.Looper.getMainLooper()).postDelayed(EdgeBarService.this::updateVisibility, 220);
 
 // CODE MỚI — thay bằng:
 } else if (Intent.ACTION_SCREEN_ON.equals(act)) {
