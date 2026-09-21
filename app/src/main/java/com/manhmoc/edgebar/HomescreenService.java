@@ -138,7 +138,7 @@ private boolean recIndicatorTestPaused = false;
     private long lastSyncMs = 0;
     private final Handler appLockPollHandler = new Handler(android.os.Looper.getMainLooper());
     private String lastPolledFgPkg = "";
-    private static final long APPLOCK_POLL_MS = 400; // đủ nhanh, không tốn pin đáng kể
+    private static final long APPLOCK_POLL_MS = 800; // đủ nhanh, không tốn pin đáng kể
 
     private void startAppLockPolling() {
         appLockPollHandler.removeCallbacks(appLockPollRunnable);
@@ -174,7 +174,7 @@ private boolean recIndicatorTestPaused = false;
                 }
             } catch (Exception ignored) {}
             // LockList rỗng -> thưa hẳn (3s) thay vì đánh thức handler 400ms/lần
-            appLockPollHandler.postDelayed(this, listEmpty ? 3000 : APPLOCK_POLL_MS);
+            appLockPollHandler.postDelayed(this, listEmpty ? 5000 : APPLOCK_POLL_MS);
         }
     };
 

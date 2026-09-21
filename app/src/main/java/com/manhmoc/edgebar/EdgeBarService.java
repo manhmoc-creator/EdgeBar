@@ -200,7 +200,7 @@ private volatile boolean isCapturingIconColorScreenshot = false;
 private volatile long iconColorCaptureStartMs = 0L;
 private static final long ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS = 1500; // [FIX] rút từ 4000 xuống 1500 
 
-private static final long ICON_COLOR_EVENT_GATE_MS = 2000;
+private static final long ICON_COLOR_EVENT_GATE_MS = 3000;
 private static final long ICON_COLOR_MIN_GAP_MS = 1500;      // MỚI: giãn cách tối thiểu giữa 2 lần takeScreenshot
 
 private static final long ICON_COLOR_INTERVAL_MIN_MS = 400;
@@ -278,12 +278,14 @@ private void doSampleIconColors(boolean isFollowUp) {
                     // [FIX TẦNG 1] Kiểm tra executor đã shutdown chưa trước khi submit.
                     // Sau onDestroy() -> shutdownNow() thì isShutdown() = true vĩnh viễn,
                     // nên chỉ cần 1 check là đủ, KHÔNG cần try-catch (tránh rối ngoặc).
-                    if (iconColorExecutor.isShutdown()) {
-                        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
-                        isCapturingIconColorScreenshot = false;
-                        return;
-                    }
-                    iconColorExecutor.execute(() -> {
+                    if (iconColorExecutor.isShutdown() || iconColorExecutor.isTerminated()) {
+    try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+    isCapturingIconColorScreenshot = false;
+    return;
+}
+try {
+    iconColorExecutor.execute(() -> {
+
                         java.util.List<Object[]> pendingTints = new java.util.ArrayList<>();
                         try {
                             Bitmap screenHw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
@@ -304,7 +306,7 @@ private void doSampleIconColors(boolean isFollowUp) {
                             }
                         });
                     });
-                    if (!isFollowUp && !iconColorFollowUpPending) {
+                                        if (!isFollowUp && !iconColorFollowUpPending) {
                         iconColorFollowUpPending = true;
                         iconColorHandler.postDelayed(() -> {
                             iconColorFollowUpPending = false;
@@ -317,10 +319,17 @@ private void doSampleIconColors(boolean isFollowUp) {
                     if (!isFollowUp) iconColorHandler.postDelayed(() -> doSampleIconColors(true), 2000);
                 }
             });
+    } catch (java.util.concurrent.RejectedExecutionException ree) {
+        // [FIX] Race: executor đã shutdownNow() trong onDestroy() ngay trước khi
+        // onSuccess() kịp gọi execute() — bắt riêng để KHÔNG nuốt mất lỗi khác.
+        // Nhớ nhả HardwareBuffer để không rò native memory.
+        isCapturingIconColorScreenshot = false;
+        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
     } catch (Exception e) {
         isCapturingIconColorScreenshot = false;
     }
 }
+
 private java.util.List<Object[]> buildColorSampleJobs(String prefix) {
     java.util.List<Object[]> jobs = new java.util.ArrayList<>();
     int[] loc = new int[2];

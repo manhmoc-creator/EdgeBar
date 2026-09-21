@@ -1260,19 +1260,33 @@ if (currentMainTab == 0) {
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
         @Override protected void onCreate(Bundle savedInstanceState) {
+    // ============================================================
+    // [FIX CRASH NPE] Gán prefs TRƯỚC TIÊN, TRƯỚC CẢ super.onCreate().
+    // Lý do: một số ROM Pixel 2XL gọi onResume/onStart trong super.onCreate()
+    // → nếu có bất kỳ listener nào đọc prefs trước dòng gán cũ → NPE.
+    // getSharedPreferences() là API của Context, KHÔNG phụ thuộc super.onCreate(),
+    // nên an toàn tuyệt đối khi gọi trước.
+    // ============================================================
+    prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
     super.onCreate(savedInstanceState);
-    prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);  // ← THÊM DÒNG NÀY
-    // [FIX RECENTS] Nếu user bật checkbox "Luôn tắt Recents Edge Bar" → gắn flag
-// FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS ngay từ Intent khởi tạo. Flag này làm
-// cho TASK KHÔNG BAO GIỜ được ghi vào Recents, không phải "xoá sau" — nên
-// hoạt động chắc chắn 100%, không có độ trễ hiển thị như finishAndRemoveTask().
-// Chỉ cần dọn 1 lần nếu task cũ đã lỡ vào Recents từ phiên trước khi bật checkbox.
-if (prefs.getBoolean("appicon_kill_recents", false)) {
-    getIntent().addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-    if (Build.VERSION.SDK_INT >= 21) {
-        try { finishAndRemoveTask(); recreate(); return; } catch (Exception ignored) {}
+
+    // [FIX RECENTS] Chỉ chạy 1 LẦN DUY NHẤT — dùng cờ prefs để chống đệ quy vô hạn
+    // khi recreate() gọi lại onCreate(). Trước đây gọi recreate() trực tiếp có thể
+    // gây vòng lặp nếu user bật/tắt checkbox liên tục → crash OOM.
+    if (prefs.getBoolean("appicon_kill_recents", false)) {
+        Intent it = getIntent();
+        if (it != null && (it.getFlags() & Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) == 0) {
+            it.addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+            if (Build.VERSION.SDK_INT >= 21) {
+                try { finishAndRemoveTask(); recreate(); return; }
+                catch (Exception ignored) {}
+            }
+        }
     }
-}
+
+    // [FIX LỖI ICON APP BẤM VÀO CRASH] Không đọc bất kỳ prefs.getString/getBoolean
+    // nào TRƯỚC khi setContentView(). Toàn bộ logic phụ thuộc prefs (appicon slot,
+    // permanently_stopped, lang_vi) được dời xuống SAU setContentView() bên dưới.
 
     // [MỚI] Nếu user đã gán 1 Slot làm hành động "1 chạm" VÀ đây đúng là cú chạm
     // icon ngoài Home (có CATEGORY_LAUNCHER) -> chạy Slot đó rồi thoát ngay, KHÔNG
@@ -1583,10 +1597,27 @@ fab.setPadding(22, 22, 22, 22); // đồng bộ với padding mới trong create
             }
         });
 
-        bottomBar.addView(btnBack); bottomBar.addView(etNavSearch); bottomBar.addView(fab);
+                bottomBar.addView(btnBack); bottomBar.addView(etNavSearch); bottomBar.addView(fab);
         rootLayout.addView(bottomBar);
 showMainMenu();
         setContentView(rootLayout);
+
+        // ============================================================
+        // [TỐI ƯU PIXEL 2XL] Toàn bộ logic đọc prefs được dời xuống ĐÂY,
+        // chạy SAU setContentView() → nếu có crash bất ngờ, UI đã vẽ xong
+        // trước, user không thấy màn hình đen. Đồng thời tránh mọi rủi ro NPE
+        // do prefs chưa kịp gán khi super.onCreate() gọi lại vòng đời con.
+        // ============================================================
+        prefs.edit().putBoolean("edgebar_permanently_stopped", false).apply();
+        syncVolumeService();
+        syncProximityService();
+        updateFabVisibility();
+        isVi = prefs.getBoolean("lang_vi", true);
+        reloadActionLabels();
+        syncAllTileComponentsOnBoot();
+
+        if (prefs.getBoolean("needs_sanitize", false)) sanitizeAllPrefsAfterRestore();
+
         syncAppShortcutLabels();
     }
 

@@ -59,7 +59,7 @@ public class QrScanActivity extends Activity {
     // [MỚI] Timeout tự tắt cam nếu quét quá lâu không ra kết quả — chống nóng máy
     private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private Runnable timeoutRunnable;
-    private static final long SCAN_TIMEOUT_MS = 15000;
+    private static final long SCAN_TIMEOUT_MS = 10000;
     private boolean cameraClosed = false;
 
     // [MỚI] Quét từ ảnh + Tạo QR
@@ -481,7 +481,7 @@ public class QrScanActivity extends Activity {
     private void openCamera(android.view.Surface previewSurface) {
         try {
             CameraManager cm = (CameraManager) getSystemService(CAMERA_SERVICE);
-            reader = ImageReader.newInstance(1280, 720, ImageFormat.YUV_420_888, 2);
+            reader = ImageReader.newInstance(960, 540, ImageFormat.YUV_420_888, 2);
             reader.setOnImageAvailableListener(this::onFrame, bgHandler);
             if (checkSelfPermission(android.Manifest.permission.CAMERA)
                     != PackageManager.PERMISSION_GRANTED) { finish(); return; }
@@ -704,7 +704,7 @@ public class QrScanActivity extends Activity {
             // Buffer phân tích cố định 1280x720 (xem ImageReader.newInstance trong openCamera()).
             // Dùng cạnh ngắn (720) làm chuẩn quy đổi vì khung vuông lấy 68% CHIỀU RỘNG
             // màn hình (= cạnh ngắn khi cầm máy dọc) làm kích thước gốc.
-            float bufferShortSide = Math.min(1280, 720);
+            float bufferShortSide = Math.min(960, 540);
             float qrFractionOfBuffer = qrPixelSize / bufferShortSide;
             float rawScale = qrFractionOfBuffer / 0.68f;
 
