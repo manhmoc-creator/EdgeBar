@@ -275,6 +275,9 @@ private void doSampleIconColors(boolean isFollowUp) {
                 takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
             new AccessibilityService.TakeScreenshotCallback() {
                 @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
+    // [FIX TẦNG 1] Service có thể đã bị onDestroy() shutdown executor trong lúc
+    // callback takeScreenshot() còn đang bay về -> RejectedExecutionException.
+    // Phải đóng HardwareBuffer TRƯỚC khi return, nếu không rò rỉ 15-20MB GPU.
     if (iconColorExecutor.isShutdown()) {
         try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
         isCapturingIconColorScreenshot = false;
@@ -302,6 +305,12 @@ private void doSampleIconColors(boolean isFollowUp) {
                 }
             });
         });
+    } catch (java.util.concurrent.RejectedExecutionException ree) {
+        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+        isCapturingIconColorScreenshot = false;
+        return;
+    }
+
     } catch (java.util.concurrent.RejectedExecutionException ree) {
         try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
         isCapturingIconColorScreenshot = false;
@@ -3174,19 +3183,42 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
         }
     }
 private boolean homaccViewsMissing() {
-    for (int i = 0; i < 12; i++)
-        if (accHomeBars[i] == null || accHomeBars[i].getParent() == null) return true;
-    for (int i = 0; i < 4; i++)
-        if (accHomeCorners[i] == null || accHomeCorners[i].getParent() == null) return true;
+    // [FIX TẦNG 2] getParent() không phản ánh trạng thái WM thực — sau OOM-kill
+    // OS có thể gỡ Surface khỏi WindowManager nhưng mParent của View vẫn non-null
+    // trong 1 khoảng thời gian, khiến heal logic tưởng "vẫn còn view" và bỏ qua.
+    // isAttachedToWindow() là cờ native, phản ánh CHÍNH XÁC lúc View mất WM token.
+    for (int i = 0; i < 12; i++) {
+        View v = accHomeBars[i];
+        if (v == null || !v.isAttachedToWindow()) return true;
+    }
+    for (int i = 0; i < 4; i++) {
+        View v = accHomeCorners[i];
+        if (v == null || !v.isAttachedToWindow()) return true;
+    }
     return false;
 }
 
+// [FIX TẦNG 3] Backoff theo cấp số: lần đầu heal ngay lập tức (0ms backoff),
+// các lần sau mới backoff tăng dần 200 → 500 → 1000 → 2000 → 3000ms.
+// Reset về 0 khi heal thành công (views attached trở lại).
+private int homaccHealFailStreak = 0;
 private void healHomaccIfNeeded() {
     boolean shouldExist = AccessibleHomeService.isRunning || prefs.getBoolean("preview_homacc", false);
-    if (!shouldExist || !homaccViewsMissing()) return;
+    if (!shouldExist) return;
+    if (!homaccViewsMissing()) { homaccHealFailStreak = 0; return; } // đã có view -> reset fail streak
+
     long now = SystemClock.elapsedRealtime();
-    if (now - lastHomaccHealMs < 2000) return; // backoff, tránh vòng lặp tốn pin
+    long backoffMs;
+    if (homaccHealFailStreak == 0) backoffMs = 0;
+    else if (homaccHealFailStreak == 1) backoffMs = 200;
+    else if (homaccHealFailStreak == 2) backoffMs = 500;
+    else if (homaccHealFailStreak == 3) backoffMs = 1000;
+    else if (homaccHealFailStreak <= 5) backoffMs = 2000;
+    else backoffMs = 3000;
+
+    if (now - lastHomaccHealMs < backoffMs) return;
     lastHomaccHealMs = now;
+    homaccHealFailStreak++;
     drawAccessibleHome();
 }
 
@@ -3238,9 +3270,15 @@ private void removeAccessibleHome() {
 }
 
 private void updateHomaccLive() {
-    if (!isHomaccDrawn || homaccViewsMissing()) healHomaccIfNeeded();
+    // [FIX BỔ SUNG] Nếu phát hiện views bị OOM-kill (mất WM token), force rebuild
+    // NGAY thay vì tiếp tục cấu hình trên views mồ côi — tránh tình trạng user
+    // thấy bar/corner "biến mất" nhưng không có tín hiệu hồi phục nào.
+    if (homaccViewsMissing()) {
+        healHomaccIfNeeded();
+        if (!isHomaccDrawn || homaccViewsMissing()) return; // vẫn chưa hồi -> thoát sạch
+    }
     if (!isHomaccDrawn) return;
- 
+
     // [FIX BUG LOGIC] Kiểm tra cờ xem trước và trạng thái khóa màn hình.
     // Homacc chỉ được hiện khi: Đang KHÔNG ở màn hình khóa, HOẶC đang bật xem trước Homacc.
     boolean isPreviewHomacc = prefs.getBoolean("preview_homacc", false);
