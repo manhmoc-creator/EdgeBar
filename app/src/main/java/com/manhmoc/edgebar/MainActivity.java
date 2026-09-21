@@ -693,6 +693,13 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     @Override protected void onPause() { super.onPause();
 
 prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
+@Override
+protected void onDestroy() {
+    if (prefs.getBoolean("appicon_kill_recents", false) && isFinishing()) {
+        try { finishAndRemoveTask(); } catch (Exception ignored) {}
+    }
+    super.onDestroy();
+}
     private void reloadActionLabels() {
 // [XÓA] OPEN_PANEL_1/2/3 — Panel giờ liệt kê động qua nút "PANEL" (buildDynamicPackItems).
 String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "SCREEN_ON",
@@ -1270,19 +1277,16 @@ if (currentMainTab == 0) {
     prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
     super.onCreate(savedInstanceState);
 
-    // [FIX RECENTS] Chỉ chạy 1 LẦN DUY NHẤT — dùng cờ prefs để chống đệ quy vô hạn
-    // khi recreate() gọi lại onCreate(). Trước đây gọi recreate() trực tiếp có thể
-    // gây vòng lặp nếu user bật/tắt checkbox liên tục → crash OOM.
-    if (prefs.getBoolean("appicon_kill_recents", false)) {
-        Intent it = getIntent();
-        if (it != null && (it.getFlags() & Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) == 0) {
-            it.addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-            if (Build.VERSION.SDK_INT >= 21) {
-                try { finishAndRemoveTask(); recreate(); return; }
-                catch (Exception ignored) {}
-            }
-        }
-    }
+    // [FIX] Bỏ hẳn finishAndRemoveTask()+recreate() — gọi recreate() sau khi đã
+// finish chính Activity là hành vi không xác định, và vì Task mới luôn có
+// Intent KHÔNG kèm cờ EXCLUDE_FROM_RECENTS, nó lặp lại điều kiện này ở lần
+// mở kế tiếp -> tự kill app ngay khi vừa mở, vĩnh viễn không vào được UI.
+// Việc "ẩn khỏi Recents" giờ chỉ set cờ trên Intent hiện tại (rẻ, an toàn),
+// không finish/recreate gì cả — task vẫn tiếp tục chạy setContentView() bình thường.
+if (prefs.getBoolean("appicon_kill_recents", false)) {
+    Intent it = getIntent();
+    if (it != null) it.addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+}
 
     // [FIX LỖI ICON APP BẤM VÀO CRASH] Không đọc bất kỳ prefs.getString/getBoolean
     // nào TRƯỚC khi setContentView(). Toàn bộ logic phụ thuộc prefs (appicon slot,
