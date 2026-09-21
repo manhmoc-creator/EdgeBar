@@ -5,5 +5,5 @@
 <string name="eb_shortcut_2_label">Slot 2</string>
 <string name="eb_shortcut_3_label">Slot 3</string>
 <string name="eb_shortcut_4_label">Slot 4</string>
-
+<string name="eb_open_label">Mở Edge Bar</string>
 </resources>

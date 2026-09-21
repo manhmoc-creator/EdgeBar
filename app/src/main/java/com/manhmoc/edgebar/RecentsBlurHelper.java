@@ -5,6 +5,7 @@ import android.content.Context;
 
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -90,13 +91,24 @@ public boolean wantsScrollEvents() { return isEnabled(); }
         String p = ev.getPackageName() != null ? ev.getPackageName().toString() : "";
         boolean launcher = isLauncherPkg(p);
         if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || t == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
-            if (launcher || p.isEmpty()) { discoveryRetries = 3; requestScan(150); }
-            else if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            if (launcher || p.isEmpty()) {
+                discoveryRetries = 4;
+                requestScan(0);              // [FIX] quét ngay khung hình đầu tiên
+                h.postDelayed(scanRunnable, 220); // rồi bù thêm 1 lần cho content-description nạp trễ
+            } else if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                     && !p.contains("systemui") && !p.contains("inputmethod")
-                    && !p.equals(svc.getPackageName())) hide();
+                    && !p.equals(svc.getPackageName())) {
+                // [FIX] App khác lên foreground (tap từ Recents / mở app mới) -> gỡ NGAY,
+                // không chờ debounce -> hết cảm giác "mất đi dần".
+                h.removeCallbacks(scanRunnable);
+                scanPending = false;
+                hide();
+            }
         } else if (launcher && (t == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-                || t == AccessibilityEvent.TYPE_VIEW_SCROLLED)) {
-            requestScan(80);
+                || t == AccessibilityEvent.TYPE_VIEW_SCROLLED
+                || t == AccessibilityEvent.TYPE_VIEW_CLICKED)) {
+            if (t == AccessibilityEvent.TYPE_VIEW_CLICKED) removeCover(); // [MỚI] vừa chạm thẻ -> ẩn tức thì
+            requestScan(30);
         }
     }
 
@@ -175,8 +187,7 @@ public boolean wantsScrollEvents() { return isEnabled(); }
         }
         if (hits.isEmpty()) {
             removeCover();
-            // content-description của thẻ nạp bất đồng bộ -> thử lại tối đa 3 lần
-            if (discoveryRetries > 0) { discoveryRetries--; requestScan(300); }
+            if (discoveryRetries > 0) { discoveryRetries--; requestScan(150); }
         } else showCover();
     }
 
@@ -213,6 +224,27 @@ public boolean wantsScrollEvents() { return isEnabled(); }
     }
 
     public void destroy() { hide(); iconCache.clear(); pkgToLabel.clear(); }
+    private Bitmap loadedBlurBmp;
+    private String loadedBlurBmpKey = "";
+
+    private Bitmap getCustomBlurBitmap() {
+        String uriStr = prefs.getString("recents_blur_image_uri", "");
+        if (uriStr.isEmpty()) { loadedBlurBmp = null; loadedBlurBmpKey = ""; return null; }
+        if (uriStr.equals(loadedBlurBmpKey) && loadedBlurBmp != null) return loadedBlurBmp;
+        try {
+            android.net.Uri uri = android.net.Uri.parse(uriStr);
+            if (android.os.Build.VERSION.SDK_INT >= 28) {
+                android.graphics.ImageDecoder.Source src =
+                    android.graphics.ImageDecoder.createSource(svc.getContentResolver(), uri);
+                loadedBlurBmp = android.graphics.ImageDecoder.decodeBitmap(src, (decoder, info, s) ->
+                    decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE));
+            } else {
+                loadedBlurBmp = android.provider.MediaStore.Images.Media.getBitmap(svc.getContentResolver(), uri);
+            }
+            loadedBlurBmpKey = uriStr;
+        } catch (Exception e) { loadedBlurBmp = null; loadedBlurBmpKey = ""; }
+        return loadedBlurBmp;
+    }
 
     private Drawable getIcon(String pkg) {
         Drawable d = iconCache.get(pkg);
@@ -224,17 +256,39 @@ public boolean wantsScrollEvents() { return isEnabled(); }
     private class CoverView extends View {
         private final List<Object[]> items = new ArrayList<>();
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint dimPaint = new Paint();
         private final RectF tmp = new RectF();
+        private final RectF dst = new RectF();
+        private final android.graphics.Path clipPath = new android.graphics.Path();
         private final int[] loc = new int[2];
         CoverView(android.content.Context c) { super(c); }
         void setItems(List<Object[]> src) { items.clear(); items.addAll(src); invalidate(); }
         @Override protected void onDraw(Canvas c) {
             getLocationOnScreen(loc);
-            p.setColor(Color.argb(prefs.getInt("recents_blur_alpha", 235), 32, 33, 36));
+            Bitmap customBmp = getCustomBlurBitmap();
+            int alpha = prefs.getInt("recents_blur_alpha", 235);
+            p.setColor(Color.argb(alpha, 32, 33, 36));
             for (Object[] it : items) {
                 RectF r = (RectF) it[0];
                 tmp.set(r.left - loc[0], r.top - loc[1], r.right - loc[0], r.bottom - loc[1]);
-                c.drawRoundRect(tmp, 36f, 36f, p);
+                if (customBmp != null) {
+                    clipPath.reset();
+                    clipPath.addRoundRect(tmp, 36f, 36f, android.graphics.Path.Direction.CW);
+                    c.save();
+                    c.clipPath(clipPath);
+                    float scale = Math.max(tmp.width() / customBmp.getWidth(), tmp.height() / customBmp.getHeight());
+                    float bw = customBmp.getWidth() * scale, bh = customBmp.getHeight() * scale;
+                    float bx = tmp.centerX() - bw / 2f, by = tmp.centerY() - bh / 2f;
+                    dst.set(bx, by, bx + bw, by + bh);
+                    c.drawBitmap(customBmp, null, dst, null);
+                    if (alpha < 255) {
+                        dimPaint.setColor(Color.argb(255 - alpha, 0, 0, 0));
+                        c.drawRect(tmp, dimPaint);
+                    }
+                    c.restore();
+                } else {
+                    c.drawRoundRect(tmp, 36f, 36f, p);
+                }
                 Drawable d = getIcon((String) it[1]);
                 if (d != null) {
                     int s = (int) Math.min(160f, Math.min(tmp.width(), tmp.height()) * 0.3f);

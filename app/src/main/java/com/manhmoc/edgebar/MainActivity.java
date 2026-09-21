@@ -579,14 +579,13 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     } catch (Exception e) { return null; }
 }
     private void refreshPreview() { 
-        // [FIX] Thêm điều kiện inFrontierSub: Chỉ bung Full Overlay khi người dùng
-        // THỰC SỰ đã bấm vào các không gian Lock/Homeb/Homacc (Hiển thị list Data Pack).
-        // Tránh tình trạng vừa mở danh mục Frontier ở ngoài đã bị bung Overlay.
         boolean inFrontierSub = (frontierBodyContainer != null && frontierBodyContainer.getVisibility() == View.VISIBLE);
-        
+        // [FIX] Bỏ hẳn "currentGesTab==0" — currentGesTab MẶC ĐỊNH là 0 nên điều kiện này
+        // trúng ngay cả khi chỉ vừa mở menu Gestures (chưa chọn Frontier/VolKey/Texture/Sensor),
+        // khiến Lock bị bung ra sai chỗ. Lock giờ CHỈ bung khi thật sự đang đứng trong
+        // Data Pack mẹ của Lock (Frontier > Lock, frontierSubTab==0, inFrontierSub==true).
         boolean pLock = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==0)
-            || (currentMainTab==1 && currentGesTab==0)
-            || (currentMainTab==1 && currentGesTab==5 && frontierSubTab==0 && inFrontierSub); 
+            || (currentMainTab==1 && currentGesTab==5 && frontierSubTab==0 && inFrontierSub);
         boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4)
             || (currentMainTab==1 && currentGesTab==5 && frontierSubTab==2 && inFrontierSub);
         boolean pHome = (currentMainTab==1 && currentGesTab==5 && frontierSubTab==1 && inFrontierSub);
@@ -859,6 +858,15 @@ private String[] getVolKeyActLabs() {
     } catch (Exception e) {
         prefs.edit().putBoolean("is_panel_shortcut_pending", false).apply();
         Toast.makeText(this, "Lỗi lưu Shortcut!", Toast.LENGTH_SHORT).show();
+    }
+} else if (req == REQ_PICK_BLUR_IMAGE) {
+    Uri picked = data.getData();
+    if (picked != null) {
+        try { getContentResolver().takePersistableUriPermission(picked, Intent.FLAG_GRANT_READ_URI_PERMISSION); }
+        catch (Exception ignored) {}
+        prefs.edit().putString("recents_blur_image_uri", picked.toString()).apply();
+        renderEcosystem();
+        Toast.makeText(this, T("Blur image set!","Đã đặt ảnh làm mờ!"), Toast.LENGTH_SHORT).show();
     }
 } else if (req == REQ_UNINSTALL_CONFIRM) {
     // ✅ FIX: nhánh này phải ở CẤP NGOÀI (cùng cấp với req==104), mới được gọi đúng
@@ -1222,11 +1230,18 @@ if (currentMainTab == 0) {
         String overrideId = prefs.getString("appicon_tap_override_id", "");
         if (!overrideId.isEmpty()
                 && !prefs.getString("appicon_" + overrideId + "_act", "NONE").equals("NONE")) {
-            fireAppIconSlotAction(overrideId);
-            finish();
-            return;
+            long nowTap = System.currentTimeMillis();
+            if (nowTap - prefs.getLong("appicon_tap_last_ms", 0) > 2000) {
+                prefs.edit().putLong("appicon_tap_last_ms", nowTap).apply();
+                fireAppIconSlotAction(overrideId);
+                finish();
+                return;
+            }
+            // Chạm lần 2 trong 2 giây -> rơi xuống, mở giao diện bình thường
+            prefs.edit().putLong("appicon_tap_last_ms", 0).apply();
         }
     }
+
         // [MỚI] User chủ động mở lại app -> tự xoá cờ "dừng vĩnh viễn", mọi watchdog/
         // BootReceiver/QS Tile từ đây được phép hồi sinh service trở lại như thường.
         // Ghi bằng apply() (async, không chặn main thread) — giá trị chỉ cần có trước
@@ -3005,8 +3020,9 @@ ed.apply();
     body.setVisibility(View.GONE);
     frontierBackRow.setVisibility(View.GONE);
     subTab.setVisibility(View.VISIBLE);
-    gesSubHeader.setVisibility(View.VISIBLE);
+    gesSubHeader.setVisibility(View.GONE);
     updateFabVisibility();
+    refreshPreview(); // [FIX] thoát Lock/Homeb/Homacc subspace -> dọn ngay preview cũ
 });
             });
         subTab.addView(row);
@@ -4425,7 +4441,7 @@ private void buildMainMenuList() {
     {"flash_on_24px", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)this::openEcosystemMenu},
     {"file_present_24px", T("Storage","Bộ nhớ"), T("Storage Scan","Quét dung lượng"), (Runnable)() -> openEco(3, false)},
     {"music_note_24px", T("Sound & Media","Âm thanh & Media"), T("Voice Recording · Screen Recording · My Playlist","Ghi âm · Quay màn hình · Danh sách phát"), (Runnable)() -> openEco(4, false)},
-    {"security_24px", T("Security","Bảo mật"), "Blacklist · Locklist", (Runnable)() -> openEco(5, false)},
+    {"security_24px", T("Security","Bảo mật"), "Blacklist · Locklist · Blurlist", (Runnable)() -> openEco(5, false)},
     {"routine_24px", T("Ecosystem","Hệ sinh thái"), "YTDLnis · Island", (Runnable)this::openEcoShowcase},
     {"settings_24px", T("System","Hệ thống"), T("Backup · Restore · Update · Trash · QR Scan · Permissions","Sao lưu · Khôi phục · Nâng cấp · Kho cũ · Quét QR · Quyền"), (Runnable)this::openSystemSpace},
     {"help_24px", T("Infomation","Giới thiệu về Edge Bar"), "Premium", (Runnable)this::showPremiumDialog},
@@ -5299,20 +5315,58 @@ cardWrap.addView(selDot);
     // Thẻ 2B: LÀM MỜ NỀN KHI RECENTS
     LinearLayout cardRecentsBlur = new LinearLayout(this);
     cardRecentsBlur.setOrientation(LinearLayout.VERTICAL);
+
+    LinearLayout blurBtnRow = new LinearLayout(this);
+    blurBtnRow.setOrientation(LinearLayout.HORIZONTAL);
     Button btnPickRecentsBlur = new Button(this);
-    btnPickRecentsBlur.setText("🌫️ " + T("BLUR IN RECENTS", "LÀM MỜ KHI XEM ĐA NHIỆM"));
+    btnPickRecentsBlur.setText("🌫️ " + T("Choose apps", "Chọn app"));
     btnPickRecentsBlur.setBackground(getRounded("#009688", 20f));
     btnPickRecentsBlur.setTextColor(Color.WHITE);
+    btnPickRecentsBlur.setTextSize(12.5f);
+    LinearLayout.LayoutParams bLp1 = new LinearLayout.LayoutParams(0, -2, 1f);
+    bLp1.setMargins(0, 0, 8, 0);
+    btnPickRecentsBlur.setLayoutParams(bLp1);
     btnPickRecentsBlur.setOnClickListener(v -> showPanelMultiPicker("recents_blur_list", true));
-    cardRecentsBlur.addView(btnPickRecentsBlur);
+    blurBtnRow.addView(btnPickRecentsBlur);
+
+    Button btnPickBlurImage = new Button(this);
+    boolean hasBlurImg = !prefs.getString("recents_blur_image_uri", "").isEmpty();
+    btnPickBlurImage.setText("🖼️ " + (hasBlurImg ? T("Change image", "Đổi ảnh") : T("Choose image", "Chọn ảnh")));
+    btnPickBlurImage.setBackground(getRounded("#7C4DFF", 20f));
+    btnPickBlurImage.setTextColor(Color.WHITE);
+    btnPickBlurImage.setTextSize(12.5f);
+    LinearLayout.LayoutParams bLp2 = new LinearLayout.LayoutParams(0, -2, 1f);
+    bLp2.setMargins(8, 0, 0, 0);
+    btnPickBlurImage.setLayoutParams(bLp2);
+    btnPickBlurImage.setOnClickListener(v -> pickRecentsBlurImage());
+    blurBtnRow.addView(btnPickBlurImage);
+    cardRecentsBlur.addView(blurBtnRow);
+
+    if (hasBlurImg) {
+        Button btnClearBlurImage = new Button(this);
+        btnClearBlurImage.setText("✖ " + T("Remove custom image", "Bỏ ảnh (dùng màu mặc định)"));
+        btnClearBlurImage.setBackground(getRounded("#333333", 18f));
+        btnClearBlurImage.setTextColor(Color.WHITE);
+        btnClearBlurImage.setTextSize(11.5f);
+        LinearLayout.LayoutParams clLp = new LinearLayout.LayoutParams(-1, -2);
+        clLp.setMargins(0, 10, 0, 0);
+        btnClearBlurImage.setLayoutParams(clLp);
+        btnClearBlurImage.setOnClickListener(v -> {
+            prefs.edit().remove("recents_blur_image_uri").apply();
+            renderEcosystem();
+        });
+        cardRecentsBlur.addView(btnClearBlurImage);
+    }
+
     CheckBox cbBlurLock = new CheckBox(this);
+
     cbBlurLock.setText(T("Also blur every app in Locklist", "Làm mờ luôn mọi app thuộc Locklist"));
     cbBlurLock.setTextColor(Color.parseColor("#FFC107"));
     cbBlurLock.setChecked(prefs.getBoolean("recents_blur_locklist_en", false));
     cbBlurLock.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("recents_blur_locklist_en", c).apply());
     cbBlurLock.setPadding(0, 20, 0, 0);
     cardRecentsBlur.addView(cbBlurLock);
-    cardRecentsBlur.addView(createSlider(T("Cover opacity", "Độ đậm lớp che"), "recents_blur_alpha", 255, 235));
+    cardRecentsBlur.addView(createSlider(T("Cover opacity", "Độ đậm lớp che"), "recents_blur_alpha", 300, 235));
     ecoContainer.addView(wrapCard(cardRecentsBlur));
 
     // Thẻ 3: Keyboard (Nút ẩn)
@@ -7726,6 +7780,11 @@ private android.graphics.drawable.Drawable resolveAppIconOverrideDrawable(String
 
 private void openAppIconShortcutSpace() {
     reloadActionLabels();
+    // [FIX] Dọn sạch mọi cờ preview còn sót từ Frontier trước khi mở màn này
+    prefs.edit().putBoolean("preview_lock", false)
+        .putBoolean("preview_homacc", false)
+        .putBoolean("preview_home", false).apply();
+    sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
@@ -7776,6 +7835,7 @@ private void openAppIconShortcutSpace() {
     bClose.setOnClickListener(v -> { syncAppShortcutLabels(); d.dismiss(); });
     root.addView(bClose);
 
+    d.setOnDismissListener(dlg -> refreshPreview()); // [FIX] khôi phục preview đúng tab hiện tại
     d.setContentView(root); d.show();
 }
 
@@ -9878,7 +9938,7 @@ private void syncAppShortcutLabels() {
             String act = prefs.getString(px + "act", "NONE");
             boolean isTapSlot = slotId.equals(tapId);
             boolean hasAct = !act.equals("NONE") && !act.isEmpty();
-            if (!isTapSlot && !hasAct) continue;          // slot trống -> không hiện
+if (isTapSlot || !hasAct) continue;   // slot 1-chạm đã có shortcut tĩnh "Mở Edge Bar" lo
 
             String label; Intent it; android.graphics.drawable.Icon icon = null;
             if (isTapSlot) {
@@ -9892,13 +9952,29 @@ private void syncAppShortcutLabels() {
                     .putExtra("eb_shortcut_id", slotId);
                 android.graphics.drawable.Drawable ov = resolveAppIconOverrideDrawable(prefs.getString(px + "icon", ""));
                 if (ov != null) {
-                    Bitmap bmp = PanelEngine.normalizeIconBitmap(ov, 108, 0.85f);
+                    // [FIX] 0.85 quá lớn so với vùng an toàn chuẩn Adaptive Icon (~61-66%)
+                    // -> icon trông to hơn hẳn icon khác trong menu shortcut. Hạ về 0.60.
+                    Bitmap bmp = PanelEngine.normalizeIconBitmap(ov, 108, 0.60f);
                     if (bmp != null) icon = Build.VERSION.SDK_INT >= 26
                         ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(bmp)
                         : android.graphics.drawable.Icon.createWithBitmap(bmp);
                 }
             }
-            if (icon == null) icon = android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_launcher_fg);
+            if (icon == null) {
+                // [FIX] Không lấy thẳng ic_launcher_fg làm icon thường (không bị cắt safe-zone,
+                // nhìn to bất thường) — tự cắt qua normalizeIconBitmap giống mọi icon khác.
+                try {
+                    Drawable fg = getDrawable(R.drawable.ic_launcher_fg);
+                    Bitmap fallbackBmp = PanelEngine.normalizeIconBitmap(fg, 108, 0.60f);
+                    icon = fallbackBmp != null
+                        ? (Build.VERSION.SDK_INT >= 26
+                            ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(fallbackBmp)
+                            : android.graphics.drawable.Icon.createWithBitmap(fallbackBmp))
+                        : android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_launcher_fg);
+                } catch (Exception e) {
+                    icon = android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_launcher_fg);
+                }
+            }
             String shortLb = label.length() > 12 ? label.substring(0, 12) : label;
             list.add(new android.content.pm.ShortcutInfo.Builder(this, "eb_dyn_" + i)
                 .setShortLabel(shortLb).setLongLabel(label)
@@ -10213,6 +10289,15 @@ private void pickSongsForMyPlaylist(String packId) {
     i.setType("audio/*");
     i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
     try { startActivityForResult(Intent.createChooser(i, T("Choose songs","Chọn bài hát")), REQ_PICK_SONGS); }
+    catch (Exception e) { Toast.makeText(this, T("No file picker found","Không tìm thấy app chọn file"), Toast.LENGTH_SHORT).show(); }
+}
+private static final int REQ_PICK_BLUR_IMAGE = 106;
+
+private void pickRecentsBlurImage() {
+    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+    i.addCategory(Intent.CATEGORY_OPENABLE);
+    i.setType("image/*");
+    try { startActivityForResult(Intent.createChooser(i, T("Choose blur image","Chọn ảnh làm mờ")), REQ_PICK_BLUR_IMAGE); }
     catch (Exception e) { Toast.makeText(this, T("No file picker found","Không tìm thấy app chọn file"), Toast.LENGTH_SHORT).show(); }
 }
 
