@@ -1,6 +1,8 @@
 package com.manhmoc.edgebar;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.Context;
+
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Canvas;
@@ -49,21 +51,33 @@ public class RecentsBlurHelper {
         return prefs.getBoolean("recents_blur_locklist_en", false) && !prefs.getString("applock_list", "").isEmpty();
     }
 
-    public boolean wantsScrollEvents() { return recentsVisible; }
+// [FIX] Subscribe ngay khi feature bật — không chờ recentsVisible=true nữa
+public boolean wantsScrollEvents() { return isEnabled(); }
 
-    public void onEvent(AccessibilityEvent ev) {
-        if (!isEnabled()) { if (cover != null || recentsVisible) hide(); return; }
-        int t = ev.getEventType();
-        String p = ev.getPackageName() != null ? ev.getPackageName().toString() : "";
-        boolean isLauncher = p.contains("launcher") || p.contains("quickstep");
-        if (isLauncher) {
-            h.removeCallbacks(scanRunnable);
-            h.postDelayed(scanRunnable, t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ? 200 : 90);
-        } else if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && !p.isEmpty()
-                && !p.contains("systemui") && !p.contains("inputmethod") && !p.equals(svc.getPackageName())) {
-            hide(); // đã vào 1 app thật -> rời Recents
-        }
+public void onEvent(AccessibilityEvent ev) {
+    if (!isEnabled()) { if (cover != null || recentsVisible) hide(); return; }
+    int t = ev.getEventType();
+    String p = ev.getPackageName() != null ? ev.getPackageName().toString() : "";
+
+    // [FIX] Mở rộng nhận diện launcher/recents provider trên mọi ROM Pixel/AOSP
+    boolean isLauncher = p.contains("launcher") || p.contains("quickstep")
+            || p.contains("recents") || p.equals("com.android.systemui");
+
+    // [FIX] Scan cả khi content thay đổi (TaskView add/remove) — không chỉ state change
+    boolean triggersScan = (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            || t == AccessibilityEvent.TYPE_WINDOWS_CHANGED
+            || t == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+
+    if (isLauncher && triggersScan) {
+        h.removeCallbacks(scanRunnable);
+        // [FIX] 250ms đủ để TaskView render xong thumbnail + label trên Adreno 540
+        h.postDelayed(scanRunnable, t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ? 250 : 100);
+    } else if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && !p.isEmpty()
+            && !p.contains("systemui") && !p.contains("inputmethod")
+            && !p.equals(svc.getPackageName())) {
+        hide();
     }
+}
 
     private void rebuildLabelsIfNeeded() {
         String a = prefs.getString("recents_blur_list", "");
@@ -88,7 +102,13 @@ public class RecentsBlurHelper {
         if (!isEnabled()) { hide(); return; }
         rebuildLabelsIfNeeded();
         if (pkgToLabel.isEmpty()) { hide(); return; }
+
+        // [PIN] Nếu screen tắt -> skip scan luôn, đỡ wake CPU
+        android.os.PowerManager _pm = (android.os.PowerManager) svc.getSystemService(Context.POWER_SERVICE);
+        if (_pm != null && !_pm.isInteractive()) { removeCover(); return; }
+
         hits.clear(); taskViewSeen = false;
+
         AccessibilityNodeInfo root = null;
         try {
             root = svc.getRootInActiveWindow();
@@ -104,34 +124,56 @@ public class RecentsBlurHelper {
         showCover();
     }
 
-    private void collect(AccessibilityNodeInfo n, int depth) {
-        if (depth > 14) return;
-        CharSequence cn = n.getClassName();
-        if (cn != null && cn.toString().contains("TaskView")) {
-            taskViewSeen = true;
-            if (n.isVisibleToUser()) {
-                CharSequence d = n.getContentDescription();
-                if (d != null) {
-                    String low = d.toString().toLowerCase(Locale.ROOT);
-                    for (Map.Entry<String, String> e : pkgToLabel.entrySet()) {
-                        if (low.contains(e.getValue())) {
-                            Rect r = new Rect(); n.getBoundsInScreen(r);
-                            hits.add(new Object[]{new RectF(r), e.getKey()});
-                            break;
-                        }
-                    }
-                }
+private void collect(AccessibilityNodeInfo n, int depth) {
+    if (depth > 14) return;
+    CharSequence cn = n.getClassName();
+    // [FIX] Match cả "TaskView", "TaskThumbnailView", "TaskSnapshotView"
+    if (cn != null && cn.toString().contains("TaskView")) {
+        taskViewSeen = true;
+        if (n.isVisibleToUser()) {
+            // [FIX] Label có thể ở contentDescription CỦA CHÍNH NÓ hoặc child "TaskThumbnailView"
+            String label = matchLabelFromNode(n);
+            if (label != null) {
+                Rect r = new Rect();
+                n.getBoundsInScreen(r);
+                if (r.width() > 40 && r.height() > 40) // bỏ qua node rác
+                    hits.add(new Object[]{new RectF(r), label});
             }
-            return; // không đi sâu vào trong thẻ
         }
-        int c = n.getChildCount();
-        for (int i = 0; i < c; i++) {
-            AccessibilityNodeInfo ch = n.getChild(i);
-            if (ch == null) continue;
-            collect(ch, depth + 1);
-            ch.recycle();
-        }
+        return;
     }
+    int c = n.getChildCount();
+    for (int i = 0; i < c; i++) {
+        AccessibilityNodeInfo ch = n.getChild(i);
+        if (ch == null) continue;
+        collect(ch, depth + 1);
+        ch.recycle();
+    }
+}
+
+// [FIX] Helper đọc label từ chính node + fallback children 1 cấp
+private String matchLabelFromNode(AccessibilityNodeInfo taskView) {
+    CharSequence d = taskView.getContentDescription();
+    if (d != null) {
+        String low = d.toString().toLowerCase(Locale.ROOT);
+        for (Map.Entry<String, String> e : pkgToLabel.entrySet())
+            if (low.contains(e.getValue())) return e.getKey();
+    }
+    // Fallback: duyệt con 1 cấp
+    int cc = taskView.getChildCount();
+    for (int i = 0; i < cc; i++) {
+        AccessibilityNodeInfo ch = taskView.getChild(i);
+        if (ch == null) continue;
+        CharSequence cd = ch.getContentDescription();
+        if (cd != null) {
+            String low = cd.toString().toLowerCase(Locale.ROOT);
+            for (Map.Entry<String, String> e : pkgToLabel.entrySet())
+                if (low.contains(e.getValue())) { ch.recycle(); return e.getKey(); }
+        }
+        ch.recycle();
+    }
+    return null;
+}
 
     private void showCover() {
         if (cover == null) {

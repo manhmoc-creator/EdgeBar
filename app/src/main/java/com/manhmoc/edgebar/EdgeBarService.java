@@ -1354,6 +1354,54 @@ refreshEventSubscription();
 @Override public void onAccessibilityEvent(AccessibilityEvent event) {
 int eventType = event.getEventType();
 if (recentsBlur != null) recentsBlur.onEvent(event);
+// [FIX FLASH LOCK] Bắt launcher active TRƯỚC khi ACTION_USER_PRESENT tới.
+// Khi fingerprint đúng, keyguard bắt đầu dismiss animation -> launcher nhận
+// WINDOW_STATE_CHANGED. Tại thời điểm này km.isKeyguardLocked() có thể vẫn = true,
+// nên ta phải tin event launcher và ẩn Lock bars ngay, tránh "nhá" 1 frame.
+if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        && km != null && km.isKeyguardLocked()) {
+    CharSequence _ep = event.getPackageName();
+    if (_ep != null) {
+        String _eps = _ep.toString();
+        if ((_eps.contains("launcher") || _eps.contains("quickstep"))
+                && !_eps.contains("systemui")) {
+            // Chỉ ẩn nếu đang CÓ Lock bar thực sự hiển thị (tránh ẩn nhầm vô ích)
+            boolean anyLockVisible = false;
+            for (int _i = 0; _i < 12; _i++) {
+                if (bars[_i] != null && bars[_i].getVisibility() == View.VISIBLE) {
+                    anyLockVisible = true; break;
+                }
+            }
+            if (!anyLockVisible) for (int _i = 0; _i < 4; _i++) {
+                if (corners[_i] != null && corners[_i].getVisibility() == View.VISIBLE) {
+                    anyLockVisible = true; break;
+                }
+            }
+            if (anyLockVisible) {
+                // [FIX] 1500ms là đủ trùm quãng dismiss animation (~300-500ms)
+                // + trễ framework sau USER_PRESENT (~200-400ms). Đủ an toàn.
+                forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 1500;
+                // Ẩn tức thời KHÔNG animate — đây là đường phản ứng "panic"
+                for (int _i = 0; _i < 12; _i++) {
+                    if (bars[_i] != null) {
+                        bars[_i].animate().cancel();
+                        bars[_i].setAlpha(1f);
+                        bars[_i].setVisibility(View.GONE);
+                        hideIconLayer("lock_" + BARS[_i]);
+                    }
+                }
+                for (int _i = 0; _i < 4; _i++) {
+                    if (corners[_i] != null) {
+                        corners[_i].animate().cancel();
+                        corners[_i].setAlpha(1f);
+                        corners[_i].setVisibility(View.GONE);
+                    }
+                }
+            }
+        }
+    }
+}
+
 // [MỚI - FIX 1/3 BOUNCER] typeWindowContentChanged bắt được đúng lúc bouncer
 // PIN xuất hiện/biến mất (cùng window, chỉ đổi nội dung). Xử lý NGAY tại đây,
 // trước mọi early-return khác, throttle riêng 60ms — nhanh hơn nhiều so với

@@ -959,7 +959,7 @@ private Path buildRoundedPentagon(int size) {
 private Path buildSquirclePath(int size) {
     Path path = new Path();
     float cx = size / 2f, cy = size / 2f, r = size / 2f;
-    float n = 3.4f; // càng nhỏ càng tròn/mềm (5 = vuông kiểu iOS, 2 = hình tròn). One UI ≈ 3.2–3.6
+    float n = 3.1f; // càng nhỏ càng tròn/mềm (5 = vuông kiểu iOS, 2 = hình tròn). One UI ≈ 3.2–3.6
     int steps = 72;
     for (int i = 0; i <= steps; i++) {
         double t = (Math.PI * 2 * i) / steps;
@@ -971,38 +971,24 @@ private Path buildSquirclePath(int size) {
     path.close();
     return path;
 }
-   // Pebble — 1 góc to, 3 góc nhỏ (kiểu Material You "pebble"). Path chỉ build lại khi
-// kích thước icon đổi (Android cache Outline) — rẻ ngang RoundRect, không tốn thêm CPU.
-// [FIX] Toạ độ Q-curve LẤY ĐÚNG từ path SVG mẫu PEBBLE (viewBox 480x480), đã lật
-// ngang (mirror x = 480-x) để khớp CSS "transform: scaleX(-1)" mà file mẫu áp dụng
-// lên đúng chiều hiển thị thật. Scale theo iconSize/480.
-// Hệ số đẩy ra xa tâm cho từng điểm (1.00 = giữ nguyên bản cũ, lớn hơn = phình hơn)
-// Thứ tự on-curve: BL, Bottom, BR, TR, Top, TL
-private static final float[] PEBBLE_END_PUSH  = {1.04f, 1.00f, 1.12f, 1.07f, 1.00f, 1.04f};
-// Thứ tự điều khiển: (BL→Bottom), (Bottom→BR), Right, (TR→Top), (Top→TL), Left
-private static final float[] PEBBLE_CTRL_PUSH = {1.03f, 1.10f, 1.00f, 1.05f, 1.03f, 1.00f};
-
 private Path buildPebblePath(int size) {
     float s = size / 480f;
-    final float c = 240f;
-    // Điểm nằm trên đường cong (đã lật ngang cho khớp scaleX(-1) của bản HTML)
-    float[][] E = { {67f, 339f}, {242f, 441f}, {397.5f, 342f}, {394f, 144f}, {246f, 58.5f}, {74.5f, 154.5f} };
-    // Điểm điều khiển của từng đoạn
-    float[][] C = { {126f, 438f}, {358f, 444f}, {437f, 240f}, {351f, 48f}, {141f, 69f}, {8f, 240f} };
-
-    for (int i = 0; i < 6; i++) {
-        E[i][0] = c + (E[i][0] - c) * PEBBLE_END_PUSH[i];
-        E[i][1] = c + (E[i][1] - c) * PEBBLE_END_PUSH[i];
-        C[i][0] = c + (C[i][0] - c) * PEBBLE_CTRL_PUSH[i];
-        C[i][1] = c + (C[i][1] - c) * PEBBLE_CTRL_PUSH[i];
-    }
-
+    // 6 điểm điều khiển (toạ độ màn hình). Điểm cuối mỗi đoạn = trung điểm 2 điểm kề nhau
+    // -> đường cong luôn mượt, không thể bị thủng/gập.
+    float[][] P = {
+        {100f, 450f},   // 0: dưới-trái  (đẩy ra để hết khuyết bên trái)
+        {385f, 455f},   // 1: dưới-phải  (rộng thêm chút)
+        {465f, 235f},   // 2: cạnh phải  (phình cong hơn)
+        {385f,  40f},   // 3: đỉnh-phải  (nhô ra, không vuông)
+        {125f,  62f},   // 4: đỉnh-trái
+        {-25f, 240f}    // 5: cạnh trái  (mũi nhọn hơn)
+    };
     Path path = new Path();
-    path.moveTo(E[0][0] * s, E[0][1] * s);
-    // Đoạn i đi từ E[i] tới E[i+1], điều khiển C[i]
+    float[] a = P[5], b = P[0];
+    path.moveTo((a[0] + b[0]) / 2f * s, (a[1] + b[1]) / 2f * s);
     for (int i = 0; i < 6; i++) {
-        float[] to = E[(i + 1) % 6];
-        path.quadTo(C[i][0] * s, C[i][1] * s, to[0] * s, to[1] * s);
+        float[] c = P[i], n = P[(i + 1) % 6];
+        path.quadTo(c[0] * s, c[1] * s, (c[0] + n[0]) / 2f * s, (c[1] + n[1]) / 2f * s);
     }
     path.close();
     return normalizeToFullSize(path, size);

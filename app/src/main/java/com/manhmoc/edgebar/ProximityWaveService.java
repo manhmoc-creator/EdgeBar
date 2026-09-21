@@ -37,11 +37,18 @@ public class ProximityWaveService extends Service {
     public static boolean isRunning = false;
     private static final String TAG = "EdgeBar_Prox";
 
-    private static final long MAX_NEAR_MS = 900;     // che lâu hơn = không phải vẫy
-    private static final long WAVE_GAP_MS = 650;     // im lặng bấy lâu sau nhịp cuối thì chốt số lần vẫy
-    private static final long ARM_GRACE_MS = 1000;   // bỏ qua nhiễu do tay/nút nguồn ngay lúc tắt màn
-    private static final long POCKET_HOLD_MS = 20000;
-    private static final float NEAR_CM = 3f;
+// [FIX ĐỘ NHẠY] Vẫy tay tự nhiên 800-1400ms -> nới lên 1500ms
+private static final long MAX_NEAR_MS = 1500;
+// Giữ 650ms — đủ tách 2 vẫy liên tiếp nhưng không gộp 1 vẫy thành 2
+private static final long WAVE_GAP_MS = 650;
+// [FIX] 1000ms quá dài — user tắt màn xong vẫy ngay bị bỏ qua
+private static final long ARM_GRACE_MS = 400;
+private static final long POCKET_HOLD_MS = 20000;
+// [FIX] Chống double-fire khi 2 xung near/far sát nhau do rung cảm biến
+private long lastWaveFireMs = 0;
+private static final long WAVE_FIRE_COOLDOWN_MS = 250;
+
+// [FIX] Bỏ ngưỡng cm tuyệt đối — sensor đời cũ báo giá trị bất thường
 
     private static final java.util.Set<String> SCREEN_REQUIRED = new java.util.HashSet<>(java.util.Arrays.asList(
         "CAMERA", "SCREENSHOT", "POWER_DIALOG", "NOTIFICATIONS", "QUICK_SETTINGS", "SCAN_QR"));
@@ -166,7 +173,10 @@ public class ProximityWaveService extends Service {
 
         boolean ok = false;
         try {
-            ok = sm.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_NORMAL, h);
+// [FIX] SENSOR_DELAY_UI (60ms) — nhanh hơn NORMAL (200ms) gấp 3 lần,
+// vẫn tiết kiệm pin vì proximity sensor chỉ fire khi giá trị đổi.
+ok = sm.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_UI, h);
+
         } catch (Exception e) { Log.w(TAG, "register prox failed", e); }
         if (!ok) { Log.w(TAG, "registerListener trả về false"); return; }
 
@@ -215,7 +225,9 @@ public class ProximityWaveService extends Service {
         @Override public void onSensorChanged(SensorEvent e) {
             if (e.values.length == 0) return;
             long now = SystemClock.elapsedRealtime();
-            boolean near = e.values[0] < Math.min(proxMax, NEAR_CM);
+// [FIX] Dùng ngưỡng tương đối — robust với mọi sensor (0/5, 0/8, 1/5...)
+// Sensor proximity gần như luôn báo near=0 hoặc giá trị rất nhỏ
+boolean near = e.values[0] < (proxMax * 0.5f);
 
             if (near) {
                 if (!lastNear) {
@@ -293,8 +305,17 @@ public class ProximityWaveService extends Service {
     };
 
     // ---------- CHẠY HÀNH ĐỘNG ----------
-    private void fireWave(int n) {
-        final String want = "wave" + n;
+private void fireWave(int n) {
+    // [FIX] Cooldown chống double-fire
+    long now = SystemClock.elapsedRealtime();
+    if (now - lastWaveFireMs < WAVE_FIRE_COOLDOWN_MS) {
+        Log.d(TAG, "Cooldown skip wave#" + n);
+        return;
+    }
+    lastWaveFireMs = now;
+
+    final String want = "wave" + n;
+
         for (String rawId : prefs.getString("sensor_prox_pack_ids", "").split(",")) {
             String id = rawId.trim();
             if (id.isEmpty()) continue;
