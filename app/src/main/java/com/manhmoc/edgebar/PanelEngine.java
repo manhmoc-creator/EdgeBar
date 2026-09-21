@@ -1002,14 +1002,15 @@ private Path buildSquirclePath(int size) {
 private Path buildPebblePath(int size) {
     float s = size / 480f;
     // 6 điểm điều khiển. Điểm cuối mỗi đoạn = trung điểm 2 điểm kề nhau -> luôn mượt, không thủng.
-    float[][] P = {
-        { 80f, 450f},   // 0: dưới-trái  (kéo ra trái thêm)
-        {385f, 455f},   // 1: dưới-phải
-        {470f, 235f},   // 2: cạnh phải  (nới nhẹ để nửa phải giữ tỉ lệ)
-        {385f,  40f},   // 3: đỉnh-phải
-        {105f,  62f},   // 4: đỉnh-trái  (kéo ra trái thêm)
-        {-55f, 240f}    // 5: cạnh trái  (nhô hơn)
-    };
+// MỚI
+float[][] P = {
+    { 60f, 460f},   // dưới-trái
+    {400f, 465f},   // dưới-phải
+    {500f, 230f},   // cạnh phải — đẩy xa tâm hơn
+    {400f,  20f},   // đỉnh-phải
+    { 85f,  45f},   // đỉnh-trái
+    {-85f, 245f}    // cạnh trái — đẩy xa tâm hơn
+};
     Path path = new Path();
     float[] a = P[5], b = P[0];
     path.moveTo((a[0] + b[0]) / 2f * s, (a[1] + b[1]) / 2f * s);

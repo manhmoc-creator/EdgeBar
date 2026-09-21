@@ -977,6 +977,13 @@ private void fireTestActions(java.util.Collection<String> acts, String launchPkg
 private void fireAppIconSlotAction(String shortcutId) {
     String act = prefs.getString("appicon_" + shortcutId + "_act", "NONE");
     if (act.equals("NONE") || act.isEmpty()) return;
+    if (act.equals("OPEN_APP_UI")) {
+        // Không dùng CATEGORY_LAUNCHER -> không lặp lại chính logic trong onCreate()
+        Intent open = new Intent(Intent.ACTION_VIEW, null, this, MainActivity.class);
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(open);
+        return;
+    }
     Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
     if (act.equals("LAUNCH_APP")) {
         ipc.putExtra("act", "LAUNCH_APP");
@@ -1226,22 +1233,17 @@ if (currentMainTab == 0) {
     // icon ngoài Home (có CATEGORY_LAUNCHER) -> chạy Slot đó rồi thoát ngay, KHÔNG
     // vẽ UI. Mọi lệnh mở MainActivity nội bộ khác đều dùng "new Intent(this,
     // MainActivity.class)" không kèm category này nên hoàn toàn không bị ảnh hưởng.
-    Intent launchIntent = getIntent();
-    if (launchIntent != null && launchIntent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
-        String overrideId = prefs.getString("appicon_tap_override_id", "");
-        if (!overrideId.isEmpty()
-                && !prefs.getString("appicon_" + overrideId + "_act", "NONE").equals("NONE")) {
-            long nowTap = System.currentTimeMillis();
-            if (nowTap - prefs.getLong("appicon_tap_last_ms", 0) > 2000) {
-                prefs.edit().putLong("appicon_tap_last_ms", nowTap).apply();
-                fireAppIconSlotAction(overrideId);
-                finish();
-                return;
-            }
-            // Chạm lần 2 trong 2 giây -> rơi xuống, mở giao diện bình thường
-            prefs.edit().putLong("appicon_tap_last_ms", 0).apply();
-        }
+// MỚI — luôn chạy action đã gán, không chờ double-tap nữa
+Intent launchIntent = getIntent();
+if (launchIntent != null && launchIntent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
+    String overrideId = prefs.getString("appicon_tap_override_id", "");
+    if (!overrideId.isEmpty()
+            && !prefs.getString("appicon_" + overrideId + "_act", "NONE").equals("NONE")) {
+        fireAppIconSlotAction(overrideId);
+        finish();
+        return;
     }
+}
 
         // [MỚI] User chủ động mở lại app -> tự xoá cờ "dừng vĩnh viễn", mọi watchdog/
         // BootReceiver/QS Tile từ đây được phép hồi sinh service trở lại như thường.
@@ -3007,16 +3009,16 @@ ed.apply();
                 
                 // Gọi refreshPreview() - Hàm này đã được tinh chỉnh ở bản sửa trước 
                 // để tự động "Show Full Overlay" (reset cờ manual_hide) cho đúng không gian đang mở!
-                refreshPreview();
-                
-                if (spaceIdx == 1) ensureHomeServiceForPreview();
-                subTab.setVisibility(View.GONE);
-                gesSubHeader.setVisibility(View.GONE);
-                frontierBackRow.setVisibility(View.VISIBLE);
-                tvFrontierSubTitle.setText(spaceLabel);
-                body.setVisibility(View.VISIBLE);
-                redrawFrontierBody(body);
-                updateFabVisibility();
+// MỚI — chuyển refreshPreview() xuống SAU khi body đã VISIBLE
+if (spaceIdx == 1) ensureHomeServiceForPreview();
+subTab.setVisibility(View.GONE);
+gesSubHeader.setVisibility(View.GONE);
+frontierBackRow.setVisibility(View.VISIBLE);
+tvFrontierSubTitle.setText(spaceLabel);
+body.setVisibility(View.VISIBLE);
+redrawFrontierBody(body);
+refreshPreview(); // [FIX] gọi sau khi body hiện, để inFrontierSub tính đúng
+updateFabVisibility();
                 navBackStack.push(() -> {
     body.setVisibility(View.GONE);
     frontierBackRow.setVisibility(View.GONE);
@@ -4315,6 +4317,7 @@ private String resolveTileActionLabel(String act, String pkg, String scId) {
     if (act == null || act.equals("NONE")) return T("(None)","(Chưa chọn)");
     if (act.equals("LAUNCH_APP")) return "📱 " + getAppLabelCached(pkg);
     if (act.equals("RUN_SHORTCUT")) return "🔗 " + prefs.getString("shortcut_"+scId+"_name","Shortcut");
+    if (act.equals("OPEN_APP_UI")) return "🏠 " + T("Open Edge Bar","Mở giao diện Edge Bar");
     // [MỚI] App Icon lưu dạng "RUN_SHORTCUT_<id>" (khác quy ước QS Tile) — thiếu nhánh
     // này khiến trước đây hiện nguyên chuỗi key thô thay vì tên Shortcut thật.
     if (act.startsWith("RUN_SHORTCUT_")) return "🔗 " + prefs.getString("shortcut_"+act.substring(13)+"_name","Shortcut");
@@ -7819,12 +7822,13 @@ private void openAppIconShortcutSpace() {
     List<String[]> intentItems = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
     List<String[]> macroItems = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
 
-    // [MỚI] 4 RadioButton dùng chung -> đảm bảo chỉ 1 Slot được chọn làm hành động "1 chạm"
-    CheckBox[] tapRadios = new CheckBox[4];
-    for (int i = 1; i <= 4; i++) {
-        String shortcutId = "eb_slot_" + i;
-        content.addView(buildAppIconSlotCard(shortcutId, i, sysItems, panelItems, intentItems, macroItems, tapRadios, i - 1));
-    }
+content.addView(createSlider(T("Icon size","Kích thước icon"), "appicon_icon_scale", 100, 60));
+
+CheckBox[] tapRadios = new CheckBox[3];
+for (int i = 1; i <= 3; i++) {
+    String shortcutId = "eb_slot_" + i;
+    content.addView(buildAppIconSlotCard(shortcutId, i, sysItems, panelItems, intentItems, macroItems, tapRadios, i - 1));
+}
 
     Button bClose = new Button(this);
     bClose.setText(T("CLOSE", "ĐÓNG"));
@@ -7909,6 +7913,15 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
             refreshHolder[0].run(); syncAppShortcutLabels(); pd.dismiss();
         }));
         pin.addView(bApp);
+Button bOpenUi = new Button(this);
+bOpenUi.setText("🏠 " + T("OPEN EDGE BAR APP", "MỞ GIAO DIỆN EDGE BAR"));
+bOpenUi.setBackground(getRounded("#4CAF50", 20f)); bOpenUi.setTextColor(Color.WHITE);
+bOpenUi.setOnClickListener(v2 -> {
+    chosenAct[0] = "OPEN_APP_UI"; chosenPkg[0] = ""; chosenScId[0] = "";
+    prefs.edit().putString(px + "act", "OPEN_APP_UI").remove(px + "launch_pkg").remove(px + "shortcut_id").apply();
+    refreshHolder[0].run(); syncAppShortcutLabels(); pd.dismiss();
+});
+pin.addView(bOpenUi);
 
         Button bSc = new Button(this); bSc.setText("🔗 SHORTCUT");
         bSc.setBackground(getRounded("#7C4DFF", 20f)); bSc.setTextColor(Color.WHITE);
@@ -9933,7 +9946,7 @@ private void syncAppShortcutLabels() {
         if (sm == null) return;
         String tapId = prefs.getString("appicon_tap_override_id", "");
         List<android.content.pm.ShortcutInfo> list = new ArrayList<>();
-        for (int i = 1; i <= 4; i++) {
+        for (int i = 1; i <= 3; i++) {
             String slotId = "eb_slot_" + i;
             String px = "appicon_" + slotId + "_";
             String act = prefs.getString(px + "act", "NONE");
@@ -9955,7 +9968,8 @@ if (isTapSlot || !hasAct) continue;   // slot 1-chạm đã có shortcut tĩnh "
                 if (ov != null) {
                     // [FIX] 0.85 quá lớn so với vùng an toàn chuẩn Adaptive Icon (~61-66%)
                     // -> icon trông to hơn hẳn icon khác trong menu shortcut. Hạ về 0.60.
-                    Bitmap bmp = PanelEngine.normalizeIconBitmap(ov, 108, 0.60f);
+float iconScale = prefs.getInt("appicon_icon_scale", 60) / 100f;
+Bitmap bmp = PanelEngine.normalizeIconBitmap(ov, 108, iconScale);
                     if (bmp != null) icon = Build.VERSION.SDK_INT >= 26
                         ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(bmp)
                         : android.graphics.drawable.Icon.createWithBitmap(bmp);
@@ -9966,7 +9980,7 @@ if (isTapSlot || !hasAct) continue;   // slot 1-chạm đã có shortcut tĩnh "
                 // nhìn to bất thường) — tự cắt qua normalizeIconBitmap giống mọi icon khác.
                 try {
                     Drawable fg = getDrawable(R.drawable.ic_launcher_fg);
-                    Bitmap fallbackBmp = PanelEngine.normalizeIconBitmap(fg, 108, 0.60f);
+                    Bitmap fallbackBmp = PanelEngine.normalizeIconBitmap(fg, 108, iconScale);
                     icon = fallbackBmp != null
                         ? (Build.VERSION.SDK_INT >= 26
                             ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(fallbackBmp)

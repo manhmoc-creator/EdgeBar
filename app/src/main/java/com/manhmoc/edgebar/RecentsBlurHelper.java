@@ -41,6 +41,13 @@ public class RecentsBlurHelper {
     private final Map<String, String> pkgToLabel = new HashMap<>();
     private final Map<String, Drawable> iconCache = new HashMap<>();
     private final List<Object[]> hits = new ArrayList<>(); // {RectF, pkg}
+    private final java.util.Map<String, Bitmap> blurCache = new java.util.HashMap<>();
+private long lastBlurCaptureMs = 0;
+private static final long BLUR_CAPTURE_MIN_GAP_MS = 900;
+// [TỐI ƯU PIXEL 2XL] 1 thread nền duy nhất, allowCoreThreadTimeOut để nhả thread khi rảnh
+private final java.util.concurrent.ExecutorService blurExecutor =
+    java.util.concurrent.Executors.newSingleThreadExecutor();
+private volatile boolean isCapturingBlur = false; // chặn chồng 2 lần chụp
 
     public RecentsBlurHelper(AccessibilityService svc, WindowManager wm, SharedPreferences prefs, Runnable onSubscriptionChanged) {
         this.svc = svc; this.wm = wm; this.prefs = prefs; this.onSubscriptionChanged = onSubscriptionChanged;
@@ -104,13 +111,19 @@ public boolean wantsScrollEvents() { return isEnabled(); }
                 scanPending = false;
                 hide();
             }
-        } else if (launcher && (t == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-                || t == AccessibilityEvent.TYPE_VIEW_SCROLLED
-                || t == AccessibilityEvent.TYPE_VIEW_CLICKED)) {
-            if (t == AccessibilityEvent.TYPE_VIEW_CLICKED) removeCover(); // [MỚI] vừa chạm thẻ -> ẩn tức thì
-            requestScan(30);
-        }
+// MỚI
+} else if (launcher && (t == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+        || t == AccessibilityEvent.TYPE_VIEW_SCROLLED
+        || t == AccessibilityEvent.TYPE_VIEW_CLICKED)) {
+    if (t == AccessibilityEvent.TYPE_VIEW_CLICKED) removeCover();
+    if (t == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+        if (cover != null) cover.setItems(java.util.Collections.emptyList()); // ẩn ngay, tránh dính sang thẻ khác
+        requestScan(0);
+    } else {
+        requestScan(30);
     }
+  }
+}
 
     private boolean matchesLabel(CharSequence cs, String label) {
         if (cs == null || cs.length() == 0) return false;
@@ -185,11 +198,68 @@ public boolean wantsScrollEvents() { return isEnabled(); }
             recentsVisible = nowVisible;
             if (onSubscriptionChanged != null) onSubscriptionChanged.run();
         }
-        if (hits.isEmpty()) {
-            removeCover();
-            if (discoveryRetries > 0) { discoveryRetries--; requestScan(150); }
-        } else showCover();
+// MỚI
+if (hits.isEmpty()) {
+    removeCover();
+    if (discoveryRetries > 0) { discoveryRetries--; requestScan(150); }
+} else {
+    showCover();
+    refreshBlurSnapshots();
     }
+}
+private void refreshBlurSnapshots() {
+    if (android.os.Build.VERSION.SDK_INT < 30) return;
+    if (isCapturingBlur) return;
+    long now = System.currentTimeMillis();
+    if (now - lastBlurCaptureMs < BLUR_CAPTURE_MIN_GAP_MS) return;
+    lastBlurCaptureMs = now;
+    isCapturingBlur = true;
+    // Chụp snapshot của hits NGAY tại thời điểm gọi — tránh race với lần scan() kế tiếp
+    final List<Object[]> hitsSnap = new ArrayList<>(hits);
+    try {
+        svc.takeScreenshot(android.view.Display.DEFAULT_DISPLAY, svc.getMainExecutor(),
+            new AccessibilityService.TakeScreenshotCallback() {
+                @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
+                    // [TỐI ƯU] Đẩy hết copy + blur xuống thread nền — main thread chỉ nhận invalidate()
+                    blurExecutor.execute(() -> {
+                        Bitmap soft = null;
+                        try {
+                            Bitmap full = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
+                            if (full != null) {
+                                soft = full.copy(Bitmap.Config.ARGB_8888, false);
+                                for (Object[] it : hitsSnap) {
+                                    RectF r = (RectF) it[0]; String pkg = (String) it[1];
+                                    int x = Math.max(0, (int) r.left), y = Math.max(0, (int) r.top);
+                                    int w = Math.min(soft.getWidth() - x, (int) r.width());
+                                    int hh = Math.min(soft.getHeight() - y, (int) r.height());
+                                    if (w <= 0 || hh <= 0) continue;
+                                    // [FIX] .copy() để tách hẳn bản sao, tránh recycle nhầm soft
+                                    Bitmap crop = Bitmap.createBitmap(soft, x, y, w, hh)
+                                        .copy(Bitmap.Config.ARGB_8888, false);
+                                    blurCache.put(pkg, cheapBoxBlur(crop, 10));
+                                }
+                            }
+                        } catch (Exception ignored) {
+                        } finally {
+                            if (soft != null) soft.recycle();
+                            try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+                            isCapturingBlur = false;
+                            h.post(() -> { if (cover != null) cover.invalidate(); });
+                        }
+                    });
+                }
+                @Override public void onFailure(int errorCode) { isCapturingBlur = false; }
+            });
+    } catch (Exception e) { isCapturingBlur = false; }
+}
+
+private Bitmap cheapBoxBlur(Bitmap src, int factor) {
+    int w = Math.max(1, src.getWidth() / factor), hh = Math.max(1, src.getHeight() / factor);
+    Bitmap small = Bitmap.createScaledBitmap(src, w, hh, true);
+    Bitmap big = Bitmap.createScaledBitmap(small, src.getWidth(), src.getHeight(), true);
+    small.recycle(); src.recycle();
+    return big;
+}
 
     private void showCover() {
         if (cover == null) {
@@ -213,17 +283,24 @@ public boolean wantsScrollEvents() { return isEnabled(); }
     }
 
     public void hide() {
-        h.removeCallbacks(scanRunnable);
-        scanPending = false; discoveryRetries = 0;
+h.removeCallbacks(scanRunnable);
+scanPending = false; discoveryRetries = 0;
 
-        removeCover();
+removeCover();
+blurCache.clear();   // [FIX] nhả RAM ảnh blur ngay khi rời Recents
+
         if (recentsVisible) {
             recentsVisible = false;
             if (onSubscriptionChanged != null) onSubscriptionChanged.run();
         }
     }
 
-    public void destroy() { hide(); iconCache.clear(); pkgToLabel.clear(); }
+public void destroy() {
+    hide();
+    iconCache.clear();
+    pkgToLabel.clear();
+    try { blurExecutor.shutdownNow(); } catch (Exception ignored) {}
+}
     private Bitmap loadedBlurBmp;
     private String loadedBlurBmpKey = "";
 
@@ -271,24 +348,38 @@ public boolean wantsScrollEvents() { return isEnabled(); }
             for (Object[] it : items) {
                 RectF r = (RectF) it[0];
                 tmp.set(r.left - loc[0], r.top - loc[1], r.right - loc[0], r.bottom - loc[1]);
-                if (customBmp != null) {
-                    clipPath.reset();
-                    clipPath.addRoundRect(tmp, 36f, 36f, android.graphics.Path.Direction.CW);
-                    c.save();
-                    c.clipPath(clipPath);
-                    float scale = Math.max(tmp.width() / customBmp.getWidth(), tmp.height() / customBmp.getHeight());
-                    float bw = customBmp.getWidth() * scale, bh = customBmp.getHeight() * scale;
-                    float bx = tmp.centerX() - bw / 2f, by = tmp.centerY() - bh / 2f;
-                    dst.set(bx, by, bx + bw, by + bh);
-                    c.drawBitmap(customBmp, null, dst, null);
-                    if (alpha < 255) {
-                        dimPaint.setColor(Color.argb(255 - alpha, 0, 0, 0));
-                        c.drawRect(tmp, dimPaint);
-                    }
-                    c.restore();
-                } else {
-                    c.drawRoundRect(tmp, 36f, 36f, p);
-                }
+Bitmap blurBmp = blurCache.get((String) it[1]);
+if (blurBmp != null) {
+    clipPath.reset();
+    clipPath.addRoundRect(tmp, 36f, 36f, android.graphics.Path.Direction.CW);
+    c.save();
+    c.clipPath(clipPath);
+    dst.set(tmp);
+    c.drawBitmap(blurBmp, null, dst, null);
+    if (alpha < 255) {
+        dimPaint.setColor(Color.argb(255 - alpha, 0, 0, 0));
+        c.drawRect(tmp, dimPaint);
+    }
+    c.restore();
+} else if (customBmp != null) {
+    clipPath.reset();
+    clipPath.addRoundRect(tmp, 36f, 36f, android.graphics.Path.Direction.CW);
+    c.save();
+    c.clipPath(clipPath);
+    float scale = Math.max(tmp.width() / customBmp.getWidth(), tmp.height() / customBmp.getHeight());
+    float bw = customBmp.getWidth() * scale, bh = customBmp.getHeight() * scale;
+    float bx = tmp.centerX() - bw / 2f, by = tmp.centerY() - bh / 2f;
+    dst.set(bx, by, bx + bw, by + bh);
+    c.drawBitmap(customBmp, null, dst, null);
+    if (alpha < 255) {
+        dimPaint.setColor(Color.argb(255 - alpha, 0, 0, 0));
+        c.drawRect(tmp, dimPaint);
+    }
+    c.restore();
+} else {
+    c.drawRoundRect(tmp, 36f, 36f, p);
+}
+
                 Drawable d = getIcon((String) it[1]);
                 if (d != null) {
                     int s = (int) Math.min(160f, Math.min(tmp.width(), tmp.height()) * 0.3f);
