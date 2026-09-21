@@ -34,6 +34,11 @@ public class RecentsBlurHelper {
     private final Runnable onSubscriptionChanged;
     private final Handler h = new Handler(Looper.getMainLooper());
     private final Runnable scanRunnable = this::scan;
+    // [MỚI] Runnable chạy sau khi user dừng scroll — tách khỏi scanRunnable để
+// có thể huỷ riêng khi user scroll tiếp. Zero-RAM: chỉ là 1 reference Runnable.
+private final Runnable scrollEndRunnable = () -> requestScan(0);
+private static final long SCROLL_END_DEBOUNCE_MS = 350;
+
 
     private CoverView cover;
     private boolean recentsVisible = false;
@@ -43,7 +48,12 @@ public class RecentsBlurHelper {
     private final List<Object[]> hits = new ArrayList<>(); // {RectF, pkg}
     private final java.util.Map<String, Bitmap> blurCache = new java.util.HashMap<>();
 private long lastBlurCaptureMs = 0;
-private static final long BLUR_CAPTURE_MIN_GAP_MS = 900;
+// [FIX NÓNG MÁY] Trước đây 900ms vẫn còn quá dày — 1 lần scroll nhanh có thể kích
+// 2-3 lần chụp liên tiếp gây spike CPU/GPU + tăng nhiệt. Nâng lên 1500ms: lần chụp
+// đầu tiên khi vừa vào Recents chạy ngay, còn lại user phải scroll xong + dừng
+// >= 1500ms mới chụp lại. Giảm ~40% số lần takeScreenshot() mỗi phiên Recents.
+private static final long BLUR_CAPTURE_MIN_GAP_MS = 1500;
+
 // [TỐI ƯU PIXEL 2XL] 1 thread nền duy nhất, allowCoreThreadTimeOut để nhả thread khi rảnh
 private final java.util.concurrent.ExecutorService blurExecutor =
     java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -111,16 +121,29 @@ public boolean wantsScrollEvents() { return isEnabled(); }
                 scanPending = false;
                 hide();
             }
-// MỚI
 } else if (launcher && (t == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         || t == AccessibilityEvent.TYPE_VIEW_SCROLLED
         || t == AccessibilityEvent.TYPE_VIEW_CLICKED)) {
-    if (t == AccessibilityEvent.TYPE_VIEW_CLICKED) removeCover();
-    if (t == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
-        if (cover != null) cover.setItems(java.util.Collections.emptyList()); // ẩn ngay, tránh dính sang thẻ khác
-        requestScan(0);
+    if (t == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+        removeCover();
+    } else if (t == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+        // [FIX "OVERLAY CHẠY THEO SAU"] Khi scroll, ẩn HẲN cover khỏi WindowManager
+        // (removeView, không phải setVisibility GONE). Trước đây chỉ empty list rồi
+        // requestScan(0) ngay → overlay đứng yên tại vị trí cũ trong khi card trượt
+        // đi, tạo cảm giác "bóng ma chạy theo sau". Giờ cover biến mất hoàn toàn
+        // trong lúc kéo, chỉ vẽ lại sau khi user NGỪNG kéo 350ms — không còn gì
+        // đứng sau card nữa để "chạy theo".
+        removeCover();
+        h.removeCallbacks(scanRunnable);
+        scanPending = false;
+        // Huỷ hết mọi lần chụp đang chờ để tránh screenshot chồng chéo khi kéo nhanh
+        h.removeCallbacks(scrollEndRunnable);
+        // Đợi user dừng scroll hẳn mới scan lại — 350ms đủ để OS ngừng bắn VIEW_SCROLLED
+        h.postDelayed(scrollEndRunnable, SCROLL_END_DEBOUNCE_MS);
     } else {
-        requestScan(30);
+        // WINDOW_CONTENT_CHANGED — debounce ngắn, gộp nhiều event liên tiếp thành 1 scan
+        h.removeCallbacks(scrollEndRunnable);
+        h.postDelayed(scrollEndRunnable, 120);
     }
   }
 }
@@ -236,7 +259,7 @@ private void refreshBlurSnapshots() {
                                     // [FIX] .copy() để tách hẳn bản sao, tránh recycle nhầm soft
                                     Bitmap crop = Bitmap.createBitmap(soft, x, y, w, hh)
                                         .copy(Bitmap.Config.ARGB_8888, false);
-                                    blurCache.put(pkg, cheapBoxBlur(crop, 10));
+                                    blurCache.put(pkg, cheapBoxBlur(crop, 8));
                                 }
                             }
                         } catch (Exception ignored) {
@@ -338,6 +361,7 @@ public void destroy() {
         private final RectF dst = new RectF();
         private final android.graphics.Path clipPath = new android.graphics.Path();
         private final int[] loc = new int[2];
+        private final Paint circleCoverPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         CoverView(android.content.Context c) { super(c); }
         void setItems(List<Object[]> src) { items.clear(); items.addAll(src); invalidate(); }
         @Override protected void onDraw(Canvas c) {
@@ -381,12 +405,20 @@ if (blurBmp != null) {
 }
 
                 Drawable d = getIcon((String) it[1]);
-                if (d != null) {
-                    int s = (int) Math.min(160f, Math.min(tmp.width(), tmp.height()) * 0.3f);
-                    int cx = (int) tmp.centerX(), cy = (int) tmp.centerY();
-                    d.setBounds(cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2);
-                    d.draw(c);
-                }
+if (d != null) {
+    // [FIX "MỜ LUÔN ICON APP"] Vì bitmap blur vốn được crop từ screenshot
+    // (đã chứa cả icon gốc trong đó), nếu chỉ vẽ icon mới lên trên mà không
+    // che vệt cũ thì khi factor blur nhỏ, vệt icon mờ mờ vẫn còn nhìn thấy —
+    // trông như "icon bị lem". Giải pháp: vẽ 1 đĩa tròn cùng màu nền Recents
+    // để DỌN SẠCH vệt icon cũ, rồi mới vẽ icon sắc nét lên. Zero-alloc:
+    // Paint + Rect tái sử dụng, không tạo Bitmap mới.
+    int s = (int) Math.min(160f, Math.min(tmp.width(), tmp.height()) * 0.35f);
+    int cx = (int) tmp.centerX(), cy = (int) tmp.centerY();
+    circleCoverPaint.setColor(Color.argb(235, 28, 28, 30)); // sát màu nền Recents
+    c.drawCircle(cx, cy, s * 0.62f, circleCoverPaint);
+    d.setBounds(cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2);
+    d.draw(c);
+               }
             }
         }
     }

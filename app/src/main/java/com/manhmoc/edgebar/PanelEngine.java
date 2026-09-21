@@ -1000,25 +1000,32 @@ private Path buildSquirclePath(int size) {
     return path;
 }
 private Path buildPebblePath(int size) {
-    float s = size / 480f;
-    // 6 điểm điều khiển. Điểm cuối mỗi đoạn = trung điểm 2 điểm kề nhau -> luôn mượt, không thủng.
-// MỚI
-float[][] P = {
-    { 60f, 460f},   // dưới-trái
-    {400f, 465f},   // dưới-phải
-    {500f, 230f},   // cạnh phải — đẩy xa tâm hơn
-    {400f,  20f},   // đỉnh-phải
-    { 85f,  45f},   // đỉnh-trái
-    {-85f, 245f}    // cạnh trái — đẩy xa tâm hơn
-};
+    // [FIX PEBBLE GẦY] Bỏ hẳn 6 điểm neo cũ — chúng tạo "eo" sâu khiến hình bị
+    // bóp gầy khi normalize. Dùng công thức bán kính biến thiên quanh tâm:
+    //   r(θ) = R × (1 + a·sin(3θ) + b·cos(5θ))
+    // → hình gần tròn đều, hơi lồi/lõm rất nhẹ ở vài cung, giống hệt dáng
+    // "giọt nước mềm béo" của hình tham chiếu. Deform chỉ ±7% nên bounding box
+    // vẫn gần vuông → normalizeToFullSize() không kéo méo nữa.
     Path path = new Path();
-    float[] a = P[5], b = P[0];
-    path.moveTo((a[0] + b[0]) / 2f * s, (a[1] + b[1]) / 2f * s);
-    for (int i = 0; i < 6; i++) {
-        float[] c = P[i], n = P[(i + 1) % 6];
-        path.quadTo(c[0] * s, c[1] * s, (c[0] + n[0]) / 2f * s, (c[1] + n[1]) / 2f * s);
+    float cx = size / 2f, cy = size / 2f;
+    float baseR = size * 0.5f;
+    // [YÊU CẦU: thấp hơn 1 tẹo] Hệ số nén dọc nhẹ — pebble hơi dẹt (wider than tall),
+    // giống tỉ lệ hình tham chiếu. Các shape khác vẫn normalize full khung nên
+    // icon app bên trong vẫn bằng nhau tuyệt đối sau bước scale.
+    final float RY_RATIO = 0.95f;
+    int steps = 120;
+    for (int i = 0; i <= steps; i++) {
+        double t = (Math.PI * 2 * i) / steps;
+        double deform = 1.0
+            + 0.06 * Math.sin(3 * t)   // bất đối xứng mềm — 3 múi
+            + 0.03 * Math.cos(5 * t);  // chi tiết nhỏ — 5 múi
+        float x = cx + (float) (baseR * deform * Math.cos(t));
+        float y = cy + (float) (baseR * deform * Math.sin(t) * RY_RATIO);
+        if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
     }
     path.close();
+    // Vẫn normalize để lấp đầy khung — vì deform nhỏ nên scale X/Y gần bằng nhau,
+    // không còn kéo gầy như thuật toán 6-điểm-neo cũ.
     return normalizeToFullSize(path, size);
 }
 

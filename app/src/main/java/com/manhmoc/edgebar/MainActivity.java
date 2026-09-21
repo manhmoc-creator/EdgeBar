@@ -620,6 +620,27 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     }
     @Override protected void onResume() {
         super.onResume();
+        try { registerReceiver(screenOffKillRecents, new IntentFilter(Intent.ACTION_SCREEN_OFF)); }
+catch (Exception ignored) {}
+
+                // [FIX] Xoá mọi notification không phải Foreground Service (FGS) của
+        // accessibility — tránh launcher tự chèn entry "Thông báo" vào menu
+        // long-press icon. FGS notification của EdgeBarService có ID 99, của các
+        // service khác dùng 91-98 — bỏ qua hết các ID này, chỉ cancel phần còn lại.
+        try {
+            android.service.notification.StatusBarNotification[] snbs =
+                ((android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE))
+                    .getActiveNotifications();
+            if (snbs != null) {
+                for (android.service.notification.StatusBarNotification s : snbs) {
+                    int id = s.getId();
+                    if (id == 99 || (id >= 91 && id <= 98)) continue; // FGS — không đụng
+                    try { ((android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE)).cancel(id); }
+                    catch (Exception ignored) {}
+                }
+            }
+        } catch (Exception ignored) {}
+
         refreshPreview();
         checkPendingStorageScan();
         syncProximityService(); // tự bật lại service nếu bị hệ thống kill (chỉ đọc vài biến static, gần như 0 chi phí)
@@ -669,7 +690,31 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
                 != android.content.pm.PackageManager.PERMISSION_GRANTED ? View.VISIBLE : View.GONE);
         }
     }
-    @Override protected void onPause() { super.onPause(); prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
+    @Override protected void onPause() { super.onPause();
+
+try { unregisterReceiver(screenOffKillRecents); } catch (Exception ignored) {}
+
+prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
+    // [MỚI] User nhấn nút Home / Recents → đây là lúc "rời app chủ động".
+// onUserLeaveHint() KHÔNG bị gọi khi mở dialog / permission request / đổi cấu
+// hình — chính xác đúng trường hợp cần xoá recents.
+private BroadcastReceiver screenOffKillRecents = new BroadcastReceiver() {
+    @Override public void onReceive(Context c, Intent i) {
+        if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())
+            && prefs.getBoolean("appicon_kill_recents", false)
+            && Build.VERSION.SDK_INT >= 21) {
+            try { finishAndRemoveTask(); } catch (Exception ignored) {}
+        }
+    }
+};
+
+@Override protected void onUserLeaveHint() {
+    super.onUserLeaveHint();
+    if (prefs.getBoolean("appicon_kill_recents", false) && Build.VERSION.SDK_INT >= 21) {
+        try { finishAndRemoveTask(); } catch (Exception ignored) {}
+    }
+}
+
     private void reloadActionLabels() {
 // [XÓA] OPEN_PANEL_1/2/3 — Panel giờ liệt kê động qua nút "PANEL" (buildDynamicPackItems).
 String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "SCREEN_ON",
@@ -918,6 +963,10 @@ private String[] getVolKeyActLabs() {
         || (pageSystemSpace != null && pageSystemSpace.getVisibility() == View.VISIBLE)) {
         showMainMenu(); return;
     }
+        // [MỚI] Nếu user bật checkbox "Luôn tắt Recents" → xoá task hẳn khỏi Đa nhiệm
+    if (prefs.getBoolean("appicon_kill_recents", false) && Build.VERSION.SDK_INT >= 21) {
+        try { finishAndRemoveTask(); return; } catch (Exception ignored) {}
+    }
     finish();
 }
 
@@ -975,10 +1024,19 @@ private void fireTestActions(java.util.Collection<String> acts, String launchPkg
 // y hệt ShortcutTrampolineActivity, không mở UI, zero-cost lúc bình thường vì
 // chỉ chạy đúng 1 lần trong onCreate() khi user đã bật tính năng này.
 private void fireAppIconSlotAction(String shortcutId) {
-    String act = prefs.getString("appicon_" + shortcutId + "_act", "NONE");
+    String act, pkg, scId;
+    if (shortcutId.equals(prefs.getString("appicon_tap_override_id", ""))) {
+        // Slot này là action tap → chạy action GỐC đã backup (vì slot đã bị ghi đè OPEN_APP_UI)
+        act = prefs.getString("appicon_tap_saved_act", "NONE");
+        pkg = prefs.getString("appicon_tap_saved_pkg", "");
+        scId = prefs.getString("appicon_tap_saved_scId", "");
+    } else {
+        act = prefs.getString("appicon_" + shortcutId + "_act", "NONE");
+        pkg = prefs.getString("appicon_" + shortcutId + "_launch_pkg", "");
+        scId = prefs.getString("appicon_" + shortcutId + "_shortcut_id", "");
+    }
     if (act.equals("NONE") || act.isEmpty()) return;
     if (act.equals("OPEN_APP_UI")) {
-        // Không dùng CATEGORY_LAUNCHER -> không lặp lại chính logic trong onCreate()
         Intent open = new Intent(Intent.ACTION_VIEW, null, this, MainActivity.class);
         open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(open);
@@ -987,7 +1045,7 @@ private void fireAppIconSlotAction(String shortcutId) {
     Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
     if (act.equals("LAUNCH_APP")) {
         ipc.putExtra("act", "LAUNCH_APP");
-        ipc.putExtra("launch_pkg", prefs.getString("appicon_" + shortcutId + "_launch_pkg", ""));
+        ipc.putExtra("launch_pkg", pkg);
     } else if (act.startsWith("RUN_SHORTCUT_")) {
         ipc.putExtra("act", "RUN_SHORTCUT");
         ipc.putExtra("shortcut_id", act.substring("RUN_SHORTCUT_".length()));
@@ -1185,7 +1243,11 @@ if (currentMainTab == 0) {
     fab.setVisibility(View.VISIBLE);
     fab.setImageDrawable(getDrawable(customIconRes("mobile_lock_portrait_24px") != 0
         ? customIconRes("mobile_lock_portrait_24px") : android.R.drawable.ic_menu_compass));
-    fab.setOnClickListener(v -> {
+        fab.setOnClickListener(v -> {
+        // [MỚI] Xoá task khỏi Recents trước khi về Home (nếu user bật checkbox)
+        if (prefs.getBoolean("appicon_kill_recents", false) && Build.VERSION.SDK_INT >= 21) {
+            try { finishAndRemoveTask(); } catch (Exception ignored) {}
+        }
         Intent home = new Intent(Intent.ACTION_MAIN);
         home.addCategory(Intent.CATEGORY_HOME);
         home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -7824,8 +7886,23 @@ private void openAppIconShortcutSpace() {
 
 content.addView(createSlider(T("Icon size","Kích thước icon"), "appicon_icon_scale", 100, 60));
 
-CheckBox[] tapRadios = new CheckBox[3];
-for (int i = 1; i <= 3; i++) {
+// [MỚI] Checkbox toàn cục: luôn xoá Edge Bar khỏi Recents khi thoát
+CheckBox cbKillRecents = new CheckBox(this);
+cbKillRecents.setText(T("Always remove Edge Bar from Recents on exit",
+    "Luôn tắt Recents Edge Bar khi thoát (về Home / tắt màn / bấm Back)"));
+cbKillRecents.setTextColor(Color.parseColor("#FFC107"));
+cbKillRecents.setTextSize(12.5f);
+cbKillRecents.setChecked(prefs.getBoolean("appicon_kill_recents", false));
+cbKillRecents.setOnCheckedChangeListener((v, c) ->
+    prefs.edit().putBoolean("appicon_kill_recents", c).apply());
+LinearLayout.LayoutParams cbKillLp = new LinearLayout.LayoutParams(-1, -2);
+cbKillLp.setMargins(0, 20, 0, 20);
+cbKillRecents.setLayoutParams(cbKillLp);
+content.addView(cbKillRecents);
+
+// [MỚI] 4 SLOT TỰ DO — bỏ slot cứng "Mở Edge Bar" cũ.
+CheckBox[] tapRadios = new CheckBox[4];
+for (int i = 1; i <= 4; i++) {
     String shortcutId = "eb_slot_" + i;
     content.addView(buildAppIconSlotCard(shortcutId, i, sysItems, panelItems, intentItems, macroItems, tapRadios, i - 1));
 }
@@ -7840,10 +7917,27 @@ for (int i = 1; i <= 3; i++) {
     bClose.setOnClickListener(v -> { syncAppShortcutLabels(); d.dismiss(); });
     root.addView(bClose);
 
-    d.setOnDismissListener(dlg -> refreshPreview()); // [FIX] khôi phục preview đúng tab hiện tại
+        final android.os.Handler liveSyncHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    final Runnable liveSyncRun = () -> syncAppShortcutLabels();
+    SharedPreferences.OnSharedPreferenceChangeListener liveListener = (p, k) -> {
+        if (k == null) return;
+        if (k.equals("appicon_icon_scale")
+            || (k.startsWith("appicon_") && k.endsWith("_icon"))) {
+            liveSyncHandler.removeCallbacks(liveSyncRun);
+            liveSyncHandler.postDelayed(liveSyncRun, 180);
+        }
+    };
+    prefs.registerOnSharedPreferenceChangeListener(liveListener);
+    d.setOnDismissListener(dlg -> {
+        prefs.unregisterOnSharedPreferenceChangeListener(liveListener);
+        liveSyncHandler.removeCallbacks(liveSyncRun);
+        syncAppShortcutLabels();
+        refreshPreview();
+    });
     d.setContentView(root); d.show();
 }
 
+/** [MỚI] Card "Mở Edge Bar" — action cứng (không picker action), chỉ có nút chọn icon. */
 private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]> sysItems,
         List<String[]> panelItems, List<String[]> intentItems, List<String[]> macroItems,
         CheckBox[] tapRadios, int slotIdx) {
@@ -7865,7 +7959,13 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
     TextView tTitle = (TextView) infoCol.getChildAt(0);
     refreshHolder[0] = () -> tTitle.setText(resolveTileActionLabel(chosenAct[0], chosenPkg[0], chosenScId[0]));
 
-    btnIcon.setOnClickListener(v -> showIconPickerDialog(px + "icon", () -> syncAppShortcutLabels()));
+    btnIcon.setOnClickListener(v -> {
+    // [HƯỚNG B] Nếu slot này đang là action-tap (đã tick) → chọn icon cho
+    // vai trò "Mở Edge Bar" (key _open_icon). Ngược lại chọn icon action gốc.
+    boolean isTapSlot = shortcutId.equals(prefs.getString("appicon_tap_override_id", ""));
+    String key = isTapSlot ? (px + "open_icon") : (px + "icon");
+    showIconPickerDialog(key, () -> syncAppShortcutLabels());
+});
 
     CheckBox rb = new CheckBox(this);
     rb.setText(T("Tap app icon = run this action (long-press shows \"Open Edge Bar\")",
@@ -7877,21 +7977,53 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
     rbLp.setMargins(0, 6, 0, 0);
     rb.setLayoutParams(rbLp);
     tapRadios[slotIdx] = rb;
-    rb.setOnCheckedChangeListener((btn, checked) -> {
+            rb.setOnCheckedChangeListener((btn, checked) -> {
         if (checked) {
             if (chosenAct[0].equals("NONE")) {
                 Toast.makeText(this, T("Pick an action first!", "Hãy chọn hành động trước!"), Toast.LENGTH_SHORT).show();
                 btn.setChecked(false);
                 return;
             }
-            prefs.edit().putString("appicon_tap_override_id", shortcutId).apply();
             for (CheckBox other : tapRadios)
                 if (other != null && other != btn && other.isChecked()) other.setChecked(false);
+            // Backup CẢ action + icon gốc
+            prefs.edit()
+                .putString("appicon_tap_override_id", shortcutId)
+                .putString("appicon_tap_saved_act", chosenAct[0])
+                .putString("appicon_tap_saved_pkg", chosenPkg[0])
+                .putString("appicon_tap_saved_scId", chosenScId[0])
+                .putString("appicon_tap_saved_icon", prefs.getString(px + "icon", ""))
+                .putString(px + "act", "OPEN_APP_UI")
+                .remove(px + "launch_pkg")
+                .remove(px + "shortcut_id")
+                .remove(px + "icon")     // icon gốc đã backup, xoá để slot dùng icon mới
+                .apply();
+            chosenAct[0] = "OPEN_APP_UI"; chosenPkg[0] = ""; chosenScId[0] = "";
+            refreshHolder[0].run();
         } else if (shortcutId.equals(prefs.getString("appicon_tap_override_id", ""))) {
-            prefs.edit().remove("appicon_tap_override_id").apply();   // bỏ tick được rồi
+            // Restore cả action + icon gốc
+            String savedAct = prefs.getString("appicon_tap_saved_act", "NONE");
+            String savedPkg = prefs.getString("appicon_tap_saved_pkg", "");
+            String savedScId = prefs.getString("appicon_tap_saved_scId", "");
+            String savedIcon = prefs.getString("appicon_tap_saved_icon", "");
+            prefs.edit()
+                .remove("appicon_tap_override_id")
+                .remove("appicon_tap_saved_act")
+                .remove("appicon_tap_saved_pkg")
+                .remove("appicon_tap_saved_scId")
+                .remove("appicon_tap_saved_icon")
+                .putString(px + "act", savedAct)
+                .putString(px + "launch_pkg", savedPkg)
+                .putString(px + "shortcut_id", savedScId)
+                .putString(px + "icon", savedIcon)
+                .remove(px + "open_icon")   // dọn icon "Mở Edge Bar" cũ
+                .apply();
+            chosenAct[0] = savedAct; chosenPkg[0] = savedPkg; chosenScId[0] = savedScId;
+            refreshHolder[0].run();
         }
         syncAppShortcutLabels();
     });
+
     infoCol.addView(rb);
 
     View.OnClickListener openPicker = v -> {
@@ -9942,60 +10074,68 @@ private String stripEmojiSafe(String s) {
 private void syncAppShortcutLabels() {
     if (Build.VERSION.SDK_INT < 25) return;
     try {
-        android.content.pm.ShortcutManager sm = getSystemService(android.content.pm.ShortcutManager.class);
+        android.content.pm.ShortcutManager sm =
+            getSystemService(android.content.pm.ShortcutManager.class);
         if (sm == null) return;
-        String tapId = prefs.getString("appicon_tap_override_id", "");
+        float iconScale = prefs.getInt("appicon_icon_scale", 60) / 100f;
+        String tapOverride = prefs.getString("appicon_tap_override_id", "");
         List<android.content.pm.ShortcutInfo> list = new ArrayList<>();
-        for (int i = 1; i <= 3; i++) {
+
+        for (int i = 1; i <= 4; i++) {
             String slotId = "eb_slot_" + i;
             String px = "appicon_" + slotId + "_";
             String act = prefs.getString(px + "act", "NONE");
-            boolean isTapSlot = slotId.equals(tapId);
-            boolean hasAct = !act.equals("NONE") && !act.isEmpty();
-if (isTapSlot || !hasAct) continue;   // slot 1-chạm đã có shortcut tĩnh "Mở Edge Bar" lo
-
-            String label; Intent it; android.graphics.drawable.Icon icon = null;
-            // [FIX] Khai báo iconScale ở scope ngoài cùng của vòng lặp — dùng chung cho
-            // cả 2 nhánh (override riêng + fallback), tránh lỗi "cannot find symbol"
-            // khi biến chỉ tồn tại bên trong 1 nhánh if.
-            float iconScale = prefs.getInt("appicon_icon_scale", 60) / 100f;
-            if (isTapSlot) {
+            String pkg = prefs.getString(px + "launch_pkg", "");
+            String scId = prefs.getString(px + "shortcut_id", "");
+            String label;
+            if (slotId.equals(tapOverride)) {
+                // Slot này là action tap → đã bị ghi đè OPEN_APP_UI lúc tick
                 label = T("Open Edge Bar", "Mở Edge Bar");
-                it = new Intent(Intent.ACTION_VIEW, null, this, MainActivity.class);
+            } else if (act.equals("NONE") || act.isEmpty()) {
+                label = "Slot " + i;
             } else {
-                label = stripEmojiSafe(resolveTileActionLabel(act,
-                    prefs.getString(px + "launch_pkg", ""), prefs.getString(px + "shortcut_id", "")));
-                if (label.isEmpty()) label = "Slot " + i;
-                it = new Intent(Intent.ACTION_VIEW, null, this, ShortcutTrampolineActivity.class)
-                    .putExtra("eb_shortcut_id", slotId);
-                android.graphics.drawable.Drawable ov = resolveAppIconOverrideDrawable(prefs.getString(px + "icon", ""));
-                if (ov != null) {
-                    Bitmap bmp = PanelEngine.normalizeIconBitmap(ov, 108, iconScale);
-                    if (bmp != null) icon = Build.VERSION.SDK_INT >= 26
-                        ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(bmp)
-                        : android.graphics.drawable.Icon.createWithBitmap(bmp);
-                }
+                label = stripEmojiSafe(resolveTileActionLabel(act, pkg, scId));
+                if (label == null || label.isEmpty()) label = "Slot " + i;
             }
-            if (icon == null) {
-                try {
-                    Drawable fg = getDrawable(R.drawable.ic_launcher_fg);
-                    Bitmap fallbackBmp = PanelEngine.normalizeIconBitmap(fg, 108, iconScale);
-                    icon = fallbackBmp != null
-                        ? (Build.VERSION.SDK_INT >= 26
-                            ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(fallbackBmp)
-                            : android.graphics.drawable.Icon.createWithBitmap(fallbackBmp))
-                        : android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_launcher_fg);
-                } catch (Exception e) {
-                    icon = android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_launcher_fg);
-                }
-            }
+            Intent it = new Intent(Intent.ACTION_VIEW, null, this, ShortcutTrampolineActivity.class)
+                .putExtra("eb_shortcut_id", slotId);
+                        // [HƯỚNG B] Slot đang đóng vai "Mở Edge Bar" → đọc icon riêng _open_icon
+            String iconKey = slotId.equals(tapOverride) ? (px + "open_icon") : (px + "icon");
+            android.graphics.drawable.Icon icon = loadShortcutIcon(
+                prefs.getString(iconKey, ""), iconScale);
+
             String shortLb = label.length() > 12 ? label.substring(0, 12) : label;
             list.add(new android.content.pm.ShortcutInfo.Builder(this, "eb_dyn_" + i)
                 .setShortLabel(shortLb).setLongLabel(label)
                 .setIntent(it).setIcon(icon).setRank(i).build());
         }
+
+        // Ghi 2 lần + clear ở giữa để chắc chắn launcher refresh cache
+        sm.setDynamicShortcuts(list);
+        try { sm.removeAllDynamicShortcuts(); } catch (Exception ignored) {}
         sm.setDynamicShortcuts(list);
     } catch (Exception ignored) {}
+}
+
+private android.graphics.drawable.Icon loadShortcutIcon(String ref, float iconScale) {
+    Drawable ov = resolveAppIconOverrideDrawable(ref);
+    if (ov != null) {
+        Bitmap bmp = PanelEngine.normalizeIconBitmap(ov, 108, iconScale);
+        if (bmp != null) return Build.VERSION.SDK_INT >= 26
+            ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(bmp)
+            : android.graphics.drawable.Icon.createWithBitmap(bmp);
+    }
+    try {
+        Drawable fg = getDrawable(R.drawable.ic_launcher_fg);
+        Bitmap fallbackBmp = PanelEngine.normalizeIconBitmap(fg, 108, iconScale);
+        return fallbackBmp != null
+            ? (Build.VERSION.SDK_INT >= 26
+                ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(fallbackBmp)
+                : android.graphics.drawable.Icon.createWithBitmap(fallbackBmp))
+            : android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_launcher_fg);
+    } catch (Exception e) {
+        return android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_launcher_fg);
+    }
 }
 
 // Gọi 1 lần lúc mở app — đồng bộ lại đúng trạng thái bật/tắt của cả 30 slot
