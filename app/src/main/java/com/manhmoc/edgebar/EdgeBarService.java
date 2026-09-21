@@ -272,38 +272,49 @@ private void doSampleIconColors(boolean isFollowUp) {
     isCapturingIconColorScreenshot = true;
     iconColorCaptureStartMs = System.currentTimeMillis();
     try {
-        takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
+                takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
             new AccessibilityService.TakeScreenshotCallback() {
                 @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
-                    iconColorExecutor.execute(() -> {
-                        java.util.List<Object[]> pendingTints = new java.util.ArrayList<>();
-                        try {
-                            Bitmap screenHw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
-                            if (screenHw != null) {
-                                sampleJobsInto(screenHw, lockJobs, pendingTints);
-                                sampleJobsInto(screenHw, homaccJobs, pendingTints);
-                            }
-                        } catch (Exception ignored) {
-                        } finally {
-                            try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
-                            if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
-                        }
-                        iconColorHandler.post(() -> {
-                            isCapturingIconColorScreenshot = false;
-                            for (Object[] pair : pendingTints) {
-                                IconLayerView l = (IconLayerView) pair[0];
-                                if (l.isAttachedToWindow()) l.setTint((Integer) pair[1]);
-                            }
-                        });
-                    });
-                    if (!isFollowUp && !iconColorFollowUpPending) {
-                        iconColorFollowUpPending = true;
-                        iconColorHandler.postDelayed(() -> {
-                            iconColorFollowUpPending = false;
-                            doSampleIconColors(true);
-                        }, 400);
-                    }
+    if (iconColorExecutor.isShutdown()) {
+        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+        isCapturingIconColorScreenshot = false;
+        return;
+    }
+    try {
+        iconColorExecutor.execute(() -> {
+            java.util.List<Object[]> pendingTints = new java.util.ArrayList<>();
+            try {
+                Bitmap screenHw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
+                if (screenHw != null) {
+                    sampleJobsInto(screenHw, lockJobs, pendingTints);
+                    sampleJobsInto(screenHw, homaccJobs, pendingTints);
                 }
+            } catch (Exception ignored) {
+            } finally {
+                try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+                if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
+            }
+            iconColorHandler.post(() -> {
+                isCapturingIconColorScreenshot = false;
+                for (Object[] pair : pendingTints) {
+                    IconLayerView l = (IconLayerView) pair[0];
+                    if (l.isAttachedToWindow()) l.setTint((Integer) pair[1]);
+                }
+            });
+        });
+    } catch (java.util.concurrent.RejectedExecutionException ree) {
+        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+        isCapturingIconColorScreenshot = false;
+        return;
+    }
+    if (!isFollowUp && !iconColorFollowUpPending) {
+        iconColorFollowUpPending = true;
+        iconColorHandler.postDelayed(() -> {
+            iconColorFollowUpPending = false;
+            doSampleIconColors(true);
+        }, 400);
+    }
+}
                 @Override public void onFailure(int errorCode) {
                     isCapturingIconColorScreenshot = false;
                     // Retry đúng 1 lần (không còn vòng lặp vô hạn)

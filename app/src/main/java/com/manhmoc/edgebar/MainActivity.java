@@ -1259,8 +1259,9 @@ if (currentMainTab == 0) {
 }
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
-    @Override protected void onCreate(Bundle savedInstanceState) {
+        @Override protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);  // ← THÊM DÒNG NÀY
     // [FIX RECENTS] Nếu user bật checkbox "Luôn tắt Recents Edge Bar" → gắn flag
 // FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS ngay từ Intent khởi tạo. Flag này làm
 // cho TASK KHÔNG BAO GIỜ được ghi vào Recents, không phải "xoá sau" — nên
