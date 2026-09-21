@@ -129,6 +129,7 @@ private static final String[] KEYGUARD_BOUNCER_IDS = {
     private SharedPreferences prefs;
     private Vibrator vibrator;
     private PanelEngine panelEngine;
+    private RecentsBlurHelper recentsBlur;
     private AssistiveBubbleEngine bubbleEngine;
     private final java.util.concurrent.ExecutorService iconColorExecutor =
     java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -553,6 +554,15 @@ for (int j = 0; j < 4; j++) if (accHomeCorners[j] != null) accHomeCorners[j].set
             
             updateVisibility();
 // CODE MỚI — thay bằng:
+} else if (Intent.ACTION_SCREEN_ON.equals(act)) {
+    lastBouncerCheckMs = 0;          // bỏ throttle cho lần kiểm tra đầu tiên
+    refreshEventSubscription();      // bật ngay CONTENT_CHANGED để bắt bouncer
+    if (km != null && km.isKeyguardLocked() && needBouncerTracking()) {
+        checkBouncerVisible("");
+        applyLockGateInstant();
+    }
+    updateVisibility();
+
 } else if ("com.manhmoc.edgebar.OPEN_PANEL_REQUEST".equals(act)) {
     String panelId = i.getStringExtra("panel_id");
     if (panelEngine != null && panelId != null) panelEngine.togglePanel(panelId);
@@ -1056,6 +1066,9 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
             int mask = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED | AccessibilityEvent.TYPE_WINDOWS_CHANGED;
             if (locked && needBouncerTracking()) mask |= AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
             if (needScrollSampling()) mask |= AccessibilityEvent.TYPE_VIEW_SCROLLED;
+            if (recentsBlur != null && recentsBlur.wantsScrollEvents())
+                mask |= AccessibilityEvent.TYPE_VIEW_SCROLLED | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
+
             if (mask == lastAppliedEventMask) return;
             AccessibilityServiceInfo info = getServiceInfo();
             if (info == null) return;
@@ -1309,7 +1322,11 @@ if (HomescreenService.isRunning) {
 }
 prefs.edit().putBoolean("shortcut_home_on", false).apply();
 createFloatingBars();
+if (!prefs.getBoolean("blacklist_lock_active", false))
+    sendBroadcast(new Intent("com.manhmoc.edgebar.STOP_LOCK_EB").setPackage(getPackageName()));
+
 checkAndKickBlacklistOnAccEnable(); // [MỚI] tự thoát app Blacklist nếu đang mở lúc bật Acc
+       recentsBlur = new RecentsBlurHelper(this, wm, prefs, this::refreshEventSubscription);
         panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ true);
 panelEngine.rebuildAll();
 bubbleEngine = new AssistiveBubbleEngine(this, wm, prefs, /* isAnyMode = */ true);
@@ -1332,6 +1349,7 @@ refreshEventSubscription();
 
 @Override public void onAccessibilityEvent(AccessibilityEvent event) {
 int eventType = event.getEventType();
+if (recentsBlur != null) recentsBlur.onEvent(event);
 // [MỚI - FIX 1/3 BOUNCER] typeWindowContentChanged bắt được đúng lúc bouncer
 // PIN xuất hiện/biến mất (cùng window, chỉ đổi nội dung). Xử lý NGAY tại đây,
 // trước mọi early-return khác, throttle riêng 60ms — nhanh hơn nhiều so với
@@ -1465,42 +1483,53 @@ if (!stateChanged) return;
 }
 private void checkBouncerVisible(String currentPkg) {
     try {
-        java.util.List<android.view.accessibility.AccessibilityWindowInfo> windows = getWindows();
-        boolean foundSecureAppWindow = false;
-        if (windows != null) {
-            for (android.view.accessibility.AccessibilityWindowInfo w : windows) {
-                // Chỉ window kiểu APPLICATION mới tính là "app thật đang che màn khoá"
-                // — loại trừ notification heads-up, IME, system alert (nguyên nhân gây false positive)
-                if (w.getType() == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION) {
+        boolean cover = false;
+
+        // 1) Đang đổ chuông / đang gọi (rẻ nhất, kiểm tra trước)
+        AudioManager amCover = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (amCover != null && amCover.getMode() != AudioManager.MODE_NORMAL) cover = true;
+
+        // 2) Cửa sổ khác màn khoá gốc: camera, calculator, màn cuộc gọi (APPLICATION)
+        //    và Trợ lý (cửa sổ SYSTEM đang active/focused của app khác)
+        if (!cover) {
+            java.util.List<android.view.accessibility.AccessibilityWindowInfo> windows = getWindows();
+            if (windows != null) {
+                String self = getPackageName();
+                for (android.view.accessibility.AccessibilityWindowInfo w : windows) {
+                    int type = w.getType();
+                    boolean app = type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION;
+                    boolean sys = type == android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM
+                        && (w.isActive() || w.isFocused());
+                    if (!app && !sys) continue;
                     android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
-                    if (root != null) {
-                        String pkg = root.getPackageName() != null ? root.getPackageName().toString() : "";
-                        root.recycle();
-                        if (!pkg.isEmpty() && !pkg.equals("com.android.systemui") && !pkg.equals(getPackageName())) {
-                            foundSecureAppWindow = true;
-                        }
-                    }
+                    if (root == null) continue;
+                    String pkg = root.getPackageName() != null ? root.getPackageName().toString() : "";
+                    root.recycle();
+                    if (pkg.isEmpty() || pkg.equals(self) || pkg.equals("android")
+                        || pkg.contains("systemui") || pkg.contains("inputmethod")) continue;
+                    cover = true;
+                    break;
                 }
             }
         }
 
-        boolean foundBouncerNode = false;
-        if (!foundSecureAppWindow) {
+        // 3) Bouncer PIN (nằm trong chính cửa sổ systemui)
+        if (!cover) {
             android.view.accessibility.AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root != null) {
                 for (String id : KEYGUARD_BOUNCER_IDS) {
                     java.util.List<android.view.accessibility.AccessibilityNodeInfo> nodes =
                         root.findAccessibilityNodeInfosByViewId(id);
                     if (nodes != null) {
-                        if (!nodes.isEmpty()) foundBouncerNode = true;
+                        if (!nodes.isEmpty()) cover = true;
                         for (android.view.accessibility.AccessibilityNodeInfo n : nodes) n.recycle();
                     }
-                    if (foundBouncerNode) break;
+                    if (cover) break;
                 }
                 root.recycle();
             }
         }
-        isBouncerVisible = foundSecureAppWindow || foundBouncerNode;
+        isBouncerVisible = cover;
     } catch (Exception e) {
         isBouncerVisible = false;
     }
@@ -2565,6 +2594,14 @@ private void pauseAllOverlaysSync() {
 boolean isPreview = prefs.getBoolean("preview_lock", false);
 boolean isLocked = km.isKeyguardLocked() || isPreview;
 // true = có PIN/camera bảo mật/calculator... đang che màn khoá gốc
+if (!isPreview && km.isKeyguardLocked() && needBouncerTracking()) {
+    long nowB = SystemClock.elapsedRealtime();
+    if (nowB - lastBouncerCheckMs >= BOUNCER_CHECK_THROTTLE_MS) {
+        lastBouncerCheckMs = nowB;
+        checkBouncerVisible("");
+    }
+}
+
 boolean isSecureOverlayVisible = (isBouncerVisible || qrScannerOverlayActive) && !isPreview;
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hide = isBl; // isKbd không ẩn nữa — đẩy lên thay vì ẩn
@@ -3237,7 +3274,7 @@ public void onDestroy() {
     iconColorHandler.removeCallbacksAndMessages(null);
     syntheticGuardHandler.removeCallbacksAndMessages(null);
     iconColorExecutor.shutdownNow(); // tránh mỗi lần bật Trợ năng lại đẻ thêm 1 thread
-
+    if (recentsBlur != null) { recentsBlur.destroy(); recentsBlur = null; }
     try {
         if (fpRegistered && fpController != null && fpCallback != null)
             fpController.unregisterFingerprintGestureCallback(fpCallback);

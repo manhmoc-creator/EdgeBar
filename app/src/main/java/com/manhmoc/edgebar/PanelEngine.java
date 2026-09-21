@@ -979,16 +979,19 @@ private Path buildSquirclePath(int size) {
 private Path buildPebblePath(int size) {
     Path path = new Path();
     float s = size / 480f;
-    path.moveTo(93f * s, 319.5f * s);
-    path.quadTo(148f * s, 399f * s, 247f * s, 411.5f * s);
-    path.quadTo(346f * s, 424f * s, 388f * s, 332f * s);
-    path.quadTo(430f * s, 240f * s, 384f * s, 155f * s);
-    path.quadTo(338f * s, 70f * s, 241.5f * s, 72.5f * s);
-    path.quadTo(145f * s, 75f * s, 91.5f * s, 157.5f * s);
-    path.quadTo(38f * s, 240f * s, 93f * s, 319.5f * s);
+    // Path gốc: M413,339 Q354,438,238,441 Q122,444,82.5,342 Q43,240,86,144 Q129,48,234,58.5 Q339,69,405.5,154.5 Q472,240,413,339Z
+    // Đã lật ngang (x' = 480 - x) để khớp scaleX(-1) của bản HTML.
+    path.moveTo(67f * s, 339f * s);
+    path.quadTo(126f * s, 438f * s, 242f * s, 441f * s);
+    path.quadTo(358f * s, 444f * s, 397.5f * s, 342f * s);
+    path.quadTo(437f * s, 240f * s, 394f * s, 144f * s);
+    path.quadTo(351f * s, 48f * s, 246f * s, 58.5f * s);
+    path.quadTo(141f * s, 69f * s, 74.5f * s, 154.5f * s);
+    path.quadTo(8f * s, 240f * s, 67f * s, 339f * s);
     path.close();
     return normalizeToFullSize(path, size);
 }
+
 // Rough — viền lởm chởm kiểu "xé giấy". Toạ độ CỐ ĐỊNH (không Random) nên mọi icon
 // Rough trong cùng Panel vẽ giống hệt nhau, Zero jitter/Zero alloc thêm mỗi lần render.
 // [FIX] Toạ độ ĐẦY ĐỦ lấy đúng từ path SVG mẫu ROUGH (viewBox 500x500) — trước đây

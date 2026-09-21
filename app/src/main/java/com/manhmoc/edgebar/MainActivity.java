@@ -962,6 +962,24 @@ private void fireTestActions(java.util.Collection<String> acts, String launchPkg
         delay += 120;
     }
 }
+// [MỚI] Dùng chung cho chế độ "1 chạm mở app -> chạy Slot X" — bắn IPC_ACTION
+// y hệt ShortcutTrampolineActivity, không mở UI, zero-cost lúc bình thường vì
+// chỉ chạy đúng 1 lần trong onCreate() khi user đã bật tính năng này.
+private void fireAppIconSlotAction(String shortcutId) {
+    String act = prefs.getString("appicon_" + shortcutId + "_act", "NONE");
+    if (act.equals("NONE") || act.isEmpty()) return;
+    Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+    if (act.equals("LAUNCH_APP")) {
+        ipc.putExtra("act", "LAUNCH_APP");
+        ipc.putExtra("launch_pkg", prefs.getString("appicon_" + shortcutId + "_launch_pkg", ""));
+    } else if (act.startsWith("RUN_SHORTCUT_")) {
+        ipc.putExtra("act", "RUN_SHORTCUT");
+        ipc.putExtra("shortcut_id", act.substring("RUN_SHORTCUT_".length()));
+    } else {
+        ipc.putExtra("act", act);
+    }
+    sendBroadcast(ipc);
+}
 // ==================== DRAG-TO-REORDER DÙNG CHUNG ====================
 // Nhấn giữ 1 card đã build sẵn -> kéo đổi vị trí với card khác trong cùng
 // list (áp dụng mọi lưới 2/3 cột). KHÔNG tạo View mới lúc kéo — chỉ hoán
@@ -1192,8 +1210,22 @@ if (currentMainTab == 0) {
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+    super.onCreate(savedInstanceState);
+    prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+
+    // [MỚI] Nếu user đã gán 1 Slot làm hành động "1 chạm" VÀ đây đúng là cú chạm
+    // icon ngoài Home (có CATEGORY_LAUNCHER) -> chạy Slot đó rồi thoát ngay, KHÔNG
+    // vẽ UI. Mọi lệnh mở MainActivity nội bộ khác đều dùng "new Intent(this,
+    // MainActivity.class)" không kèm category này nên hoàn toàn không bị ảnh hưởng.
+    Intent launchIntent = getIntent();
+    if (launchIntent != null && launchIntent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
+        String overrideId = prefs.getString("appicon_tap_override_id", "");
+        if (!overrideId.isEmpty()) {
+            fireAppIconSlotAction(overrideId);
+            finish();
+            return;
+        }
+    }
         // [MỚI] User chủ động mở lại app -> tự xoá cờ "dừng vĩnh viễn", mọi watchdog/
         // BootReceiver/QS Tile từ đây được phép hồi sinh service trở lại như thường.
         // Ghi bằng apply() (async, không chặn main thread) — giá trị chỉ cần có trước
@@ -4265,10 +4297,16 @@ private String resolveTileActionLabel(String act, String pkg, String scId) {
     if (act == null || act.equals("NONE")) return T("(None)","(Chưa chọn)");
     if (act.equals("LAUNCH_APP")) return "📱 " + getAppLabelCached(pkg);
     if (act.equals("RUN_SHORTCUT")) return "🔗 " + prefs.getString("shortcut_"+scId+"_name","Shortcut");
+    // [MỚI] App Icon lưu dạng "RUN_SHORTCUT_<id>" (khác quy ước QS Tile) — thiếu nhánh
+    // này khiến trước đây hiện nguyên chuỗi key thô thay vì tên Shortcut thật.
+    if (act.startsWith("RUN_SHORTCUT_")) return "🔗 " + prefs.getString("shortcut_"+act.substring(13)+"_name","Shortcut");
     if (act.startsWith("INTENT_")) return "⚡ " + prefs.getString("intent_"+act.substring(7)+"_name","Intent");
     if (act.startsWith("MACRO_")) return "🤖 " + prefs.getString("macro_"+act.substring(6)+"_name","Macro");
+    // [MỚI] Panel trước đây rơi vào getActionLabel() và hiện thẳng "PANEL_xxxxxxxx"
+    if (act.startsWith("PANEL_")) return "🗂️ " + prefs.getString("pack_panel_"+act.substring(6)+"_name","Panel");
     return getActionLabel(act);
 }
+
 // Dialog picker DÙNG CHUNG cho cả 4 category — có ô tìm kiếm + multi-select,
 // y hệt pattern showPanelMultiPicker() đã có sẵn, để đồng bộ trải nghiệm.
 private void showActionCategoryPicker(String title, List<String[]> items,
@@ -5257,6 +5295,24 @@ cardWrap.addView(selDot);
     cardLocklist.addView(btnPickLockList);
     cardLocklist.addView(createSlider(T("Lock grace period after leaving app (sec)", "Thời gian ân hạn trước khi khoá lại (giây)"), "applock_grace_sec", 1000, 0));
     ecoContainer.addView(wrapCard(cardLocklist));
+    // Thẻ 2B: LÀM MỜ NỀN KHI RECENTS
+    LinearLayout cardRecentsBlur = new LinearLayout(this);
+    cardRecentsBlur.setOrientation(LinearLayout.VERTICAL);
+    Button btnPickRecentsBlur = new Button(this);
+    btnPickRecentsBlur.setText("🌫️ " + T("BLUR IN RECENTS", "LÀM MỜ KHI XEM ĐA NHIỆM"));
+    btnPickRecentsBlur.setBackground(getRounded("#009688", 20f));
+    btnPickRecentsBlur.setTextColor(Color.WHITE);
+    btnPickRecentsBlur.setOnClickListener(v -> showPanelMultiPicker("recents_blur_list", true));
+    cardRecentsBlur.addView(btnPickRecentsBlur);
+    CheckBox cbBlurLock = new CheckBox(this);
+    cbBlurLock.setText(T("Also blur every app in Locklist", "Làm mờ luôn mọi app thuộc Locklist"));
+    cbBlurLock.setTextColor(Color.parseColor("#FFC107"));
+    cbBlurLock.setChecked(prefs.getBoolean("recents_blur_locklist_en", false));
+    cbBlurLock.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("recents_blur_locklist_en", c).apply());
+    cbBlurLock.setPadding(0, 20, 0, 0);
+    cardRecentsBlur.addView(cbBlurLock);
+    cardRecentsBlur.addView(createSlider(T("Cover opacity", "Độ đậm lớp che"), "recents_blur_alpha", 255, 235));
+    ecoContainer.addView(wrapCard(cardRecentsBlur));
 
     // Thẻ 3: Keyboard (Nút ẩn)
     LinearLayout cardKbd = new LinearLayout(this);
@@ -7647,7 +7703,25 @@ for (String id : csvToList(prefs.getString("shortcut_ids", ""))) {
     "SCREEN_RECORD","AUTO_ROTATE_TOGGLE","TOGGLE_RECORD","PAUSE_RECORD",
     "TOGGLE_OVERLAY","TOGGLE_WORK_PROFILE","OPEN_STORAGE_SCAN","SCAN_QR",
     "PLAY_MY_PLAYLIST","YTDL_DOWNLOAD"
-};
+}; // Đã gộp sẵn Utility vào đây -> nút "System" cho App Icon vốn dĩ đã là System+Utility
+
+// [MỚI] Nạp icon tuỳ chỉnh riêng cho từng Slot — cùng định dạng "app:"/"pool:"/"poolc:"
+// dùng chung với showIconPickerDialog(), zero cấp phát khi không có override.
+private android.graphics.drawable.Drawable resolveAppIconOverrideDrawable(String ref) {
+    if (ref == null || ref.isEmpty()) return null;
+    try {
+        if (ref.startsWith("app:")) return getPackageManager().getApplicationIcon(ref.substring(4));
+        if (ref.startsWith("poolc:")) {
+            int[] pool = PanelEngine.getCustomIconPool(this);
+            int idx = Integer.parseInt(ref.substring(6));
+            if (idx >= 0 && idx < pool.length) return getDrawable(pool[idx]);
+        } else if (ref.startsWith("pool:")) {
+            int idx = Integer.parseInt(ref.substring(5));
+            if (idx >= 0 && idx < PanelEngine.SYSTEM_ICON_POOL.length) return getDrawable(PanelEngine.SYSTEM_ICON_POOL[idx]);
+        }
+    } catch (Exception ignored) {}
+    return null;
+}
 
 private void openAppIconShortcutSpace() {
     reloadActionLabels();
@@ -7665,8 +7739,8 @@ private void openAppIconShortcutSpace() {
 
     TextView note = new TextView(this);
     note.setText(T(
-        "Android only allows tap (open app) and long-press (this menu) on the launcher icon. Double-tap is not possible on any launcher.",
-        "Android chỉ cho chạm (mở app) và giữ (menu này) trên icon ngoài Home. 2-chạm KHÔNG thể làm được trên bất kỳ launcher nào."));
+        "Long-press = this menu. You can also pick ONE Slot below to run instead of opening the app on a normal tap.",
+        "Giữ icon = menu này. Bạn có thể chọn ĐÚNG 1 Slot bên dưới để chạy thay vì mở app khi chạm 1 lần."));
     note.setTextColor(Color.parseColor("#9AA0A6")); note.setTextSize(11.5f);
     note.setPadding(0, 0, 0, 20);
     root.addView(note);
@@ -7679,10 +7753,16 @@ private void openAppIconShortcutSpace() {
     root.addView(scroll);
 
     List<String[]> sysItems = buildItemsForKeys(APPICON_SYS_KEYS, ACT_KEYS, ACT_LABS);
+    // [MỚI] 3 danh mục còn thiếu — đồng bộ đúng những gì Homeb đang có
+    List<String[]> panelItems = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
+    List<String[]> intentItems = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
+    List<String[]> macroItems = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
 
+    // [MỚI] 4 RadioButton dùng chung -> đảm bảo chỉ 1 Slot được chọn làm hành động "1 chạm"
+    RadioButton[] tapRadios = new RadioButton[4];
     for (int i = 1; i <= 4; i++) {
         String shortcutId = "eb_slot_" + i;
-        content.addView(buildAppIconSlotCard(shortcutId, i, sysItems));
+        content.addView(buildAppIconSlotCard(shortcutId, i, sysItems, panelItems, intentItems, macroItems, tapRadios, i - 1));
     }
 
     Button bClose = new Button(this);
@@ -7698,30 +7778,54 @@ private void openAppIconShortcutSpace() {
     d.setContentView(root); d.show();
 }
 
-private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]> sysItems) {
+private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]> sysItems,
+        List<String[]> panelItems, List<String[]> intentItems, List<String[]> macroItems,
+        RadioButton[] tapRadios, int slotIdx) {
     String px = "appicon_" + shortcutId + "_";
     final String[] chosenAct = { prefs.getString(px + "act", "NONE") };
     final String[] chosenPkg = { prefs.getString(px + "launch_pkg", "") };
     final String[] chosenScId = { prefs.getString(px + "shortcut_id", "") };
 
     Runnable[] refreshHolder = new Runnable[1];
+    Button btnIcon = stdCardBtn("🎨", SURFACE_COLOR, Color.WHITE);
     Button btnEdit = stdCardBtn(T("CHOOSE", "CHỌN"), ACCENT_COLOR, Color.BLACK);
-    LinearLayout card = buildStdPackCard(null,
-        "Slot " + slotNum,
-        null,
-        "▶ " + resolveTileActionLabel(chosenAct[0], chosenPkg[0], chosenScId[0]),
-        btnEdit);
-    refreshHolder[0] = () -> {
-        TextView t3 = card.findViewWithTag("line3");
-        if (t3 != null) t3.setText("▶ " + resolveTileActionLabel(chosenAct[0], chosenPkg[0], chosenScId[0]));
-    };
 
-    Button btnApp = new Button(this);
-    Button btnSc = new Button(this);
+    // [SỬA] title = TÊN HÀNH ĐỘNG thay vì "Slot N"; "Slot N" lùi xuống làm dòng phụ
+    LinearLayout card = buildStdPackCard(null,
+        resolveTileActionLabel(chosenAct[0], chosenPkg[0], chosenScId[0]),
+        "Slot " + slotNum, null, btnIcon, btnEdit);
+
+    LinearLayout infoCol = (LinearLayout) card.getChildAt(0);
+    TextView tTitle = (TextView) infoCol.getChildAt(0);
+    refreshHolder[0] = () -> tTitle.setText(resolveTileActionLabel(chosenAct[0], chosenPkg[0], chosenScId[0]));
+
+    btnIcon.setOnClickListener(v -> showIconPickerDialog(px + "icon", () -> syncAppShortcutLabels()));
+
+    // [MỚI] Radio "Dùng làm hành động khi chạm 1 lần vào icon app"
+    RadioButton rb = new RadioButton(this);
+    rb.setText(T("Use on app-icon TAP", "Dùng khi chạm 1 lần vào icon app"));
+    rb.setTextColor(Color.parseColor("#9AA0A6"));
+    rb.setTextSize(12f);
+    rb.setChecked(shortcutId.equals(prefs.getString("appicon_tap_override_id", "")));
+    LinearLayout.LayoutParams rbLp = new LinearLayout.LayoutParams(-2, -2);
+    rbLp.setMargins(0, 6, 0, 0);
+    rb.setLayoutParams(rbLp);
+    tapRadios[slotIdx] = rb;
+    rb.setOnClickListener(v -> {
+        prefs.edit().putString("appicon_tap_override_id", shortcutId).apply();
+        for (RadioButton other : tapRadios) if (other != null && other != rb) other.setChecked(false);
+    });
+    infoCol.addView(rb);
+
     View.OnClickListener openPicker = v -> {
         Dialog pd = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout r = new LinearLayout(this); r.setOrientation(LinearLayout.VERTICAL);
         r.setBackgroundColor(Color.parseColor("#121212")); r.setPadding(30, 80, 30, 30);
+
+        ScrollView psc = new ScrollView(this);
+        LinearLayout pin = new LinearLayout(this); pin.setOrientation(LinearLayout.VERTICAL);
+        psc.addView(pin);
+        r.addView(psc, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         Button bApp = new Button(this); bApp.setText("📱 " + T("APP", "MỞ APP"));
         bApp.setBackground(getRounded(ACCENT_COLOR, 20f)); bApp.setTextColor(Color.BLACK);
@@ -7729,9 +7833,9 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
             chosenAct[0] = "LAUNCH_APP"; chosenPkg[0] = pkg; chosenScId[0] = "";
             prefs.edit().putString(px + "act", "LAUNCH_APP").putString(px + "launch_pkg", pkg)
                 .remove(px + "shortcut_id").apply();
-            refreshHolder[0].run(); pd.dismiss();
+            refreshHolder[0].run(); syncAppShortcutLabels(); pd.dismiss();
         }));
-        r.addView(bApp);
+        pin.addView(bApp);
 
         Button bSc = new Button(this); bSc.setText("🔗 SHORTCUT");
         bSc.setBackground(getRounded("#7C4DFF", 20f)); bSc.setTextColor(Color.WHITE);
@@ -7739,17 +7843,36 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
             chosenAct[0] = "RUN_SHORTCUT_" + scId; chosenScId[0] = scId; chosenPkg[0] = "";
             prefs.edit().putString(px + "act", "RUN_SHORTCUT_" + scId)
                 .putString(px + "shortcut_id", scId).remove(px + "launch_pkg").apply();
-            refreshHolder[0].run(); pd.dismiss();
+            refreshHolder[0].run(); syncAppShortcutLabels(); pd.dismiss();
         }));
-        r.addView(bSc);
+        pin.addView(bSc);
 
-        Button bSys = singleActionCategoryBtn("⚙️ " + T("SYSTEM (no Accessibility needed)", "HỆ THỐNG (không cần Trợ năng)"),
+        Button bSys = singleActionCategoryBtn("⚙️ " + T("SYSTEM & UTILITY", "HỆ THỐNG & TIỆN ÍCH"),
             "#4CAF50", sysItems, chosenAct, chosenPkg, chosenScId, () -> {
                 prefs.edit().putString(px + "act", chosenAct[0])
                     .putString(px + "launch_pkg", "").remove(px + "shortcut_id").apply();
-                refreshHolder[0].run();
+                refreshHolder[0].run(); syncAppShortcutLabels();
             });
-        r.addView(bSys);
+        pin.addView(bSys);
+
+        // [MỚI] 3 nút còn thiếu — đồng bộ với các nút lớn trong Homeb
+        Button bPanel = singleActionCategoryBtn("🗂️ PANEL", "#9C27B0", panelItems, chosenAct, chosenPkg, chosenScId, () -> {
+            prefs.edit().putString(px + "act", chosenAct[0]).putString(px + "launch_pkg", "").remove(px + "shortcut_id").apply();
+            refreshHolder[0].run(); syncAppShortcutLabels();
+        });
+        pin.addView(bPanel);
+
+        Button bIntent = singleActionCategoryBtn("⚡ INTENT", "#D32F2F", intentItems, chosenAct, chosenPkg, chosenScId, () -> {
+            prefs.edit().putString(px + "act", chosenAct[0]).putString(px + "launch_pkg", "").remove(px + "shortcut_id").apply();
+            refreshHolder[0].run(); syncAppShortcutLabels();
+        });
+        pin.addView(bIntent);
+
+        Button bMacro = singleActionCategoryBtn("🤖 MACRO", "#2196F3", macroItems, chosenAct, chosenPkg, chosenScId, () -> {
+            prefs.edit().putString(px + "act", chosenAct[0]).putString(px + "launch_pkg", "").remove(px + "shortcut_id").apply();
+            refreshHolder[0].run(); syncAppShortcutLabels();
+        });
+        pin.addView(bMacro);
 
         Button bNone = new Button(this); bNone.setText(T("NONE", "KHÔNG CÓ"));
         bNone.setBackground(getRounded("#D32F2F", 20f)); bNone.setTextColor(Color.WHITE);
@@ -7758,9 +7881,9 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
         bNone.setOnClickListener(v2 -> {
             chosenAct[0] = "NONE";
             prefs.edit().putString(px + "act", "NONE").remove(px + "launch_pkg").remove(px + "shortcut_id").apply();
-            refreshHolder[0].run(); pd.dismiss();
+            refreshHolder[0].run(); syncAppShortcutLabels(); pd.dismiss();
         });
-        r.addView(bNone);
+        pin.addView(bNone);
 
         pd.setContentView(r); pd.show();
     };
@@ -9724,18 +9847,39 @@ private void syncAppShortcutLabels() {
         java.util.List<android.content.pm.ShortcutInfo> updates = new java.util.ArrayList<>();
         String[] ids = {"eb_slot_1", "eb_slot_2", "eb_slot_3", "eb_slot_4"};
         for (int i = 0; i < ids.length; i++) {
-            String act = prefs.getString("appicon_" + ids[i] + "_act", "NONE");
-            String label = "Slot " + (i + 1) + (act.equals("NONE") ? "" : ": " + getActionLabelSmart(act,
-                prefs.getString("appicon_" + ids[i] + "_launch_pkg", "")));
-            updates.add(new android.content.pm.ShortcutInfo.Builder(this, ids[i])
+            String px = "appicon_" + ids[i] + "_";
+            String act = prefs.getString(px + "act", "NONE");
+            String scId = prefs.getString(px + "shortcut_id", "");
+            String pkg = prefs.getString(px + "launch_pkg", "");
+            // [FIX] resolveTileActionLabel() hiểu đúng RUN_SHORTCUT_/PANEL_/INTENT_/MACRO_,
+            // getActionLabelSmart() cũ không xử lý -> hiện nguyên key thô.
+            String label = act.equals("NONE") ? T("Slot " + (i + 1), "Ô " + (i + 1))
+                : resolveTileActionLabel(act, pkg, scId);
+
+            android.content.pm.ShortcutInfo.Builder b = new android.content.pm.ShortcutInfo.Builder(this, ids[i])
                 .setShortLabel(label.length() > 10 ? label.substring(0, 10) : label)
                 .setLongLabel(label)
-                .setIntent(new Intent(Intent.ACTION_VIEW, null, this, ShortcutTrampolineActivity.class))
-                .build());
+                // [FIX QUAN TRỌNG] PHẢI tự nhúng lại "eb_shortcut_id" ở đây — nếu không,
+                // updateShortcuts() sẽ XOÁ MẤT extra đã khai báo trong shortcuts.xml,
+                // Slot lại "bấm không chạy" như trước dù đã sửa XML.
+                .setIntent(new Intent(Intent.ACTION_VIEW, null, this, ShortcutTrampolineActivity.class)
+                    .putExtra("eb_shortcut_id", ids[i]));
+
+            android.graphics.drawable.Drawable iconOverride = resolveAppIconOverrideDrawable(prefs.getString(px + "icon", ""));
+            if (iconOverride != null) {
+                Bitmap bmp = PanelEngine.normalizeIconBitmap(iconOverride, 108, 0.85f);
+                if (bmp != null) {
+                    b.setIcon(Build.VERSION.SDK_INT >= 26
+                        ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(bmp)
+                        : android.graphics.drawable.Icon.createWithBitmap(bmp));
+                }
+            }
+            updates.add(b.build());
         }
         sm.updateShortcuts(updates);
     } catch (Exception ignored) {}
 }
+
 // Gọi 1 lần lúc mở app — đồng bộ lại đúng trạng thái bật/tắt của cả 30 slot
 // (phòng trường hợp restore backup, hoặc lần đầu cài app).
 private void syncAllTileComponentsOnBoot() {

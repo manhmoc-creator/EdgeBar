@@ -14,11 +14,12 @@ import android.os.Bundle;
 public class ShortcutTrampolineActivity extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
-        String shortcutId = getIntent().getStringExtra(Intent.EXTRA_SHORTCUT_ID);
-        // Android 7.1-7.x không có EXTRA_SHORTCUT_ID cho static shortcut khi mở qua
-        // ACTION_VIEW trực tiếp -> fallback đọc từ ShortcutManager reportShortcutUsed API
-        // thực tế trên các máy hiện đại (minSdk 26) luôn có EXTRA_SHORTCUT_ID.
-        if (shortcutId == null) shortcutId = "";
+// [FIX GỐC] Static Shortcut KHÔNG được hệ thống tự gắn EXTRA_SHORTCUT_ID — đây là
+// lý do mọi Slot trước đây bấm không có phản ứng. ID giờ được nhúng thủ công qua
+// <extra android:name="eb_shortcut_id"...> trong shortcuts.xml.
+String shortcutId = getIntent().getStringExtra("eb_shortcut_id");
+if (shortcutId == null) shortcutId = getIntent().getStringExtra(Intent.EXTRA_SHORTCUT_ID); // dự phòng
+if (shortcutId == null) shortcutId = "";
 
         SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
         String act = prefs.getString("appicon_" + shortcutId + "_act", "NONE");

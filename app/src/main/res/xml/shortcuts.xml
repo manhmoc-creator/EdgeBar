@@ -9,7 +9,9 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.manhmoc.edgebar"
-            android:targetClass="com.manhmoc.edgebar.ShortcutTrampolineActivity" />
+            android:targetClass="com.manhmoc.edgebar.ShortcutTrampolineActivity">
+            <extra android:name="eb_shortcut_id" android:value="eb_slot_1" />
+        </intent>
     </shortcut>
     <shortcut
         android:shortcutId="eb_slot_2"
@@ -20,7 +22,9 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.manhmoc.edgebar"
-            android:targetClass="com.manhmoc.edgebar.ShortcutTrampolineActivity" />
+            android:targetClass="com.manhmoc.edgebar.ShortcutTrampolineActivity">
+            <extra android:name="eb_shortcut_id" android:value="eb_slot_2" />
+        </intent>
     </shortcut>
     <shortcut
         android:shortcutId="eb_slot_3"
@@ -31,7 +35,9 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.manhmoc.edgebar"
-            android:targetClass="com.manhmoc.edgebar.ShortcutTrampolineActivity" />
+            android:targetClass="com.manhmoc.edgebar.ShortcutTrampolineActivity">
+            <extra android:name="eb_shortcut_id" android:value="eb_slot_3" />
+        </intent>
     </shortcut>
     <shortcut
         android:shortcutId="eb_slot_4"
@@ -42,6 +48,8 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.manhmoc.edgebar"
-            android:targetClass="com.manhmoc.edgebar.ShortcutTrampolineActivity" />
+            android:targetClass="com.manhmoc.edgebar.ShortcutTrampolineActivity">
+            <extra android:name="eb_shortcut_id" android:value="eb_slot_4" />
+        </intent>
     </shortcut>
 </shortcuts>

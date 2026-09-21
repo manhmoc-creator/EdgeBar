@@ -1119,11 +1119,9 @@ if (!ref.isEmpty()) tv.setTextSize(11f);
 
         showGridListOnly("SEARCH", ""); 
         
-        et.postDelayed(() -> {
-            et.requestFocus();
-            android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) ctx.getSystemService(Context.INPUT_METHOD_SERVICE);
-            if (imm != null) imm.showSoftInput(et, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
-        }, 200);
+        card.setFocusable(true);
+        card.setFocusableInTouchMode(true);
+
     }
 
     private void showGridListOnly(String type, String query) {
@@ -1597,7 +1595,12 @@ private void openCircleSearchOverlay() {
     if (circleSearchOverlay != null) return;
     int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
     DisplayMetrics dmS = getRealMetrics();
-    int ringSize = Math.min(dmS.widthPixels, dmS.heightPixels) - 40; // khớp đúng đường kính vòng đạn
+    // Cùng công thức với ringRadius()/onDraw() của CircleMenuView -> bằng đúng mép ngoài của ring
+    int viewSize = Math.min(dmS.widthPixels, dmS.heightPixels) - 40;
+    float ringR = viewSize / 2f * (prefs.getInt("bubble_circle_radius", 70) / 100f);
+    float bgW = prefs.getInt("bubble_circle_bg_width", 60);
+    final int outerD = Math.min(viewSize, Math.round((ringR + bgW / 2f) * 2f));
+
     FrameLayout overlay = new FrameLayout(ctx) {
         @Override public boolean dispatchKeyEvent(KeyEvent event) {
             if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
@@ -1606,39 +1609,38 @@ private void openCircleSearchOverlay() {
             return super.dispatchKeyEvent(event);
         }
     };
-    circleSearchLp = new WindowManager.LayoutParams(
-    ringSize, ringSize, wmType,
-    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-    | ((isAnyMode || showLocked) ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
-    PixelFormat.TRANSLUCENT);
-    circleSearchLp.gravity = Gravity.CENTER;
+    circleSearchLp = new WindowManager.LayoutParams(outerD, outerD, wmType,
+        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        | ((isAnyMode || showLocked) ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+        PixelFormat.TRANSLUCENT);
+    circleSearchLp.gravity = Gravity.CENTER; // cùng tâm với ring
 
     overlay.setOnTouchListener((v, event) -> {
         if (event.getAction() == MotionEvent.ACTION_OUTSIDE) { closeCircleSearchOverlay(); return true; }
         return false;
     });
-LinearLayout card = new LinearLayout(ctx);
-card.setOrientation(LinearLayout.VERTICAL);
-GradientDrawable bg = new GradientDrawable();
-bg.setShape(GradientDrawable.OVAL); // hình tròn
-bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 220), 18, 18, 18)); // #121212
-bg.setStroke(5, Color.parseColor("#8AB4F8")); // [MỚI] viền xanh bao quanh cho dễ nhìn
-card.setBackground(bg);
-// [MỚI] Clip nội dung con theo đúng hình tròn của nền — bảng cố định, không xoay
-card.setClipToOutline(true);
-card.setOutlineProvider(new ViewOutlineProvider() {
-    @Override public void getOutline(View view, Outline outline) {
-        outline.setOval(0, 0, view.getWidth(), view.getHeight());
-    }
-});
-card.setPadding((int)(ringSize*0.14f), (int)(ringSize*0.20f), (int)(ringSize*0.14f), (int)(ringSize*0.14f));
+
+    LinearLayout card = new LinearLayout(ctx);
+    card.setOrientation(LinearLayout.VERTICAL);
+    card.setFocusable(true);              // card giữ focus ban đầu -> Gboard KHÔNG tự bật
+    card.setFocusableInTouchMode(true);
+    GradientDrawable bg = new GradientDrawable();
+    bg.setShape(GradientDrawable.OVAL);
+    bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 220), 18, 18, 18));
+    bg.setStroke(5, Color.parseColor("#8AB4F8"));
+    card.setBackground(bg);
+    card.setClipToOutline(true);
+    card.setOutlineProvider(new ViewOutlineProvider() {
+        @Override public void getOutline(View view, Outline outline) {
+            outline.setOval(0, 0, view.getWidth(), view.getHeight());
+        }
+    });
+    int pad = Math.round(outerD * 0.16f); // nội dung nằm trong hình vuông nội tiếp của hình tròn
+    card.setPadding(pad, pad, pad, pad);
     card.setOnClickListener(v -> {});
     buildCircleSearchMenu(card);
-    FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-cardLp.gravity = Gravity.CENTER;
-cardLp.setMargins(60, 60, 60, 60); // điều chỉnh cho vừa với vòng tròn
-overlay.addView(card, cardLp);
+    overlay.addView(card, new FrameLayout.LayoutParams(-1, -1)); // card = đúng hình tròn outerD x outerD
 
     try { wm.addView(overlay, circleSearchLp); circleSearchOverlay = overlay; } catch (Exception e) { }
 }
@@ -1669,8 +1671,8 @@ private void buildCircleSearchMenu(LinearLayout card) {
     LinearLayout listContainer = new LinearLayout(ctx);
     listContainer.setOrientation(LinearLayout.VERTICAL);
     scroll.addView(listContainer);
-    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, prefs.getInt("bubble_bg_h", 800));
-    card.addView(scroll, slp);
+    card.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+
 
     Runnable[] refresh = new Runnable[1];
     refresh[0] = () -> {
@@ -1679,8 +1681,8 @@ String q = et.getText().toString().trim().toLowerCase(Locale.ROOT);
 List<String[]> allItems = buildItemsAllCached();
 int shownCount = 0;
 for (String[] item : allItems) {
-    if (++shownCount > 40) break;
     if (!q.isEmpty() && !item[0].toLowerCase(Locale.ROOT).contains(q)) continue;
+    if (++shownCount > 40) break;
 
     LinearLayout row = new LinearLayout(ctx);
     row.setOrientation(LinearLayout.HORIZONTAL);
@@ -1735,11 +1737,6 @@ for (String[] item : allItems) {
         public void beforeTextChanged(CharSequence s,int a,int b,int c){}
         public void onTextChanged(CharSequence s,int a,int b,int c){}
     });
-    et.postDelayed(() -> {
-        et.requestFocus();
-        android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) ctx.getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (imm != null) imm.showSoftInput(et, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
-    }, 200);
 }
     private Runnable spinHoldRunnable;
     private float lastSpinVelocity = 0f;

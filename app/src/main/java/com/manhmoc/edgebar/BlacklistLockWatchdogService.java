@@ -37,7 +37,6 @@ public class BlacklistLockWatchdogService extends Service {
     private static final long PREEMPT_MAX_MS = 14 * 60 * 60 * 1000L;
     private static final long NO_USAGE_PERM_MAX_MS = 90 * 1000L;
     private static final long APP_APPEAR_TIMEOUT_MS = 20 * 1000L;
-    private static final long SCREEN_ON_DECIDE_MS = 1000;        // chờ xem có cuộc gọi/app Blacklist kéo màn lên không
     private static final long CALL_NOTIF_WINDOW_MS = 15 * 1000L; // thông báo cuộc gọi Blacklist trong 15s gần nhất
 
     private static final int NOTIF_ID = 97;
@@ -71,15 +70,14 @@ public class BlacklistLockWatchdogService extends Service {
                 && pm != null && pm.isInteractive()) handleUnlock();
     };
     // [MỚI] Pre-emptive: bật màn ở màn khoá mà KHÔNG có cuộc gọi/app Blacklist -> trả Trợ năng lại
+    // Pre-emptive: bật màn ở màn khoá mà KHÔNG có cuộc gọi -> trả Trợ năng NGAY (không chờ)
     private final Runnable screenOnDecide = () -> {
         if (restoreDone || !preempt) return;
-        if (pm == null || !pm.isInteractive()) return;          // màn lại tắt rồi
-        if (km == null || !km.isKeyguardLocked()) return;       // đã mở khoá -> unlockCheck/USER_PRESENT lo
-        long now = System.currentTimeMillis();
-        if (hasUsageAccess()) refreshUsageState(now);
+        if (pm == null || !pm.isInteractive()) return;
+        if (km == null || !km.isKeyguardLocked()) return;
         boolean inCall = audio != null && audio.getMode() != AudioManager.MODE_NORMAL;
-        boolean callNotif = now - prefs.getLong("bl_call_ts", 0) < CALL_NOTIF_WINDOW_MS;
-        if (inCall || callNotif || !fgKeep.isEmpty()) return;   // có cuộc gọi/app -> giữ LockEb, KHÔNG bật Trợ năng
+        boolean callNotif = System.currentTimeMillis() - prefs.getLong("bl_call_ts", 0) < CALL_NOTIF_WINDOW_MS;
+        if (inCall || callNotif) return;   // có cuộc gọi -> giữ LockEb, không Trợ năng
         finishAndRestore("screen_on_no_call");
     };
 
@@ -98,12 +96,9 @@ public class BlacklistLockWatchdogService extends Service {
                 ignoreLeftUntilMs = System.currentTimeMillis() + 1500;
                 leftStreak = 0;
                 if (preempt) {
-                    if (km != null && !km.isKeyguardLocked()) {
-                        handler.postDelayed(unlockCheck, 2500);
-                    } else {
-                        handler.removeCallbacks(screenOnDecide);
-                        handler.postDelayed(screenOnDecide, SCREEN_ON_DECIDE_MS);
-                    }
+                if (preempt) {
+                    if (km != null && !km.isKeyguardLocked()) handler.postDelayed(unlockCheck, 2500);
+                    else screenOnDecide.run();   // quyết định tức thì
                 }
 
             } else if (Intent.ACTION_USER_PRESENT.equals(a)) {
@@ -358,8 +353,10 @@ public class BlacklistLockWatchdogService extends Service {
         if (handler != null) handler.removeCallbacksAndMessages(null);
         Log.d(TAG, "RESTORE reason=" + reason);
 
-        sendBroadcast(new Intent("com.manhmoc.edgebar.STOP_LOCK_EB").setPackage(getPackageName()));
-        try { stopService(new Intent(this, LockEbService.class)); } catch (Exception ignored) {}
+        if (!"screen_on_no_call".equals(reason)) { // trường hợp này: LockEb sẽ do EdgeBarService tự tắt khi kết nối xong
+            sendBroadcast(new Intent("com.manhmoc.edgebar.STOP_LOCK_EB").setPackage(getPackageName()));
+            try { stopService(new Intent(this, LockEbService.class)); } catch (Exception ignored) {}
+        }
 
         prefs.edit()
             .putLong("blacklist_lock_restore_ts", "screen_on_no_call".equals(reason) ? 0 : System.currentTimeMillis())
