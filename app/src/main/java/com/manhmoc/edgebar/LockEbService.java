@@ -166,13 +166,22 @@ public class LockEbService extends Service {
             String a = i.getAction();
             if ("com.manhmoc.edgebar.STOP_LOCK_EB".equals(a)) { stopSelf(); return; }
             if ("com.manhmoc.edgebar.IPC_ACTION".equals(a)) { handleIpc(i); return; }
-            applyVisibility(); // LOCKEB_FG / SCREEN_ON / USER_PRESENT
             if (Intent.ACTION_USER_PRESENT.equals(a)) {
-                // dự phòng: watchdog đã kết thúc mà LockEb còn sót -> tự tắt
+                // [FIX TỐC ĐỘ] USER_PRESENT = chắc chắn đã mở khoá -> ẩn NGAY, không
+                // qua applyVisibility() (phụ thuộc km.isKeyguardLocked() có thể báo trễ).
+                forceHideInstant();
                 h.postDelayed(() -> { if (!prefs.getBoolean("blacklist_lock_active", false)) stopSelf(); }, 500);
+                return;
             }
+            applyVisibility(); // LOCKEB_FG / SCREEN_ON
         }
     };
+
+    /** [MỚI] Ẩn toàn bộ bar/corner LockEb ngay lập tức, bỏ qua điều kiện keyguard. */
+    private void forceHideInstant() {
+        for (View b : bars) if (b != null) b.setVisibility(View.GONE);
+        for (View c : corners) if (c != null) c.setVisibility(View.GONE);
+    }
 
     private void startForegroundQuiet() {
         String cid = "eb_lockeb";

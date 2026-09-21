@@ -57,6 +57,7 @@ private android.view.View[] accHomeCorners = new android.view.View[4];
 private android.content.BroadcastReceiver accHomeReceiver;
 public static volatile boolean isConnected = false;
 private long lastHomaccHealMs = 0;
+private volatile long forceUnlockedUntilMs = 0; // [MỚI] chống flicker Lock lúc vừa mở khoá
 
 private boolean isHomaccDrawn = false; // Guard chặn vẽ lại khi đã có view
 // THÊM MỚI — cache trạng thái preview để tránh gọi drawAccessibleHome()/removeAccessibleHome()
@@ -539,6 +540,11 @@ for (int j = 0; j < 4; j++) if (accHomeCorners[j] != null) accHomeCorners[j].set
             }
 
                 } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
+            // [FIX TỐC ĐỘ MỞ KHOÁ] Ép "đã mở khoá" trong 400ms tới, chặn hẳn khả năng
+            // Lock bị updateVisibility() vẽ lại do keyguard báo trễ.
+            forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 400;
+            instantSwitchLockToHomacc(); // ẩn Lock / hiện Homacc NGAY, không chờ animate hay event kế tiếp
+
             if (AccessibleHomeService.isRunning) drawAccessibleHome();
             refreshFingerprintRegistration();
 
@@ -553,6 +559,11 @@ for (int j = 0; j < 4; j++) if (accHomeCorners[j] != null) accHomeCorners[j].set
             ed.apply();
             
             updateVisibility();
+            // [MỚI] Chốt lại 2 lần trong lúc forceUnlocked còn hiệu lực, phòng Homacc
+            // vừa được khởi động lại chưa kịp add đủ View ngay lượt đầu.
+            new Handler(android.os.Looper.getMainLooper()).postDelayed(this::updateVisibility, 60);
+            new Handler(android.os.Looper.getMainLooper()).postDelayed(this::updateVisibility, 220);
+
 // CODE MỚI — thay bằng:
 } else if (Intent.ACTION_SCREEN_ON.equals(act)) {
     lastBouncerCheckMs = 0;          // bỏ throttle cho lần kiểm tra đầu tiên
@@ -2594,7 +2605,12 @@ private void pauseAllOverlaysSync() {
     private void updateVisibility() {
     syncHomaccPreviewState(); // THÊM DÒNG NÀY — đồng bộ preview Homacc, zero cost nếu không đổi
 boolean isPreview = prefs.getBoolean("preview_lock", false);
-boolean isLocked = km.isKeyguardLocked() || isPreview;
+// [FIX FLICKER] Vừa USER_PRESENT -> ép coi như đã mở khoá trong ~400ms, bất kể
+// km.isKeyguardLocked() có thể còn báo trạng thái cũ (framework cập nhật trễ),
+// tránh Lock bị vẽ lại đúng lúc Home vừa hiện ra.
+boolean forceUnlocked = SystemClock.elapsedRealtime() < forceUnlockedUntilMs;
+boolean isLocked = !forceUnlocked && (km.isKeyguardLocked() || isPreview);
+
 // true = có PIN/camera bảo mật/calculator... đang che màn khoá gốc
 if (!isPreview && km.isKeyguardLocked() && needBouncerTracking()) {
     long nowB = SystemClock.elapsedRealtime();
@@ -2738,7 +2754,40 @@ private void applyLockGateInstant() {
         corners[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
     }
 }
+/** [MỚI] Chuyển tức thời Lock -> Homacc ngay lúc ACTION_USER_PRESENT — không animate,
+ *  không chờ accessibility event kế tiếp, để mắt thường không kịp thấy Lock/LockEb
+ *  còn sót lại trên Home dù chỉ đúng 1 khung hình. */
+private void instantSwitchLockToHomacc() {
+    for (int i = 0; i < 12; i++) {
+        if (bars[i] == null) continue;
+        bars[i].animate().cancel();
+        bars[i].setAlpha(1f);
+        bars[i].setVisibility(View.GONE);
+        hideIconLayer("lock_" + BARS[i]);
+    }
+    for (int i = 0; i < 4; i++) {
+        if (corners[i] == null) continue;
+        corners[i].animate().cancel();
+        corners[i].setVisibility(View.GONE);
+    }
+    if (AccessibleHomeService.isRunning) {
+        drawAccessibleHome();
+        for (int i = 0; i < 12; i++) {
+            if (accHomeBars[i] != null && prefs.getBoolean("homacc_" + BARS[i] + "_en", false)
+                    && !prefs.getBoolean("homacc_" + BARS[i] + "_manual_hide", false)) {
+                accHomeBars[i].setVisibility(View.VISIBLE);
+            }
+        }
+        for (int i = 0; i < 4; i++) {
+            if (accHomeCorners[i] != null && prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_en", false)
+                    && !prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_manual_hide", false)) {
+                accHomeCorners[i].setVisibility(View.VISIBLE);
+            }
+        }
+    }
+}
 private static final int MAX_TRIGGER_DEPTH = 3;
+
     private static final String[] GESTURE_SUFFIXES = {
         "_up_hold","_down_hold","_left_hold","_right_hold","_diag_hold",
         "_dtap","_long","_diag","_up","_down","_left","_right","_tap"

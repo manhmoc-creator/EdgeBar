@@ -976,18 +976,29 @@ private Path buildSquirclePath(int size) {
 // [FIX] Toạ độ Q-curve LẤY ĐÚNG từ path SVG mẫu PEBBLE (viewBox 480x480), đã lật
 // ngang (mirror x = 480-x) để khớp CSS "transform: scaleX(-1)" mà file mẫu áp dụng
 // lên đúng chiều hiển thị thật. Scale theo iconSize/480.
+// Hệ số "béo" cho Pebble: 1.00 = như cũ (gầy), 1.15 = đầy đặn, 1.30 = rất tròn/vuông.
+private static final float PEBBLE_FAT = 1.15f;
+
 private Path buildPebblePath(int size) {
     Path path = new Path();
     float s = size / 480f;
-    // Path gốc: M413,339 Q354,438,238,441 Q122,444,82.5,342 Q43,240,86,144 Q129,48,234,58.5 Q339,69,405.5,154.5 Q472,240,413,339Z
-    // Đã lật ngang (x' = 480 - x) để khớp scaleX(-1) của bản HTML.
+    final float c = 240f;                 // tâm trong hệ toạ độ 480x480
+    // Điểm điều khiển (đã lật ngang x' = 480 - x cho khớp scaleX(-1)) — đẩy ra xa tâm
+    float[][] ctrl = {
+        {126f, 438f}, {358f, 444f}, {437f, 240f},
+        {351f,  48f}, {141f,  69f}, {  8f, 240f}
+    };
+    // Điểm nằm trên đường cong — giữ nguyên
+    float[][] end = {
+        {242f, 441f}, {397.5f, 342f}, {394f, 144f},
+        {246f, 58.5f}, {74.5f, 154.5f}, {67f, 339f}
+    };
     path.moveTo(67f * s, 339f * s);
-    path.quadTo(126f * s, 438f * s, 242f * s, 441f * s);
-    path.quadTo(358f * s, 444f * s, 397.5f * s, 342f * s);
-    path.quadTo(437f * s, 240f * s, 394f * s, 144f * s);
-    path.quadTo(351f * s, 48f * s, 246f * s, 58.5f * s);
-    path.quadTo(141f * s, 69f * s, 74.5f * s, 154.5f * s);
-    path.quadTo(8f * s, 240f * s, 67f * s, 339f * s);
+    for (int i = 0; i < 6; i++) {
+        float cx = c + (ctrl[i][0] - c) * PEBBLE_FAT;
+        float cy = c + (ctrl[i][1] - c) * PEBBLE_FAT;
+        path.quadTo(cx * s, cy * s, end[i][0] * s, end[i][1] * s);
+    }
     path.close();
     return normalizeToFullSize(path, size);
 }
