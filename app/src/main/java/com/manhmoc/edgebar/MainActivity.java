@@ -1220,7 +1220,8 @@ if (currentMainTab == 0) {
     Intent launchIntent = getIntent();
     if (launchIntent != null && launchIntent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
         String overrideId = prefs.getString("appicon_tap_override_id", "");
-        if (!overrideId.isEmpty()) {
+        if (!overrideId.isEmpty()
+                && !prefs.getString("appicon_" + overrideId + "_act", "NONE").equals("NONE")) {
             fireAppIconSlotAction(overrideId);
             finish();
             return;
@@ -7759,7 +7760,7 @@ private void openAppIconShortcutSpace() {
     List<String[]> macroItems = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
 
     // [MỚI] 4 RadioButton dùng chung -> đảm bảo chỉ 1 Slot được chọn làm hành động "1 chạm"
-    RadioButton[] tapRadios = new RadioButton[4];
+    CheckBox[] tapRadios = new CheckBox[4];
     for (int i = 1; i <= 4; i++) {
         String shortcutId = "eb_slot_" + i;
         content.addView(buildAppIconSlotCard(shortcutId, i, sysItems, panelItems, intentItems, macroItems, tapRadios, i - 1));
@@ -7780,7 +7781,7 @@ private void openAppIconShortcutSpace() {
 
 private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]> sysItems,
         List<String[]> panelItems, List<String[]> intentItems, List<String[]> macroItems,
-        RadioButton[] tapRadios, int slotIdx) {
+        CheckBox[] tapRadios, int slotIdx) {
     String px = "appicon_" + shortcutId + "_";
     final String[] chosenAct = { prefs.getString(px + "act", "NONE") };
     final String[] chosenPkg = { prefs.getString(px + "launch_pkg", "") };
@@ -7801,9 +7802,9 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
 
     btnIcon.setOnClickListener(v -> showIconPickerDialog(px + "icon", () -> syncAppShortcutLabels()));
 
-    // [MỚI] Radio "Dùng làm hành động khi chạm 1 lần vào icon app"
-    RadioButton rb = new RadioButton(this);
-    rb.setText(T("Use on app-icon TAP", "Dùng khi chạm 1 lần vào icon app"));
+    CheckBox rb = new CheckBox(this);
+    rb.setText(T("Tap app icon = run this action (long-press shows \"Open Edge Bar\")",
+                 "Chạm 1 lần icon app = chạy hành động này (giữ icon sẽ có \"Mở Edge Bar\")"));
     rb.setTextColor(Color.parseColor("#9AA0A6"));
     rb.setTextSize(12f);
     rb.setChecked(shortcutId.equals(prefs.getString("appicon_tap_override_id", "")));
@@ -7811,9 +7812,20 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
     rbLp.setMargins(0, 6, 0, 0);
     rb.setLayoutParams(rbLp);
     tapRadios[slotIdx] = rb;
-    rb.setOnClickListener(v -> {
-        prefs.edit().putString("appicon_tap_override_id", shortcutId).apply();
-        for (RadioButton other : tapRadios) if (other != null && other != rb) other.setChecked(false);
+    rb.setOnCheckedChangeListener((btn, checked) -> {
+        if (checked) {
+            if (chosenAct[0].equals("NONE")) {
+                Toast.makeText(this, T("Pick an action first!", "Hãy chọn hành động trước!"), Toast.LENGTH_SHORT).show();
+                btn.setChecked(false);
+                return;
+            }
+            prefs.edit().putString("appicon_tap_override_id", shortcutId).apply();
+            for (CheckBox other : tapRadios)
+                if (other != null && other != btn && other.isChecked()) other.setChecked(false);
+        } else if (shortcutId.equals(prefs.getString("appicon_tap_override_id", ""))) {
+            prefs.edit().remove("appicon_tap_override_id").apply();   // bỏ tick được rồi
+        }
+        syncAppShortcutLabels();
     });
     infoCol.addView(rb);
 
@@ -7881,6 +7893,7 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
         bNone.setOnClickListener(v2 -> {
             chosenAct[0] = "NONE";
             prefs.edit().putString(px + "act", "NONE").remove(px + "launch_pkg").remove(px + "shortcut_id").apply();
+            if (rb.isChecked()) rb.setChecked(false);   // slot không còn action thì tự bỏ tick 1-chạm
             refreshHolder[0].run(); syncAppShortcutLabels(); pd.dismiss();
         });
         pin.addView(bNone);
@@ -9839,44 +9852,59 @@ private void sanitizeAllPrefsAfterRestore() {
 }
 // [MỚI] Cập nhật longLabel của App Shortcut để hiện đúng tên action đang gán
 // ngay dưới "Slot N" trong menu long-press icon. Zero cost nếu SDK < 25.
+private String stripEmojiSafe(String s) {
+    if (s == null) return "";
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < s.length(); ) {
+        int cp = s.codePointAt(i); i += Character.charCount(cp);
+        int t = Character.getType(cp);
+        if (cp >= 0x1F000 || cp == 0xFE0F || t == Character.OTHER_SYMBOL
+            || t == Character.NON_SPACING_MARK || t == Character.FORMAT) continue;
+        sb.appendCodePoint(cp);
+    }
+    return sb.toString().trim();
+}
+
 private void syncAppShortcutLabels() {
     if (Build.VERSION.SDK_INT < 25) return;
     try {
         android.content.pm.ShortcutManager sm = getSystemService(android.content.pm.ShortcutManager.class);
         if (sm == null) return;
-        java.util.List<android.content.pm.ShortcutInfo> updates = new java.util.ArrayList<>();
-        String[] ids = {"eb_slot_1", "eb_slot_2", "eb_slot_3", "eb_slot_4"};
-        for (int i = 0; i < ids.length; i++) {
-            String px = "appicon_" + ids[i] + "_";
+        String tapId = prefs.getString("appicon_tap_override_id", "");
+        List<android.content.pm.ShortcutInfo> list = new ArrayList<>();
+        for (int i = 1; i <= 4; i++) {
+            String slotId = "eb_slot_" + i;
+            String px = "appicon_" + slotId + "_";
             String act = prefs.getString(px + "act", "NONE");
-            String scId = prefs.getString(px + "shortcut_id", "");
-            String pkg = prefs.getString(px + "launch_pkg", "");
-            // [FIX] resolveTileActionLabel() hiểu đúng RUN_SHORTCUT_/PANEL_/INTENT_/MACRO_,
-            // getActionLabelSmart() cũ không xử lý -> hiện nguyên key thô.
-            String label = act.equals("NONE") ? T("Slot " + (i + 1), "Ô " + (i + 1))
-                : resolveTileActionLabel(act, pkg, scId);
+            boolean isTapSlot = slotId.equals(tapId);
+            boolean hasAct = !act.equals("NONE") && !act.isEmpty();
+            if (!isTapSlot && !hasAct) continue;          // slot trống -> không hiện
 
-            android.content.pm.ShortcutInfo.Builder b = new android.content.pm.ShortcutInfo.Builder(this, ids[i])
-                .setShortLabel(label.length() > 10 ? label.substring(0, 10) : label)
-                .setLongLabel(label)
-                // [FIX QUAN TRỌNG] PHẢI tự nhúng lại "eb_shortcut_id" ở đây — nếu không,
-                // updateShortcuts() sẽ XOÁ MẤT extra đã khai báo trong shortcuts.xml,
-                // Slot lại "bấm không chạy" như trước dù đã sửa XML.
-                .setIntent(new Intent(Intent.ACTION_VIEW, null, this, ShortcutTrampolineActivity.class)
-                    .putExtra("eb_shortcut_id", ids[i]));
-
-            android.graphics.drawable.Drawable iconOverride = resolveAppIconOverrideDrawable(prefs.getString(px + "icon", ""));
-            if (iconOverride != null) {
-                Bitmap bmp = PanelEngine.normalizeIconBitmap(iconOverride, 108, 0.85f);
-                if (bmp != null) {
-                    b.setIcon(Build.VERSION.SDK_INT >= 26
+            String label; Intent it; android.graphics.drawable.Icon icon = null;
+            if (isTapSlot) {
+                label = T("Open Edge Bar", "Mở Edge Bar");
+                it = new Intent(Intent.ACTION_VIEW, null, this, MainActivity.class); // không có CATEGORY_LAUNCHER
+            } else {
+                label = stripEmojiSafe(resolveTileActionLabel(act,
+                    prefs.getString(px + "launch_pkg", ""), prefs.getString(px + "shortcut_id", "")));
+                if (label.isEmpty()) label = "Slot " + i;
+                it = new Intent(Intent.ACTION_VIEW, null, this, ShortcutTrampolineActivity.class)
+                    .putExtra("eb_shortcut_id", slotId);
+                android.graphics.drawable.Drawable ov = resolveAppIconOverrideDrawable(prefs.getString(px + "icon", ""));
+                if (ov != null) {
+                    Bitmap bmp = PanelEngine.normalizeIconBitmap(ov, 108, 0.85f);
+                    if (bmp != null) icon = Build.VERSION.SDK_INT >= 26
                         ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(bmp)
-                        : android.graphics.drawable.Icon.createWithBitmap(bmp));
+                        : android.graphics.drawable.Icon.createWithBitmap(bmp);
                 }
             }
-            updates.add(b.build());
+            if (icon == null) icon = android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_launcher_fg);
+            String shortLb = label.length() > 12 ? label.substring(0, 12) : label;
+            list.add(new android.content.pm.ShortcutInfo.Builder(this, "eb_dyn_" + i)
+                .setShortLabel(shortLb).setLongLabel(label)
+                .setIntent(it).setIcon(icon).setRank(i).build());
         }
-        sm.updateShortcuts(updates);
+        sm.setDynamicShortcuts(list);
     } catch (Exception ignored) {}
 }
 

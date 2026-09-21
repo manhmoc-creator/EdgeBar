@@ -175,8 +175,7 @@ private static final long WAVE_FIRE_COOLDOWN_MS = 250;
         try {
 // [FIX] SENSOR_DELAY_UI (60ms) — nhanh hơn NORMAL (200ms) gấp 3 lần,
 // vẫn tiết kiệm pin vì proximity sensor chỉ fire khi giá trị đổi.
-ok = sm.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_UI, h);
-
+ok = sm.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_FASTEST, 0, h);
         } catch (Exception e) { Log.w(TAG, "register prox failed", e); }
         if (!ok) { Log.w(TAG, "registerListener trả về false"); return; }
 
@@ -225,25 +224,21 @@ ok = sm.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_UI
         @Override public void onSensorChanged(SensorEvent e) {
             if (e.values.length == 0) return;
             long now = SystemClock.elapsedRealtime();
-// [FIX] Dùng ngưỡng tương đối — robust với mọi sensor (0/5, 0/8, 1/5...)
-// Sensor proximity gần như luôn báo near=0 hoặc giá trị rất nhỏ
-boolean near = e.values[0] < (proxMax * 0.5f);
+            long evMs = e.timestamp / 1_000_000L;               // giờ THẬT của cảm biến
+            if (evMs <= 0 || Math.abs(now - evMs) > 30_000) evMs = now;
+            boolean near = e.values[0] < Math.min(proxMax, 5f);
 
             if (near) {
-                if (!lastNear) {
-                    lastNear = true;
-                    nearSinceMs = now;
-                    h.removeCallbacks(commitRunnable); // đang vẫy tiếp -> hoãn chốt
-                }
+                if (!lastNear) { lastNear = true; nearSinceMs = evMs; h.removeCallbacks(commitRunnable); }
                 return;
             }
-            if (!lastNear) return;           // far -> far: bỏ qua
+            if (!lastNear) return;
             lastNear = false;
-            long dur = now - nearSinceMs;
+            long dur = Math.max(0, evMs - nearSinceMs);
 
-            // Không phải vẫy: che quá lâu / che từ lúc vừa tắt màn / đang trong túi hoặc đang đi
             if (nearSinceMs < armedAtMs || dur > MAX_NEAR_MS || now < pocketBlockUntilMs) {
-                Log.d(TAG, "ignore near dur=" + dur);
+                Log.d(TAG, "ignore near dur=" + dur + " stale=" + (nearSinceMs < armedAtMs)
+                    + " pocket=" + (now < pocketBlockUntilMs));
                 waveCount = 0;
                 h.removeCallbacks(commitRunnable);
                 return;
@@ -251,12 +246,8 @@ boolean near = e.values[0] < (proxMax * 0.5f);
             waveCount++;
             Log.d(TAG, "wave #" + waveCount + " dur=" + dur);
             h.removeCallbacks(commitRunnable);
-            if (waveCount >= maxWaveNeeded) {     // đủ số lần tối đa đã gán -> chạy NGAY
-                commitRunnable.run();
-            } else {
-                holdCpu(WAVE_GAP_MS + 400);       // chỉ giữ CPU ~1 giây
-                h.postDelayed(commitRunnable, WAVE_GAP_MS);
-            }
+            if (waveCount >= maxWaveNeeded) commitRunnable.run();
+            else { holdCpu(WAVE_GAP_MS + 400); h.postDelayed(commitRunnable, WAVE_GAP_MS); }
         }
         @Override public void onAccuracyChanged(Sensor s, int a) {}
     };

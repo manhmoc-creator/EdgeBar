@@ -36,7 +36,6 @@ public class RecentsBlurHelper {
 
     private CoverView cover;
     private boolean recentsVisible = false;
-    private boolean taskViewSeen = false;
     private String lastSig = "";
     private final Map<String, String> pkgToLabel = new HashMap<>();
     private final Map<String, Drawable> iconCache = new HashMap<>();
@@ -53,31 +52,6 @@ public class RecentsBlurHelper {
 
 // [FIX] Subscribe ngay khi feature bật — không chờ recentsVisible=true nữa
 public boolean wantsScrollEvents() { return isEnabled(); }
-
-public void onEvent(AccessibilityEvent ev) {
-    if (!isEnabled()) { if (cover != null || recentsVisible) hide(); return; }
-    int t = ev.getEventType();
-    String p = ev.getPackageName() != null ? ev.getPackageName().toString() : "";
-
-    // [FIX] Mở rộng nhận diện launcher/recents provider trên mọi ROM Pixel/AOSP
-    boolean isLauncher = p.contains("launcher") || p.contains("quickstep")
-            || p.contains("recents") || p.equals("com.android.systemui");
-
-    // [FIX] Scan cả khi content thay đổi (TaskView add/remove) — không chỉ state change
-    boolean triggersScan = (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-            || t == AccessibilityEvent.TYPE_WINDOWS_CHANGED
-            || t == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-
-    if (isLauncher && triggersScan) {
-        h.removeCallbacks(scanRunnable);
-        // [FIX] 250ms đủ để TaskView render xong thumbnail + label trên Adreno 540
-        h.postDelayed(scanRunnable, t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ? 250 : 100);
-    } else if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && !p.isEmpty()
-            && !p.contains("systemui") && !p.contains("inputmethod")
-            && !p.equals(svc.getPackageName())) {
-        hide();
-    }
-}
 
     private void rebuildLabelsIfNeeded() {
         String a = prefs.getString("recents_blur_list", "");
@@ -97,83 +71,114 @@ public void onEvent(AccessibilityEvent ev) {
             }
         }
     }
+    private boolean scanPending = false;
+    private int discoveryRetries = 0;
+
+    private boolean isLauncherPkg(String p) {
+        return p.contains("launcher") || p.contains("quickstep") || p.contains("recents");
+    }
+
+    private void requestScan(long delayMs) {
+        if (scanPending) return;          // throttle, không debounce -> cover bám theo khi vuốt
+        scanPending = true;
+        h.postDelayed(scanRunnable, delayMs);
+    }
+
+    public void onEvent(AccessibilityEvent ev) {
+        if (!isEnabled()) { if (cover != null || recentsVisible) hide(); return; }
+        int t = ev.getEventType();
+        String p = ev.getPackageName() != null ? ev.getPackageName().toString() : "";
+        boolean launcher = isLauncherPkg(p);
+        if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || t == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            if (launcher || p.isEmpty()) { discoveryRetries = 3; requestScan(150); }
+            else if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                    && !p.contains("systemui") && !p.contains("inputmethod")
+                    && !p.equals(svc.getPackageName())) hide();
+        } else if (launcher && (t == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                || t == AccessibilityEvent.TYPE_VIEW_SCROLLED)) {
+            requestScan(80);
+        }
+    }
+
+    private boolean matchesLabel(CharSequence cs, String label) {
+        if (cs == null || cs.length() == 0) return false;
+        String s = cs.toString().toLowerCase(Locale.ROOT);
+        int from = 0;
+        while (true) {
+            int i = s.indexOf(label, from);
+            if (i < 0) return false;
+            int e = i + label.length();
+            boolean okL = i == 0 || !Character.isLetterOrDigit(s.charAt(i - 1));
+            boolean okR = e >= s.length() || !Character.isLetterOrDigit(s.charAt(e));
+            if (okL && okR) return true;
+            from = i + 1;
+        }
+    }
+
+    private void addHit(RectF r, String pkg) {
+        for (Object[] it : hits) {
+            if (!pkg.equals(it[1])) continue;
+            RectF ex = (RectF) it[0];
+            if (ex.contains(r)) return;
+            if (r.contains(ex)) { it[0] = r; return; }
+        }
+        hits.add(new Object[]{r, pkg});
+    }
 
     private void scan() {
+        scanPending = false;
         if (!isEnabled()) { hide(); return; }
         rebuildLabelsIfNeeded();
         if (pkgToLabel.isEmpty()) { hide(); return; }
+        android.os.PowerManager pw = (android.os.PowerManager) svc.getSystemService(Context.POWER_SERVICE);
+        if (pw != null && !pw.isInteractive()) { removeCover(); return; }
 
-        // [PIN] Nếu screen tắt -> skip scan luôn, đỡ wake CPU
-        android.os.PowerManager _pm = (android.os.PowerManager) svc.getSystemService(Context.POWER_SERVICE);
-        if (_pm != null && !_pm.isInteractive()) { removeCover(); return; }
-
-        hits.clear(); taskViewSeen = false;
-
-        AccessibilityNodeInfo root = null;
+        hits.clear();
+        android.util.DisplayMetrics dm = svc.getResources().getDisplayMetrics();
+        int minCard = Math.round(Math.min(dm.widthPixels, dm.heightPixels) * 0.30f); // thẻ Recents cao >> icon
+        Rect r = new Rect();
         try {
-            root = svc.getRootInActiveWindow();
-            if (root != null) collect(root, 0);
-        } catch (Exception ignored) {
-        } finally { if (root != null) root.recycle(); }
+            List<android.view.accessibility.AccessibilityWindowInfo> windows = svc.getWindows();
+            if (windows != null) {
+                for (android.view.accessibility.AccessibilityWindowInfo w : windows) {
+                    if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION) continue;
+                    AccessibilityNodeInfo root = w.getRoot();
+                    if (root == null) continue;
+                    CharSequence rp = root.getPackageName();
+                    if (rp != null && isLauncherPkg(rp.toString())) {
+                        for (Map.Entry<String, String> e : pkgToLabel.entrySet()) {
+                            List<AccessibilityNodeInfo> found = root.findAccessibilityNodeInfosByText(e.getValue());
+                            if (found == null) continue;
+                            for (AccessibilityNodeInfo nd : found) {
+                                CharSequence cs = nd.getContentDescription();
+                                if (cs == null || cs.length() == 0) cs = nd.getText();
+                                if (matchesLabel(cs, e.getValue())) {
+                                    nd.getBoundsInScreen(r);
+                                    boolean full = r.width() >= dm.widthPixels * 0.95f
+                                                && r.height() >= dm.heightPixels * 0.9f;
+                                    if (r.width() > 80 && r.height() >= minCard && !full)
+                                        addHit(new RectF(r), e.getKey());
+                                }
+                                nd.recycle();
+                            }
+                        }
+                    }
+                    root.recycle();
+                }
+            }
+        } catch (Exception ignored) {}
 
-        if (taskViewSeen != recentsVisible) {
-            recentsVisible = taskViewSeen;
+        boolean nowVisible = !hits.isEmpty();
+        if (nowVisible != recentsVisible) {
+            recentsVisible = nowVisible;
             if (onSubscriptionChanged != null) onSubscriptionChanged.run();
         }
-        if (hits.isEmpty()) { removeCover(); return; }
-        showCover();
+        if (hits.isEmpty()) {
+            removeCover();
+            // content-description của thẻ nạp bất đồng bộ -> thử lại tối đa 3 lần
+            if (discoveryRetries > 0) { discoveryRetries--; requestScan(300); }
+        } else showCover();
     }
-
-private void collect(AccessibilityNodeInfo n, int depth) {
-    if (depth > 14) return;
-    CharSequence cn = n.getClassName();
-    // [FIX] Match cả "TaskView", "TaskThumbnailView", "TaskSnapshotView"
-    if (cn != null && cn.toString().contains("TaskView")) {
-        taskViewSeen = true;
-        if (n.isVisibleToUser()) {
-            // [FIX] Label có thể ở contentDescription CỦA CHÍNH NÓ hoặc child "TaskThumbnailView"
-            String label = matchLabelFromNode(n);
-            if (label != null) {
-                Rect r = new Rect();
-                n.getBoundsInScreen(r);
-                if (r.width() > 40 && r.height() > 40) // bỏ qua node rác
-                    hits.add(new Object[]{new RectF(r), label});
-            }
-        }
-        return;
-    }
-    int c = n.getChildCount();
-    for (int i = 0; i < c; i++) {
-        AccessibilityNodeInfo ch = n.getChild(i);
-        if (ch == null) continue;
-        collect(ch, depth + 1);
-        ch.recycle();
-    }
-}
-
-// [FIX] Helper đọc label từ chính node + fallback children 1 cấp
-private String matchLabelFromNode(AccessibilityNodeInfo taskView) {
-    CharSequence d = taskView.getContentDescription();
-    if (d != null) {
-        String low = d.toString().toLowerCase(Locale.ROOT);
-        for (Map.Entry<String, String> e : pkgToLabel.entrySet())
-            if (low.contains(e.getValue())) return e.getKey();
-    }
-    // Fallback: duyệt con 1 cấp
-    int cc = taskView.getChildCount();
-    for (int i = 0; i < cc; i++) {
-        AccessibilityNodeInfo ch = taskView.getChild(i);
-        if (ch == null) continue;
-        CharSequence cd = ch.getContentDescription();
-        if (cd != null) {
-            String low = cd.toString().toLowerCase(Locale.ROOT);
-            for (Map.Entry<String, String> e : pkgToLabel.entrySet())
-                if (low.contains(e.getValue())) { ch.recycle(); return e.getKey(); }
-        }
-        ch.recycle();
-    }
-    return null;
-}
 
     private void showCover() {
         if (cover == null) {
@@ -198,6 +203,8 @@ private String matchLabelFromNode(AccessibilityNodeInfo taskView) {
 
     public void hide() {
         h.removeCallbacks(scanRunnable);
+        scanPending = false; discoveryRetries = 0;
+
         removeCover();
         if (recentsVisible) {
             recentsVisible = false;

@@ -840,6 +840,34 @@ private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji,
     synchronized (maskedIconCache) { maskedIconCache.put(key, result); }
     return result;
 }
+// Icon Adaptive: layer 108dp, vùng nhìn thấy ~72dp -> phóng layer ~1.4x rồi căn giữa,
+// nền tràn kín hình dạng, foreground vẫn nằm trong vùng an toàn của hình.
+private static final float ADAPTIVE_LAYER_SCALE = 1.4f;
+private Bitmap getFullBleedAdaptiveBitmap(String cacheKey, AdaptiveIconDrawable adaptive, int shape, int size) {
+    String key = "fb_" + cacheKey + "_" + shape + "_" + size;
+    synchronized (maskedIconCache) {
+        Bitmap cached = maskedIconCache.get(key);
+        if (cached != null && !cached.isRecycled()) return cached;
+    }
+    Bitmap content = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+    Canvas cc = new Canvas(content);
+    cc.drawColor(Color.WHITE); // phòng icon có nền trong suốt
+
+    Drawable.ConstantState cs = adaptive.getConstantState();
+    AdaptiveIconDrawable ad = (cs != null) ? (AdaptiveIconDrawable) cs.newDrawable().mutate() : adaptive;
+    int layer = Math.round(size * ADAPTIVE_LAYER_SCALE);
+    int off = (layer - size) / 2;
+    Drawable bg = ad.getBackground();
+    Drawable fg = ad.getForeground();
+    if (bg != null) { bg.setBounds(-off, -off, size + off, size + off); bg.draw(cc); }
+    if (fg != null) { fg.setBounds(-off, -off, size + off, size + off); fg.draw(cc); }
+
+    Bitmap result = maskBitmapToShape(content, shape, size);
+    content.recycle();
+    synchronized (maskedIconCache) { maskedIconCache.put(key, result); }
+    return result;
+}
+
     private Drawable getCachedShortcutIcon(String scId) {
         Drawable overrideIcon = getShortcutIconOverride(scId);
         if (overrideIcon != null) return overrideIcon;
@@ -959,7 +987,7 @@ private Path buildRoundedPentagon(int size) {
 private Path buildSquirclePath(int size) {
     Path path = new Path();
     float cx = size / 2f, cy = size / 2f, r = size / 2f;
-    float n = 3.1f; // càng nhỏ càng tròn/mềm (5 = vuông kiểu iOS, 2 = hình tròn). One UI ≈ 3.2–3.6
+    float n = 2.9f; // càng nhỏ càng tròn/mềm (5 = vuông kiểu iOS, 2 = hình tròn). One UI ≈ 3.2–3.6
     int steps = 72;
     for (int i = 0; i <= steps; i++) {
         double t = (Math.PI * 2 * i) / steps;
@@ -973,15 +1001,14 @@ private Path buildSquirclePath(int size) {
 }
 private Path buildPebblePath(int size) {
     float s = size / 480f;
-    // 6 điểm điều khiển (toạ độ màn hình). Điểm cuối mỗi đoạn = trung điểm 2 điểm kề nhau
-    // -> đường cong luôn mượt, không thể bị thủng/gập.
+    // 6 điểm điều khiển. Điểm cuối mỗi đoạn = trung điểm 2 điểm kề nhau -> luôn mượt, không thủng.
     float[][] P = {
-        {100f, 450f},   // 0: dưới-trái  (đẩy ra để hết khuyết bên trái)
-        {385f, 455f},   // 1: dưới-phải  (rộng thêm chút)
-        {465f, 235f},   // 2: cạnh phải  (phình cong hơn)
-        {385f,  40f},   // 3: đỉnh-phải  (nhô ra, không vuông)
-        {125f,  62f},   // 4: đỉnh-trái
-        {-25f, 240f}    // 5: cạnh trái  (mũi nhọn hơn)
+        { 80f, 450f},   // 0: dưới-trái  (kéo ra trái thêm)
+        {385f, 455f},   // 1: dưới-phải
+        {470f, 235f},   // 2: cạnh phải  (nới nhẹ để nửa phải giữ tỉ lệ)
+        {385f,  40f},   // 3: đỉnh-phải
+        {105f,  62f},   // 4: đỉnh-trái  (kéo ra trái thêm)
+        {-55f, 240f}    // 5: cạnh trái  (nhô hơn)
     };
     Path path = new Path();
     float[] a = P[5], b = P[0];
@@ -1105,9 +1132,16 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
         // "System" đã xử lý riêng ở nhánh if phía trên) -> đồng nhất tuyệt đối,
         // và khi cắt hình cũng LUÔN nhìn thấy rõ viền trắng + hình dạng đã đổi.
         int effectiveShape = (shape == 5) ? 0 : shape;
-        int backdropColor = Color.WHITE;
-        Bitmap styled = getStyledIconBitmap(cacheKey, icon, null, effectiveShape, iconSize, backdropColor);
+        Bitmap styled;
+        if (icon instanceof AdaptiveIconDrawable) {
+            // Icon Adaptive: nền + foreground tràn kín hình dạng đã chọn (giống launcher)
+            styled = getFullBleedAdaptiveBitmap(cacheKey, (AdaptiveIconDrawable) icon, effectiveShape, iconSize);
+        } else {
+            // Icon cũ (bitmap vuông): giữ nền trắng như trước
+            styled = getStyledIconBitmap(cacheKey, icon, null, effectiveShape, iconSize, Color.WHITE);
+        }
         iv.setImageBitmap(styled);
+
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
     }
     box.addView(iv);

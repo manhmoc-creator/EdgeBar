@@ -407,7 +407,7 @@ private static final java.util.Set<String> EB_KEY_PREFIXES =
         // [FIX] Khóa thật của Panel là "pack_panel_<id>_..." — không phải "panel".
         // Thiếu tiền tố đúng khiến isOurKey() chặn TOÀN BỘ thay đổi live của Panel
         // (Preview Handle, Enable, slider...) ngay từ vòng lọc whitelist.
-        "pack_panel_","lenap_","bubble_","sensor_","texture_","volkey_","applock_",
+        "pack_panel_","lenap_","bubble_","sensor_","texture_","volkey_","applock_","recents_",
         "i1_","i2_","i3_","i4_","i5_","i6_","i7_","i8_",
         "i9_","i10_","i11_","i12_","i13_","i14_","i15_"
     ));
@@ -429,8 +429,7 @@ private static final long LOCK_DEBOUNCE_MS = 400;
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     // TẦNG 1: Whitelist tuyệt đối — bỏ qua mọi key không thuộc EdgeBar
     if (!isOurKey(k)) return;
-
-
+    if (k.startsWith("recents_")) { refreshEventSubscription(); return; }
     if (k != null && k.startsWith("sensor_")) return; // ProximityWaveService tự đọc prefs khi cần, đỡ debounce updateVisibility() vô ích
 
 
@@ -1354,53 +1353,18 @@ refreshEventSubscription();
 @Override public void onAccessibilityEvent(AccessibilityEvent event) {
 int eventType = event.getEventType();
 if (recentsBlur != null) recentsBlur.onEvent(event);
-// [FIX FLASH LOCK] Bắt launcher active TRƯỚC khi ACTION_USER_PRESENT tới.
-// Khi fingerprint đúng, keyguard bắt đầu dismiss animation -> launcher nhận
-// WINDOW_STATE_CHANGED. Tại thời điểm này km.isKeyguardLocked() có thể vẫn = true,
-// nên ta phải tin event launcher và ẩn Lock bars ngay, tránh "nhá" 1 frame.
 if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         && km != null && km.isKeyguardLocked()) {
     CharSequence _ep = event.getPackageName();
     if (_ep != null) {
         String _eps = _ep.toString();
-        if ((_eps.contains("launcher") || _eps.contains("quickstep"))
-                && !_eps.contains("systemui")) {
-            // Chỉ ẩn nếu đang CÓ Lock bar thực sự hiển thị (tránh ẩn nhầm vô ích)
-            boolean anyLockVisible = false;
-            for (int _i = 0; _i < 12; _i++) {
-                if (bars[_i] != null && bars[_i].getVisibility() == View.VISIBLE) {
-                    anyLockVisible = true; break;
-                }
-            }
-            if (!anyLockVisible) for (int _i = 0; _i < 4; _i++) {
-                if (corners[_i] != null && corners[_i].getVisibility() == View.VISIBLE) {
-                    anyLockVisible = true; break;
-                }
-            }
-            if (anyLockVisible) {
-                // [FIX] 1500ms là đủ trùm quãng dismiss animation (~300-500ms)
-                // + trễ framework sau USER_PRESENT (~200-400ms). Đủ an toàn.
-                forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 1500;
-                // Ẩn tức thời KHÔNG animate — đây là đường phản ứng "panic"
-                for (int _i = 0; _i < 12; _i++) {
-                    if (bars[_i] != null) {
-                        bars[_i].animate().cancel();
-                        bars[_i].setAlpha(1f);
-                        bars[_i].setVisibility(View.GONE);
-                        hideIconLayer("lock_" + BARS[_i]);
-                    }
-                }
-                for (int _i = 0; _i < 4; _i++) {
-                    if (corners[_i] != null) {
-                        corners[_i].animate().cancel();
-                        corners[_i].setAlpha(1f);
-                        corners[_i].setVisibility(View.GONE);
-                    }
-                }
-            }
+        if ((_eps.contains("launcher") || _eps.contains("quickstep")) && !_eps.contains("systemui")) {
+            forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 1500;
+            instantSwitchLockToHomacc();   // ẩn Lock tức thì + hiện Homacc ngay
         }
     }
 }
+
 
 // [MỚI - FIX 1/3 BOUNCER] typeWindowContentChanged bắt được đúng lúc bouncer
 // PIN xuất hiện/biến mất (cùng window, chỉ đổi nội dung). Xử lý NGAY tại đây,
@@ -2671,7 +2635,10 @@ for (int i=0;i<12;i++) {
 boolean passesLockGate = (lockMode == 1) || !isSecureOverlayVisible;
 boolean shouldShowBar = en && isLocked && !hide && passesLockGate &&
     !prefs.getBoolean("lock_"+BARS[i]+"_manual_hide", false);
-setViewVisibilityAnimated(bars[i], shouldShowBar);
+if (!shouldShowBar && !isLocked) {
+    bars[i].animate().cancel(); bars[i].setAlpha(1f); bars[i].setVisibility(View.GONE);
+} else setViewVisibilityAnimated(bars[i], shouldShowBar);
+
     if (en && isLocked) {
                 int alpha = prefs.getInt("lock_"+BARS[i]+"_alpha",50);
                 int w = prefs.getInt("lock_"+BARS[i]+"_w",300);
@@ -2810,19 +2777,7 @@ private void instantSwitchLockToHomacc() {
         corners[i].setVisibility(View.GONE);
     }
     if (AccessibleHomeService.isRunning) {
-        drawAccessibleHome();
-        for (int i = 0; i < 12; i++) {
-            if (accHomeBars[i] != null && prefs.getBoolean("homacc_" + BARS[i] + "_en", false)
-                    && !prefs.getBoolean("homacc_" + BARS[i] + "_manual_hide", false)) {
-                accHomeBars[i].setVisibility(View.VISIBLE);
-            }
-        }
-        for (int i = 0; i < 4; i++) {
-            if (accHomeCorners[i] != null && prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_en", false)
-                    && !prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_manual_hide", false)) {
-                accHomeCorners[i].setVisibility(View.VISIBLE);
-            }
-        }
+        if (isHomaccDrawn) updateHomaccLive(); else drawAccessibleHome();
     }
 }
 private static final int MAX_TRIGGER_DEPTH = 3;
@@ -3258,7 +3213,8 @@ private void updateHomaccLive() {
     // [FIX BUG LOGIC] Kiểm tra cờ xem trước và trạng thái khóa màn hình.
     // Homacc chỉ được hiện khi: Đang KHÔNG ở màn hình khóa, HOẶC đang bật xem trước Homacc.
     boolean isPreviewHomacc = prefs.getBoolean("preview_homacc", false);
-    boolean isLocked = km != null && km.isKeyguardLocked();
+    boolean isLocked = km != null && km.isKeyguardLocked()
+        && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs;
     boolean shouldShowHomacc = !isLocked || isPreviewHomacc;
 
     for (int i = 0; i < 12; i++) {
