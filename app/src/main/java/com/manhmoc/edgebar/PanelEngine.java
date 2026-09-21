@@ -976,28 +976,27 @@ private Path buildSquirclePath(int size) {
 // [FIX] Toạ độ Q-curve LẤY ĐÚNG từ path SVG mẫu PEBBLE (viewBox 480x480), đã lật
 // ngang (mirror x = 480-x) để khớp CSS "transform: scaleX(-1)" mà file mẫu áp dụng
 // lên đúng chiều hiển thị thật. Scale theo iconSize/480.
-// Hệ số "béo" cho Pebble: 1.00 = như cũ (gầy), 1.15 = đầy đặn, 1.30 = rất tròn/vuông.
-private static final float PEBBLE_FAT = 1.15f;
+// Độ "mập" hai bên trái/phải: 1.00 = hình cũ, 1.30 = mập vừa, 1.50 = rất mập
+private static final float PEBBLE_X_FAT = 1.30f;
 
 private Path buildPebblePath(int size) {
-    Path path = new Path();
     float s = size / 480f;
-    final float c = 240f;                 // tâm trong hệ toạ độ 480x480
-    // Điểm điều khiển (đã lật ngang x' = 480 - x cho khớp scaleX(-1)) — đẩy ra xa tâm
-    float[][] ctrl = {
+    final float cx = 240f;
+    // 6 điểm điều khiển của Pebble (đã lật ngang để khớp scaleX(-1) của bản HTML)
+    float[][] P = {
         {126f, 438f}, {358f, 444f}, {437f, 240f},
         {351f,  48f}, {141f,  69f}, {  8f, 240f}
     };
-    // Điểm nằm trên đường cong — giữ nguyên
-    float[][] end = {
-        {242f, 441f}, {397.5f, 342f}, {394f, 144f},
-        {246f, 58.5f}, {74.5f, 154.5f}, {67f, 339f}
-    };
-    path.moveTo(67f * s, 339f * s);
+    // Kéo dang rộng các điểm phía trên/dưới (0,1,3,4) ra hai bên -> hình mập hơn
+    int[] widen = {0, 1, 3, 4};
+    for (int i : widen) P[i][0] = cx + (P[i][0] - cx) * PEBBLE_X_FAT;
+
+    Path path = new Path();
+    // Điểm cuối mỗi đoạn LUÔN là trung điểm 2 điểm điều khiển kề nhau -> đường cong mượt, không gãy
+    path.moveTo((P[5][0] + P[0][0]) / 2f * s, (P[5][1] + P[0][1]) / 2f * s);
     for (int i = 0; i < 6; i++) {
-        float cx = c + (ctrl[i][0] - c) * PEBBLE_FAT;
-        float cy = c + (ctrl[i][1] - c) * PEBBLE_FAT;
-        path.quadTo(cx * s, cy * s, end[i][0] * s, end[i][1] * s);
+        float[] c = P[i], n = P[(i + 1) % 6];
+        path.quadTo(c[0] * s, c[1] * s, (c[0] + n[0]) / 2f * s, (c[1] + n[1]) / 2f * s);
     }
     path.close();
     return normalizeToFullSize(path, size);
