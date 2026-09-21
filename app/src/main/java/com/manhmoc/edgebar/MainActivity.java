@@ -9955,9 +9955,13 @@ private void syncAppShortcutLabels() {
 if (isTapSlot || !hasAct) continue;   // slot 1-chạm đã có shortcut tĩnh "Mở Edge Bar" lo
 
             String label; Intent it; android.graphics.drawable.Icon icon = null;
+            // [FIX] Khai báo iconScale ở scope ngoài cùng của vòng lặp — dùng chung cho
+            // cả 2 nhánh (override riêng + fallback), tránh lỗi "cannot find symbol"
+            // khi biến chỉ tồn tại bên trong 1 nhánh if.
+            float iconScale = prefs.getInt("appicon_icon_scale", 60) / 100f;
             if (isTapSlot) {
                 label = T("Open Edge Bar", "Mở Edge Bar");
-                it = new Intent(Intent.ACTION_VIEW, null, this, MainActivity.class); // không có CATEGORY_LAUNCHER
+                it = new Intent(Intent.ACTION_VIEW, null, this, MainActivity.class);
             } else {
                 label = stripEmojiSafe(resolveTileActionLabel(act,
                     prefs.getString(px + "launch_pkg", ""), prefs.getString(px + "shortcut_id", "")));
@@ -9966,18 +9970,13 @@ if (isTapSlot || !hasAct) continue;   // slot 1-chạm đã có shortcut tĩnh "
                     .putExtra("eb_shortcut_id", slotId);
                 android.graphics.drawable.Drawable ov = resolveAppIconOverrideDrawable(prefs.getString(px + "icon", ""));
                 if (ov != null) {
-                    // [FIX] 0.85 quá lớn so với vùng an toàn chuẩn Adaptive Icon (~61-66%)
-                    // -> icon trông to hơn hẳn icon khác trong menu shortcut. Hạ về 0.60.
-float iconScale = prefs.getInt("appicon_icon_scale", 60) / 100f;
-Bitmap bmp = PanelEngine.normalizeIconBitmap(ov, 108, iconScale);
+                    Bitmap bmp = PanelEngine.normalizeIconBitmap(ov, 108, iconScale);
                     if (bmp != null) icon = Build.VERSION.SDK_INT >= 26
                         ? android.graphics.drawable.Icon.createWithAdaptiveBitmap(bmp)
                         : android.graphics.drawable.Icon.createWithBitmap(bmp);
                 }
             }
             if (icon == null) {
-                // [FIX] Không lấy thẳng ic_launcher_fg làm icon thường (không bị cắt safe-zone,
-                // nhìn to bất thường) — tự cắt qua normalizeIconBitmap giống mọi icon khác.
                 try {
                     Drawable fg = getDrawable(R.drawable.ic_launcher_fg);
                     Bitmap fallbackBmp = PanelEngine.normalizeIconBitmap(fg, 108, iconScale);
