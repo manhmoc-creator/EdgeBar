@@ -37,6 +37,9 @@ public class BlacklistLockWatchdogService extends Service {
     private static final long PREEMPT_MAX_MS = 14 * 60 * 60 * 1000L;
     private static final long NO_USAGE_PERM_MAX_MS = 90 * 1000L;
     private static final long APP_APPEAR_TIMEOUT_MS = 20 * 1000L;
+    private static final long SCREEN_ON_DECIDE_MS = 1000;        // chờ xem có cuộc gọi/app Blacklist kéo màn lên không
+    private static final long CALL_NOTIF_WINDOW_MS = 15 * 1000L; // thông báo cuộc gọi Blacklist trong 15s gần nhất
+
     private static final int NOTIF_ID = 97;
     private static final String CHANNEL_ID = "eb_bl_lock_watchdog";
 
@@ -61,11 +64,23 @@ public class BlacklistLockWatchdogService extends Service {
     public static volatile boolean isRunning = false;
     private final java.util.Set<String> keepPkgs = new java.util.HashSet<>();
     private final java.util.Set<String> fgKeep = new java.util.HashSet<>();
-
+    private final java.util.Set<String> coverFg = new java.util.HashSet<>(); // mọi app "không phải màn khoá gốc" đang ở foreground
     private final Runnable pollRunnable = new Runnable() { @Override public void run() { poll(); } };
     private final Runnable unlockCheck = () -> {
         if (preempt && !restoreDone && km != null && !km.isKeyguardLocked()
                 && pm != null && pm.isInteractive()) handleUnlock();
+    };
+    // [MỚI] Pre-emptive: bật màn ở màn khoá mà KHÔNG có cuộc gọi/app Blacklist -> trả Trợ năng lại
+    private final Runnable screenOnDecide = () -> {
+        if (restoreDone || !preempt) return;
+        if (pm == null || !pm.isInteractive()) return;          // màn lại tắt rồi
+        if (km == null || !km.isKeyguardLocked()) return;       // đã mở khoá -> unlockCheck/USER_PRESENT lo
+        long now = System.currentTimeMillis();
+        if (hasUsageAccess()) refreshUsageState(now);
+        boolean inCall = audio != null && audio.getMode() != AudioManager.MODE_NORMAL;
+        boolean callNotif = now - prefs.getLong("bl_call_ts", 0) < CALL_NOTIF_WINDOW_MS;
+        if (inCall || callNotif || !fgKeep.isEmpty()) return;   // có cuộc gọi/app -> giữ LockEb, KHÔNG bật Trợ năng
+        finishAndRestore("screen_on_no_call");
     };
 
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
@@ -73,6 +88,7 @@ public class BlacklistLockWatchdogService extends Service {
             if (handler == null || restoreDone) return;
             String a = i.getAction();
             if (Intent.ACTION_SCREEN_OFF.equals(a)) {
+                handler.removeCallbacks(screenOnDecide);
                 if (!preempt && shouldPreempt(prefs)) {
                     preempt = true;
                     prefs.edit().putBoolean("blacklist_lock_preempt", true).apply();
@@ -81,7 +97,15 @@ public class BlacklistLockWatchdogService extends Service {
             } else if (Intent.ACTION_SCREEN_ON.equals(a)) {
                 ignoreLeftUntilMs = System.currentTimeMillis() + 1500;
                 leftStreak = 0;
-                if (preempt && km != null && !km.isKeyguardLocked()) handler.postDelayed(unlockCheck, 2500);
+                if (preempt) {
+                    if (km != null && !km.isKeyguardLocked()) {
+                        handler.postDelayed(unlockCheck, 2500);
+                    } else {
+                        handler.removeCallbacks(screenOnDecide);
+                        handler.postDelayed(screenOnDecide, SCREEN_ON_DECIDE_MS);
+                    }
+                }
+
             } else if (Intent.ACTION_USER_PRESENT.equals(a)) {
                 if (preempt) { handleUnlock(); return; }
             }
@@ -114,6 +138,7 @@ public class BlacklistLockWatchdogService extends Service {
             .putBoolean("blacklist_lock_seen_fg", seenFg)
             .putBoolean("blacklist_lock_fg", seenFg)
             .putBoolean("blacklist_lock_preempt", preempt)
+            .remove("bl_call_ts")
             .apply();
         try {
             Intent wd = new Intent(c, BlacklistLockWatchdogService.class);
@@ -193,6 +218,7 @@ public class BlacklistLockWatchdogService extends Service {
         keepPkgs.add("com.android.incallui");
         keepPkgs.add("com.google.android.dialer");
         keepPkgs.add("com.android.dialer");
+        keepPkgs.add("com.google.android.googlequicksearchbox");
 
         handler = new Handler(Looper.getMainLooper());
 
@@ -228,7 +254,8 @@ public class BlacklistLockWatchdogService extends Service {
             finishAndRestore("timeout"); return;
         }
         boolean hasUsage = hasUsageAccess();
-        if (interactive && hasUsage) { refreshUsageState(now); broadcastFg(); }
+        if (interactive) { if (hasUsage) refreshUsageState(now); broadcastFg(inCall); }
+
 
         if (preempt) { // chỉ chờ mở khoá (USER_PRESENT), không tự khôi phục
             if (interactive) handler.postDelayed(pollRunnable, POLL_INTERVAL_MS);
@@ -267,12 +294,18 @@ public class BlacklistLockWatchdogService extends Service {
         }
     }
 
-    private void broadcastFg() {
-        boolean fg = !fgKeep.isEmpty();
+    private void broadcastFg(boolean inCall) {
+        // Ẩn only-base khi: đang đổ chuông/gọi, app Blacklist chạy, hoặc bất kỳ app nào che màn khoá gốc
+        boolean fg = inCall || !fgKeep.isEmpty() || !coverFg.isEmpty();
         if (fg == lastFgSent) return;
         lastFgSent = fg;
         prefs.edit().putBoolean("blacklist_lock_fg", fg).apply();
         sendBroadcast(new Intent("com.manhmoc.edgebar.LOCKEB_FG").setPackage(getPackageName()));
+    }
+
+    private boolean isBasePkg(String p) {
+        return p.equals("android") || p.contains("systemui")
+            || p.contains("inputmethod") || p.contains("launcher");
     }
 
     private void refreshUsageState(long now) {
@@ -289,9 +322,11 @@ public class BlacklistLockWatchdogService extends Service {
                 int type = ev.getEventType();
                 boolean keep = keepPkgs.contains(p);
                 if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                    if (!isBasePkg(p)) coverFg.add(p);          // [MỚI] camera/assistant/calculator/app gọi...
                     if (keep) { fgKeep.add(p); everSawKeepFg = true; }
                     else if (!isIgnorablePkg(p)) fgKeep.clear();
                 } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+                    coverFg.remove(p);                            // [MỚI]
                     if (keep) fgKeep.remove(p);
                 }
             }
@@ -327,7 +362,9 @@ public class BlacklistLockWatchdogService extends Service {
         try { stopService(new Intent(this, LockEbService.class)); } catch (Exception ignored) {}
 
         prefs.edit()
-            .putLong("blacklist_lock_restore_ts", System.currentTimeMillis())
+            .putLong("blacklist_lock_restore_ts", "screen_on_no_call".equals(reason) ? 0 : System.currentTimeMillis())
+            .remove("bl_call_ts")
+
             .putBoolean("blacklist_lock_active", false)
             .remove("blacklist_lock_pkg").remove("blacklist_lock_start_ms")
             .remove("blacklist_lock_seen_fg").remove("blacklist_lock_fg")

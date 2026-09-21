@@ -14,7 +14,9 @@ import android.os.Build;
 public class HomebWatchdogReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context c, Intent i) {
         SharedPreferences p = c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
+        if (p.getBoolean("edgebar_permanently_stopped", false)) return; // [MỚI] user đã bấm Dừng vĩnh viễn
         if (isAccEnabled(c)) return; // Accessibility đang bật -> không cần Homeb tự động
+
                // [MỚI] Đang trong chế độ Blacklist-Lock → KHÔNG bật Homeb (sẽ đè app Blacklist)
         if (p.getBoolean("blacklist_lock_active", false)) return;
 

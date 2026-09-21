@@ -15,7 +15,12 @@ public class BootReceiver extends BroadcastReceiver {
         if (!isBoot && !isReplaced) return;
 
         SharedPreferences prefs = c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
+        // [MỚI] User đã bấm "Dừng vĩnh viễn" -> máy có reboot cũng KHÔNG tự hồi sinh service nào.
+        // Đặt TRƯỚC mọi lệnh startForegroundService() để Zero-IPC, Zero-WakeLock, Zero-Alarm
+        // khi cờ đang bật — đúng tinh thần tiết kiệm pin tuyệt đối cho Pixel 2XL.
+        if (prefs.getBoolean("edgebar_permanently_stopped", false)) return;
         if (VolumeButtonService.hasAnyRule(prefs)) {
+
             Intent svc = new Intent(c, VolumeButtonService.class);
             if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(svc);
             else c.startService(svc);

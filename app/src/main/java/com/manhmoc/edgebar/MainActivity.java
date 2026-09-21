@@ -1146,10 +1146,21 @@ if (currentMainTab == 0) {
         } else {
             fab.setOnClickListener(v -> showPremiumDialog());
         }
-    } else if (currentMainTab == -1 || currentMainTab == -2 || currentMainTab == -3) { 
-        // Hiện FAB ở Màn Chính, Màn Hệ Sinh Thái, Màn Hệ Thống để mở mục Premium
-        fab.setVisibility(View.VISIBLE);
-        fab.setOnClickListener(v -> showPremiumDialog());
+    } else if (currentMainTab == -1) {
+    // [ĐỔI] Ở màn 9-mục-chính: trái = Dừng vĩnh viễn, phải = Home
+    fab.setVisibility(View.VISIBLE);
+    fab.setImageDrawable(getDrawable(customIconRes("mobile_lock_portrait_24px") != 0
+        ? customIconRes("mobile_lock_portrait_24px") : android.R.drawable.ic_menu_compass));
+    fab.setOnClickListener(v -> {
+        Intent home = new Intent(Intent.ACTION_MAIN);
+        home.addCategory(Intent.CATEGORY_HOME);
+        home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(home);
+    });
+} else if (currentMainTab == -2 || currentMainTab == -3) { 
+    fab.setVisibility(View.VISIBLE);
+    fab.setOnClickListener(v -> showPremiumDialog());
+
     } else {
         fab.setVisibility(View.GONE);
     }
@@ -1181,7 +1192,15 @@ if (currentMainTab == 0) {
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState); prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);syncVolumeService(); syncProximityService(); updateFabVisibility();isVi = prefs.getBoolean("lang_vi", true); reloadActionLabels();syncAllTileComponentsOnBoot();
+        super.onCreate(savedInstanceState);
+        prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+        // [MỚI] User chủ động mở lại app -> tự xoá cờ "dừng vĩnh viễn", mọi watchdog/
+        // BootReceiver/QS Tile từ đây được phép hồi sinh service trở lại như thường.
+        // Ghi bằng apply() (async, không chặn main thread) — giá trị chỉ cần có trước
+        // khi service kế tiếp được start, không cần commit() đồng bộ. Zero-RAM, Zero-IPC.
+        prefs.edit().putBoolean("edgebar_permanently_stopped", false).apply();
+        syncVolumeService(); syncProximityService(); updateFabVisibility();isVi = prefs.getBoolean("lang_vi", true); reloadActionLabels();syncAllTileComponentsOnBoot();
+
 if (prefs.getBoolean("needs_sanitize", false)) sanitizeAllPrefsAfterRestore();
         // Tối ưu OLED: Nền đen tuyệt đối #000000 tắt hoàn toàn bóng LED trên Pixel 2XL
     rootLayout = new RelativeLayout(this);
@@ -1415,10 +1434,13 @@ if (Build.VERSION.SDK_INT >= 29 &&
 
         LinearLayout bottomBar = new LinearLayout(this); bottomBar.setOrientation(LinearLayout.HORIZONTAL); bottomBar.setGravity(Gravity.CENTER_VERTICAL); bottomBar.setBackground(getRounded("#1E1E1E", 100f)); bottomBar.setPadding(20, 20, 20, 20);
         RelativeLayout.LayoutParams bLp = new RelativeLayout.LayoutParams(-1, -2); bLp.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM); bLp.setMargins(40, 0, 40, 60); bottomBar.setLayoutParams(bLp);
-        // Đưa nút Back xuống Nav Bar, sử dụng icon hệ thống (ic_menu_revert) để luôn hiển thị an toàn
         ImageButton btnBack = createIconCircleBtn(customIconRes("cycle_24px"), "#333333");
-btnBack.setOnClickListener(v -> performBack());
+btnBack.setOnClickListener(v -> {
+    if (currentMainTab == -1) showPermanentStopDialog(1);
+    else performBack();
+});
 btnBack.setOnLongClickListener(v -> { navBackStack.clear(); showMainMenu(); return true; });
+
 // [FIX] Phóng to vùng chạm thật sự của nút Back — icon chỉ ~86px nhưng touch target
 // nên rộng hơn để không bị "trượt" khi chạm hơi lệch mép, đặc biệt lúc thao tác 1 tay.
 btnBack.post(() -> {
@@ -1448,9 +1470,15 @@ btnBack.post(() -> {
 fab.setTag("fab");
 fab.setPadding(22, 22, 22, 22); // đồng bộ với padding mới trong createIconCircleBtn
         fab.setOnClickListener(v -> {
-            if (currentMainTab == 1) {
-                openRuleBuilderDialog(null, -1, -1, ""); 
-            } else if (currentMainTab == 2) {
+    if (currentMainTab == -1) {
+        Intent home = new Intent(Intent.ACTION_MAIN);
+        home.addCategory(Intent.CATEGORY_HOME);
+        home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(home);
+    } else if (currentMainTab == 1) {
+        openRuleBuilderDialog(null, -1, -1, ""); 
+    } else if (currentMainTab == 2) {
+
                 String listKey = ecoType == 0 ? "intent_ids" : (ecoType == 1 ? "tile_ids_v2" : "macro_ids");
                 String newId = addDynamicId(listKey);
                 if (ecoType == 0) openIntentEditorV2(newId);
@@ -1463,6 +1491,7 @@ fab.setPadding(22, 22, 22, 22); // đồng bộ với padding mới trong create
         rootLayout.addView(bottomBar);
 showMainMenu();
         setContentView(rootLayout);
+        syncAppShortcutLabels();
     }
 
     @Override
@@ -1584,6 +1613,9 @@ navBackStack.clear(); // ← THÊM DÒNG NÀY
      gesMenuContainer.addView(createSettingsRow("flare_24px", "Sensor",
         T("Proximity Sensor", "Cảm biến tiệm cận (0% Battery)"),
         () -> openGesTab(6, "Sensor")));
+    gesMenuContainer.addView(createSettingsRow("android_24px", "App Icon",
+    T("Long-press launcher icon", "Giữ icon app ngoài Home"),
+    this::openAppIconShortcutSpace));
 
     gesSubHeader = new LinearLayout(this);
     gesSubHeader.setOrientation(LinearLayout.HORIZONTAL);
@@ -7610,6 +7642,138 @@ for (String id : csvToList(prefs.getString("shortcut_ids", ""))) {
         });
         d.setContentView(root); d.show();
     }
+    private static final String[] APPICON_SYS_KEYS = {
+    "HOME","FLASH","VOLUME","CAMERA","SCREEN_OFF","SCREENSHOT",
+    "SCREEN_RECORD","AUTO_ROTATE_TOGGLE","TOGGLE_RECORD","PAUSE_RECORD",
+    "TOGGLE_OVERLAY","TOGGLE_WORK_PROFILE","OPEN_STORAGE_SCAN","SCAN_QR",
+    "PLAY_MY_PLAYLIST","YTDL_DOWNLOAD"
+};
+
+private void openAppIconShortcutSpace() {
+    reloadActionLabels();
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212"));
+    root.setPadding(30, 80, 30, 30);
+
+    TextView title = new TextView(this);
+    title.setText(T("4 Slots for Long-press App Icon", "4 Ô cho cử chỉ giữ Icon App"));
+    title.setTextColor(Color.parseColor("#8AB4F8")); title.setTextSize(18);
+    title.setPadding(0, 0, 0, 10);
+    root.addView(title);
+
+    TextView note = new TextView(this);
+    note.setText(T(
+        "Android only allows tap (open app) and long-press (this menu) on the launcher icon. Double-tap is not possible on any launcher.",
+        "Android chỉ cho chạm (mở app) và giữ (menu này) trên icon ngoài Home. 2-chạm KHÔNG thể làm được trên bất kỳ launcher nào."));
+    note.setTextColor(Color.parseColor("#9AA0A6")); note.setTextSize(11.5f);
+    note.setPadding(0, 0, 0, 20);
+    root.addView(note);
+
+    ScrollView scroll = new ScrollView(this);
+    scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    LinearLayout content = new LinearLayout(this);
+    content.setOrientation(LinearLayout.VERTICAL);
+    scroll.addView(content);
+    root.addView(scroll);
+
+    List<String[]> sysItems = buildItemsForKeys(APPICON_SYS_KEYS, ACT_KEYS, ACT_LABS);
+
+    for (int i = 1; i <= 4; i++) {
+        String shortcutId = "eb_slot_" + i;
+        content.addView(buildAppIconSlotCard(shortcutId, i, sysItems));
+    }
+
+    Button bClose = new Button(this);
+    bClose.setText(T("CLOSE", "ĐÓNG"));
+    bClose.setBackground(getRounded("#333333", 20f));
+    bClose.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
+    clp.setMargins(0, 20, 0, 0);
+    bClose.setLayoutParams(clp);
+    bClose.setOnClickListener(v -> { syncAppShortcutLabels(); d.dismiss(); });
+    root.addView(bClose);
+
+    d.setContentView(root); d.show();
+}
+
+private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]> sysItems) {
+    String px = "appicon_" + shortcutId + "_";
+    final String[] chosenAct = { prefs.getString(px + "act", "NONE") };
+    final String[] chosenPkg = { prefs.getString(px + "launch_pkg", "") };
+    final String[] chosenScId = { prefs.getString(px + "shortcut_id", "") };
+
+    Runnable[] refreshHolder = new Runnable[1];
+    Button btnEdit = stdCardBtn(T("CHOOSE", "CHỌN"), ACCENT_COLOR, Color.BLACK);
+    LinearLayout card = buildStdPackCard(null,
+        "Slot " + slotNum,
+        null,
+        "▶ " + resolveTileActionLabel(chosenAct[0], chosenPkg[0], chosenScId[0]),
+        btnEdit);
+    refreshHolder[0] = () -> {
+        TextView t3 = card.findViewWithTag("line3");
+        if (t3 != null) t3.setText("▶ " + resolveTileActionLabel(chosenAct[0], chosenPkg[0], chosenScId[0]));
+    };
+
+    Button btnApp = new Button(this);
+    Button btnSc = new Button(this);
+    View.OnClickListener openPicker = v -> {
+        Dialog pd = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        LinearLayout r = new LinearLayout(this); r.setOrientation(LinearLayout.VERTICAL);
+        r.setBackgroundColor(Color.parseColor("#121212")); r.setPadding(30, 80, 30, 30);
+
+        Button bApp = new Button(this); bApp.setText("📱 " + T("APP", "MỞ APP"));
+        bApp.setBackground(getRounded(ACCENT_COLOR, 20f)); bApp.setTextColor(Color.BLACK);
+        bApp.setOnClickListener(v2 -> showSingleAppPickerDialogCallback(pkg -> {
+            chosenAct[0] = "LAUNCH_APP"; chosenPkg[0] = pkg; chosenScId[0] = "";
+            prefs.edit().putString(px + "act", "LAUNCH_APP").putString(px + "launch_pkg", pkg)
+                .remove(px + "shortcut_id").apply();
+            refreshHolder[0].run(); pd.dismiss();
+        }));
+        r.addView(bApp);
+
+        Button bSc = new Button(this); bSc.setText("🔗 SHORTCUT");
+        bSc.setBackground(getRounded("#7C4DFF", 20f)); bSc.setTextColor(Color.WHITE);
+        bSc.setOnClickListener(v2 -> showShortcutPickerDialog((scId, name) -> {
+            chosenAct[0] = "RUN_SHORTCUT_" + scId; chosenScId[0] = scId; chosenPkg[0] = "";
+            prefs.edit().putString(px + "act", "RUN_SHORTCUT_" + scId)
+                .putString(px + "shortcut_id", scId).remove(px + "launch_pkg").apply();
+            refreshHolder[0].run(); pd.dismiss();
+        }));
+        r.addView(bSc);
+
+        Button bSys = singleActionCategoryBtn("⚙️ " + T("SYSTEM (no Accessibility needed)", "HỆ THỐNG (không cần Trợ năng)"),
+            "#4CAF50", sysItems, chosenAct, chosenPkg, chosenScId, () -> {
+                prefs.edit().putString(px + "act", chosenAct[0])
+                    .putString(px + "launch_pkg", "").remove(px + "shortcut_id").apply();
+                refreshHolder[0].run();
+            });
+        r.addView(bSys);
+
+        Button bNone = new Button(this); bNone.setText(T("NONE", "KHÔNG CÓ"));
+        bNone.setBackground(getRounded("#D32F2F", 20f)); bNone.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(-1, -2); nlp.setMargins(0, 20, 0, 0);
+        bNone.setLayoutParams(nlp);
+        bNone.setOnClickListener(v2 -> {
+            chosenAct[0] = "NONE";
+            prefs.edit().putString(px + "act", "NONE").remove(px + "launch_pkg").remove(px + "shortcut_id").apply();
+            refreshHolder[0].run(); pd.dismiss();
+        });
+        r.addView(bNone);
+
+        pd.setContentView(r); pd.show();
+    };
+    btnEdit.setOnClickListener(openPicker);
+    card.setOnClickListener(openPicker);
+
+    FrameLayout wrap = wrapPackCard(card, shortcutId);
+    LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(-1, -2);
+    wlp.setMargins(0, 8, 0, 8);
+    wrap.setLayoutParams(wlp);
+    return wrap;
+}
+
 
     private void openBubbleGestureSpace() {
         reloadActionLabels();
@@ -9550,6 +9714,28 @@ private void sanitizeAllPrefsAfterRestore() {
     }
     ed.putBoolean("needs_sanitize", false).apply();
 }
+// [MỚI] Cập nhật longLabel của App Shortcut để hiện đúng tên action đang gán
+// ngay dưới "Slot N" trong menu long-press icon. Zero cost nếu SDK < 25.
+private void syncAppShortcutLabels() {
+    if (Build.VERSION.SDK_INT < 25) return;
+    try {
+        android.content.pm.ShortcutManager sm = getSystemService(android.content.pm.ShortcutManager.class);
+        if (sm == null) return;
+        java.util.List<android.content.pm.ShortcutInfo> updates = new java.util.ArrayList<>();
+        String[] ids = {"eb_slot_1", "eb_slot_2", "eb_slot_3", "eb_slot_4"};
+        for (int i = 0; i < ids.length; i++) {
+            String act = prefs.getString("appicon_" + ids[i] + "_act", "NONE");
+            String label = "Slot " + (i + 1) + (act.equals("NONE") ? "" : ": " + getActionLabelSmart(act,
+                prefs.getString("appicon_" + ids[i] + "_launch_pkg", "")));
+            updates.add(new android.content.pm.ShortcutInfo.Builder(this, ids[i])
+                .setShortLabel(label.length() > 10 ? label.substring(0, 10) : label)
+                .setLongLabel(label)
+                .setIntent(new Intent(Intent.ACTION_VIEW, null, this, ShortcutTrampolineActivity.class))
+                .build());
+        }
+        sm.updateShortcuts(updates);
+    } catch (Exception ignored) {}
+}
 // Gọi 1 lần lúc mở app — đồng bộ lại đúng trạng thái bật/tắt của cả 30 slot
 // (phòng trường hợp restore backup, hoặc lần đầu cài app).
 private void syncAllTileComponentsOnBoot() {
@@ -10068,6 +10254,80 @@ private void liveSearchSettings(String query) {
     });
     searchPopup.show();
 }
+// [MỚI] Dừng vĩnh viễn Edge Bar — xác nhận nhiều bước để tránh bấm nhầm,
+// thu hồi toàn bộ quyền đã cấp (Trợ năng, Overlay, Device Admin, Notification
+// Listener) rồi kill mọi Service đang chạy. App vẫn còn cài, user vào lại icon
+// vẫn mở được MainActivity để sửa cấu hình/build lại — không phải gỡ cài đặt.
+private void showPermanentStopDialog(int stepsRemaining) {
+    String msg;
+    String posBtn;
+    if (stepsRemaining == 1) {
+        msg = T("This will STOP ALL Edge Bar services and revoke every permission (Accessibility, Overlay, Device Admin, Notification Access). Are you sure?",
+            "Thao tác này sẽ DỪNG TOÀN BỘ dịch vụ Edge Bar và thu hồi mọi quyền đã cấp (Trợ năng, Lớp phủ, Device Admin, Truy cập Thông báo). Bạn chắc chắn chứ?");
+        posBtn = T("CONTINUE", "TIẾP TỤC");
+    } else if (stepsRemaining == 2) {
+        msg = T("Confirm again: all bars, corners, panels and overlays will disappear immediately.",
+            "Xác nhận lần nữa: mọi Bar/Corner/Panel/Overlay sẽ biến mất ngay lập tức.");
+        posBtn = T("CONTINUE", "TIẾP TỤC");
+    } else {
+        msg = T("FINAL confirmation — tap STOP to permanently disable Edge Bar until you reopen the app.",
+            "Xác nhận CUỐI CÙNG — bấm DỪNG để tắt hẳn Edge Bar cho tới khi bạn mở lại app.");
+        posBtn = T("STOP NOW", "DỪNG NGAY");
+    }
+    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle(T("⚠️ Permanently Stop Edge Bar?", "⚠️ Dừng Vĩnh Viễn Edge Bar?"))
+        .setMessage(msg)
+        .setPositiveButton(posBtn, (d, w) -> {
+            if (stepsRemaining <= 1) doPermanentStop();
+            else showPermanentStopDialog(stepsRemaining - 1);
+        })
+        .setNegativeButton(T("CANCEL", "HỦY"), null)
+        .show();
+}
+
+private void doPermanentStop() {
+    // 1) Thu hồi Trợ năng
+    try {
+        String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
+        String cur = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        if (cur != null && cur.contains(mySvc)) {
+            java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
+            for (String part : cur.split(":")) {
+                String t = part.trim();
+                if (!t.isEmpty() && !t.equals(mySvc)) set.add(t);
+            }
+            Settings.Secure.putString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                TextUtils.join(":", set));
+        }
+    } catch (Exception ignored) {}
+
+    // 2) Dừng mọi Service đang chạy
+    String[] servicesToStop = {
+        "com.manhmoc.edgebar.HomescreenService", "com.manhmoc.edgebar.AccessibleHomeService",
+        "com.manhmoc.edgebar.VolumeButtonService", "com.manhmoc.edgebar.ProximityWaveService",
+        "com.manhmoc.edgebar.VoiceRecorderService", "com.manhmoc.edgebar.ScreenRecorderService",
+        "com.manhmoc.edgebar.MyPlaylistService", "com.manhmoc.edgebar.BlacklistLockWatchdogService",
+        "com.manhmoc.edgebar.LockEbService"
+    };
+    for (String cls : servicesToStop) {
+        try { stopService(new Intent().setClassName(this, cls)); } catch (Exception ignored) {}
+    }
+
+    // 3) Thu hồi Device Admin
+    revokeDeviceAdminIfActive();
+
+    // 4) Ghi cờ "đã tắt vĩnh viễn" — mọi BroadcastReceiver/Watchdog tự kiểm tra
+    //    cờ này trước khi tự khởi động lại bất kỳ Service nào.
+    prefs.edit().putBoolean("edgebar_permanently_stopped", true).apply();
+
+    // 5) Hướng người dùng sang màn Cài đặt để tự tắt Overlay/Notification Access
+    //    (2 quyền này Android KHÔNG cho app tự thu hồi bằng code).
+    Toast.makeText(this, T(
+        "Stopped. To fully revoke Overlay/Notification permissions, open App Info manually.",
+        "Đã dừng. Để thu hồi hẳn quyền Lớp phủ/Thông báo, vào Cài đặt > Ứng dụng."),
+        Toast.LENGTH_LONG).show();
+}
+
 private void confirmThenUninstallApp() {
     if (Build.VERSION.SDK_INT >= 30) {
         android.hardware.biometrics.BiometricPrompt prompt =

@@ -26,15 +26,22 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
             if (pkg == null || pkg.equals(getPackageName())) return;
             String bl = prefs.getString("blacklist", "");
             if (bl.isEmpty() || !("," + bl + ",").contains("," + pkg + ",")) return;
-            if (prefs.getBoolean("blacklist_lock_active", false)) return;
-            // vừa khôi phục xong thì không revoke lại ngay (tránh thông báo cập nhật gây vòng lặp)
-            if (System.currentTimeMillis() - prefs.getLong("blacklist_lock_restore_ts", 0) < 10000) return;
 
             Notification n = sbn.getNotification();
             boolean ongoing = (n.flags & Notification.FLAG_ONGOING_EVENT) != 0;
             boolean callLike = n.fullScreenIntent != null
                 || (Notification.CATEGORY_CALL.equals(n.category) && !ongoing);
             if (!callLike) return;
+            // [MỚI] Đang pre-emptive (Trợ năng đã tắt lúc tắt màn) -> chỉ đánh dấu "có cuộc gọi đến"
+            // để Watchdog biết mà KHÔNG trả Trợ năng khi bật màn. Key "bl_call_ts" cố ý không bắt đầu
+            // bằng "blacklist" nên không đánh thức prefListener của các service khác.
+            if (prefs.getBoolean("blacklist_lock_active", false)) {
+                if (prefs.getBoolean("blacklist_lock_preempt", false))
+                    prefs.edit().putLong("bl_call_ts", System.currentTimeMillis()).apply();
+                return;
+            }
+            // vừa khôi phục xong thì không revoke lại ngay (tránh thông báo cập nhật gây vòng lặp)
+            if (System.currentTimeMillis() - prefs.getLong("blacklist_lock_restore_ts", 0) < 10000) return;
 
             KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
