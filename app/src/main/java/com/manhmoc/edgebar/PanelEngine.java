@@ -959,7 +959,7 @@ private Path buildRoundedPentagon(int size) {
 private Path buildSquirclePath(int size) {
     Path path = new Path();
     float cx = size / 2f, cy = size / 2f, r = size / 2f;
-    float n = 5f;
+    float n = 3.4f; // càng nhỏ càng tròn/mềm (5 = vuông kiểu iOS, 2 = hình tròn). One UI ≈ 3.2–3.6
     int steps = 72;
     for (int i = 0; i <= steps; i++) {
         double t = (Math.PI * 2 * i) / steps;
@@ -976,27 +976,33 @@ private Path buildSquirclePath(int size) {
 // [FIX] Toạ độ Q-curve LẤY ĐÚNG từ path SVG mẫu PEBBLE (viewBox 480x480), đã lật
 // ngang (mirror x = 480-x) để khớp CSS "transform: scaleX(-1)" mà file mẫu áp dụng
 // lên đúng chiều hiển thị thật. Scale theo iconSize/480.
-// Độ "mập" hai bên trái/phải: 1.00 = hình cũ, 1.30 = mập vừa, 1.50 = rất mập
-private static final float PEBBLE_X_FAT = 1.30f;
+// Hệ số đẩy ra xa tâm cho từng điểm (1.00 = giữ nguyên bản cũ, lớn hơn = phình hơn)
+// Thứ tự on-curve: BL, Bottom, BR, TR, Top, TL
+private static final float[] PEBBLE_END_PUSH  = {1.04f, 1.00f, 1.12f, 1.07f, 1.00f, 1.04f};
+// Thứ tự điều khiển: (BL→Bottom), (Bottom→BR), Right, (TR→Top), (Top→TL), Left
+private static final float[] PEBBLE_CTRL_PUSH = {1.03f, 1.10f, 1.00f, 1.05f, 1.03f, 1.00f};
 
 private Path buildPebblePath(int size) {
     float s = size / 480f;
-    final float cx = 240f;
-    // 6 điểm điều khiển của Pebble (đã lật ngang để khớp scaleX(-1) của bản HTML)
-    float[][] P = {
-        {126f, 438f}, {358f, 444f}, {437f, 240f},
-        {351f,  48f}, {141f,  69f}, {  8f, 240f}
-    };
-    // Kéo dang rộng các điểm phía trên/dưới (0,1,3,4) ra hai bên -> hình mập hơn
-    int[] widen = {0, 1, 3, 4};
-    for (int i : widen) P[i][0] = cx + (P[i][0] - cx) * PEBBLE_X_FAT;
+    final float c = 240f;
+    // Điểm nằm trên đường cong (đã lật ngang cho khớp scaleX(-1) của bản HTML)
+    float[][] E = { {67f, 339f}, {242f, 441f}, {397.5f, 342f}, {394f, 144f}, {246f, 58.5f}, {74.5f, 154.5f} };
+    // Điểm điều khiển của từng đoạn
+    float[][] C = { {126f, 438f}, {358f, 444f}, {437f, 240f}, {351f, 48f}, {141f, 69f}, {8f, 240f} };
+
+    for (int i = 0; i < 6; i++) {
+        E[i][0] = c + (E[i][0] - c) * PEBBLE_END_PUSH[i];
+        E[i][1] = c + (E[i][1] - c) * PEBBLE_END_PUSH[i];
+        C[i][0] = c + (C[i][0] - c) * PEBBLE_CTRL_PUSH[i];
+        C[i][1] = c + (C[i][1] - c) * PEBBLE_CTRL_PUSH[i];
+    }
 
     Path path = new Path();
-    // Điểm cuối mỗi đoạn LUÔN là trung điểm 2 điểm điều khiển kề nhau -> đường cong mượt, không gãy
-    path.moveTo((P[5][0] + P[0][0]) / 2f * s, (P[5][1] + P[0][1]) / 2f * s);
+    path.moveTo(E[0][0] * s, E[0][1] * s);
+    // Đoạn i đi từ E[i] tới E[i+1], điều khiển C[i]
     for (int i = 0; i < 6; i++) {
-        float[] c = P[i], n = P[(i + 1) % 6];
-        path.quadTo(c[0] * s, c[1] * s, (c[0] + n[0]) / 2f * s, (c[1] + n[1]) / 2f * s);
+        float[] to = E[(i + 1) % 6];
+        path.quadTo(C[i][0] * s, C[i][1] * s, to[0] * s, to[1] * s);
     }
     path.close();
     return normalizeToFullSize(path, size);
