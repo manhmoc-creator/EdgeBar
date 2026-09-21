@@ -16,6 +16,7 @@ import android.database.Cursor;
 import android.graphics.Paint;
 import android.graphics.Canvas;
 import android.graphics.Path;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
