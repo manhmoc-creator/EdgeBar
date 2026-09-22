@@ -69,19 +69,23 @@ private static final LinkedHashMap<String, Drawable> bubbleIconCache =
 private final Handler bubbleIconHandler = new Handler(Looper.getMainLooper());
 
 private void loadIconAsync(String cacheKey, java.util.function.Supplier<Drawable> loader, ImageView iv, int iconSize, boolean isAppHint) {
+    loadIconAsync(cacheKey, loader, iv, iconSize, isAppHint, false);
+}
+private void loadIconAsync(String cacheKey, java.util.function.Supplier<Drawable> loader, ImageView iv, int iconSize, boolean isAppHint, boolean neonPanel) {
     synchronized (bubbleIconCache) {
         Drawable cached = bubbleIconCache.get(cacheKey);
-        if (cached != null) { applyIconToImageView(iv, cached, iconSize, isAppHint); return; }
+        if (cached != null) { applyIconToImageView(iv, cached, iconSize, isAppHint, neonPanel); return; }
     }
-        iv.setTag(cacheKey);
-        bubbleIconExecutor.execute(() -> {
+    iv.setTag(cacheKey);
+    bubbleIconExecutor.execute(() -> {
         Drawable d = loader.get();
         if (d != null) synchronized (bubbleIconCache) { bubbleIconCache.put(cacheKey, d); }
         bubbleIconHandler.post(() -> {
-            if (d != null && cacheKey.equals(iv.getTag())) applyIconToImageView(iv, d, iconSize, isAppHint);
+            if (d != null && cacheKey.equals(iv.getTag())) applyIconToImageView(iv, d, iconSize, isAppHint, neonPanel);
         });
     });
 }
+
 /** [MỚI] Load icon app có xử lý Island (work profile).
  *  Thử profile chính trước (nhanh), nếu thất bại thì quét LauncherApps qua mọi UserHandle. */
 private Drawable getAppIconAnyProfile(String pkg) {
@@ -297,27 +301,48 @@ private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, 
         return null;
     }
 
+        // Overload 4-tham-số giữ nguyên cho chat bubble (không neon)
     private void applyIconToImageView(ImageView iv, Drawable d, int iconSize, boolean isApp) {
+        applyIconToImageView(iv, d, iconSize, isApp, false);
+    }
+    /** [SỬA] Thêm cờ `neonPanel`:
+     *   - true  → icon Action/Shortcut trên Bubble Panel dùng dải Neon gradient
+     *             giống 4 shortcut slot ngoài Home (PanelEngine.buildNeonGradientIcon).
+     *   - false → hành vi cũ (tint trắng) — dùng cho icon chat bubble chính,
+     *             vì user yêu cầu KHÔNG đổi màu icon bong bóng chat.
+     * Zero-RAM: buildNeonGradientIcon chỉ tạo 2 Bitmap tạm, recycle ngay;
+     * Bitmap neon gắn trực tiếp vào ImageView nên không cache thêm. */
+    private void applyIconToImageView(ImageView iv, Drawable d, int iconSize, boolean isApp, boolean neonPanel) {
         if (d == null) return;
         if (isApp) {
             iv.setImageDrawable(d);
             iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            iv.setPadding(0, 0, 0, 0); 
+            iv.setPadding(0, 0, 0, 0);
+        } else if (neonPanel) {
+            // [MỚI] Neon gradient trên nền trong suốt (nền node giữ nguyên #333333).
+            Bitmap neon = PanelEngine.buildNeonGradientIcon(d, iconSize, 0.85f);
+            if (neon != null) {
+                iv.setImageBitmap(neon);
+                iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                iv.setPadding(0, 0, 0, 0);
+            } else {
+                // fallback: giữ đường cũ nếu vì lý do gì neon tạo thất bại
+                d = d.mutate(); d.setTint(Color.WHITE);
+                iv.setImageDrawable(d);
+                iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                int pad = (int) (iconSize * 0.15f);
+                iv.setPadding(pad, pad, pad, pad);
+            }
         } else {
-            d = d.mutate(); 
+            d = d.mutate();
             d.setTint(Color.WHITE);
-            
-            // [FIX LAG KHỦNG KHIẾP BUBBLE] 
-            // KHÔNG GỌI PanelEngine.normalizeIconBitmap() ở đây! Nó làm Main Thread bị treo 1-2s.
-            // Dùng scale có sẵn của ImageView cực nhanh và không tốn CPU.
             iv.setImageDrawable(d);
             iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            
-            // Tính toán bù đệm để System Icon có kích thước tương đương với lúc normalize
-            int pad = (int) (iconSize * 0.15f); 
+            int pad = (int) (iconSize * 0.15f);
             iv.setPadding(pad, pad, pad, pad);
         }
     }
+
     private String getActiveBubbleMainIconRef() {
     if (isCircleModeActive()) {
         return prefs.getString("bubble_circle_main_icon", "");
@@ -907,7 +932,11 @@ card.setBackground(bg);
         int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
         GradientDrawable boxBg = new GradientDrawable();
         boxBg.setCornerRadius(100f); 
-        boxBg.setColor(selectedMainIdx != null && selectedMainIdx == idx ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 51, 51, 51));
+        // [MỚI] Nền TRẮNG cho node chưa-chọn (khớp App Shortcut). Node đang chọn giữ
+        // highlight xanh #8AB4F8 để báo trạng thái "đang chờ đổi chỗ".
+        boxBg.setColor(selectedMainIdx != null && selectedMainIdx == idx
+            ? Color.parseColor("#8AB4F8")
+            : Color.argb(nodeAlpha, 255, 255, 255));
         iconBox.setBackground(boxBg);
 
         ImageView iv = new ImageView(ctx);
@@ -931,10 +960,11 @@ card.setBackground(bg);
             default: fallbackRes = android.R.drawable.ic_menu_view;
         }
 
-        try { applyIconToImageView(iv, ctx.getDrawable(fallbackRes), iconSize, false); } catch (Exception ignored) {}
+                // [SỬA] neonPanel=true cho icon mặc định của 9 nút chính Panel
+        try { applyIconToImageView(iv, ctx.getDrawable(fallbackRes), iconSize, false, true); } catch (Exception ignored) {}
 
         if (!customOverride.isEmpty()) {
-            loadIconAsync("main_" + type + "_" + customOverride, () -> getCustomIcon(customOverride), iv, iconSize, isAppIcon);
+           loadIconAsync("main_" + type + "_" + customOverride, () -> getCustomIcon(customOverride), iv, iconSize, isAppIcon, true);
         }
         iconBox.addView(iv);
         
@@ -1005,7 +1035,10 @@ tv.setTextSize(12f);
         int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
         GradientDrawable boxBg = new GradientDrawable();
         boxBg.setCornerRadius(100f); 
-        boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 51, 51, 51));
+        // [MỚI] Nền TRẮNG cho node chưa-chọn (khớp App Shortcut + đồng bộ với buildMainButton).
+        boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx
+            ? Color.parseColor("#8AB4F8")
+            : Color.argb(nodeAlpha, 255, 255, 255));
         iconBox.setBackground(boxBg);
 
                 if (!ref.isEmpty()) {
@@ -1033,15 +1066,13 @@ if (!isAppRef) {
     else if (ref.equals("act:SCREENSHOT") || ref.equals("act:CAMERA")) defaultIconRes = android.R.drawable.ic_menu_camera;
     else if (ref.equals("act:NOTIFICATIONS")) defaultIconRes = android.R.drawable.ic_dialog_email;
     else if (ref.equals("act:VOICE_RECORD") || ref.equals("act:TOGGLE_RECORD")) defaultIconRes = android.R.drawable.ic_btn_speak_now;
-    try { applyIconToImageView(iv, ctx.getDrawable(defaultIconRes), iconSize, false); } catch (Exception ignored) {}
+    try { applyIconToImageView(iv, ctx.getDrawable(defaultIconRes), iconSize, false, true); } catch (Exception ignored) {}
 } else {
-    // Placeholder cho app: robot Android, không phải con mắt
-    try { applyIconToImageView(iv, ctx.getDrawable(android.R.drawable.sym_def_app_icon), iconSize, true); } catch (Exception ignored) {}
+    try { applyIconToImageView(iv, ctx.getDrawable(android.R.drawable.sym_def_app_icon), iconSize, true, false); } catch (Exception ignored) {}
 }
 
 loadIconAsync("sub_" + type + "_" + ref + "_" + customOverride,
-    () -> resolveSubNodeIcon(customOverride, ref), iv, iconSize, isAppRef);
-
+    () -> resolveSubNodeIcon(customOverride, ref), iv, iconSize, isAppRef, true);
 
             iconBox.addView(iv);
         }
@@ -1838,13 +1869,19 @@ for (String[] item : allItems) {
         try { return ctx.getDrawable(res); } catch (Exception e) { return null; }
     }
 
-    private Bitmap drawableToNodeBitmap(Drawable d, int size, boolean isApp) {
+private Bitmap drawableToNodeBitmap(Drawable d, int size, boolean isApp) {
     if (d == null) return null;
+    // [MỚI] Với icon Action/Shortcut trên Vòng đạn → dùng dải Neon gradient
+    // giống Panel/Bubble Panel và 4 shortcut slot ngoài Home. Icon App giữ nguyên.
+    if (!isApp) {
+        Bitmap neon = PanelEngine.buildNeonGradientIcon(d, size, 0.85f);
+        if (neon != null) return neon;
+        // fallback nếu neon thất bại
+    }
     Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
     Canvas c = new Canvas(bmp);
     Drawable dm = d.mutate();
     if (!isApp) dm.setTint(Color.WHITE);
-    // [FIX] Đồng bộ tỉ lệ với Bubble Panel (icon co về ~77%), kể cả App/Shortcut
     int pad = Math.round(size * 0.115f);
     dm.setBounds(pad, pad, size - pad, size - pad);
     dm.draw(c);
@@ -1895,9 +1932,13 @@ for (String[] item : allItems) {
             float ny = cy + ringR * (float) Math.sin(angle);
 
             boolean selected = selectedNodeIdx != null && selectedNodeIdx == i;
-            pNodeBg.setColor(selected ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 51, 51, 51));
+            // [MỚI] Nền TRẮNG cho node chưa-chọn — đồng bộ với Panel + Bubble Panel.
+            pNodeBg.setColor(selected ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 255, 255, 255));
             canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeBg);
-            pNodeStroke.setColor(selected ? Color.WHITE : Color.argb(150, 190, 190, 200));
+            // [MỚI] Trên nền trắng, viền xám nhạt mất tương phản → dùng viền đậm
+            // (tone xám-đen) cho node chưa-chọn, viền trắng cho node đang chọn.
+            pNodeStroke.setColor(selected ? Color.WHITE : Color.argb(150, 100, 100, 110));
+
             pNodeStroke.setStrokeWidth(selected ? 5f : 3f);
             canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeStroke);
 

@@ -205,6 +205,42 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
             return out;
         } catch (Exception e) { return null; }
     }
+        /**
+     * [MỚI] Vẽ lại glyph của bất kỳ Drawable nào theo dải "Midnight Neon"
+     * (Deep Blue → Purple → Neon Blue) giống hệt icon App Shortcut khi
+     * long-press ngoài Home — thay cho kiểu "tint trắng trên nền xám" đơn điệu.
+     *
+     * Trả về Bitmap CÓ NỀN TRONG SUỐT: chỉ glyph mang màu gradient, alpha
+     * giữ nguyên theo icon gốc → có thể ghép lên backdrop tùy ý.
+     *
+     * Zero-RAM: chỉ 2 Bitmap tạm (normalized + glyph) sống trong scope, recycle
+     * ngay khi thoát. Không Thread, không Handler, không prefs.
+     */
+    public static Bitmap buildNeonGradientIcon(Drawable icon, int size, float contentScale) {
+        if (icon == null) return null;
+        try {
+            Drawable tinted = icon.mutate();
+            tinted.setTint(Color.WHITE);
+            Bitmap normalized = normalizeIconBitmap(tinted, size, contentScale);
+            if (normalized == null) return null;
+            Bitmap glyph = normalized.copy(Bitmap.Config.ARGB_8888, true);
+            normalized.recycle();
+
+            Canvas gc = new Canvas(glyph);
+            Paint gp = new Paint(Paint.ANTI_ALIAS_FLAG);
+            float pad = size * (1f - contentScale) / 2f;
+            gp.setShader(new android.graphics.LinearGradient(
+                pad, pad, size - pad, size - pad,
+                new int[]{ 0xFF1A237E, 0xFF7B1FA2, 0xFF03A9F4 },
+                new float[]{ 0f, 0.45f, 1f },
+                android.graphics.Shader.TileMode.CLAMP));
+            gp.setXfermode(new android.graphics.PorterDuffXfermode(
+                android.graphics.PorterDuff.Mode.SRC_IN));
+            gc.drawRect(0, 0, size, size, gp);
+            return glyph;
+        } catch (Exception e) { return null; }
+    }
+
     static int[] getCustomIconPool(Context ctx) {
         if (customIconPoolCache != null) return customIconPoolCache;
         List<Integer> ids = new ArrayList<>();
@@ -803,10 +839,16 @@ private static final float ICON_CONTENT_SCALE = 0.77f;
     private float getIconCoreScale() { return prefs.getInt("lenap_global_icon_scale", 77) / 100f; }
     private int getPoolIconAlpha() { return prefs.getInt("lenap_global_alpha_pool", 255); }
 private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor) {
-    return getStyledIconBitmap(cacheKey, icon, emoji, shape, size, backdropColor, false);
+    return getStyledIconBitmap(cacheKey, icon, emoji, shape, size, backdropColor, false, false);
 }
 private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor, boolean useGlobalScale) {
-    String key = cacheKey + "_" + shape + "_" + size + "_" + backdropColor + "_" + (useGlobalScale ? getIconCoreScale() : 0);
+    return getStyledIconBitmap(cacheKey, icon, emoji, shape, size, backdropColor, useGlobalScale, false);
+}
+/** [SỬA] Thêm cờ `useNeon`: khi true && icon != null -> vẽ theo dải Neon gradient
+ *  giống App Shortcut thay cho tint trắng. Cache key có thêm "_neon" nên entry cũ
+ *  tự nhiên bị vô hiệu, không cần dọn maskedIconCache thủ công. */
+private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor, boolean useGlobalScale, boolean useNeon) {
+    String key = cacheKey + "_" + shape + "_" + size + "_" + backdropColor + "_" + (useGlobalScale ? getIconCoreScale() : 0) + (useNeon ? "_neon" : "");
     synchronized (maskedIconCache) {
         Bitmap cached = maskedIconCache.get(key);
         if (cached != null && !cached.isRecycled()) return cached;
@@ -816,22 +858,53 @@ private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji,
     if (backdropColor != 0) cc.drawColor(backdropColor);
     if (icon != null) {
         float scale = useGlobalScale ? getIconCoreScale() : ICON_CONTENT_SCALE;
-        int targetSize = Math.round(size * scale);
-        int off = (size - targetSize) / 2;
-        Bitmap normIcon = normalizeIconBitmap(icon, targetSize, 1f);
-        if (normIcon != null) {
-            Paint iconPaintDraw = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
-            if (useGlobalScale) iconPaintDraw.setAlpha(getPoolIconAlpha());
-            cc.drawBitmap(normIcon, off, off, iconPaintDraw);
-            normIcon.recycle();
+        if (useNeon) {
+            // [MỚI] Neon gradient glyph trên nền đã vẽ (xám cho Panel, trong suốt cho Bubble)
+            Bitmap neonGlyph = buildNeonGradientIcon(icon, size, scale);
+            if (neonGlyph != null) {
+                Paint p = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+                if (useGlobalScale) p.setAlpha(getPoolIconAlpha());
+                cc.drawBitmap(neonGlyph, 0, 0, p);
+                neonGlyph.recycle();
+            } else {
+                // fallback: giữ nguyên đường vẽ cũ nếu vì lý do gì không tạo được neon
+                int targetSize = Math.round(size * scale);
+                int off = (size - targetSize) / 2;
+                Bitmap normIcon = normalizeIconBitmap(icon, targetSize, 1f);
+                if (normIcon != null) {
+                    Paint iconPaintDraw = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+                    if (useGlobalScale) iconPaintDraw.setAlpha(getPoolIconAlpha());
+                    cc.drawBitmap(normIcon, off, off, iconPaintDraw);
+                    normIcon.recycle();
+                } else {
+                    if (useGlobalScale) icon.setAlpha(getPoolIconAlpha());
+                    icon.setBounds(off, off, off + targetSize, off + targetSize);
+                    icon.draw(cc);
+                }
+            }
         } else {
-            if (useGlobalScale) icon.setAlpha(getPoolIconAlpha());
-            icon.setBounds(off, off, off + targetSize, off + targetSize);
-            icon.draw(cc);
+            // Đường vẽ cũ — nguyên vẹn (dùng cho icon App và chat bubble)
+            int targetSize = Math.round(size * scale);
+            int off = (size - targetSize) / 2;
+            Bitmap normIcon = normalizeIconBitmap(icon, targetSize, 1f);
+            if (normIcon != null) {
+                Paint iconPaintDraw = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+                if (useGlobalScale) iconPaintDraw.setAlpha(getPoolIconAlpha());
+                cc.drawBitmap(normIcon, off, off, iconPaintDraw);
+                normIcon.recycle();
+            } else {
+                if (useGlobalScale) icon.setAlpha(getPoolIconAlpha());
+                icon.setBounds(off, off, off + targetSize, off + targetSize);
+                icon.draw(cc);
+            }
         }
     } else if (emoji != null) {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setTextSize(size * 0.5f); p.setTextAlign(Paint.Align.CENTER); p.setColor(Color.WHITE);
+        p.setTextSize(size * 0.5f); p.setTextAlign(Paint.Align.CENTER);
+        // [MỚI] Nền giờ là trắng → emoji glyph đơn sắc phải đổi sang màu tối
+        // (dùng tone Deep Blue #1A237E cho đồng bộ với dải neon) để không bị vô hình.
+        p.setColor(0xFF1A237E);
+
         Paint.FontMetrics fm = p.getFontMetrics();
         cc.drawText(emoji, size / 2f, size / 2f - (fm.ascent + fm.descent) / 2, p);
     }
@@ -1093,8 +1166,15 @@ private Path buildRoughPath(int size) {
         box.addView(iv);
     } else {
         int effectiveShape = (shape == 5) ? 0 : shape;
-        int backdropColor = Color.argb(230, 60, 64, 67);
-        Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null, effectiveShape, iconSize, backdropColor, true);
+        // [MỚI] Nền TRẮNG tinh khiết — khớp đúng style icon App Shortcut ngoài Home
+        // (xem buildNeonEdgeIcon() trong MainActivity: nền trắng + glyph gradient).
+        int backdropColor = Color.WHITE;
+
+        // [MỚI] useNeon=true cho Action/Shortcut icon → dải Neon gradient giống App Shortcut.
+        // Nếu icon == null (dùng emoji) thì cờ neon bị bỏ qua, không ảnh hưởng.
+        Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null,
+            effectiveShape, iconSize, backdropColor, true, icon != null);
+
         ImageView iv = new ImageView(ctx);
         iv.setImageBitmap(styled);
         iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
