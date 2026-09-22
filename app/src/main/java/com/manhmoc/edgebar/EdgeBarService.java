@@ -1397,9 +1397,10 @@ refreshEventSubscription();
 // AccessibilityEvent (không bắn nếu launcher tái dùng cùng window sau vân tay)
 // hoặc broadcast USER_PRESENT (có thể trễ nếu main thread đang bận). Zero-polling,
 // chỉ 1 lệnh IPC hệ thống lúc khoá màn hình thực sự đổi — không tốn thêm pin/RAM.
-if (Build.VERSION.SDK_INT >= 30 && km != null) {
+if (Build.VERSION.SDK_INT >= 31 && km != null) {
     keyguardHelper30 = new KeyguardLockedStateHelperApi30();
     keyguardHelper30.register(this, km, () -> {
+
         forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 800;
         instantSwitchLockToHomacc();
         if (AccessibleHomeService.isRunning) drawAccessibleHome();
@@ -3410,7 +3411,7 @@ public boolean onUnbind(Intent intent) {
 @Override
 public void onDestroy() {
     isConnected = false;
-    if (Build.VERSION.SDK_INT >= 30 && km != null && keyguardHelper30 != null) {
+    if (Build.VERSION.SDK_INT >= 31 && km != null && keyguardHelper30 != null) {
     keyguardHelper30.unregister(km);
 }
 
