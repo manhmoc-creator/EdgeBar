@@ -1082,22 +1082,18 @@ private Path buildSquirclePath(int size) {
     return path;
 }
 private Path buildPebblePath(int size) {
-    // [FIX PLUMP] Chuyển NGUYÊN VẸN 6 lệnh quadTo() từ SVG path gốc (viewBox 480x480).
-    // KHÁC bản trước: KHÔNG dùng normalizeToFullSize (hàm đó kéo giãn X và Y ĐỘC LẬP
-    // → ép bbox 429×396 thành vuông 1×1 → trục Y bị kéo +8.3% → Pebble bị "cao gầy").
-    //
-    // Thay vào đó: scale ĐỒNG NHẤT theo chiều rộng (dimension lớn hơn), rồi căn giữa.
-    // Kết quả: Pebble giữ ĐÚNG tỉ lệ plump của SVG gốc, chỉ chừa ~3.85% padding
-    // trên/dưới — nhìn đầy đặn y hệt ảnh tham chiếu.
+    // [FIX 100%] Chuyển NGUYÊN VẸN 6 lệnh quadTo() từ SVG path gốc (viewBox 480x480).
+    // Đây là path "PEBBLE" đúng như bản HTML tham chiếu — KHÔNG còn tự tính
+    // sin/cos 3-5 múi như bản cũ (nguồn gốc khiến shape bị bóp gầy + lệch dáng).
     //
     // Tối ưu Pixel 2XL:
     //  • Chỉ 6 quadTo → 13 điểm, nhẹ nhất trong toàn bộ shape pool
-    //  • Path cache 1 lần trong shapePathCache[shape=2][size] → Zero-RAM mỗi frame
+    //    (Squircle: 73 điểm, Rough: ~100 điểm, Pentacle: 12 điểm)
+    //  • Path được cache 1 lần trong shapePathCache[shape=2][size] → Zero-RAM
+    //    sau lần vẽ đầu tiên, không cấp phát lại mỗi frame
     //  • Không loop, không Math.sin/cos → 0 CPU khi khởi tạo
     Path path = new Path();
-    // Bbox SVG gốc: X[43,472]=429 rộng, Y[48,444]=396 cao. Scale theo chiều RỘNG
-    // để hình lấp đầy bề ngang khung size×size, không bị co nhỏ.
-    float s = size / 429f;
+    float s = size / 480f;   // quy đổi đúng tỉ lệ viewBox SVG gốc
     path.moveTo(413f * s, 339f * s);
     path.quadTo(354f * s,   438f * s, 238f * s,   441f * s);
     path.quadTo(122f * s,   444f * s, 82.5f * s,  342f * s);
@@ -1106,15 +1102,10 @@ private Path buildPebblePath(int size) {
     path.quadTo(339f * s,   69f * s,  405.5f * s, 154.5f * s);
     path.quadTo(472f * s,   240f * s, 413f * s,   339f * s);
     path.close();
-    // Căn giữa trong khung size×size: bbox sau scale là
-    // (43*s .. 472*s) × (48*s .. 444*s) = (0.100*size .. 1.100*size) × (0.112*size .. 1.035*size)
-    // → translate để left=0, top=(size - 0.923*size)/2 = 0.0385*size
-    float offsetX = -43f * s;
-    float offsetY = -48f * s + (size - 396f * s) / 2f;
-    Matrix m = new Matrix();
-    m.setTranslate(offsetX, offsetY);
-    path.transform(m);
-    return path;
+    // Vẫn normalizeToFullSize để Pebble lấp đầy khung size×size đồng bộ với
+    // 5 shape khác (Circle/Squircle/Rough/Pentacle/System) — đảm bảo icon
+    // bên trong luôn có cùng kích thước hiển thị tuyệt đối.
+    return normalizeToFullSize(path, size);
 }
 
 // Rough — viền lởm chởm kiểu "xé giấy". Toạ độ CỐ ĐỊNH (không Random) nên mọi icon
