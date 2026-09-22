@@ -7439,11 +7439,10 @@ private void renderBubbleSettings() {
     dCommon.setPadding(20, 10, 20, 20);
 
     dCommon.addView(createSlider(T("Bubble Size", "Kích thước bong bóng"), "bubble_size", 300, 120));
-    dCommon.addView(createSlider(T("Node Icon Size", "Kích thước icon 9 nút"), "bubble_icon_size", 200, 100));
-    dCommon.addView(createSlider(T("Node Background Opacity", "Độ đậm mờ nền 9 nút"), "bubble_node_bg_alpha", 255, 255));
-    dCommon.addView(createSlider(
-    T("Bubble Opacity (%)", "Độ đậm bong bóng (%)"),
-    "bubble_alpha_pct", 100, 87));
+dCommon.addView(createSlider(T("Node Icon Size", "Kích thước icon 9 nút"), "bubble_icon_size", 200, 100));
+dCommon.addView(createSlider(T("Node Icon Scale (%)", "Độ to icon trên nút (%)"), "bubble_node_icon_pct", 150, 100)); // ← THÊM
+dCommon.addView(createSlider(T("Node Background Opacity", "Độ đậm mờ nền 9 nút"), "bubble_node_bg_alpha", 255, 255));
+dCommon.addView(createSlider(T("Bubble Opacity (%)", "Độ đậm bong bóng (%)"), "bubble_alpha_pct", 100, 87));
 
     dCommon.addView(createSectionTitle("⚙️ " + T("BUBBLE GESTURES", "CỬ CHỈ BONG BÓNG CHAT")));
     List<String> rules = getDynamicIds("bubble_pack_rules");

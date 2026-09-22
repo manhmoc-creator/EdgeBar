@@ -1180,9 +1180,9 @@ private Path buildRoughPath(int size) {
         int backdropColor = Color.WHITE;
 
         // [MỚI] useNeon=true cho Action/Shortcut icon → dải Neon gradient giống App Shortcut.
-        // Nếu icon == null (dùng emoji) thì cờ neon bị bỏ qua, không ảnh hưởng.
-        Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null,
-            effectiveShape, iconSize, backdropColor, true, icon != null);
+        // [FIX QS] useNeon = false → icon dùng tint xám (xem dòng cuối hàm này)
+Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null,
+    effectiveShape, iconSize, backdropColor, true, false);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageBitmap(styled);
@@ -1403,10 +1403,11 @@ private Drawable getSwapHighlightBg(Drawable orig) {
         Drawable sysIcon = overrideIcon != null ? overrideIcon
             : (resId != null ? ctx.getDrawable(resId) : null);
         boolean isAppOverride = overrideVal.startsWith("app:");
-        if (sysIcon != null && !isAppOverride) {
-            sysIcon = sysIcon.mutate();
-            sysIcon.setTint(Color.WHITE);
-        }
+if (sysIcon != null && !isAppOverride) {
+    sysIcon = sysIcon.mutate();
+    // [FIX QS] #E8EAED = xám-trắng giống icon Quick Settings Android
+    sysIcon.setTint(0xFFE8EAED);        // ← ĐỔI
+}
         Runnable actAction = () -> {
             Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             ipc.putExtra("act", ref);

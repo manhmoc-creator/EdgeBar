@@ -323,13 +323,15 @@ private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, 
         // [ĐỔI] Action/Shortcut System/Utility/Trigger: BỎ neon — icon tint trắng xám
         // #E0E0E0 giống hệt bộ Settings Android 11 (Wi-Fi, Bluetooth, Data...).
         // neonPanel giờ chỉ là flag giữ API, không còn dùng để bật neon nữa.
-        d = d.mutate();
-        d.setTint(0xFFE0E0E0);
-        iv.setImageDrawable(d);
-        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        int pad = (int) (iconSize * 0.15f);
-        iv.setPadding(pad, pad, pad, pad);
-    }
+        } else {
+    d = d.mutate();
+    // [FIX QS] #E8EAED = xám-trắng giống icon Quick Settings Android (không trắng hẳn)
+    d.setTint(0xFFE8EAED);
+    iv.setImageDrawable(d);
+    iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+    int pad = (int) (iconSize * 0.15f);
+    iv.setPadding(pad, pad, pad, pad);
+   }
 }
 
     private String getActiveBubbleMainIconRef() {
@@ -914,25 +916,28 @@ card.setBackground(bg);
         content.setGravity(Gravity.CENTER);
         
         FrameLayout iconBox = new FrameLayout(ctx);
-        int iconSize = prefs.getInt("bubble_icon_size", 100);
-        LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
-        iconBox.setLayoutParams(ibLp);
-        
+int iconSize = prefs.getInt("bubble_icon_size", 100);
+// [MỚI] Nhân hệ số chung cho CẢ Panel + Circle → cùng tỷ lệ icon/khung
+int effectiveIconSize = Math.round(iconSize * prefs.getInt("bubble_node_icon_pct", 100) / 100f);
+LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
+iconBox.setLayoutParams(ibLp);
+
         int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
         GradientDrawable boxBg = new GradientDrawable();
         boxBg.setCornerRadius(100f); 
         // [MỚI] Nền TRẮNG cho node chưa-chọn (khớp App Shortcut). Node đang chọn giữ
         // highlight xanh #8AB4F8 để báo trạng thái "đang chờ đổi chỗ".
-        boxBg.setColor(selectedMainIdx != null && selectedMainIdx == idx
+        // [FIX QS] Nền xám #3A3A3A giống Quick Settings Android (không còn trắng hẳn)
+boxBg.setColor(selectedMainIdx != null && selectedMainIdx == idx
     ? Color.parseColor("#8AB4F8")
-    : Color.argb(nodeAlpha, 0x2E, 0x2E, 0x2E));
+    : Color.argb(nodeAlpha, 58, 58, 58));
 
         iconBox.setBackground(boxBg);
 
         ImageView iv = new ImageView(ctx);
-        FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
-        iv.setLayoutParams(ivLp);
-        
+        FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(effectiveIconSize, effectiveIconSize, Gravity.CENTER);
+iv.setLayoutParams(ivLp);
+
                 String customOverride = prefs.getString("bubble_node_icon_" + type, "");
         boolean isAppIcon = customOverride.startsWith("app:");
 
@@ -1018,24 +1023,25 @@ tv.setTextSize(12f);
         content.setGravity(Gravity.CENTER);
         
         FrameLayout iconBox = new FrameLayout(ctx);
-        int iconSize = prefs.getInt("bubble_icon_size", 100);
-        LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
-        iconBox.setLayoutParams(ibLp);
-        
+int iconSize = prefs.getInt("bubble_icon_size", 100);
+int effectiveIconSize = Math.round(iconSize * prefs.getInt("bubble_node_icon_pct", 100) / 100f);
+LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
+iconBox.setLayoutParams(ibLp);
+
         int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
         GradientDrawable boxBg = new GradientDrawable();
         boxBg.setCornerRadius(100f); 
         // [MỚI] Nền TRẮNG cho node chưa-chọn (khớp App Shortcut + đồng bộ với buildMainButton).
         boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx
     ? Color.parseColor("#8AB4F8")
-    : Color.argb(nodeAlpha, 0x2E, 0x2E, 0x2E));
+    : Color.argb(nodeAlpha, 58, 58, 58));
 
         iconBox.setBackground(boxBg);
 
                 if (!ref.isEmpty()) {
             ImageView iv = new ImageView(ctx);
-            FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER);
-            iv.setLayoutParams(ivLp);
+            FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(effectiveIconSize, effectiveIconSize, Gravity.CENTER);
+iv.setLayoutParams(ivLp);
 
             String customOverride = prefs.getString("bubble_node_icon_override_" + type + "_" + ref, "");
 
@@ -1806,7 +1812,12 @@ for (String[] item : allItems) {
     }
     // [MỚI] tải icon thật (App/Shortcut/System...) giống hệt nguồn icon đã chọn ở 9 ô cấu hình
     private void loadAllNodeIcons() {
-        int iconSize = Math.round(prefs.getInt("bubble_icon_size", 100) * (prefs.getInt("bubble_circle_node_scale", 90) / 100f));
+    int base = prefs.getInt("bubble_icon_size", 100);
+    int nodeSize = Math.round(base * (prefs.getInt("bubble_circle_node_scale", 90) / 100f));
+    // [FIX ĐỒNG BỘ] 0.71 = tỷ lệ icon/khung chuẩn của Panel (100/(100+40)) → Circle nhìn cùng tỷ lệ
+    // Nhân thêm hệ số pct chung → khi user kéo slider, CẢ 2 cùng to/nhỏ đồng bộ
+    int iconSize = Math.round(nodeSize * 0.71f * (prefs.getInt("bubble_node_icon_pct", 100) / 100f));
+
         for (int i = 0; i < items.size(); i++) {
             String ref = items.get(i)[1];
             final int idx = i;
@@ -1862,15 +1873,15 @@ for (String[] item : allItems) {
 
 private Bitmap drawableToNodeBitmap(Drawable d, int size, boolean isApp) {
     if (d == null) return null;
-    // [ĐỔI] BỎ neon gradient — quay về style Settings Android 11: icon trắng xám
-    // (#E0E0E0) trên nền xám đậm. Chỉ tint nhẹ, không vẽ gradient.
+    // [FIX QS] Bỏ neon — Circle giờ dùng xám-trắng #E8EAED giống Bubble Panel
     Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
     Canvas c = new Canvas(bmp);
     Drawable dm = d.mutate();
-    if (!isApp) dm.setTint(0xFFE0E0E0);   // ← trắng xám nhạt, không trắng tinh
+    // [FIX QS] #E8EAED = xám-trắng giống icon Quick Settings Android
+    if (!isApp) dm.setTint(0xFFE8EAED);
     int pad = Math.round(size * 0.115f);
     dm.setBounds(pad, pad, size - pad, size - pad);
-    dm.setFilterBitmap(true);   // [FIX RĂNG CƯA] giữ luôn
+    dm.setFilterBitmap(true); // [FIX RĂNG CƯA] đã hướng dẫn ở turn trước
     dm.draw(c);
     return bmp;
 }
@@ -1920,7 +1931,7 @@ private Bitmap drawableToNodeBitmap(Drawable d, int size, boolean isApp) {
 
             boolean selected = selectedNodeIdx != null && selectedNodeIdx == i;
             // [MỚI] Nền TRẮNG cho node chưa-chọn — đồng bộ với Panel + Bubble Panel.
-            pNodeBg.setColor(selected ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 0x2E, 0x2E, 0x2E));
+            pNodeBg.setColor(selected ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 58, 58, 58));
             canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeBg);
             // [MỚI] Trên nền trắng, viền xám nhạt mất tương phản → dùng viền đậm
             // (tone xám-đen) cho node chưa-chọn, viền trắng cho node đang chọn.
