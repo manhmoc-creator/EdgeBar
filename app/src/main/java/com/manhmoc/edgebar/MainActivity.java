@@ -7989,10 +7989,11 @@ for (int i = 1; i <= 4; i++) {
 private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]> sysItems,
         List<String[]> panelItems, List<String[]> intentItems, List<String[]> macroItems,
         CheckBox[] tapRadios, int slotIdx) {
-    String px = "appicon_" + shortcutId + "_";
+        String px = "appicon_" + shortcutId + "_";
     final String[] chosenAct = { prefs.getString(px + "act", "NONE") };
     final String[] chosenPkg = { prefs.getString(px + "launch_pkg", "") };
     final String[] chosenScId = { prefs.getString(px + "shortcut_id", "") };
+    final CheckBox rb; // [FIX BUILD] khai báo ở scope method để openPicker cũng truy cập được
 
     Runnable[] refreshHolder = new Runnable[1];
     Button btnIcon = stdCardBtn("🎨", SURFACE_COLOR, Color.WHITE);
@@ -8018,8 +8019,8 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
     // [MỚI] Chỉ Slot 1 & Slot 2 được phép làm "1 chạm = hành động" — Slot 3/4
     // không có checkbox này (tapRadios[slotIdx] giữ nguyên null, đã null-safe
     // ở vòng lặp tắt-bớt-nút-khác nên không cần sửa gì thêm chỗ đó).
-    if (slotNum <= 2) {
-        CheckBox rb = new CheckBox(this);
+        if (slotNum <= 2) {
+        rb = new CheckBox(this);
         rb.setText(T("Tap app icon = run this action (long-press shows \"Open Edge Bar\")",
                      "Chạm 1 lần icon app = chạy hành động này (giữ icon sẽ có \"Mở Edge Bar\")"));
         rb.setTextColor(Color.parseColor("#9AA0A6"));
@@ -8074,11 +8075,14 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
             syncAppShortcutLabels();
         });
         infoCol.addView(rb);
-    } else if (shortcutId.equals(prefs.getString("appicon_tap_override_id", ""))) {
-        // [DỌN RÁC] Nếu trước đó Slot 3/4 lỡ đang giữ override (dữ liệu cũ) -> tự trả về bình thường
-        prefs.edit().remove("appicon_tap_override_id")
-            .remove("appicon_tap_saved_act").remove("appicon_tap_saved_pkg")
-            .remove("appicon_tap_saved_scId").remove("appicon_tap_saved_icon").apply();
+        } else {
+        rb = null;
+        if (shortcutId.equals(prefs.getString("appicon_tap_override_id", ""))) {
+            // [DỌN RÁC] Nếu trước đó Slot 3/4 lỡ đang giữ override (dữ liệu cũ) -> tự trả về bình thường
+            prefs.edit().remove("appicon_tap_override_id")
+                .remove("appicon_tap_saved_act").remove("appicon_tap_saved_pkg")
+                .remove("appicon_tap_saved_scId").remove("appicon_tap_saved_icon").apply();
+        }
     }
 
     View.OnClickListener openPicker = v -> {
@@ -8154,7 +8158,7 @@ pin.addView(bOpenUi);
         bNone.setOnClickListener(v2 -> {
             chosenAct[0] = "NONE";
             prefs.edit().putString(px + "act", "NONE").remove(px + "launch_pkg").remove(px + "shortcut_id").apply();
-            if (rb.isChecked()) rb.setChecked(false);   // slot không còn action thì tự bỏ tick 1-chạm
+            if (rb != null && rb.isChecked()) rb.setChecked(false);   // slot không còn action thì tự bỏ tick 1-chạm
             refreshHolder[0].run(); syncAppShortcutLabels(); pd.dismiss();
         });
         pin.addView(bNone);
