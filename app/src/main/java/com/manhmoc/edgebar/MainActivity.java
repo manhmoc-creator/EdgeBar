@@ -1286,26 +1286,27 @@ if (currentMainTab == 0) {
 }
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
 
-    @Override protected void onCreate(Bundle savedInstanceState) {
+        @Override protected void onCreate(Bundle savedInstanceState) {
     // ============================================================
     // [FIX CRASH NPE] Gán prefs TRƯỚC TIÊN, TRƯỚC CẢ super.onCreate().
-    // Đảm bảo tuyệt đối không bao giờ bị NullPointerException
+    // Lý do: một số ROM Pixel 2XL gọi onResume/onStart trong super.onCreate()
+    // → nếu có bất kỳ listener nào đọc prefs trước dòng gán cũ → NPE.
+    // getSharedPreferences() là API của Context, KHÔNG phụ thuộc super.onCreate(),
+    // nên an toàn tuyệt đối khi gọi trước.
     // ============================================================
-    if (prefs == null) {
-        prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-    }
+    prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
     super.onCreate(savedInstanceState);
 
-    if (prefs == null) {
-        // Nếu vẫn null (trường hợp cực hiếm), khởi tạo lại để tránh crash
-        prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-    }
-
-    // [FIX] Bỏ hẳn finishAndRemoveTask()+recreate() ...
-    if (prefs.getBoolean("appicon_kill_recents", false)) {
-        Intent it = getIntent();
-        if (it != null) it.addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-    }
+    // [FIX] Bỏ hẳn finishAndRemoveTask()+recreate() — gọi recreate() sau khi đã
+// finish chính Activity là hành vi không xác định, và vì Task mới luôn có
+// Intent KHÔNG kèm cờ EXCLUDE_FROM_RECENTS, nó lặp lại điều kiện này ở lần
+// mở kế tiếp -> tự kill app ngay khi vừa mở, vĩnh viễn không vào được UI.
+// Việc "ẩn khỏi Recents" giờ chỉ set cờ trên Intent hiện tại (rẻ, an toàn),
+// không finish/recreate gì cả — task vẫn tiếp tục chạy setContentView() bình thường.
+if (prefs.getBoolean("appicon_kill_recents", false)) {
+    Intent it = getIntent();
+    if (it != null) it.addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+}
 
     // [FIX LỖI ICON APP BẤM VÀO CRASH] Không đọc bất kỳ prefs.getString/getBoolean
     // nào TRƯỚC khi setContentView(). Toàn bộ logic phụ thuộc prefs (appicon slot,
