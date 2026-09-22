@@ -57,8 +57,13 @@ private android.view.View[] accHomeCorners = new android.view.View[4];
 private android.content.BroadcastReceiver accHomeReceiver;
 public static volatile boolean isConnected = false;
 private long lastHomaccHealMs = 0;
-private volatile long forceUnlockedUntilMs = 0; // [MỚI] chống flicker Lock lúc vừa mở khoá
-private KeyguardManager.KeyguardLockedStateListener keyguardLockedStateListener; // [MỚI] callback mở khoá tức thời, Zero-polling
+private long forceUnlockedUntilMs = 0; // [MỚI] chống flicker Lock lúc vừa mở khoá
+// [FIX CRASH] KHÔNG khai báo trực tiếp kiểu KeyguardManager.KeyguardLockedStateListener
+// (chỉ có từ API 30) làm FIELD — field phải phân giải kiểu ngay lúc nạp class, nên máy
+// dưới Android 11 sẽ ném ClassNotFoundException và làm sập luôn cả EdgeBarService
+// (mọi overlay biến mất). Dùng Object, ép kiểu khi thật sự dùng trong thân method.
+private Object keyguardLockedStateListenerObj;
+
 private boolean lockLayerShown = false; // true nếu đang có Bar/Corner Lock VISIBLE (để hạ nhanh khi Home hiện)
 private void refreshLockShownFlag() {
     boolean any = false;
@@ -1392,7 +1397,7 @@ refreshEventSubscription();
 // hoặc broadcast USER_PRESENT (có thể trễ nếu main thread đang bận). Zero-polling,
 // chỉ 1 lệnh IPC hệ thống lúc khoá màn hình thực sự đổi — không tốn thêm pin/RAM.
 if (Build.VERSION.SDK_INT >= 30 && km != null) {
-    keyguardLockedStateListener = locked -> {
+    KeyguardManager.KeyguardLockedStateListener listener = locked -> {
         if (locked) return; // chỉ xử lý đúng lúc VỪA MỞ KHOÁ
         forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 800;
         instantSwitchLockToHomacc();
@@ -1401,9 +1406,11 @@ if (Build.VERSION.SDK_INT >= 30 && km != null) {
         mh.postDelayed(EdgeBarService.this::updateVisibility, 60);
         mh.postDelayed(EdgeBarService.this::updateVisibility, 220);
     };
-    try { km.addKeyguardLockedStateListener(getMainExecutor(), keyguardLockedStateListener); }
+    keyguardLockedStateListenerObj = listener;
+    try { km.addKeyguardLockedStateListener(getMainExecutor(), listener); }
     catch (Exception ignored) {}
 }
+
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
 
 @Override public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -3405,9 +3412,13 @@ public boolean onUnbind(Intent intent) {
 @Override
 public void onDestroy() {
     isConnected = false;
-    if (Build.VERSION.SDK_INT >= 30 && km != null && keyguardLockedStateListener != null) {
-        try { km.removeKeyguardLockedStateListener(keyguardLockedStateListener); } catch (Exception ignored) {}
-    }
+    if (Build.VERSION.SDK_INT >= 30 && km != null && keyguardLockedStateListenerObj != null) {
+    try {
+        km.removeKeyguardLockedStateListener(
+            (KeyguardManager.KeyguardLockedStateListener) keyguardLockedStateListenerObj);
+    } catch (Exception ignored) {}
+}
+
     try { if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(prefListener); } catch (Exception ignored) {}
     try { unregisterReceiver(stateReceiver); } catch (Exception ignored) {}
     try { unregisterReceiver(ipcReceiver); } catch (Exception ignored) {}
