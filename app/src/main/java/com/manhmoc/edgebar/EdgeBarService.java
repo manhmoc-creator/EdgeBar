@@ -58,6 +58,7 @@ private android.content.BroadcastReceiver accHomeReceiver;
 public static volatile boolean isConnected = false;
 private long lastHomaccHealMs = 0;
 private volatile long forceUnlockedUntilMs = 0; // [MỚI] chống flicker Lock lúc vừa mở khoá
+private KeyguardManager.KeyguardLockedStateListener keyguardLockedStateListener; // [MỚI] callback mở khoá tức thời, Zero-polling
 private boolean lockLayerShown = false; // true nếu đang có Bar/Corner Lock VISIBLE (để hạ nhanh khi Home hiện)
 private void refreshLockShownFlag() {
     boolean any = false;
@@ -1385,6 +1386,24 @@ try {
 refreshFingerprintRegistration();
 lastAppliedEventMask = -1;
 refreshEventSubscription();
+
+// [MỚI] Callback CHÍNH XÁC lúc keyguard đổi trạng thái (API 30+) — thay vì chờ
+// AccessibilityEvent (không bắn nếu launcher tái dùng cùng window sau vân tay)
+// hoặc broadcast USER_PRESENT (có thể trễ nếu main thread đang bận). Zero-polling,
+// chỉ 1 lệnh IPC hệ thống lúc khoá màn hình thực sự đổi — không tốn thêm pin/RAM.
+if (Build.VERSION.SDK_INT >= 30 && km != null) {
+    keyguardLockedStateListener = locked -> {
+        if (locked) return; // chỉ xử lý đúng lúc VỪA MỞ KHOÁ
+        forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 800;
+        instantSwitchLockToHomacc();
+        if (AccessibleHomeService.isRunning) drawAccessibleHome();
+        Handler mh = new Handler(android.os.Looper.getMainLooper());
+        mh.postDelayed(EdgeBarService.this::updateVisibility, 60);
+        mh.postDelayed(EdgeBarService.this::updateVisibility, 220);
+    };
+    try { km.addKeyguardLockedStateListener(getMainExecutor(), keyguardLockedStateListener); }
+    catch (Exception ignored) {}
+}
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
 
 @Override public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -3386,6 +3405,9 @@ public boolean onUnbind(Intent intent) {
 @Override
 public void onDestroy() {
     isConnected = false;
+    if (Build.VERSION.SDK_INT >= 30 && km != null && keyguardLockedStateListener != null) {
+        try { km.removeKeyguardLockedStateListener(keyguardLockedStateListener); } catch (Exception ignored) {}
+    }
     try { if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(prefListener); } catch (Exception ignored) {}
     try { unregisterReceiver(stateReceiver); } catch (Exception ignored) {}
     try { unregisterReceiver(ipcReceiver); } catch (Exception ignored) {}
