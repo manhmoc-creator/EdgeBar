@@ -312,26 +312,22 @@ private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, 
      *             vì user yêu cầu KHÔNG đổi màu icon bong bóng chat.
      * Zero-RAM: buildNeonGradientIcon chỉ tạo 2 Bitmap tạm, recycle ngay;
      * Bitmap neon gắn trực tiếp vào ImageView nên không cache thêm. */
-    private void applyIconToImageView(ImageView iv, Drawable d, int iconSize, boolean isApp, boolean neonPanel) {
+        private void applyIconToImageView(ImageView iv, Drawable d, int iconSize, boolean isApp, boolean neonPanel) {
     if (d == null) return;
     if (isApp) {
-        // Icon App: giữ màu gốc, cho nổi trên nền xám
         iv.setImageDrawable(d);
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
         iv.setPadding(0, 0, 0, 0);
     } else {
-        // [ĐỔI] Action/Shortcut System/Utility/Trigger: BỎ neon — icon tint trắng xám
-        // #E0E0E0 giống hệt bộ Settings Android 11 (Wi-Fi, Bluetooth, Data...).
-        // neonPanel giờ chỉ là flag giữ API, không còn dùng để bật neon nữa.
-        } else {
-    d = d.mutate();
-    // [FIX QS] #E8EAED = xám-trắng giống icon Quick Settings Android (không trắng hẳn)
-    d.setTint(0xFFE8EAED);
-    iv.setImageDrawable(d);
-    iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-    int pad = (int) (iconSize * 0.15f);
-    iv.setPadding(pad, pad, pad, pad);
-   }
+        // [FIX QS] Action/Shortcut System/Utility/Trigger: BỎ neon
+        // Icon tint xám-trắng #E8EAED giống Quick Settings Android (không trắng hẳn)
+        d = d.mutate();
+        d.setTint(0xFFE8EAED);
+        iv.setImageDrawable(d);
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        int pad = (int) (iconSize * 0.15f);
+        iv.setPadding(pad, pad, pad, pad);
+    }
 }
 
     private String getActiveBubbleMainIconRef() {
