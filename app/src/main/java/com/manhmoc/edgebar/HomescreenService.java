@@ -2121,18 +2121,20 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     }
 
                     if (!actionName.isEmpty()) {
-                        handleAction(prefKeyBase + "_" + actionName);
-                        checkAndYieldOS(prefKeyBase + "_" + actionName);
-                        if (rippleView != null) {
-                            rippleView.popRipple();
-                            if (prefs.getBoolean(prefKeyBase + "_" + actionName + "_jump_on", true)) {
-                                float swipeMag = (float) Math.sqrt(finalDx * finalDx + finalDy * finalDy);
-                                float dirX = swipeMag > 0.001f ? finalDx / swipeMag : 0f;
-                                float dirY = swipeMag > 0.001f ? finalDy / swipeMag : 0f;
-                                rippleView.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
-                            }
-                        }
-                    }
+    handleAction(prefKeyBase + "_" + actionName);
+    checkAndYieldOS(prefKeyBase + "_" + actionName);
+    // Lấy tham chiếu cục bộ tránh NPE khi animation ngầm set rippleView = null
+    GestureRippleView currentRipple = rippleView;
+    if (currentRipple != null) {
+        currentRipple.popRipple();
+        if (prefs.getBoolean(prefKeyBase + "_" + actionName + "_jump_on", true)) {
+            float swipeMag = (float) Math.sqrt(finalDx * finalDx + finalDy * finalDy);
+            float dirX = swipeMag > 0.001f ? finalDx / swipeMag : 0f;
+            float dirY = swipeMag > 0.001f ? finalDy / swipeMag : 0f;
+            currentRipple.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
+        }
+    }
+}
                     return true;
             }
             return true;

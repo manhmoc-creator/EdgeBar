@@ -95,6 +95,7 @@ private boolean fpRegistered = false;
     private WindowManager wm;
     private View[] bars = new View[12];
     private View[] corners = new View[4];
+    private volatile boolean isDestroyed = false;
     private FlashView fV;
     private GestureRippleView rippleView;
     // [MỚI] Chỉ báo ghi âm (chấm đỏ + mm:ss)
@@ -3387,15 +3388,13 @@ public boolean onUnbind(Intent intent) {
     stopSelf();
     return super.onUnbind(intent);
 }
-// Thêm biến này vào đầu class EdgeBarService (cùng cấp với các biến khác)
-private volatile boolean isDestroyed = false;
 
 @Override
 public void onDestroy() {
     isDestroyed = true; // Đánh dấu service đã bị hủy
     isConnected = false;
     
-    // ĐÃ XÓA: Không còn sử dụng keyguardHelper30 để tránh ClassNotFoundException trên Android < 11
+    // ĐÃ XÓA: Không còn sử dụng keyguardHelper30 để tránh ClassNotFoundException
     
     try { if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(prefListener); } catch (Exception ignored) {}
     try { unregisterReceiver(stateReceiver); } catch (Exception ignored) {}
