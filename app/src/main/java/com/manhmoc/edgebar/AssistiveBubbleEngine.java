@@ -319,15 +319,15 @@ private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, 
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
         iv.setPadding(0, 0, 0, 0);
     } else {
-        // [FIX QS] Action/Shortcut System/Utility/Trigger: BỎ neon
-        // Icon tint xám-trắng #E8EAED giống Quick Settings Android (không trắng hẳn)
-        d = d.mutate();
-        d.setTint(0xFFE8EAED);
-        iv.setImageDrawable(d);
-        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        int pad = (int) (iconSize * 0.15f);
-        iv.setPadding(pad, pad, pad, pad);
-    }
+    // [FIX QS] Action/Shortcut: tint xám trung tính — đậm hơn để nhìn rõ xám
+    // trên nền #3A3A3A, không còn cảm giác "trắng hẳn" như #E8EAED
+    d = d.mutate();
+    d.setTint(0xFFB8BCC4);        // ← XÁM TRO rõ rệt, giống QS thật
+    iv.setImageDrawable(d);
+    iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+    int pad = (int) (iconSize * 0.15f);
+    iv.setPadding(pad, pad, pad, pad);
+   }
 }
 
     private String getActiveBubbleMainIconRef() {

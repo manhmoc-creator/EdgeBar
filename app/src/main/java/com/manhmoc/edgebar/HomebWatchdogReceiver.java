@@ -17,8 +17,18 @@ public class HomebWatchdogReceiver extends BroadcastReceiver {
         if (p.getBoolean("edgebar_permanently_stopped", false)) return; // [MỚI] user đã bấm Dừng vĩnh viễn
         if (isAccEnabled(c)) return; // Accessibility đang bật -> không cần Homeb tự động
 
-               // [MỚI] Đang trong chế độ Blacklist-Lock → KHÔNG bật Homeb (sẽ đè app Blacklist)
-        if (p.getBoolean("blacklist_lock_active", false)) return;
+                       // [MỚI] Đang trong chế độ Blacklist-Lock → KHÔNG bật Homeb (sẽ đè app Blacklist)
+        // [FIX SELF-HEAL] Nhưng nếu Watchdog thật sự đã chết (>5s) thì cờ bị kẹt →
+        // tự dọn để Homeb được phép bật lại (nguyên nhân chính khiến bar/corner
+        // không hiện trên MIUI sau khi MIUI kill tiến trình Watchdog).
+        if (p.getBoolean("blacklist_lock_active", false)) {
+            boolean reallyActive = BlacklistLockWatchdogService.isRunning
+                || System.currentTimeMillis() - p.getLong("blacklist_lock_start_ms", 0) < 5000;
+            if (reallyActive) return;
+            p.edit().putBoolean("blacklist_lock_active", false)
+                .remove("blacklist_lock_pkg").remove("blacklist_lock_start_ms").apply();
+            try { c.stopService(new Intent(c, LockEbService.class)); } catch (Exception ignored) {}
+        }
 
         // Accessibility TẮT -> Homacc không thể hoạt động -> dừng hẳn để tiết kiệm RAM/pin
         if (AccessibleHomeService.isRunning) {

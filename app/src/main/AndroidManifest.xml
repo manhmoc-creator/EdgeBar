@@ -159,6 +159,16 @@ android:exported="true">
 </intent-filter>
 </service>
 <service
+    android:name=".QsOpenAppTile"
+    android:label="Mở Edge Bar"
+    android:icon="@android:drawable/stat_sys_warning"
+    android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.service.quicksettings.action.QS_TILE" />
+    </intent-filter>
+</service>
+<service
             android:name=".EdgeBarNotificationListener"
             android:label="Edge Bar Media Access"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"

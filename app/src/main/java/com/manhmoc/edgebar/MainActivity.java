@@ -622,6 +622,26 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     }
     @Override protected void onResume() {
         super.onResume();
+      // [MỚI] Tự dọn cờ Blacklist-Lock nếu bị kẹt (MIUI hay giết tiến trình Watchdog giữa chừng)
+if (prefs.getBoolean("blacklist_lock_active", false)
+        && !BlacklistLockWatchdogService.isRunning
+        && System.currentTimeMillis() - prefs.getLong("blacklist_lock_start_ms", 0) > 8000) {
+    prefs.edit().putBoolean("blacklist_lock_active", false)
+        .remove("blacklist_lock_pkg").remove("blacklist_lock_start_ms").apply();
+    try { stopService(new Intent(this, LockEbService.class)); } catch (Exception ignored) {}
+    // Trả lại Trợ năng nếu đang bị treo tắt
+    String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
+    String cur = android.provider.Settings.Secure.getString(getContentResolver(),
+        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+    if (cur == null) cur = "";
+    if (!cur.contains(mySvc)) {
+        android.provider.Settings.Secure.putString(getContentResolver(),
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+            cur.isEmpty() ? mySvc : cur + ":" + mySvc);
+        android.provider.Settings.Secure.putString(getContentResolver(),
+            android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
+    }
+}
 
                 // [FIX] Xoá mọi notification không phải Foreground Service (FGS) của
         // accessibility — tránh launcher tự chèn entry "Thông báo" vào menu
@@ -3123,11 +3143,15 @@ private void redrawFrontierBody(LinearLayout body) {
 // nếu service đã sống sẵn (do Morse hoặc Homeb thật đang bật) thì không làm
 // gì thêm, tránh gọi startForegroundService() thừa (mỗi lần gọi = 1 IPC tốn pin).
 private void ensureHomeServiceForPreview() {
-    if (!HomescreenService.isRunning) {
-        Intent i = new Intent(this, HomescreenService.class);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
-    }
+    Intent i = new Intent(this, HomescreenService.class);
+    try { if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i); }
+    catch (Exception ignored) {}
+    // [MỚI] Ép service tự vẽ lại ngay — phòng trường hợp cache isRunning bị lệch
+    // do tiến trình cũ bị MIUI kill mà chưa kịp cập nhật cờ static.
+    new Handler(android.os.Looper.getMainLooper()).postDelayed(() ->
+        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE")), 300);
 }
+
     // [TỐI ƯU PIXEL 2XL] Không gian lưu Rule động cho Pack (Hiển thị 2 cột, 2 data pack 1 hàng)
     private void openPackRuleSpace(String appliedItemKey, int tabState) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
@@ -7991,64 +8015,71 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
     showIconPickerDialog(key, () -> syncAppShortcutLabels());
 });
 
-    CheckBox rb = new CheckBox(this);
-    rb.setText(T("Tap app icon = run this action (long-press shows \"Open Edge Bar\")",
-                 "Chạm 1 lần icon app = chạy hành động này (giữ icon sẽ có \"Mở Edge Bar\")"));
-    rb.setTextColor(Color.parseColor("#9AA0A6"));
-    rb.setTextSize(12f);
-    rb.setChecked(shortcutId.equals(prefs.getString("appicon_tap_override_id", "")));
-    LinearLayout.LayoutParams rbLp = new LinearLayout.LayoutParams(-2, -2);
-    rbLp.setMargins(0, 6, 0, 0);
-    rb.setLayoutParams(rbLp);
-    tapRadios[slotIdx] = rb;
-            rb.setOnCheckedChangeListener((btn, checked) -> {
-        if (checked) {
-            if (chosenAct[0].equals("NONE")) {
-                Toast.makeText(this, T("Pick an action first!", "Hãy chọn hành động trước!"), Toast.LENGTH_SHORT).show();
-                btn.setChecked(false);
-                return;
+    // [MỚI] Chỉ Slot 1 & Slot 2 được phép làm "1 chạm = hành động" — Slot 3/4
+    // không có checkbox này (tapRadios[slotIdx] giữ nguyên null, đã null-safe
+    // ở vòng lặp tắt-bớt-nút-khác nên không cần sửa gì thêm chỗ đó).
+    if (slotNum <= 2) {
+        CheckBox rb = new CheckBox(this);
+        rb.setText(T("Tap app icon = run this action (long-press shows \"Open Edge Bar\")",
+                     "Chạm 1 lần icon app = chạy hành động này (giữ icon sẽ có \"Mở Edge Bar\")"));
+        rb.setTextColor(Color.parseColor("#9AA0A6"));
+        rb.setTextSize(12f);
+        rb.setChecked(shortcutId.equals(prefs.getString("appicon_tap_override_id", "")));
+        LinearLayout.LayoutParams rbLp = new LinearLayout.LayoutParams(-2, -2);
+        rbLp.setMargins(0, 6, 0, 0);
+        rb.setLayoutParams(rbLp);
+        tapRadios[slotIdx] = rb;
+        rb.setOnCheckedChangeListener((btn, checked) -> {
+            if (checked) {
+                if (chosenAct[0].equals("NONE")) {
+                    Toast.makeText(this, T("Pick an action first!", "Hãy chọn hành động trước!"), Toast.LENGTH_SHORT).show();
+                    btn.setChecked(false);
+                    return;
+                }
+                for (CheckBox other : tapRadios)
+                    if (other != null && other != btn && other.isChecked()) other.setChecked(false);
+                prefs.edit()
+                    .putString("appicon_tap_override_id", shortcutId)
+                    .putString("appicon_tap_saved_act", chosenAct[0])
+                    .putString("appicon_tap_saved_pkg", chosenPkg[0])
+                    .putString("appicon_tap_saved_scId", chosenScId[0])
+                    .putString("appicon_tap_saved_icon", prefs.getString(px + "icon", ""))
+                    .putString(px + "act", "OPEN_APP_UI")
+                    .remove(px + "launch_pkg")
+                    .remove(px + "shortcut_id")
+                    .remove(px + "icon")
+                    .apply();
+                chosenAct[0] = "OPEN_APP_UI"; chosenPkg[0] = ""; chosenScId[0] = "";
+                refreshHolder[0].run();
+            } else if (shortcutId.equals(prefs.getString("appicon_tap_override_id", ""))) {
+                String savedAct = prefs.getString("appicon_tap_saved_act", "NONE");
+                String savedPkg = prefs.getString("appicon_tap_saved_pkg", "");
+                String savedScId = prefs.getString("appicon_tap_saved_scId", "");
+                String savedIcon = prefs.getString("appicon_tap_saved_icon", "");
+                prefs.edit()
+                    .remove("appicon_tap_override_id")
+                    .remove("appicon_tap_saved_act")
+                    .remove("appicon_tap_saved_pkg")
+                    .remove("appicon_tap_saved_scId")
+                    .remove("appicon_tap_saved_icon")
+                    .putString(px + "act", savedAct)
+                    .putString(px + "launch_pkg", savedPkg)
+                    .putString(px + "shortcut_id", savedScId)
+                    .putString(px + "icon", savedIcon)
+                    .remove(px + "open_icon")
+                    .apply();
+                chosenAct[0] = savedAct; chosenPkg[0] = savedPkg; chosenScId[0] = savedScId;
+                refreshHolder[0].run();
             }
-            for (CheckBox other : tapRadios)
-                if (other != null && other != btn && other.isChecked()) other.setChecked(false);
-            // Backup CẢ action + icon gốc
-            prefs.edit()
-                .putString("appicon_tap_override_id", shortcutId)
-                .putString("appicon_tap_saved_act", chosenAct[0])
-                .putString("appicon_tap_saved_pkg", chosenPkg[0])
-                .putString("appicon_tap_saved_scId", chosenScId[0])
-                .putString("appicon_tap_saved_icon", prefs.getString(px + "icon", ""))
-                .putString(px + "act", "OPEN_APP_UI")
-                .remove(px + "launch_pkg")
-                .remove(px + "shortcut_id")
-                .remove(px + "icon")     // icon gốc đã backup, xoá để slot dùng icon mới
-                .apply();
-            chosenAct[0] = "OPEN_APP_UI"; chosenPkg[0] = ""; chosenScId[0] = "";
-            refreshHolder[0].run();
-        } else if (shortcutId.equals(prefs.getString("appicon_tap_override_id", ""))) {
-            // Restore cả action + icon gốc
-            String savedAct = prefs.getString("appicon_tap_saved_act", "NONE");
-            String savedPkg = prefs.getString("appicon_tap_saved_pkg", "");
-            String savedScId = prefs.getString("appicon_tap_saved_scId", "");
-            String savedIcon = prefs.getString("appicon_tap_saved_icon", "");
-            prefs.edit()
-                .remove("appicon_tap_override_id")
-                .remove("appicon_tap_saved_act")
-                .remove("appicon_tap_saved_pkg")
-                .remove("appicon_tap_saved_scId")
-                .remove("appicon_tap_saved_icon")
-                .putString(px + "act", savedAct)
-                .putString(px + "launch_pkg", savedPkg)
-                .putString(px + "shortcut_id", savedScId)
-                .putString(px + "icon", savedIcon)
-                .remove(px + "open_icon")   // dọn icon "Mở Edge Bar" cũ
-                .apply();
-            chosenAct[0] = savedAct; chosenPkg[0] = savedPkg; chosenScId[0] = savedScId;
-            refreshHolder[0].run();
-        }
-        syncAppShortcutLabels();
-    });
-
-    infoCol.addView(rb);
+            syncAppShortcutLabels();
+        });
+        infoCol.addView(rb);
+    } else if (shortcutId.equals(prefs.getString("appicon_tap_override_id", ""))) {
+        // [DỌN RÁC] Nếu trước đó Slot 3/4 lỡ đang giữ override (dữ liệu cũ) -> tự trả về bình thường
+        prefs.edit().remove("appicon_tap_override_id")
+            .remove("appicon_tap_saved_act").remove("appicon_tap_saved_pkg")
+            .remove("appicon_tap_saved_scId").remove("appicon_tap_saved_icon").apply();
+    }
 
     View.OnClickListener openPicker = v -> {
         Dialog pd = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);

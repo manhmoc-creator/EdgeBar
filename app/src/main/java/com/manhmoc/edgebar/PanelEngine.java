@@ -1082,32 +1082,29 @@ private Path buildSquirclePath(int size) {
     return path;
 }
 private Path buildPebblePath(int size) {
-    // [FIX PEBBLE GẦY] Bỏ hẳn 6 điểm neo cũ — chúng tạo "eo" sâu khiến hình bị
-    // bóp gầy khi normalize. Dùng công thức bán kính biến thiên quanh tâm:
-    //   r(θ) = R × (1 + a·sin(3θ) + b·cos(5θ))
-    // → hình gần tròn đều, hơi lồi/lõm rất nhẹ ở vài cung, giống hệt dáng
-    // "giọt nước mềm béo" của hình tham chiếu. Deform chỉ ±7% nên bounding box
-    // vẫn gần vuông → normalizeToFullSize() không kéo méo nữa.
+    // [FIX 100%] Chuyển NGUYÊN VẸN 6 lệnh quadTo() từ SVG path gốc (viewBox 480x480).
+    // Đây là path "PEBBLE" đúng như bản HTML tham chiếu — KHÔNG còn tự tính
+    // sin/cos 3-5 múi như bản cũ (nguồn gốc khiến shape bị bóp gầy + lệch dáng).
+    //
+    // Tối ưu Pixel 2XL:
+    //  • Chỉ 6 quadTo → 13 điểm, nhẹ nhất trong toàn bộ shape pool
+    //    (Squircle: 73 điểm, Rough: ~100 điểm, Pentacle: 12 điểm)
+    //  • Path được cache 1 lần trong shapePathCache[shape=2][size] → Zero-RAM
+    //    sau lần vẽ đầu tiên, không cấp phát lại mỗi frame
+    //  • Không loop, không Math.sin/cos → 0 CPU khi khởi tạo
     Path path = new Path();
-    float cx = size / 2f, cy = size / 2f;
-    float baseR = size * 0.5f;
-    // [YÊU CẦU: thấp hơn 1 tẹo] Hệ số nén dọc nhẹ — pebble hơi dẹt (wider than tall),
-    // giống tỉ lệ hình tham chiếu. Các shape khác vẫn normalize full khung nên
-    // icon app bên trong vẫn bằng nhau tuyệt đối sau bước scale.
-    final float RY_RATIO = 0.95f;
-    int steps = 120;
-    for (int i = 0; i <= steps; i++) {
-        double t = (Math.PI * 2 * i) / steps;
-        double deform = 1.0
-            + 0.06 * Math.sin(3 * t)   // bất đối xứng mềm — 3 múi
-            + 0.03 * Math.cos(5 * t);  // chi tiết nhỏ — 5 múi
-        float x = cx + (float) (baseR * deform * Math.cos(t));
-        float y = cy + (float) (baseR * deform * Math.sin(t) * RY_RATIO);
-        if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
-    }
+    float s = size / 480f;   // quy đổi đúng tỉ lệ viewBox SVG gốc
+    path.moveTo(413f * s, 339f * s);
+    path.quadTo(354f * s,   438f * s, 238f * s,   441f * s);
+    path.quadTo(122f * s,   444f * s, 82.5f * s,  342f * s);
+    path.quadTo(43f * s,    240f * s, 86f * s,    144f * s);
+    path.quadTo(129f * s,   48f * s,  234f * s,   58.5f * s);
+    path.quadTo(339f * s,   69f * s,  405.5f * s, 154.5f * s);
+    path.quadTo(472f * s,   240f * s, 413f * s,   339f * s);
     path.close();
-    // Vẫn normalize để lấp đầy khung — vì deform nhỏ nên scale X/Y gần bằng nhau,
-    // không còn kéo gầy như thuật toán 6-điểm-neo cũ.
+    // Vẫn normalizeToFullSize để Pebble lấp đầy khung size×size đồng bộ với
+    // 5 shape khác (Circle/Squircle/Rough/Pentacle/System) — đảm bảo icon
+    // bên trong luôn có cùng kích thước hiển thị tuyệt đối.
     return normalizeToFullSize(path, size);
 }
 
@@ -1180,9 +1177,9 @@ private Path buildRoughPath(int size) {
         int backdropColor = Color.WHITE;
 
         // [MỚI] useNeon=true cho Action/Shortcut icon → dải Neon gradient giống App Shortcut.
-        // [FIX QS] useNeon = false → icon dùng tint xám (xem dòng cuối hàm này)
+        // [FIX] useNeon = TRUE → trả lại dải Neon gradient như 4 slot shortcut ngoài Home
 Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null,
-    effectiveShape, iconSize, backdropColor, true, false);
+    effectiveShape, iconSize, backdropColor, true, true);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageBitmap(styled);

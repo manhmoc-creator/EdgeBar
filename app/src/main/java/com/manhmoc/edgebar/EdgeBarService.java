@@ -1255,9 +1255,19 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         isConnected = true;
         km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-        prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false)
-            .putBoolean("preview_home", false).apply();
+                prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+        // [FIX MIUI RECONNECT] Trước đây xoá sạch preview flags khi connect lại →
+        // nếu user đang đứng trong Frontier space và MIUI bất ngờ kill + reconnect
+        // Trợ năng, preview mất ngay lập tức, bar/corner biến mất trước mắt user.
+        // Giờ chỉ xoá nếu process trước đó đã chết hẳn (uptime < 3s = process mới
+        // tinh), còn nếu là reconnect nhanh (uptime > 3s) thì GIỮ NGUYÊN preview
+        // flags để user không bị giật hình. Zero chi phí — chỉ 1 phép so sánh long.
+        long uptimeMs = android.os.SystemClock.elapsedRealtime();
+        boolean freshProcess = uptimeMs < 3000;
+        if (freshProcess) {
+            prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false)
+                .putBoolean("preview_home", false).apply();
+        }
 
         // =========================================================
         // [MỚI] ĐẨY ICON EB LACCK LÊN STATUS BAR

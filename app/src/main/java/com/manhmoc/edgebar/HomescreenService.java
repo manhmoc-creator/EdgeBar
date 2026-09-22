@@ -1231,14 +1231,23 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
      *  thấp thoáng hiện lại trên Home). Zero RAM thêm: chỉ lặp lại View đã có sẵn.
      */
     private void updateVisibility() {
-        if (panelEngine != null) panelEngine.rebuildAll();
-        // [MỚI] Đang trong chế độ Blacklist-Lock → không vẽ bar/corner Homeb
-        // lên trên app Blacklist đang chạy full-screen.
-        if (prefs.getBoolean("blacklist_lock_active", false)) {
+    if (panelEngine != null) panelEngine.rebuildAll();
+    // [MỚI] Đang trong chế độ Blacklist-Lock → không vẽ bar/corner Homeb
+    // lên trên app Blacklist đang chạy full-screen.
+    // [FIX SELF-HEAL] Cờ bị kẹt (Watchdog bị MIUI kill) → tự dọn thay vì ẩn
+    // bar/corner mãi mãi. Đây là lớp bảo vệ cuối cùng cho Homeb nếu user không
+    // mở app EdgeBar (VÁ 1 không kịp chạy).
+    if (prefs.getBoolean("blacklist_lock_active", false)) {
+        boolean reallyActive = BlacklistLockWatchdogService.isRunning
+            || System.currentTimeMillis() - prefs.getLong("blacklist_lock_start_ms", 0) < 5000;
+        if (reallyActive) {
             for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
             for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
             return;
         }
+        prefs.edit().putBoolean("blacklist_lock_active", false)
+            .remove("blacklist_lock_pkg").remove("blacklist_lock_start_ms").apply();
+    }
 
         boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
@@ -1250,7 +1259,9 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         boolean accHomeRunning = AccessibleHomeService.isRunning && isAccEnabled();
         boolean oldHomeEnabled = HomescreenService.isRunning && prefs.getBoolean("shortcut_home_on", false);
         boolean previewHomeOn = prefs.getBoolean("preview_home", false);
-        boolean shouldRenderOldHome = isUnlocked && !hideNormal && !accHomeRunning && (oldHomeEnabled || previewHomeOn);
+        // [FIX] Cho phép xem trước Homeb ngay cả khi Homacc đang thật sự chạy song song —
+// preview chỉ để user nhìn/chỉnh, không nên bị luật "1 trong 2 engine" chặn.
+boolean shouldRenderOldHome = isUnlocked && !hideNormal && (previewHomeOn || (!accHomeRunning && oldHomeEnabled));
 
         if (accHomeRunning) {
             for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
