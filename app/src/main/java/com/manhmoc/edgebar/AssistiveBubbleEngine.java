@@ -313,35 +313,24 @@ private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, 
      * Zero-RAM: buildNeonGradientIcon chỉ tạo 2 Bitmap tạm, recycle ngay;
      * Bitmap neon gắn trực tiếp vào ImageView nên không cache thêm. */
     private void applyIconToImageView(ImageView iv, Drawable d, int iconSize, boolean isApp, boolean neonPanel) {
-        if (d == null) return;
-        if (isApp) {
-            iv.setImageDrawable(d);
-            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            iv.setPadding(0, 0, 0, 0);
-        } else if (neonPanel) {
-            // [MỚI] Neon gradient trên nền trong suốt (nền node giữ nguyên #333333).
-            Bitmap neon = PanelEngine.buildNeonGradientIcon(d, iconSize, 0.85f);
-            if (neon != null) {
-                iv.setImageBitmap(neon);
-                iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                iv.setPadding(0, 0, 0, 0);
-            } else {
-                // fallback: giữ đường cũ nếu vì lý do gì neon tạo thất bại
-                d = d.mutate(); d.setTint(Color.WHITE);
-                iv.setImageDrawable(d);
-                iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                int pad = (int) (iconSize * 0.15f);
-                iv.setPadding(pad, pad, pad, pad);
-            }
-        } else {
-            d = d.mutate();
-            d.setTint(Color.WHITE);
-            iv.setImageDrawable(d);
-            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            int pad = (int) (iconSize * 0.15f);
-            iv.setPadding(pad, pad, pad, pad);
-        }
+    if (d == null) return;
+    if (isApp) {
+        // Icon App: giữ màu gốc, cho nổi trên nền xám
+        iv.setImageDrawable(d);
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        iv.setPadding(0, 0, 0, 0);
+    } else {
+        // [ĐỔI] Action/Shortcut System/Utility/Trigger: BỎ neon — icon tint trắng xám
+        // #E0E0E0 giống hệt bộ Settings Android 11 (Wi-Fi, Bluetooth, Data...).
+        // neonPanel giờ chỉ là flag giữ API, không còn dùng để bật neon nữa.
+        d = d.mutate();
+        d.setTint(0xFFE0E0E0);
+        iv.setImageDrawable(d);
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        int pad = (int) (iconSize * 0.15f);
+        iv.setPadding(pad, pad, pad, pad);
     }
+}
 
     private String getActiveBubbleMainIconRef() {
     if (isCircleModeActive()) {
@@ -935,8 +924,9 @@ card.setBackground(bg);
         // [MỚI] Nền TRẮNG cho node chưa-chọn (khớp App Shortcut). Node đang chọn giữ
         // highlight xanh #8AB4F8 để báo trạng thái "đang chờ đổi chỗ".
         boxBg.setColor(selectedMainIdx != null && selectedMainIdx == idx
-            ? Color.parseColor("#8AB4F8")
-            : Color.argb(nodeAlpha, 255, 255, 255));
+    ? Color.parseColor("#8AB4F8")
+    : Color.argb(nodeAlpha, 0x2E, 0x2E, 0x2E));
+
         iconBox.setBackground(boxBg);
 
         ImageView iv = new ImageView(ctx);
@@ -1037,8 +1027,9 @@ tv.setTextSize(12f);
         boxBg.setCornerRadius(100f); 
         // [MỚI] Nền TRẮNG cho node chưa-chọn (khớp App Shortcut + đồng bộ với buildMainButton).
         boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx
-            ? Color.parseColor("#8AB4F8")
-            : Color.argb(nodeAlpha, 255, 255, 255));
+    ? Color.parseColor("#8AB4F8")
+    : Color.argb(nodeAlpha, 0x2E, 0x2E, 0x2E));
+
         iconBox.setBackground(boxBg);
 
                 if (!ref.isEmpty()) {
@@ -1871,19 +1862,15 @@ for (String[] item : allItems) {
 
 private Bitmap drawableToNodeBitmap(Drawable d, int size, boolean isApp) {
     if (d == null) return null;
-    // [MỚI] Với icon Action/Shortcut trên Vòng đạn → dùng dải Neon gradient
-    // giống Panel/Bubble Panel và 4 shortcut slot ngoài Home. Icon App giữ nguyên.
-    if (!isApp) {
-        Bitmap neon = PanelEngine.buildNeonGradientIcon(d, size, 0.85f);
-        if (neon != null) return neon;
-        // fallback nếu neon thất bại
-    }
+    // [ĐỔI] BỎ neon gradient — quay về style Settings Android 11: icon trắng xám
+    // (#E0E0E0) trên nền xám đậm. Chỉ tint nhẹ, không vẽ gradient.
     Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
     Canvas c = new Canvas(bmp);
     Drawable dm = d.mutate();
-    if (!isApp) dm.setTint(Color.WHITE);
+    if (!isApp) dm.setTint(0xFFE0E0E0);   // ← trắng xám nhạt, không trắng tinh
     int pad = Math.round(size * 0.115f);
     dm.setBounds(pad, pad, size - pad, size - pad);
+    dm.setFilterBitmap(true);   // [FIX RĂNG CƯA] giữ luôn
     dm.draw(c);
     return bmp;
 }
@@ -1933,11 +1920,12 @@ private Bitmap drawableToNodeBitmap(Drawable d, int size, boolean isApp) {
 
             boolean selected = selectedNodeIdx != null && selectedNodeIdx == i;
             // [MỚI] Nền TRẮNG cho node chưa-chọn — đồng bộ với Panel + Bubble Panel.
-            pNodeBg.setColor(selected ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 255, 255, 255));
+            pNodeBg.setColor(selected ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 0x2E, 0x2E, 0x2E));
             canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeBg);
             // [MỚI] Trên nền trắng, viền xám nhạt mất tương phản → dùng viền đậm
             // (tone xám-đen) cho node chưa-chọn, viền trắng cho node đang chọn.
-            pNodeStroke.setColor(selected ? Color.WHITE : Color.argb(150, 100, 100, 110));
+            pNodeStroke.setColor(selected ? Color.WHITE : Color.argb(90, 0x55, 0x55, 0x55));
+
 
             pNodeStroke.setStrokeWidth(selected ? 5f : 3f);
             canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeStroke);

@@ -165,46 +165,50 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
     // đảm bảo mọi icon có cùng "sải cánh" thị giác dù file gốc rỗng nhiều/ít khác nhau.
     // KHÔNG tự set màu — nơi gọi tự tint trước khi truyền Drawable vào đây.
     static Bitmap normalizeIconBitmap(Drawable d, int targetSize, float contentScale) {
-        if (d == null) return null;
-        try {
-            int srcSize = targetSize * 5;
-            Bitmap raw = Bitmap.createBitmap(srcSize, srcSize, Bitmap.Config.ARGB_8888);
-            Canvas rawCanvas = new Canvas(raw);
-            Drawable dm = d.mutate();
-            dm.setBounds(0, 0, srcSize, srcSize);
-            dm.draw(rawCanvas);
+    if (d == null) return null;
+    try {
+        int srcSize = targetSize * 3;   // ← ĐỔI 5 → 3: ít downsample gắt hơn, mượt hơn
+        Bitmap raw = Bitmap.createBitmap(srcSize, srcSize, Bitmap.Config.ARGB_8888);
+        Canvas rawCanvas = new Canvas(raw);
+        Drawable dm = d.mutate();
+        dm.setBounds(0, 0, srcSize, srcSize);
+        dm.draw(rawCanvas);
 
-            int left = srcSize, top = srcSize, right = 0, bottom = 0;
-            int[] pixels = new int[srcSize * srcSize];
-            raw.getPixels(pixels, 0, srcSize, 0, 0, srcSize, srcSize);
-            for (int y = 0; y < srcSize; y++) {
-                int rowBase = y * srcSize;
-                for (int x = 0; x < srcSize; x++) {
-                    if (((pixels[rowBase + x] >>> 24) & 0xFF) > 10) {
-                        if (x < left) left = x; if (x > right) right = x;
-                        if (y < top) top = y; if (y > bottom) bottom = y;
-                    }
+        int left = srcSize, top = srcSize, right = 0, bottom = 0;
+        int[] pixels = new int[srcSize * srcSize];
+        raw.getPixels(pixels, 0, srcSize, 0, 0, srcSize, srcSize);
+        for (int y = 0; y < srcSize; y++) {
+            int rowBase = y * srcSize;
+            for (int x = 0; x < srcSize; x++) {
+                if (((pixels[rowBase + x] >>> 24) & 0xFF) > 10) {
+                    if (x < left) left = x; if (x > right) right = x;
+                    if (y < top) top = y; if (y > bottom) bottom = y;
                 }
             }
-            if (right <= left || bottom <= top) { raw.recycle(); return null; }
+        }
+        if (right <= left || bottom <= top) { raw.recycle(); return null; }
 
-            Bitmap cropped = Bitmap.createBitmap(raw, left, top, right - left + 1, bottom - top + 1);
-            raw.recycle();
+        Bitmap cropped = Bitmap.createBitmap(raw, left, top, right - left + 1, bottom - top + 1);
+        raw.recycle();
 
-            Bitmap out = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888);
-            Canvas outCanvas = new Canvas(out);
-            int drawSize = Math.round(targetSize * contentScale);
-            float scale = Math.min((float) drawSize / cropped.getWidth(), (float) drawSize / cropped.getHeight());
-            int dw = Math.round(cropped.getWidth() * scale);
-            int dh = Math.round(cropped.getHeight() * scale);
-            android.graphics.Rect dst = new android.graphics.Rect((targetSize - dw) / 2, (targetSize - dh) / 2,
-                    (targetSize - dw) / 2 + dw, (targetSize - dh) / 2 + dh);
-            Paint p = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
-            outCanvas.drawBitmap(cropped, null, dst, p);
-            cropped.recycle();
-            return out;
-        } catch (Exception e) { return null; }
-    }
+        Bitmap out = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888);
+        Canvas outCanvas = new Canvas(out);
+        int drawSize = Math.round(targetSize * contentScale);
+        float scale = Math.min((float) drawSize / cropped.getWidth(), (float) drawSize / cropped.getHeight());
+        int dw = Math.round(cropped.getWidth() * scale);
+        int dh = Math.round(cropped.getHeight() * scale);
+        android.graphics.Rect dst = new android.graphics.Rect((targetSize - dw) / 2, (targetSize - dh) / 2,
+                (targetSize - dw) / 2 + dw, (targetSize - dh) / 2 + dh);
+
+        // [FIX RĂNG CƯA] Thêm DITHER (khử banding) + FILTER_BITMAP (bilinear downsample)
+        Paint p = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+        p.setDither(true);        // ← THÊM: khử dải màu liti
+        p.setFilterBitmap(true);  // ← THÊM: ép bilinear filter khi scale
+        outCanvas.drawBitmap(cropped, null, dst, p);
+        cropped.recycle();
+        return out;
+    } catch (Exception e) { return null; }
+}
         /**
      * [MỚI] Vẽ lại glyph của bất kỳ Drawable nào theo dải "Midnight Neon"
      * (Deep Blue → Purple → Neon Blue) giống hệt icon App Shortcut khi
@@ -217,29 +221,34 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
      * ngay khi thoát. Không Thread, không Handler, không prefs.
      */
     public static Bitmap buildNeonGradientIcon(Drawable icon, int size, float contentScale) {
-        if (icon == null) return null;
-        try {
-            Drawable tinted = icon.mutate();
-            tinted.setTint(Color.WHITE);
-            Bitmap normalized = normalizeIconBitmap(tinted, size, contentScale);
-            if (normalized == null) return null;
-            Bitmap glyph = normalized.copy(Bitmap.Config.ARGB_8888, true);
-            normalized.recycle();
+    if (icon == null) return null;
+    try {
+        Drawable tinted = icon.mutate();
+        tinted.setTint(Color.WHITE);
+        Bitmap normalized = normalizeIconBitmap(tinted, size, contentScale);
+        if (normalized == null) return null;
+        Bitmap glyph = normalized.copy(Bitmap.Config.ARGB_8888, true);
+        normalized.recycle();
 
-            Canvas gc = new Canvas(glyph);
-            Paint gp = new Paint(Paint.ANTI_ALIAS_FLAG);
-            float pad = size * (1f - contentScale) / 2f;
-            gp.setShader(new android.graphics.LinearGradient(
-                pad, pad, size - pad, size - pad,
-                new int[]{ 0xFF1A237E, 0xFF7B1FA2, 0xFF03A9F4 },
-                new float[]{ 0f, 0.45f, 1f },
-                android.graphics.Shader.TileMode.CLAMP));
-            gp.setXfermode(new android.graphics.PorterDuffXfermode(
-                android.graphics.PorterDuff.Mode.SRC_IN));
-            gc.drawRect(0, 0, size, size, gp);
-            return glyph;
-        } catch (Exception e) { return null; }
-    }
+        Canvas gc = new Canvas(glyph);
+        // [FIX RĂNG CƯA] Thêm FILTER_BITMAP + DITHER — đây là paint phủ gradient SRC_IN,
+        // các pixel alpha-trung-gian ở viền glyph nhận màu gradient mượt mà không bị
+        // "dải liti" ở chỗ chuyển màu Deep Blue → Purple → Neon Blue.
+        Paint gp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        gp.setFilterBitmap(true); // ← THÊM
+        gp.setDither(true);       // ← THÊM
+        float pad = size * (1f - contentScale) / 2f;
+        gp.setShader(new android.graphics.LinearGradient(
+            pad, pad, size - pad, size - pad,
+            new int[]{ 0xFF1A237E, 0xFF7B1FA2, 0xFF03A9F4 },
+            new float[]{ 0f, 0.45f, 1f },
+            android.graphics.Shader.TileMode.CLAMP));
+        gp.setXfermode(new android.graphics.PorterDuffXfermode(
+            android.graphics.PorterDuff.Mode.SRC_IN));
+        gc.drawRect(0, 0, size, size, gp);
+        return glyph;
+    } catch (Exception e) { return null; }
+}
 
     static int[] getCustomIconPool(Context ctx) {
         if (customIconPoolCache != null) return customIconPoolCache;
