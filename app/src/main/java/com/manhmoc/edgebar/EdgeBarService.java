@@ -62,8 +62,6 @@ private long forceUnlockedUntilMs = 0; // [MỚI] chống flicker Lock lúc vừ
 // (chỉ có từ API 30) làm FIELD — field phải phân giải kiểu ngay lúc nạp class, nên máy
 // dưới Android 11 sẽ ném ClassNotFoundException và làm sập luôn cả EdgeBarService
 // (mọi overlay biến mất). Dùng Object, ép kiểu khi thật sự dùng trong thân method.
-private KeyguardLockedStateHelperApi30 keyguardHelper30;
-
 
 private boolean lockLayerShown = false; // true nếu đang có Bar/Corner Lock VISIBLE (để hạ nhanh khi Home hiện)
 private void refreshLockShownFlag() {
@@ -281,55 +279,51 @@ private void doSampleIconColors(boolean isFollowUp) {
     try {
                 takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
             new AccessibilityService.TakeScreenshotCallback() {
-                                @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
-                    // [FIX TẦNG 1] Kiểm tra executor đã shutdown chưa trước khi submit.
-                    // Sau onDestroy() -> shutdownNow() thì isShutdown() = true vĩnh viễn,
-                    // nên chỉ cần 1 check là đủ, KHÔNG cần try-catch (tránh rối ngoặc).
-                    if (iconColorExecutor.isShutdown() || iconColorExecutor.isTerminated()) {
-    try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
-    isCapturingIconColorScreenshot = false;
-    return;
-}
-try {
-    iconColorExecutor.execute(() -> {
-
-                        java.util.List<Object[]> pendingTints = new java.util.ArrayList<>();
-                        try {
-                            Bitmap screenHw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
-                            if (screenHw != null) {
-                                sampleJobsInto(screenHw, lockJobs, pendingTints);
-                                sampleJobsInto(screenHw, homaccJobs, pendingTints);
-                            }
-                        } catch (Exception ignored) {
-                        } finally {
-                            try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
-                            if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
-                        }
-                        iconColorHandler.post(() -> {
-                            isCapturingIconColorScreenshot = false;
-                            for (Object[] pair : pendingTints) {
-                                IconLayerView l = (IconLayerView) pair[0];
-                                if (l.isAttachedToWindow()) l.setTint((Integer) pair[1]);
-                            }
-                        });
-                    });
-                                        if (!isFollowUp && !iconColorFollowUpPending) {
-                        iconColorFollowUpPending = true;
-                        iconColorHandler.postDelayed(() -> {
-                            iconColorFollowUpPending = false;
-                            doSampleIconColors(true);
-                        }, 400);
-                    }
-                    } catch (java.util.concurrent.RejectedExecutionException ree) {
-                        // [FIX] Race: executor đã shutdownNow() trong onDestroy() ngay
-                        // trước khi onSuccess() kịp gọi execute() — bắt riêng để KHÔNG
-                        // nuốt mất lỗi khác. Nhớ nhả HardwareBuffer tránh rò native memory.
-                        isCapturingIconColorScreenshot = false;
-                        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
-                    } catch (Exception e) {
-                        isCapturingIconColorScreenshot = false;
-                    }
+           @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
+    // Kiểm tra nếu Service đã bị hủy hoặc executor đã shutdown
+    if (isDestroyed || iconColorExecutor.isShutdown() || iconColorExecutor.isTerminated()) {
+        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+        isCapturingIconColorScreenshot = false;
+        return;
+    }
+    try {
+        iconColorExecutor.execute(() -> {
+            java.util.List<Object[]> pendingTints = new java.util.ArrayList<>();
+            try {
+                Bitmap screenHw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
+                if (screenHw != null) {
+                    sampleJobsInto(screenHw, lockJobs, pendingTints);
+                    sampleJobsInto(screenHw, homaccJobs, pendingTints);
                 }
+            } catch (Exception ignored) {
+            } finally {
+                try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+                if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
+            }
+            iconColorHandler.post(() -> {
+                isCapturingIconColorScreenshot = false;
+                for (Object[] pair : pendingTints) {
+                    IconLayerView l = (IconLayerView) pair[0];
+                    if (l.isAttachedToWindow()) l.setTint((Integer) pair[1]);
+                }
+            });
+        });
+        
+        if (!isFollowUp && !iconColorFollowUpPending) {
+            iconColorFollowUpPending = true;
+            iconColorHandler.postDelayed(() -> {
+                iconColorFollowUpPending = false;
+                doSampleIconColors(true);
+            }, 400);
+        }
+    } catch (java.util.concurrent.RejectedExecutionException ree) {
+        // Bắt riêng lỗi này để tránh crash app
+        isCapturingIconColorScreenshot = false;
+        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+    } catch (Exception e) {
+        isCapturingIconColorScreenshot = false;
+    }
+}
                 @Override public void onFailure(int errorCode) {
                     isCapturingIconColorScreenshot = false;
                     if (!isFollowUp) iconColorHandler.postDelayed(() -> doSampleIconColors(true), 2000);
@@ -1392,23 +1386,6 @@ try {
 refreshFingerprintRegistration();
 lastAppliedEventMask = -1;
 refreshEventSubscription();
-
-// [MỚI] Callback CHÍNH XÁC lúc keyguard đổi trạng thái (API 30+) — thay vì chờ
-// AccessibilityEvent (không bắn nếu launcher tái dùng cùng window sau vân tay)
-// hoặc broadcast USER_PRESENT (có thể trễ nếu main thread đang bận). Zero-polling,
-// chỉ 1 lệnh IPC hệ thống lúc khoá màn hình thực sự đổi — không tốn thêm pin/RAM.
-if (Build.VERSION.SDK_INT >= 31 && km != null) {
-    keyguardHelper30 = new KeyguardLockedStateHelperApi30();
-    keyguardHelper30.register(this, km, () -> {
-
-        forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 800;
-        instantSwitchLockToHomacc();
-        if (AccessibleHomeService.isRunning) drawAccessibleHome();
-        Handler mh = new Handler(android.os.Looper.getMainLooper());
-        mh.postDelayed(EdgeBarService.this::updateVisibility, 60);
-        mh.postDelayed(EdgeBarService.this::updateVisibility, 220);
-    });
-}
 
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
 
@@ -3199,18 +3176,20 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     }
 
                     if (!actionName.isEmpty()) {
-                        handleAction(prefKeyBase + "_" + actionName);
-                        checkAndYieldOS(prefKeyBase + "_" + actionName);
-                        if (rippleView != null) {
-                            rippleView.popRipple();
-                            if (prefs.getBoolean(prefKeyBase + "_" + actionName + "_jump_on", true)) {
-                                float swipeMag = (float) Math.sqrt(finalDx * finalDx + finalDy * finalDy);
-                                float dirX = swipeMag > 0.001f ? finalDx / swipeMag : 0f;
-                                float dirY = swipeMag > 0.001f ? finalDy / swipeMag : 0f;
-                                rippleView.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
-                            }
-                        }
-                    }
+    handleAction(prefKeyBase + "_" + actionName);
+    checkAndYieldOS(prefKeyBase + "_" + actionName);
+    // Lấy tham chiếu cục bộ để tránh bị null do animation chạy ngầm
+    GestureRippleView currentRipple = rippleView;
+    if (currentRipple != null) {
+        currentRipple.popRipple();
+        if (prefs.getBoolean(prefKeyBase + "_" + actionName + "_jump_on", true)) {
+            float swipeMag = (float) Math.sqrt(finalDx * finalDx + finalDy * finalDy);
+            float dirX = swipeMag > 0.001f ? finalDx / swipeMag : 0f;
+            float dirY = swipeMag > 0.001f ? finalDy / swipeMag : 0f;
+            currentRipple.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
+        }
+    }
+}
                     return true;
             }
             return true;
@@ -3408,13 +3387,16 @@ public boolean onUnbind(Intent intent) {
     stopSelf();
     return super.onUnbind(intent);
 }
+// Thêm biến này vào đầu class EdgeBarService (cùng cấp với các biến khác)
+private volatile boolean isDestroyed = false;
+
 @Override
 public void onDestroy() {
+    isDestroyed = true; // Đánh dấu service đã bị hủy
     isConnected = false;
-    if (Build.VERSION.SDK_INT >= 31 && km != null && keyguardHelper30 != null) {
-    keyguardHelper30.unregister(km);
-}
-
+    
+    // ĐÃ XÓA: Không còn sử dụng keyguardHelper30 để tránh ClassNotFoundException trên Android < 11
+    
     try { if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(prefListener); } catch (Exception ignored) {}
     try { unregisterReceiver(stateReceiver); } catch (Exception ignored) {}
     try { unregisterReceiver(ipcReceiver); } catch (Exception ignored) {}
@@ -3426,7 +3408,7 @@ public void onDestroy() {
     sliderPrefHandler.removeCallbacksAndMessages(null);
     iconColorHandler.removeCallbacksAndMessages(null);
     syntheticGuardHandler.removeCallbacksAndMessages(null);
-    iconColorExecutor.shutdownNow(); // tránh mỗi lần bật Trợ năng lại đẻ thêm 1 thread
+    iconColorExecutor.shutdownNow(); 
     if (recentsBlur != null) { recentsBlur.destroy(); recentsBlur = null; }
     try {
         if (fpRegistered && fpController != null && fpCallback != null)
