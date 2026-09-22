@@ -62,7 +62,8 @@ private long forceUnlockedUntilMs = 0; // [MỚI] chống flicker Lock lúc vừ
 // (chỉ có từ API 30) làm FIELD — field phải phân giải kiểu ngay lúc nạp class, nên máy
 // dưới Android 11 sẽ ném ClassNotFoundException và làm sập luôn cả EdgeBarService
 // (mọi overlay biến mất). Dùng Object, ép kiểu khi thật sự dùng trong thân method.
-private Object keyguardLockedStateListenerObj;
+private KeyguardLockedStateHelperApi30 keyguardHelper30;
+
 
 private boolean lockLayerShown = false; // true nếu đang có Bar/Corner Lock VISIBLE (để hạ nhanh khi Home hiện)
 private void refreshLockShownFlag() {
@@ -1397,18 +1398,15 @@ refreshEventSubscription();
 // hoặc broadcast USER_PRESENT (có thể trễ nếu main thread đang bận). Zero-polling,
 // chỉ 1 lệnh IPC hệ thống lúc khoá màn hình thực sự đổi — không tốn thêm pin/RAM.
 if (Build.VERSION.SDK_INT >= 30 && km != null) {
-    KeyguardManager.KeyguardLockedStateListener listener = locked -> {
-        if (locked) return; // chỉ xử lý đúng lúc VỪA MỞ KHOÁ
+    keyguardHelper30 = new KeyguardLockedStateHelperApi30();
+    keyguardHelper30.register(this, km, () -> {
         forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 800;
         instantSwitchLockToHomacc();
         if (AccessibleHomeService.isRunning) drawAccessibleHome();
         Handler mh = new Handler(android.os.Looper.getMainLooper());
         mh.postDelayed(EdgeBarService.this::updateVisibility, 60);
         mh.postDelayed(EdgeBarService.this::updateVisibility, 220);
-    };
-    keyguardLockedStateListenerObj = listener;
-    try { km.addKeyguardLockedStateListener(getMainExecutor(), listener); }
-    catch (Exception ignored) {}
+    });
 }
 
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
@@ -3412,11 +3410,8 @@ public boolean onUnbind(Intent intent) {
 @Override
 public void onDestroy() {
     isConnected = false;
-    if (Build.VERSION.SDK_INT >= 30 && km != null && keyguardLockedStateListenerObj != null) {
-    try {
-        km.removeKeyguardLockedStateListener(
-            (KeyguardManager.KeyguardLockedStateListener) keyguardLockedStateListenerObj);
-    } catch (Exception ignored) {}
+    if (Build.VERSION.SDK_INT >= 30 && km != null && keyguardHelper30 != null) {
+    keyguardHelper30.unregister(km);
 }
 
     try { if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(prefListener); } catch (Exception ignored) {}
