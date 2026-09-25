@@ -3029,6 +3029,8 @@ ed.apply();
 private void openSpaceDirect(int spaceIdx) {
     currentGesTab = 5;          // giữ 5 làm "mã không gian" để FAB/preview... vẫn nhận đúng
     frontierSubTab = spaceIdx;  // 0 = Lock, 1 = Home
+    listRules.removeAllViews();
+    frontierSpaceBuilt = false;
     ensureFrontierContainersBuilt();
 
     if (spaceIdx == 0) {
@@ -8894,41 +8896,97 @@ content.addView(createSplitComboDropdown(T("Icon Jump Direction","Hướng nhả
         content.addView(createSlider("Tọa độ X", prefix + id + "_x", 1000, 0));
         content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 3000, 0));
 
-        content.addView(createSectionTitle(T("ICON ON BAR (optional)", "ICON TRÊN BAR (tuỳ chọn)")));
-        Button btnIcons = new Button(this);
-String iconsKey = prefix + id + "_icons";
-boolean iconsSplit = prefs.getBoolean(iconsKey + "_split", false);
-int iconCount = prefs.getInt(iconsKey + "_count", 0);
-btnIcons.setText(T("CHOOSE ICON (", "CHỌN ICON (") + iconCount + ")" + (iconsSplit ? " 🔀" : ""));
-btnIcons.setBackground(getRounded("#FFC107", 20f));
-btnIcons.setTextColor(Color.BLACK);
+                content.addView(createSectionTitle(T("ICON ON BAR (optional)", "ICON TRÊN BAR (tuỳ chọn)")));
 
-final Runnable refreshIconBtn = () -> {
-    boolean sp = prefs.getBoolean(iconsKey + "_split", false);
-    int cnt = prefs.getInt(iconsKey + "_count", 0);
-    btnIcons.setText(T("CHOOSE ICON (", "CHỌN ICON (") + cnt + ")" + (sp ? " 🔀" : ""));
-};
+        // ===== [ĐỔI SANG DRAWER-STYLE] 1 tap = mở drawer, nhấn giữ = rung + 2 nửa =====
+        String iconsKey = prefix + id + "_icons";
 
-btnIcons.setOnClickListener(v -> {
-    String readKey = prefs.getBoolean(iconsKey + "_split", false)
-        ? iconsKey + "_homacc" : iconsKey;
-    showBarIconMultiPicker(readKey, () -> {
-        prefs.edit().putInt(iconsKey + "_count", csvToList(prefs.getString(readKey, "")).size()).apply();
+        // Container drawer
+        LinearLayout iconDrawer = new LinearLayout(this);
+        iconDrawer.setOrientation(LinearLayout.VERTICAL);
+        iconDrawer.setBackground(getRounded("#222222", 20f));
+        LinearLayout.LayoutParams idwLp = new LinearLayout.LayoutParams(-1, -2);
+        idwLp.setMargins(0, 0, 0, 20);
+        iconDrawer.setLayoutParams(idwLp);
+
+        // Header (tap toggle, long-press split)
+        TextView iconHeader = new TextView(this);
+        iconHeader.setText(T("CHOOSE ICON ON BAR", "CHỌN ICON TRÊN BAR"));
+        iconHeader.setTextColor(Color.parseColor("#8AB4F8"));
+        iconHeader.setPadding(30, 30, 30, 30);
+        iconHeader.setTextSize(16);
+        iconHeader.setBackground(getRounded("#222222", 20f));
+
+        // Body chứa nút chọn icon + trạng thái split
+        LinearLayout iconBody = new LinearLayout(this);
+        iconBody.setOrientation(LinearLayout.VERTICAL);
+        iconBody.setPadding(30, 10, 30, 20);
+        iconBody.setVisibility(View.GONE);
+
+        final Button btnIcons = new Button(this);
+        final Runnable refreshIconBtn = () -> {
+            boolean sp = prefs.getBoolean(iconsKey + "_split", false);
+            int cnt = prefs.getInt(iconsKey + "_count", 0);
+            btnIcons.setText(T("CHOOSE ICON (", "CHỌN ICON (") + cnt + ")" + (sp ? " 🔀" : ""));
+        };
         refreshIconBtn.run();
-    });
-});
-btnIcons.setOnLongClickListener(v -> {
-    try {
-        Vibrator vib = (Vibrator) getSystemService(VIBRATOR_SERVICE);
-        if (vib != null) vib.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE));
-    } catch (Exception ignored) {}
-    openSplitIconDialog(iconsKey, () -> {
-        refreshIconBtn.run();
-        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-    });
-    return true;
-});
-content.addView(btnIcons);
+        btnIcons.setBackground(getRounded("#FFC107", 20f));
+        btnIcons.setTextColor(Color.BLACK);
+        btnIcons.setOnClickListener(v -> {
+            String readKey = prefs.getBoolean(iconsKey + "_split", false)
+                ? iconsKey + "_homacc" : iconsKey;
+            showBarIconMultiPicker(readKey, () -> {
+                prefs.edit().putInt(iconsKey + "_count", csvToList(prefs.getString(readKey, "")).size()).apply();
+                refreshIconBtn.run();
+            });
+        });
+        iconBody.addView(btnIcons);
+
+        // Badge trạng thái split (chỉ hiện khi đang split)
+        TextView iconBadge = new TextView(this);
+        iconBadge.setTextSize(11f);
+        iconBadge.setTextColor(Color.parseColor("#FFC107"));
+        iconBadge.setPadding(0, 8, 0, 0);
+        iconBody.addView(iconBadge);
+        Runnable refreshIconBadge = () -> {
+            boolean sp = prefs.getBoolean(iconsKey + "_split", false);
+            if (sp) {
+                int hbCnt = csvToList(prefs.getString(iconsKey + "_homeb", "")).size();
+                int haCnt = csvToList(prefs.getString(iconsKey + "_homacc", "")).size();
+                iconBadge.setText("🔀 Homeb: " + hbCnt + "  ·  Homacc: " + haCnt);
+            } else iconBadge.setText("");
+        };
+        refreshIconBadge.run();
+
+        iconDrawer.addView(iconHeader);
+        iconDrawer.addView(iconBody);
+
+        // 1 tap = mở/đóng drawer
+        iconHeader.setOnClickListener(v -> {
+            boolean willOpen = iconBody.getVisibility() == View.GONE;
+            iconBody.setVisibility(willOpen ? View.VISIBLE : View.GONE);
+            iconHeader.setBackground(getRounded(willOpen ? "#333333" : "#222222", 20f));
+        });
+
+        // Long press = rung + mở dialog 2 nửa (Homacc | Homeb)
+        iconHeader.setOnLongClickListener(v -> {
+            try {
+                Vibrator vib = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+                if (vib != null) {
+                    if (Build.VERSION.SDK_INT >= 26)
+                        vib.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE));
+                    else vib.vibrate(30);
+                }
+            } catch (Exception ignored) {}
+            openSplitIconDialog(iconsKey, () -> {
+                refreshIconBtn.run();
+                refreshIconBadge.run();
+                sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+            });
+            return true;
+        });
+
+        content.addView(iconDrawer);
 
         } else if (type == 1) {
     String[] cKeys = {"br", "bl", "tr", "tl"};
@@ -11256,19 +11314,32 @@ private void doRevokeAdminAndUninstall() {
     }
 
 private LinearLayout createSplitComboDropdown(String title, String key, String[] items, int def) {
-    LinearLayout l = new LinearLayout(this);
-    l.setOrientation(LinearLayout.VERTICAL);
-    l.setPadding(0, 10, 0, 20);
+    // ===== CONTAINER NGOÀI (giống createDrawer) — dùng khung + bo góc + đệm 20px giống
+    // mọi drawer khác trong app (PANEL CONFIG, HANDLE CONFIG, ICON 22 GESTURES...) =====
+    LinearLayout container = new LinearLayout(this);
+    container.setOrientation(LinearLayout.VERTICAL);
+    container.setBackground(getRounded("#222222", 20f));
+    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
+    clp.setMargins(0, 0, 0, 20);
+    container.setLayoutParams(clp);
 
-    // Hàng label + spinner (giống createComboDropdown gốc, chỉ đổi wrapper ngoài)
+    // ===== HEADER (bấm 1 tap để mở/đóng drawer, NHẤN GIỮ để chia 2 nửa) =====
+    TextView header = new TextView(this);
+    header.setText(title);
+    header.setTextColor(Color.parseColor("#8AB4F8"));
+    header.setPadding(30, 30, 30, 30);
+    header.setTextSize(16);
+    header.setBackground(getRounded("#222222", 20f));
+
+    // ===== BODY (Spinner + badge trạng thái) — ẩn mặc định =====
+    LinearLayout body = new LinearLayout(this);
+    body.setOrientation(LinearLayout.VERTICAL);
+    body.setPadding(30, 10, 30, 20);
+    body.setVisibility(View.GONE);
+
     LinearLayout row = new LinearLayout(this);
     row.setOrientation(LinearLayout.HORIZONTAL);
     row.setGravity(Gravity.CENTER_VERTICAL);
-
-    TextView tv = new TextView(this);
-    tv.setText(title);
-    tv.setTextColor(Color.parseColor("#E91E63"));
-    tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
     Spinner sp = createSpinner();
     sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items));
@@ -11279,16 +11350,15 @@ private LinearLayout createSplitComboDropdown(String title, String key, String[]
         }
         public void onNothingSelected(AdapterView<?> p) {}
     });
-    sp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.2f));
-    row.addView(tv); row.addView(sp);
-    l.addView(row);
+    sp.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+    row.addView(sp);
+    body.addView(row);
 
-    // Badge trạng thái — chỉ hiện khi đang split
     TextView tvBadge = new TextView(this);
     tvBadge.setTextSize(11f);
     tvBadge.setTextColor(Color.parseColor("#FFC107"));
-    tvBadge.setPadding(0, 6, 0, 0);
-    l.addView(tvBadge);
+    tvBadge.setPadding(0, 8, 0, 0);
+    body.addView(tvBadge);
 
     Runnable refreshBadge = () -> {
         boolean split = prefs.getBoolean(key + "_split", false);
@@ -11303,11 +11373,21 @@ private LinearLayout createSplitComboDropdown(String title, String key, String[]
         }
     };
     refreshBadge.run();
-    // Expose refresh ra ngoài qua tag để dialog có thể gọi lại sau khi lưu
-    l.setTag(refreshBadge);
+    // Tag để dialog split gọi lại sau khi lưu
+    container.setTag(refreshBadge);
 
-    // Long-press toàn bộ hàng → mở dialog 2 nửa
-    row.setOnLongClickListener(v -> {
+    container.addView(header);
+    container.addView(body);
+
+    // ===== 1 TAP = MỞ/ĐÓNG DRAWER (đúng ngôn ngữ createDrawer() đã dùng toàn app) =====
+    header.setOnClickListener(v -> {
+        boolean willOpen = body.getVisibility() == View.GONE;
+        body.setVisibility(willOpen ? View.VISIBLE : View.GONE);
+        header.setBackground(getRounded(willOpen ? "#333333" : "#222222", 20f));
+    });
+
+    // ===== NHẤN GIỮ = RUNG 1 CÁI + MỞ DIALOG 2-NỬA (Homacc | Homeb) =====
+    header.setOnLongClickListener(v -> {
         try {
             Vibrator vib = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (vib != null) {
@@ -11320,7 +11400,7 @@ private LinearLayout createSplitComboDropdown(String title, String key, String[]
         return true;
     });
 
-    return l;
+    return container;
 }
 private void openSplitIconDialog(String iconsKey, Runnable onSaved) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
