@@ -2238,12 +2238,13 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
     private void openRuleBuilderDialog(String editKey, int preComp, int preGes, String copyActs) { Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen); d.setContentView(buildRuleEditor(d, editKey, preComp, preGes, copyActs)); d.show(); }
 private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState, boolean isFrontier) {
     String listKey = prefix + "applied_packs";
-    java.util.List<String> appliedPacks = getDynamicIds(listKey);
+    java.util.List<String> appliedPacksRaw = getDynamicIds(listKey);
+
     java.util.List<String> validBarIds = getDynamicIds("pack_bar_ids");
     java.util.List<String> validCornerIds = getDynamicIds("pack_corner_ids");
     java.util.List<String> cleaned = new java.util.ArrayList<>();
     boolean dirtFound = false;
-    for (String k : appliedPacks) {
+    for (String k : appliedPacksRaw) {
         boolean ok = false;
         if (k.startsWith("bar_")) {
             if (validBarIds.contains(k.substring(4))) ok = true;
@@ -2253,7 +2254,10 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
         if (ok) cleaned.add(k); else dirtFound = true;
     }
     if (dirtFound) prefs.edit().putString(listKey, TextUtils.join(",", cleaned)).apply();
-    appliedPacks = cleaned;
+
+    // [FIX BUILD] appliedPacks phải là FINAL để lambda bên dưới dùng được.
+    // Khai báo biến MỚI final trỏ tới cleaned — không bị reassign → effectively final.
+    final java.util.List<String> appliedPacks = cleaned;
 
 appliedPacks.sort((keyA, keyB) -> {
     boolean bA = keyA.startsWith("bar_"), bB = keyB.startsWith("bar_");
