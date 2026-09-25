@@ -268,51 +268,46 @@ private void doSampleIconColors(boolean isFollowUp) {
                 takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
             new AccessibilityService.TakeScreenshotCallback() {
                                 @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
-                    // [FIX TẦNG 1] Kiểm tra executor đã shutdown chưa trước khi submit.
-                    // Sau onDestroy() -> shutdownNow() thì isShutdown() = true vĩnh viễn,
-                    // nên chỉ cần 1 check là đủ, KHÔNG cần try-catch (tránh rối ngoặc).
-                    if (iconColorExecutor.isShutdown() || iconColorExecutor.isTerminated()) {
-    try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
-    isCapturingIconColorScreenshot = false;
-    return;
-}
-try {
-    iconColorExecutor.execute(() -> {
+    // [FIX RACE] Đặt execute() trong try đầu tiên — tránh race condition
+    // giữa isShutdown() check và execute() khi Service bị destroy giữa chừng.
+    try {
+        iconColorExecutor.execute(() -> {
 
-                        java.util.List<Object[]> pendingTints = new java.util.ArrayList<>();
-                        try {
-                            Bitmap screenHw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
-                            if (screenHw != null) {
-                                sampleJobsInto(screenHw, lockJobs, pendingTints);
-                                sampleJobsInto(screenHw, homaccJobs, pendingTints);
-                            }
-                        } catch (Exception ignored) {
-                        } finally {
-                            try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
-                            if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
-                        }
-                        iconColorHandler.post(() -> {
-                            isCapturingIconColorScreenshot = false;
-                            for (Object[] pair : pendingTints) {
-                                IconLayerView l = (IconLayerView) pair[0];
-                                if (l.isAttachedToWindow()) l.setTint((Integer) pair[1]);
-                            }
-                        });
-                    });
-                                        if (!isFollowUp && !iconColorFollowUpPending) {
-                        iconColorFollowUpPending = true;
-                        iconColorHandler.postDelayed(() -> {
-                            iconColorFollowUpPending = false;
-                            doSampleIconColors(true);
-                        }, 400);
-                    }
-                    } catch (java.util.concurrent.RejectedExecutionException ree) {
-                        isCapturingIconColorScreenshot = false;
-                        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
-                    } catch (Exception e) {
-                        isCapturingIconColorScreenshot = false;
-                    }
-                }
+        java.util.List<Object[]> pendingTints = new java.util.ArrayList<>();
+        try {
+            Bitmap screenHw = Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(), result.getColorSpace());
+            if (screenHw != null) {
+                sampleJobsInto(screenHw, lockJobs, pendingTints);
+                sampleJobsInto(screenHw, homaccJobs, pendingTints);
+            }
+        } catch (Exception ignored) {
+        } finally {
+            try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+            if (fallbackFullCopy != null) { fallbackFullCopy.recycle(); fallbackFullCopy = null; }
+        }
+        iconColorHandler.post(() -> {
+            isCapturingIconColorScreenshot = false;
+            for (Object[] pair : pendingTints) {
+                IconLayerView l = (IconLayerView) pair[0];
+                if (l.isAttachedToWindow()) l.setTint((Integer) pair[1]);
+            }
+        });
+    });
+                if (!isFollowUp && !iconColorFollowUpPending) {
+        iconColorFollowUpPending = true;
+        iconColorHandler.postDelayed(() -> {
+            iconColorFollowUpPending = false;
+            doSampleIconColors(true);
+        }, 400);
+    }
+    } catch (java.util.concurrent.RejectedExecutionException ree) {
+        // Executor đã bị shutdownNow() trong onDestroy() — bỏ qua an toàn
+        isCapturingIconColorScreenshot = false;
+        try { result.getHardwareBuffer().close(); } catch (Exception ignored) {}
+    } catch (Exception e) {
+        isCapturingIconColorScreenshot = false;
+    }
+}
                 @Override public void onFailure(int errorCode) {
                     isCapturingIconColorScreenshot = false;
                     if (!isFollowUp) iconColorHandler.postDelayed(() -> doSampleIconColors(true), 2000);
@@ -1643,13 +1638,8 @@ private boolean containsText(android.view.accessibility.AccessibilityNodeInfo no
     }
     return false;
 }
-/**
- * [MỚI] Đối xứng với triggerBlacklistAutoHomeb(): khi Accessibility vừa được BẬT LẠI
- * (qua Intent/QS Tile/Macro), kiểm tra app đang foreground có nằm trong Blacklist
- * không — nếu có, tự động về Home + kill app đó. Dùng UsageStatsManager vì lúc này
- * EdgeBarService vừa connect, chưa kịp có AccessibilityEvent nào để tự biết qua getWindows().
- */
 private void checkAndKickBlacklistOnAccEnable() {
+    if (prefs == null) return;
     if (!prefs.getBoolean("blacklist_auto_homeb_en", false)) return;
 // Trợ năng vừa được Watchdog trả về sau khi app Blacklist chạy ở màn khoá -> KHÔNG được đá/kill app
 if (prefs.getBoolean("blacklist_lock_active", false)) return;
@@ -1658,6 +1648,7 @@ if (System.currentTimeMillis() - prefs.getLong("blacklist_lock_restore_ts", 0) <
 if (km != null && km.isKeyguardLocked()) return;
 
     String bl = prefs.getString("blacklist", "");
+
     if (bl.isEmpty()) return;
     new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
         try {
@@ -2941,11 +2932,13 @@ private void checkAndYieldOS(String actionKey) {
                     if (Math.abs(cdx) > Math.abs(cdy)) actionName = cdx > 0 ? "right_hold" : "left_hold";
                     else actionName = cdy > 0 ? "down_hold" : "up_hold";
                 }
-                handleAction(prefKeyBase + "_" + actionName);
+                                handleAction(prefKeyBase + "_" + actionName);
                 checkAndYieldOS(prefKeyBase + "_" + actionName); // THÊM DÒNG NÀY
                 if (rippleView != null) {
                     float swipeMag = (float) Math.sqrt(cdx * cdx + cdy * cdy);
-                    rippleView.jumpIcon(sx, sy, actionName, Color.argb(180, 96, 125, 139), cdx/swipeMag, cdy/swipeMag);
+                    float dirX = swipeMag > 0.001f ? cdx / swipeMag : 0f;
+                    float dirY = swipeMag > 0.001f ? cdy / swipeMag : 0f;
+                    rippleView.jumpIcon(sx, sy, actionName, Color.argb(180, 96, 125, 139), dirX, dirY);
                 }
                         } else {
                 // [GÀI SỐ MỚI] Tay đứng im tại chỗ -> Rung báo hiệu vào trạng thái "Giữ + Vuốt"
@@ -3121,16 +3114,17 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                         }
                     }
 
-                    if (!actionName.isEmpty()) {
+                                        if (!actionName.isEmpty()) {
                         handleAction(prefKeyBase + "_" + actionName);
                         checkAndYieldOS(prefKeyBase + "_" + actionName);
-                        if (rippleView != null) {
-                            rippleView.popRipple();
+                        GestureRippleView rv = rippleView;
+                        if (rv != null) {
+                            rv.popRipple();
                             if (prefs.getBoolean(prefKeyBase + "_" + actionName + "_jump_on", true)) {
                                 float swipeMag = (float) Math.sqrt(finalDx * finalDx + finalDy * finalDy);
                                 float dirX = swipeMag > 0.001f ? finalDx / swipeMag : 0f;
                                 float dirY = swipeMag > 0.001f ? finalDy / swipeMag : 0f;
-                                rippleView.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
+                                rv.jumpIcon(lastX, lastY, actionName, Color.argb(200, 255, 255, 255), dirX, dirY);
                             }
                         }
                     }

@@ -123,6 +123,7 @@ private WindowManager.LayoutParams livePreviewLp;
     private boolean recIndicatorTestOn = false;
     private int currentMainTab = 1; private int currentGesTab = 0; private int frontierSubTab = 0;
 private LinearLayout frontierBodyContainer, frontierBackRowRef;
+private boolean frontierSpaceBuilt = false;      // ← THÊM DÒNG NÀY
 private TextView tvFrontierSubTitle; // [MỚI] hoisted ra field để mở thẳng không cần build menu trung gian
 
 private final java.util.ArrayDeque<Runnable> navBackStack = new java.util.ArrayDeque<>();
@@ -1779,7 +1780,6 @@ private String getSpacePrefix() {
         case 1:
         case 2: return "home_";   // Homeb + Homacc gộp chung
         case 4: return "texture_";
-        case 5: return "frontier_";
         default: return "home_";
     }
 }
@@ -8831,9 +8831,11 @@ if (type == 2) {
 }
 if (type == 0) {
         int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
+        if (currentLoc < 0 || currentLoc >= BARS.length) currentLoc = 0;
         for(int i=0; i<BARS.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[i], false).apply();
         prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[currentLoc], true).apply();
         content.addView(createSectionTitle("CẤU HÌNH BAR (FORMAT B)"));
+
         LinearLayout locDropdown = createComboDropdown("Chọn vị trí Bar chính", prefix + id + "_loc", BAR_NAMES, 0);
         Spinner locSpinner = (Spinner) locDropdown.getChildAt(1);
         locSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
@@ -8921,9 +8923,11 @@ content.addView(btnIcons);
     // [BỎ UI PREVIEW] Không còn checkbox — Corner luôn xem-trước-sẵn đúng
     // ngay vị trí đang chọn.
     int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
+    if (currentLoc < 0 || currentLoc >= cKeys.length) currentLoc = 0;
     for(int i=0; i<cKeys.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[i], false).apply();
     prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[currentLoc], true).apply();
     content.addView(createSectionTitle("CẤU HÌNH CORNER (FORMAT C)"));
+
     LinearLayout locDropdown = createComboDropdown("Chọn vị trí Corner chính", prefix + id + "_loc", CORNER_NAMES, 0);
     Spinner locSpinner = (Spinner) locDropdown.getChildAt(1);
     locSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
@@ -10904,14 +10908,13 @@ private String queryDisplayName(Uri uri) {
 private List<Object[]> buildSearchIndex() {
     if (searchIndexCache != null) return searchIndexCache;
     List<Object[]> index = new ArrayList<>();
-    index.add(new Object[]{T("Frontier - Lock", "Frontier - Khoá màn hình"), "frontier lock khoa man hinh bar corner", (Runnable) () -> {
-        openSpace(1); currentGesTab = 5; frontierSubTab = 0; renderRulesList();
-    }});
-    index.add(new Object[]{T("Frontier - Home", "Frontier - Home (2 server)"),
-    "frontier home homeb homacc 2 server",
-    (Runnable) () -> {
-        openSpace(1); currentGesTab = 5; frontierSubTab = 1; renderRulesList();
-    }});
+    index.add(new Object[]{T("Lock", "Khoá màn hình"), "lock khoa man hinh bar corner", (Runnable) () -> {
+    openSpaceDirect(0);
+}});
+index.add(new Object[]{T("Home", "Home (2 server)"), "home homeb homacc 2 server", (Runnable) () -> {
+    openSpaceDirect(1);
+}});
+
     index.add(new Object[]{T("Texture (Vân tay)", "Texture - Vân tay"), "texture van tay fingerprint", (Runnable) () -> {
         openSpace(1); currentGesTab = 4; renderRulesList();
     }});
