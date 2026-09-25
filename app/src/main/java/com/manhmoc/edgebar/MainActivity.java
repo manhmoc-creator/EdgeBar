@@ -2445,14 +2445,13 @@ final int fTabState = tabState;
                 });
                 card.setOnLongClickListener(v -> true);
             } else {
-                // [ĐỔI HÀNH VI] Chạm 1 lần vào Data Pack ở Frontier -> mở thẳng Editor
-                // của chính Data Pack cha (Format Bar/Corner qua openDataPackEditor).
-                // Muốn vào kho Pattern con thì bấm nút "PATTERN" ở cột điều khiển bên phải.
-                card.setOnClickListener(v -> {
+                                card.setOnClickListener(v -> {
                     String exKey = ensureExclusiveOwnership(fItemKey, prefix);
                     boolean exIsBar = exKey.startsWith("bar_");
                     String exId = exKey.replace(exIsBar ? "bar_" : "corner_", "");
-                    if (!exKey.equals(fItemKey)) renderRulesList();
+                    if (!exKey.equals(fItemKey)) {
+                        new Handler(android.os.Looper.getMainLooper()).post(this::renderRulesList);
+                    }
                     openDataPackEditor(exIsBar ? 0 : 1, exId);
                 });
                 card.setOnLongClickListener(v -> {
@@ -8775,7 +8774,7 @@ private LinearLayout buildPanelSelectionToolbar(List<String> ids) {
 }
 private String ensureExclusiveOwnership(String itemKey, String currentPrefix) {
     int refCount = 0;
-    for (String px : new String[]{"lock_","home_","homacc_"}) {
+    for (String px : new String[]{"lock_","home_"}) {
         if (getDynamicIds(px + "applied_packs").contains(itemKey)) refCount++;
     }
     if (refCount <= 1) return itemKey; // đã độc quyền — không cần tách
@@ -10457,16 +10456,23 @@ private void migrateLegacyBackupToV2() {
     }
     ed.putBoolean("needs_sanitize", false).apply();
 }
-        /** [MỚI] Dọn key rác trong applied_packs của cả 3 không gian (lock/home/homacc).
-     *  Chạy 1 lần lúc mở app để dọn sạch data rác từ backup JSON cũ. */
-    private void cleanStaleAppliedPacks() {
+        private void cleanStaleAppliedPacks() {
         java.util.List<String> validBarIds = getDynamicIds("pack_bar_ids");
         java.util.List<String> validCornerIds = getDynamicIds("pack_corner_ids");
         SharedPreferences.Editor ed = prefs.edit();
         boolean changed = false;
-        for (String px : new String[]{"lock_", "home_", "homacc_"}) {
+
+        // [MỚI] homacc_ không còn là không gian riêng — đã gộp hết vào home_.
+        // Xoá hẳn key rác này để ensureExclusiveOwnership() hết đếm nhầm refCount.
+        if (prefs.contains("homacc_applied_packs")) {
+            ed.remove("homacc_applied_packs");
+            changed = true;
+        }
+
+        for (String px : new String[]{"lock_", "home_"}) {
             java.util.List<String> list = getDynamicIds(px + "applied_packs");
             java.util.List<String> cleaned = new java.util.ArrayList<>();
+            java.util.Set<String> seen = new java.util.HashSet<>();
             for (String k : list) {
                 boolean ok = false;
                 if (k.startsWith("bar_")) {
@@ -10474,10 +10480,13 @@ private void migrateLegacyBackupToV2() {
                 } else if (k.startsWith("corner_")) {
                     if (validCornerIds.contains(k.substring(7))) ok = true;
                 }
-                if (ok) cleaned.add(k); else changed = true;
+                if (ok && seen.add(k)) cleaned.add(k); // [MỚI] lọc luôn phần tử trùng lặp
+                else changed = true;
             }
-            if (cleaned.size() != list.size())
+            if (cleaned.size() != list.size()) {
                 ed.putString(px + "applied_packs", TextUtils.join(",", cleaned));
+                changed = true;
+            }
         }
         if (changed) ed.apply();
     }
