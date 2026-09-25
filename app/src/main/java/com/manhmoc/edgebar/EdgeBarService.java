@@ -2608,7 +2608,7 @@ if (hide && fV != null) fV.setVisibility(View.GONE);
 for (int i=0;i<12;i++) {
             if (bars[i]==null) continue;
             boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", false);
-boolean passesLockGate = (lockMode == 1) || !isSecureOverlayVisible;
+boolean passesLockGate = (prefs.getInt("lock_"+BARS[i]+"_lockmode", 1) == 1) || !isSecureOverlayVisible;
 boolean shouldShowBar = en && isLocked && !hide && passesLockGate &&
     !prefs.getBoolean("lock_"+BARS[i]+"_manual_hide", false);
 if (!shouldShowBar && !isLocked) {
@@ -2637,7 +2637,6 @@ int jumpDir = prefs.getBoolean(jumpKey + "_split", false)
     ? prefs.getInt(jumpKey + "_homacc", prefs.getInt(jumpKey, 0))
     : prefs.getInt(jumpKey, 0);
 
-                int visMode = prefs.getInt("lock_"+BARS[i]+"_vis_mode",0);
                 int barHideDur = prefs.getInt("lock_bar_hide_dur", 2500);
                 ((BarView)bars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2, prefs.getInt("lock_bar_radius", 24));
 

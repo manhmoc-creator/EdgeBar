@@ -8924,8 +8924,6 @@ content.addView(createSplitComboDropdown(T("Icon Jump Direction","Hướng nhả
         content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 3000, 0));
 
         content.addView(createSectionTitle(T("ICON ON BAR (optional)", "ICON TRÊN BAR (tuỳ chọn)")));
-        String iconsStr = prefs.getString(prefix + id + "_icons", "");
-        int iconCount = iconsStr.isEmpty() ? 0 : iconsStr.split(",").length;
         Button btnIcons = new Button(this);
 String iconsKey = prefix + id + "_icons";
 boolean iconsSplit = prefs.getBoolean(iconsKey + "_split", false);
@@ -11208,38 +11206,7 @@ private void doRevokeAdminAndUninstall() {
         container.addView(header); container.addView(content); 
         return container; 
     }
-// [MỚI] Combo dropdown cơ bản — dùng cho openDataPackEditor() để chọn vị trí Bar/Corner/Panel.
-// Đã bị bỏ sót trong bản trước khiến compile fail 4 chỗ (dòng ~8877, 8969, 9003, 9021, 9029).
-private LinearLayout createComboDropdown(String title, String key, String[] items, int def) {
-    LinearLayout l = new LinearLayout(this);
-    l.setOrientation(LinearLayout.VERTICAL);
-    l.setPadding(0, 10, 0, 20);
 
-    LinearLayout row = new LinearLayout(this);
-    row.setOrientation(LinearLayout.HORIZONTAL);
-    row.setGravity(Gravity.CENTER_VERTICAL);
-
-    TextView tv = new TextView(this);
-    tv.setText(title);
-    tv.setTextColor(Color.parseColor("#E91E63"));
-    tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-    Spinner sp = createSpinner();
-    sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items));
-    sp.setSelection(Math.max(0, Math.min(items.length - 1, prefs.getInt(key, def))));
-    sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-        public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
-            prefs.edit().putInt(key, pos).apply();
-        }
-        public void onNothingSelected(AdapterView<?> p) {}
-    });
-    sp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.2f));
-
-    row.addView(tv);
-    row.addView(sp);
-    l.addView(row);
-    return l;
-}
 private LinearLayout createSplitComboDropdown(String title, String key, String[] items, int def) {
     LinearLayout l = new LinearLayout(this);
     l.setOrientation(LinearLayout.VERTICAL);
