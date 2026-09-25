@@ -1722,11 +1722,13 @@ private String findBlacklistedPkgInWindows(String bl) {
     return null;
 }
 
+private void triggerBlacklistLockRevokeAcc(String pkg) {                    // ← THÊM DÒNG NÀY
     if (!BlacklistLockWatchdogService.begin(this, pkg, true)) {
         if (!prefs.getBoolean("blacklist_lock_active", false)) updateVisibility();
     }
 }
 private boolean launchWithBlacklistRevoke(String pkg) {
+
     if (pkg == null || pkg.isEmpty()) return false;
     if (km == null || !km.isKeyguardLocked()) return false;
     if (!prefs.getBoolean("blacklist_lock_revoke_acc_en", false)) return false;
