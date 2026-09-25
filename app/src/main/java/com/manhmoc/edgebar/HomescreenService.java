@@ -1064,15 +1064,14 @@ private boolean isAccEnabled() {
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        // [FIX OVERLAY "MA"] Mỗi lần Service THẬT SỰ khởi động lại (không phải do lỗi
-// UI runtime), coi như không có phiên xem trước hợp lệ nào — dọn sạch cờ preview_*
-// phòng trường hợp process trước bị OOM-kill giữa lúc đang xem trước, để lại
-// giá trị true vĩnh viễn gây overlay không tương tác được. Zero cost: 1 lần ghi.
-prefs.edit()
-    .putBoolean("preview_lock", false)
-    .putBoolean("preview_homacc", false)
-    .putBoolean("preview_home", false)
-    .apply();
+long uptimeMs = android.os.SystemClock.elapsedRealtime();
+if (uptimeMs < 3000) {
+    prefs.edit()
+        .putBoolean("preview_lock", false)
+        .putBoolean("preview_homacc", false)
+        .putBoolean("preview_home", false)
+        .apply();
+}
         cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
         try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
@@ -1218,18 +1217,8 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     debounceHandler.postDelayed(debounceRunnable, 500);
 };
 
-    /** [FIX #2] Ẩn ĐỒNG THỜI nền đen + icon khóa + toàn bộ bar/corner Morse trong
-     *  CÙNG một lệnh gọi — không phụ thuộc broadcast SYNC_STATE bất đồng bộ (đây
-     *  chính là nguyên nhân nền đen biến mất trước, bar/corner biến mất trễ hoặc
-     *  thấp thoáng hiện lại trên Home). Zero RAM thêm: chỉ lặp lại View đã có sẵn.
-     */
     private void updateVisibility() {
     if (panelEngine != null) panelEngine.rebuildAll();
-    // [MỚI] Đang trong chế độ Blacklist-Lock → không vẽ bar/corner Homeb
-    // lên trên app Blacklist đang chạy full-screen.
-    // [FIX SELF-HEAL] Cờ bị kẹt (Watchdog bị MIUI kill) → tự dọn thay vì ẩn
-    // bar/corner mãi mãi. Đây là lớp bảo vệ cuối cùng cho Homeb nếu user không
-    // mở app EdgeBar (VÁ 1 không kịp chạy).
     if (prefs.getBoolean("blacklist_lock_active", false)) {
         boolean reallyActive = BlacklistLockWatchdogService.isRunning
             || System.currentTimeMillis() - prefs.getLong("blacklist_lock_start_ms", 0) < 5000;
@@ -1253,10 +1242,10 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         boolean previewHomeOn = prefs.getBoolean("preview_home", false);
 boolean shouldRenderOldHome = isUnlocked && !hideNormal && (previewHomeOn || (!accHomeRunning && oldHomeEnabled));
 
-        if (accHomeRunning) {
-            for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
-            for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
-        }
+if (accHomeRunning && !previewHomeOn) {
+    for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
+    for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
+}
 
                 boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
         int barLoopCount = Math.min(bars.length, BARS.length);

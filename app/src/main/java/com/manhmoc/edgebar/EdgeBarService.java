@@ -2783,7 +2783,7 @@ private static final int MAX_TRIGGER_DEPTH = 3;
         handleAction(key, 0, true); 
     }
 
-        private void handleAction(String key, int depth, boolean applyVibAnim) {
+private void handleAction(String key, int depth, boolean applyVibAnim) {
 if (key != null && key.startsWith("homacc_")
         && prefs.getString(key, "NONE").equals("NONE")) {
     String fallback = "home_" + key.substring("homacc_".length());
@@ -2791,6 +2791,8 @@ if (key != null && key.startsWith("homacc_")
 }
         String action = prefs.getString(key, "NONE");
         boolean isOn = prefs.getBoolean(key + "_on", true);
+        android.util.Log.d("EdgeBar_Gesture",
+            "handleAction key=" + key + " action=" + action + " isOn=" + isOn);
         if (action.equals("NONE") || !isOn) return;
 
         boolean hasTriggerAction = action.contains("TRIGGER_");

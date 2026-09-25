@@ -2234,6 +2234,15 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
 private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState, boolean isFrontier) {
     String listKey = prefix + "applied_packs";
     java.util.List<String> appliedPacksRaw = getDynamicIds(listKey);
+    if (isFrontier) {
+        for (String itemKey : appliedPacksRaw) {
+            if (!prefs.getBoolean(prefix + itemKey + "_en", false)) continue;
+            boolean isBarL = itemKey.startsWith("bar_");
+            String idL = itemKey.replace(isBarL ? "bar_" : "corner_", "");
+            if (isBarL) applyBarPackToSpace(idL, prefix);
+            else applyCornerPackToSpace(idL, prefix);
+        }
+    }
 
     java.util.List<String> validBarIds = getDynamicIds("pack_bar_ids");
     java.util.List<String> validCornerIds = getDynamicIds("pack_corner_ids");
@@ -8829,14 +8838,7 @@ SharedPreferences.OnSharedPreferenceChangeListener[1];
             refreshPreview();
         }
     });
-        // [TỐI ƯU PIXEL 2XL] Đưa nút Enable lên trên cùng cho cả 3 không gian, xóa nút gắn Pattern thừa thãi
-        // Checkbox Enable đã có sẵn trên card ở màn danh sách (renderDataPackList / renderPanelDesign)
-// → bỏ hẳn bản trùng này khỏi FormatBar/FormatCorner cho gọn màn hình.
-// Panel (type==2) vẫn giữ vì yêu cầu chỉ bỏ ở Bar/Corner.
 if (type == 2) {
-    // [BỎ UI PREVIEW] Không còn checkbox cho người dùng bấm — Handle của
-    // Panel này giờ LUÔN ở trạng thái sẵn sàng hiện ra ngay khi Enable bật,
-    // không cần bước "tick xem trước" trung gian nữa.
     prefs.edit().putBoolean(prefix + id + "_preview_handle", true).apply();
 }
 if (type == 0) {
@@ -8898,7 +8900,6 @@ content.addView(createSplitComboDropdown(T("Icon Jump Direction","Hướng nhả
 
                 content.addView(createSectionTitle(T("ICON ON BAR (optional)", "ICON TRÊN BAR (tuỳ chọn)")));
 
-        // ===== [ĐỔI SANG DRAWER-STYLE] 1 tap = mở drawer, nhấn giữ = rung + 2 nửa =====
         String iconsKey = prefix + id + "_icons";
 
         // Container drawer
@@ -9046,20 +9047,10 @@ content.addView(createSlider("Di chuyển Trăng Non Ngang (X) (1250=Giữa)", p
 content.addView(createSlider("Di chuyển Trăng Non Dọc (Y) (1250=Giữa)", prefix + id + "_moon_y", 2500, 1250));
 content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 80));
             content.addView(createSlider("Độ cong TRĂNG NON", prefix + id + "_moon_rad", 1000, 80));
-            // [XÓA] 4 slider chung — Frontier đã có Drawer "TÙY CHỈNH CHUNG GÓC VIỀN" áp dụng
-            // cho toàn không gian rồi, giữ 2 nơi chỉnh cùng 1 giá trị là dư thừa & gây xung đột.
-            // Tối ưu Pixel 2XL: bớt 4x(createSlider = 1 SeekBar + 2 Button + 2 TextView = 5 View)
-            // = 20 View object không phải cấp phát mỗi lần mở dialog Format C.
         } else if (type == 2) {
-            // Yêu cầu 2 & 4: BÊ NGUYÊN VẸN MỌI THỨ TỪ 3 MỤC Common/Panel Config/Handle Config vào ruột viên thuốc Panel
             content.addView(createSectionTitle("📦 DATA PACK LENAP (CORE CONFIG)"));
             content.addView(createComboDropdown("POSITION (Vị trí Panel)", prefix + id + "_pos", PANEL_POS_NAMES, 0));
 
-            // [FIX #1] LIVE PREVIEW cho Panel — trước đây thiếu hẳn checkbox này,
-            // Zero-RAM khi tắt: chỉ addView 1 CheckBox nhẹ, overlay chỉ addView
-            // khi bật, gỡ ngay khi tắt/đóng Dialog (dùng chung removeLivePreviewOverlay()
-            // đã có sẵn ở cuối openDataPackEditor).
-            // --- MỤC 1: COMMON & COLLECTIONS ---
             content.addView(createSectionTitle("1. COMMON & COLLECTIONS"));
             content.addView(createComboDropdown("Color (Màu)", prefix + id + "_color_idx", PANEL_COLOR_NAMES, 0));
             content.addView(createSlider("Icon Size (Kích thước)", prefix + id + "_icon_size", 180, 110));
