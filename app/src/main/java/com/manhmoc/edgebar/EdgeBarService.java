@@ -217,7 +217,7 @@ private boolean anyAutoColorLayer() {
     for (java.util.Map.Entry<String, IconLayerView> e : iconLayers.entrySet()) {
         if (e.getValue().getVisibility() != View.VISIBLE) continue; // layer đang ẩn -> không cần chụp
         String k = e.getKey();
-        String prefix = k.startsWith("homacc_") ? "homacc_" : "lock_";
+        String prefix = k.startsWith("home_") ? "home_" : "lock_";
         if (!isAutoColorOff(prefix, k.substring(prefix.length()))) return true;
     }
     return false;
@@ -245,7 +245,8 @@ private void doSampleIconColors(boolean isFollowUp) {
         else return;
     }
     final java.util.List<Object[]> lockJobs = buildColorSampleJobs("lock_");
-    final java.util.List<Object[]> homaccJobs = buildColorSampleJobs("homacc_");
+    final java.util.List<Object[]> homaccJobs = buildColorSampleJobs("home_");
+
     if (lockJobs.isEmpty() && homaccJobs.isEmpty()) return;
 
     // Giãn cách: quá sát lần trước -> gộp thành đúng 1 lần chạy trễ (trailing)
@@ -474,10 +475,8 @@ if (k != null && k.startsWith("shortcut_") && k.endsWith("_icon_override")) {
         panelDebounceHandler.postDelayed(panelDebounceRunnable, PANEL_DEBOUNCE_MS);
         return;
     }
-    // TẦNG 3: homacc_ → debounce DÀI 1000ms, chỉ gọi updateHomaccLive() sau khi dừng
-    // Guard kép: isRunning + isHomaccDrawn tránh IPC vô nghĩa
-    if (k != null && k.startsWith("homacc_")) {
-    boolean previewOn = prefs.getBoolean("preview_homacc", false);
+    if (k != null && k.startsWith("home_")) {
+    boolean previewOn = prefs.getBoolean("preview_home", false);
     if ((!AccessibleHomeService.isRunning && !previewOn) || !isHomaccDrawn) return;
 
     // [MỚI] Key chỉ ảnh hưởng icon -> cập nhật NGAY, không debounce
@@ -489,7 +488,7 @@ if (k != null && k.startsWith("shortcut_") && k.endsWith("_icon_override")) {
     if (homaccDebounceRunnable != null)
         homaccDebounceHandler.removeCallbacks(homaccDebounceRunnable);
     homaccDebounceRunnable = () -> {
-        boolean stillPreview = prefs.getBoolean("preview_homacc", false);
+        boolean stillPreview = prefs.getBoolean("preview_home", false);
         if ((!AccessibleHomeService.isRunning && !stillPreview) || !isHomaccDrawn) return;
         lastHomaccUpdateMs = System.currentTimeMillis();
         updateHomaccLive();
@@ -520,8 +519,9 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     if (recentsBlur != null) recentsBlur.hide(); // [FIX 2B] gỡ lớp phủ Recents + reset phiên khi tắt màn
     for (int j = 0; j < 12; j++) {
         if (accHomeBars[j] != null) accHomeBars[j].setVisibility(View.GONE);
-        hideIconLayer("homacc_" + BARS[j]);
+        hideIconLayer("home_" + BARS[j]);
     }
+
     for (int j = 0; j < 4; j++) if (accHomeCorners[j] != null) accHomeCorners[j].setVisibility(View.GONE);
 
     removeYtdlOverlay();
@@ -531,17 +531,12 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         try { fpController.unregisterFingerprintGestureCallback(fpCallback); } catch (Exception e) {}
         fpRegistered = false;
     }
-
-            // [MỚI] Hồi sinh hoàn toàn: Hủy mọi cờ xuyên thấu/giả lập đang kẹt
             isDispatchingSyntheticGesture = false;
             setTransientUntouchable(false);
-
-            // [THAY BẰNG CODE HỒI SINH LOCK Ở ĐÂY]
             SharedPreferences.Editor ed = prefs.edit();
             for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
             for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
             ed.apply();
-                        // [MỚI] Chủ động thu hồi Trợ năng ngay khi tắt màn hình
             if (BlacklistLockWatchdogService.shouldPreempt(prefs)) {
                 BlacklistLockWatchdogService.beginPreempt(EdgeBarService.this);
             }
@@ -554,9 +549,10 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
     isDispatchingSyntheticGesture = false;
     setTransientUntouchable(false);
     SharedPreferences.Editor ed = prefs.edit();
-    for (String b : BARS) ed.putBoolean("homacc_" + b + "_manual_hide", false);
-    for (String cn : CORNERS) ed.putBoolean("homacc_corner_" + cn + "_manual_hide", false);
+    for (String b : BARS) ed.putBoolean("home_" + b + "_manual_hide", false);
+    for (String cn : CORNERS) ed.putBoolean("home_corner_" + cn + "_manual_hide", false);
     ed.apply();
+
     updateVisibility();
     // ✅ Dùng qualified-this trỏ đúng ra class ngoài
     new Handler(android.os.Looper.getMainLooper()).postDelayed(EdgeBarService.this::updateVisibility, 60);
@@ -1919,11 +1915,11 @@ private void triggerBlacklistAutoHomeb() {
                                 case "PLAY_MY_PLAYLIST": startMyPlaylist(); break;
                 case "HIDE_SOME_OVERLAY":
                     hideSomeOverlay("lock_");
-                    hideSomeOverlay("homacc_");
+                    hideSomeOverlay("home_");
                     break;
                 case "SHOW_ALL_OVERLAY":
                     showAllOverlay("lock_");
-                    showAllOverlay("homacc_");
+                    showAllOverlay("home_");
                     break;
                 case "TRIGGER_TAP": case "TRIGGER_DTAP": case "TRIGGER_LONG":
                 case "TRIGGER_UP": case "TRIGGER_DOWN": case "TRIGGER_LEFT":
@@ -2267,20 +2263,14 @@ private void dispatchTwoFingerAccMenuGesture() {
         }
     }, null);
 }
-    // [MỚI] Ẩn thủ công đúng danh sách bar/corner user đã chọn cho rule này — tái dùng
-    // NGUYÊN VẸN cờ "_manual_hide" đã có sẵn (đọc trong updateVisibility()/updateHomaccLive()),
-    // Zero-cost khi rule không gán HIDE_SOME_OVERLAY: chỉ 1 lệnh đọc prefs, return ngay nếu rỗng.
-        private void hideSomeOverlay(String key) {
-        String prefix = key.startsWith("homacc_") ? "homacc_" : "lock_";
+private void hideSomeOverlay(String key) {
+        String prefix = key.startsWith("home_") ? "home_" : "lock_";
         String targetsBar = prefs.getString(prefix + "bar_hide_targets", "");
         String targetsCorner = prefs.getString(prefix + "corner_hide_targets", "");
         String targets = targetsBar + (targetsBar.isEmpty() || targetsCorner.isEmpty() ? "" : ",") + targetsCorner;
         
         if (targets.isEmpty()) return;
-        // [TỐI ƯU] Ẩn TRỰC TIẾP đúng view thay vì gọi updateVisibility()/updateHomaccLive()
-        // (duyệt lại toàn bộ 16 Bar/Corner + panelEngine.rebuildAll()) — đây là nguồn giật
-        // chính khi HIDE_SOME_OVERLAY chạy cùng lúc với TRIGGER_* giả lập cử chỉ thật.
-        boolean isHomacc = prefix.equals("homacc_");
+        boolean isHomacc = prefix.equals("home_");
         View[] barArr = isHomacc ? accHomeBars : bars;
         View[] cornerArr = isHomacc ? accHomeCorners : corners;
         SharedPreferences.Editor ed = prefs.edit();
@@ -2309,7 +2299,7 @@ private void dispatchTwoFingerAccMenuGesture() {
         isDispatchingSyntheticGesture = false;
         setTransientUntouchable(false);
 
-        String prefix = key.startsWith("homacc_") ? "homacc_" : "lock_";
+        String prefix = key.startsWith("home_") ? "home_" : "lock_";
         boolean changed = false;
         SharedPreferences.Editor ed = prefs.edit();
         for (String barKey : BARS) {
@@ -2322,8 +2312,8 @@ private void dispatchTwoFingerAccMenuGesture() {
         }
         if (changed) { 
             ed.apply(); 
-            if (prefix.equals("homacc_")) updateHomaccLive();
-            else updateVisibility(); 
+            if (prefix.equals("home_")) updateHomaccLive();
+            else updateVisibility();
         }
     }
     private void doVibrate(int dur) { if (dur<=0) return; try { if (Build.VERSION.SDK_INT>=26) vibrator.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(dur); } catch(Exception e){} }
@@ -2543,13 +2533,9 @@ private void refreshFingerprintRegistration() {
         }
         updateVisibility();
     }
-    /**
- * Đồng bộ preview Homacc cho không gian Frontier — KHÔNG đụng tới
- * AccessibleHomeService thật. Zero cost khi trạng thái không đổi
- * (so sánh cache trước, chỉ gọi WM khi thay đổi thực sự).
- */
 private void syncHomaccPreviewState() {
-    boolean wantPreview = prefs.getBoolean("preview_homacc", false);
+    boolean wantPreview = prefs.getBoolean("preview_home", false);
+
     if (wantPreview == lastPreviewHomaccState) return; // không đổi → zero IPC
     lastPreviewHomaccState = wantPreview;
     if (wantPreview) {
@@ -3135,13 +3121,9 @@ private boolean homaccViewsMissing() {
     }
     return false;
 }
-
-// [FIX TẦNG 3] Backoff theo cấp số: lần đầu heal ngay lập tức (0ms backoff),
-// các lần sau mới backoff tăng dần 200 → 500 → 1000 → 2000 → 3000ms.
-// Reset về 0 khi heal thành công (views attached trở lại).
 private int homaccHealFailStreak = 0;
 private void healHomaccIfNeeded() {
-    boolean shouldExist = AccessibleHomeService.isRunning || prefs.getBoolean("preview_homacc", false);
+    boolean shouldExist = AccessibleHomeService.isRunning || prefs.getBoolean("preview_home", false);
     if (!shouldExist) return;
     if (!homaccViewsMissing()) { homaccHealFailStreak = 0; return; } // đã có view -> reset fail streak
 
@@ -3168,16 +3150,16 @@ private void drawAccessibleHome() {
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
         try { wm.addView(bar, p); } catch (Exception e) { accHomeBars[i] = null; continue; }
-        bar.setOnTouchListener(new SidebarTouchListener("homacc_" + BARS[i], bar));
+        bar.setOnTouchListener(new SidebarTouchListener("home_" + BARS[i], bar));
         accHomeBars[i] = bar;
     }
     for (int i = 0; i < 4; i++) {
         if (accHomeCorners[i] != null && accHomeCorners[i].getParent() != null) continue;
-        View corner = new CornerView(this, i, "homacc_");
+        View corner = new CornerView(this, i, "home_");
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(1, 1,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
         try { wm.addView(corner, p); } catch (Exception e) { accHomeCorners[i] = null; continue; }
-        corner.setOnTouchListener(new SidebarTouchListener("homacc_corner_" + CORNERS[i], corner));
+        corner.setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corner));
         accHomeCorners[i] = corner;
     }
     isHomaccDrawn = true;
@@ -3217,9 +3199,7 @@ private void updateHomaccLive() {
     }
     if (!isHomaccDrawn) return;
 
-    // [FIX BUG LOGIC] Kiểm tra cờ xem trước và trạng thái khóa màn hình.
-    // Homacc chỉ được hiện khi: Đang KHÔNG ở màn hình khóa, HOẶC đang bật xem trước Homacc.
-    boolean isPreviewHomacc = prefs.getBoolean("preview_homacc", false);
+    boolean isPreviewHomacc = prefs.getBoolean("preview_home", false);
     boolean isLocked = km != null && km.isKeyguardLocked()
         && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs;
     boolean shouldShowHomacc = !isLocked || isPreviewHomacc;
@@ -3227,51 +3207,53 @@ private void updateHomaccLive() {
     for (int i = 0; i < 12; i++) {
         View v = accHomeBars[i];
         if (v == null || !(v instanceof BarView)) continue;
-        boolean en = prefs.getBoolean("homacc_" + BARS[i] + "_en", false);
-        boolean manualHidden = prefs.getBoolean("homacc_" + BARS[i] + "_manual_hide", false);
+        boolean en = prefs.getBoolean("home_" + BARS[i] + "_en", false);
+        boolean manualHidden = prefs.getBoolean("home_" + BARS[i] + "_manual_hide", false);
         
         // Ép thêm điều kiện shouldShowHomacc
         v.setVisibility((en && !manualHidden && shouldShowHomacc) ? View.VISIBLE : View.GONE);
         if (!en || manualHidden || !shouldShowHomacc) {
-            if (!en) removeIconLayer("homacc_" + BARS[i]); else hideIconLayer("homacc_" + BARS[i]);
+            if (!en) removeIconLayer("home_" + BARS[i]); else hideIconLayer("home_" + BARS[i]);
             continue;
         }
 
-        int alpha = prefs.getInt("homacc_" + BARS[i] + "_alpha", 50);
-        int w = prefs.getInt("homacc_" + BARS[i] + "_w", 300);
-        int h = prefs.getInt("homacc_" + BARS[i] + "_h", 60);
-        int x = prefs.getInt("homacc_" + BARS[i] + "_x", 0);
-        int y = prefs.getInt("homacc_" + BARS[i] + "_y", 0);
-        int visMode = prefs.getInt("homacc_" + BARS[i] + "_vis_mode", 0);
-        int hideDur = prefs.getInt("homacc_bar_hide_dur", 2500);
-        ((BarView) v).updateProps(alpha, visMode == 1, hideDur, visMode == 2, prefs.getInt("homacc_bar_radius", 24));
+        int alpha = prefs.getInt("home_" + BARS[i] + "_alpha", 50);
+        int w = prefs.getInt("home_" + BARS[i] + "_w", 300);
+        int h = prefs.getInt("home_" + BARS[i] + "_h", 60);
+        int x = prefs.getInt("home_" + BARS[i] + "_x", 0);
+        int y = prefs.getInt("home_" + BARS[i] + "_y", 0);
+        int visMode = prefs.getInt("home_" + BARS[i] + "_vis_mode", 0);
+        int hideDur = prefs.getInt("home_bar_hide_dur", 2500);
+        ((BarView) v).updateProps(alpha, visMode == 1, hideDur, visMode == 2, prefs.getInt("home_bar_radius", 24));
+
         WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
         int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-        int priMode = prefs.getInt("homacc_" + BARS[i] + "_pri_mode", 0);
+        int priMode = prefs.getInt("home_" + BARS[i] + "_pri_mode", 0);
         if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
         p.flags = baseFlags; p.width = w; p.height = h; p.x = x; p.y = y; p.gravity = GRAV[i];
         updateLayoutIfChanged(v, p);
         if (priMode == 0) applyAntiTapjacking(v, w, h);
-        syncIconLayer("homacc_", i, p, true);
+        syncIconLayer("home_", i, p, true);
     }
     for (int i = 0; i < 4; i++) {
         View v = accHomeCorners[i];
         if (v == null || !(v instanceof CornerView)) continue;
-        boolean en = prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_en", false);
-        boolean manualHidden = prefs.getBoolean("homacc_corner_" + CORNERS[i] + "_manual_hide", false);
+        boolean en = prefs.getBoolean("home_corner_" + CORNERS[i] + "_en", false);
+        boolean manualHidden = prefs.getBoolean("home_corner_" + CORNERS[i] + "_manual_hide", false);
         
         // Ép thêm điều kiện shouldShowHomacc
         v.setVisibility((en && !manualHidden && shouldShowHomacc) ? View.VISIBLE : View.GONE);
         if (!en || manualHidden || !shouldShowHomacc) continue;
-        String ck = "homacc_corner_" + CORNERS[i] + "_";
-        int moonAlpha = prefs.getInt("homacc_corner_moon_alpha", 100);
-        int strokeAlpha = prefs.getInt("homacc_corner_stroke_alpha", 200);
-        int hideDelay = prefs.getInt("homacc_corner_hide_dur", 2500);
+        String ck = "home_corner_" + CORNERS[i] + "_";
+        int moonAlpha = prefs.getInt("home_corner_moon_alpha", 100);
+        int strokeAlpha = prefs.getInt("home_corner_stroke_alpha", 200);
+        int hideDelay = prefs.getInt("home_corner_hide_dur", 2500);
         int visMode = prefs.getInt(ck + "vis_mode", 0);
-        ((CornerView) v).updateProps(prefs.getInt("homacc_corner_thick", 8), moonAlpha, strokeAlpha,
+        ((CornerView) v).updateProps(prefs.getInt("home_corner_thick", 8), moonAlpha, strokeAlpha,
             visMode == 1, hideDelay, visMode == 2);
+
         int priMode = prefs.getInt(ck + "pri_mode", 0);
         WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
         int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
