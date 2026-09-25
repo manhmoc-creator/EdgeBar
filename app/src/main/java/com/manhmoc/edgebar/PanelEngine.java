@@ -37,7 +37,6 @@ static {
     ACT_LABEL_MAP.put("VOLUME","Âm lượng"); ACT_LABEL_MAP.put("NOTIFICATIONS","Thông báo");
     ACT_LABEL_MAP.put("BACK","Quay lại"); ACT_LABEL_MAP.put("HOME","Màn chính");
     ACT_LABEL_MAP.put("RECENTS","Đa nhiệm"); ACT_LABEL_MAP.put("VOICE_RECORD","Ghi âm");
-    // [FIX] Thiếu 4 key này khiến label fallback về nguyên key viết hoa (VD: "POWER_DIALOG")
     ACT_LABEL_MAP.put("POWER_DIALOG","Menu nguồn");
     ACT_LABEL_MAP.put("TOGGLE_OVERLAY","Bật/Tắt Trợ Năng");
     ACT_LABEL_MAP.put("YTDL_DOWNLOAD","Tải video");
@@ -292,12 +291,6 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
     /** Gọi mỗi khi lock state / accessibility state đổi — decide xem instance này
      *  (Lock hay Homacc, tùy trạng thái) có được phép giữ panel hay không. */
     public void rebuildAll() {
-        // [FIX] Lock và Homacc dùng chung cờ isAnyMode nên shouldPanelBodyExistNow()
-        // trả về true khi LOCKED HOẶC Homacc đang chạy — nghĩa là khi khoá máy,
-        // điều kiện vẫn đúng (chỉ đổi lý do), Panel không bao giờ tự đóng dù đã
-        // đổi hẳn không gian. Phát hiện đúng thời điểm chuyển Lock <-> Homacc rồi
-        // tự đóng hết Panel đang mở tại đây — không cho Panel "mang theo" sang
-        // không gian mới, tránh treo overlay vô ích gây tốn pin/RAM.
         if (isAnyMode) {
             boolean lockedNow = km != null && km.isKeyguardLocked();
             if (lastLockedForPanels != null && lastLockedForPanels != lockedNow) {
@@ -471,11 +464,7 @@ private String computeSignature(String id) {
         + prefs.getString(px+"apps","") + "|" + prefs.getString(px+"acts","") + "|"
         + (forceTest != null && forceTest);
 }
-// PANEL BODY: luôn theo đúng vòng đời Lock/Home, KHÔNG phụ thuộc vis nữa
 private boolean shouldPanelBodyExistNow(String id) {
-    String px = "pack_panel_" + id + "_";
-    // [FIX] Nút TEST phải bỏ qua điều kiện Enable/Lock — cho phép xem trước
-    // ngay cả khi Pack đang tắt hoặc đứng sai không gian.
     Boolean forceTest = forceTestOn.get(id);
     if (forceTest != null && forceTest) return true;
 
@@ -489,19 +478,12 @@ private boolean shouldPanelBodyExistNow(String id) {
        }
     return true;
 }
-// HANDLE: Cục Bộ chỉ hiện trong Design; Toàn Cục hiện như panel
 private boolean shouldHandleExistNow(String id) {
     String px = "pack_panel_" + id + "_";
     int visMode = prefs.getInt(px+"vis", 0);
-    // [FIX] Cục Bộ (visMode==0) là chế độ XEM TRƯỚC lúc setup — phải hoạt
-    // động ĐỘC LẬP với Enable, vì lúc đang dựng Panel người dùng thường
-    // CHƯA bật Enable. Bắt buộc "en" ở đây là nguyên nhân khiến tick
-    // Preview Handle không có tác dụng gì.
     if (visMode == 0) {
         return prefs.getBoolean(px+"preview_handle", false);
     }
-    // Toàn Cục (visMode==1) là hành vi production thật -> vẫn cần Enable
-    // để Handle không tự ý xuất hiện ngoài ý muốn khi user chưa bật Pack.
     if (!prefs.getBoolean(px+"en", false)) return false;
     return shouldPanelBodyExistNow(id);
 }
@@ -513,9 +495,6 @@ public void setForceTest(String id, boolean on) {
 }
     private boolean shouldOwnPanelNow() {
         if (!isAnyMode) return true; // Homeb: luôn được phép (chỉ cần unlock, check riêng bên dưới)
-        // isAnyMode=true dùng chung cho Lock + Homacc trong EdgeBarService.
-        // Loại trừ lẫn nhau y hệt logic bars/corners: locked -> Lock giữ panel,
-        // unlocked + Homacc chạy -> Homacc giữ panel. Không bao giờ cả hai cùng lúc.
         return true; // panel Lock vs Homacc tự phân biệt qua px+"owner" bên dưới nếu cần mở rộng
     }
     private void buildHandle(String id) {
@@ -568,9 +547,6 @@ private void buildPanelBody(String id) {
 
     LinearLayout panel = new LinearLayout(ctx);
 panel.setOrientation(LinearLayout.VERTICAL);
-// [FIX] Căn giữa nội dung trong khung Panel — trước đây thiếu dòng này khiến
-// lưới icon dồn về góc trên khi Panel đặt dọc (trái/phải), tạo cảm giác
-// lệch hẳn xuống nửa trên, mất cân bằng trên/dưới.
 panel.setGravity(Gravity.CENTER);
 GradientDrawable pgd = new GradientDrawable();
     pgd.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
@@ -579,8 +555,6 @@ GradientDrawable pgd = new GradientDrawable();
     panel.setBackground(pgd);
     panel.setVisibility(View.GONE);
 
-    // [FIX] Thiếu "shortcuts" trong tổng số ô -> Panel bị đo kích thước thiếu chỗ
-// (hoặc Shortcut không có ô nào để hiện ra).
 int itemCount = csvToList(prefs.getString(px+"apps","")).size() +
                 csvToList(prefs.getString(px+"acts","")).size() +
                 csvToList(prefs.getString(px+"shortcuts","")).size();
@@ -629,10 +603,7 @@ private void renderPanelGrid(String id) {
     if (panel == null) return;
     renderGen.putIfAbsent(id, new AtomicInteger(0));
     final int myGen = renderGen.get(id).incrementAndGet();
-    panel.removeAllViews(); // [FIX] BẮT BUỘC dọn sạch gridContainer cũ trước khi build mới,
-                             // nếu không mỗi lần vẽ lại (kể cả sau khi hoán đổi 2 icon) sẽ
-                             // chồng thêm 1 lớp layout mới lên panel thay vì thay thế, khiến
-                             // trạng thái selectedForSwap và cell hiển thị bị lệch pha nhau.
+    panel.removeAllViews(); 
     int cols = Math.max(1, prefs.getInt(px+"cols", 4));
     int iconSize = prefs.getInt(px+"icon_size", 110);
     int cellSize = iconSize + CELL_INNER_PAD;
@@ -831,19 +802,6 @@ private Bitmap maskBitmapToShape(Bitmap content, int shape, int size) {
     return result;
 }
 
-/** Vẽ nền màu (nếu có) + icon/emoji rồi cắt theo hình đã chọn. Cache theo
- *  (cacheKey, shape, size, cover, backdropColor) — chỉ vẽ lại khi style/kích thước
- *  thực sự đổi, không tốn CPU khi cuộn danh sách.
- *  cover=true: phóng to 1.28x che kín 4 góc (dùng cho icon App).
- *  cover=false: thu nhỏ 0.8x, chừa đệm quanh (dùng cho icon Action/Shortcut). */
-// [FIX] Bỏ hẳn tham số "cover" (nguồn gốc gây icon App bị phóng to 1.28x trong khi
-// Action/Shortcut chỉ 0.8x, khiến 6 kiểu icon lệch kích thước nền so với nhau).
-// Dùng DUY NHẤT 1 hệ số ICON_CONTENT_SCALE cho mọi loại icon (App/Shortcut/Action)
-// và mọi kiểu hình (Circle/Squircle/Pebble/Rough/Pentacle/System) -> nền đồng nhất.
-// Cache key cũng ngắn hơn (bớt biến cover) -> ít alloc String hơn, nhẹ hơn cho Pixel 2XL.
-// [FIX] Tăng từ 0.82 lên 0.92 — lấp đầy khung gần trọn vẹn, tránh cảm giác icon
-// "bị thu bé" so với trước (bản cũ App icon phóng to 1.28x, Action icon chỉ 0.8x —
-// giờ dùng chung 1 hệ số nên phải tăng lên để không còn bé hơn hẳn so với trước).
 private static final float ICON_CONTENT_SCALE = 0.77f;
     private float getIconCoreScale() { return prefs.getInt("lenap_global_icon_scale", 77) / 100f; }
     private int getPoolIconAlpha() { return prefs.getInt("lenap_global_alpha_pool", 255); }
@@ -1040,12 +998,6 @@ private String humanizeActionKey(String key) {
     }
     return sb.length() == 0 ? key : sb.toString();
 }
-// Ngũ giác bo góc mềm — dùng Outline.setConvexPath() để clip, KHÔNG cần custom Drawable
-// riêng, tận dụng luôn backdrop trắng sẵn có -> nhẹ GPU, không thêm object vẽ nào.
-// [FIX] Toạ độ Q-curve LẤY ĐÚNG từ path SVG mẫu PENTACLE (viewBox 500x500) —
-// trước đây tự tính ngũ giác đều bo góc, giờ khớp chính xác dáng "giọt lệ 5 cạnh"
-// của file mẫu. Scale theo iconSize/500. Tên hàm giữ nguyên để không phải sửa
-// mọi nơi gọi buildRoundedPentagon(...).
 private Path buildRoundedPentagon(int size) {
     Path path = new Path();
     float s = size / 500f;
@@ -1107,12 +1059,6 @@ private Path buildPebblePath(int size) {
     // bên trong luôn có cùng kích thước hiển thị tuyệt đối.
     return normalizeToFullSize(path, size);
 }
-
-// Rough — viền lởm chởm kiểu "xé giấy". Toạ độ CỐ ĐỊNH (không Random) nên mọi icon
-// Rough trong cùng Panel vẽ giống hệt nhau, Zero jitter/Zero alloc thêm mỗi lần render.
-// [FIX] Toạ độ ĐẦY ĐỦ lấy đúng từ path SVG mẫu ROUGH (viewBox 500x500) — trước đây
-// chỉ có 20 điểm tự vẽ tay xấp xỉ, giờ dùng nguyên bộ ~100 điểm gốc để đúng hình
-// "xé giấy" như file mẫu. Scale theo iconSize/500.
 private static final float[][] ROUGH_PTS_500 = {
     {407.18f,250.00f},{411.17f,256.33f},{412.91f,262.82f},{413.20f,269.32f},{415.70f,276.24f},
     {419.13f,283.64f},{421.58f,291.19f},{417.25f,297.17f},{414.81f,303.55f},{411.09f,309.43f},
@@ -1172,12 +1118,7 @@ private Path buildRoughPath(int size) {
         box.addView(iv);
     } else {
         int effectiveShape = (shape == 5) ? 0 : shape;
-        // [MỚI] Nền TRẮNG tinh khiết — khớp đúng style icon App Shortcut ngoài Home
-        // (xem buildNeonEdgeIcon() trong MainActivity: nền trắng + glyph gradient).
         int backdropColor = Color.WHITE;
-
-        // [MỚI] useNeon=true cho Action/Shortcut icon → dải Neon gradient giống App Shortcut.
-        // [FIX] useNeon = TRUE → trả lại dải Neon gradient như 4 slot shortcut ngoài Home
 Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null,
     effectiveShape, iconSize, backdropColor, true, true);
 
@@ -1209,22 +1150,9 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
     ImageView iv = new ImageView(ctx);
     iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
     if (shape == 5 && isAdaptive) {
-        // Icon Adaptive thật của launcher -> giữ nguyên hình dạng + kích thước hệ thống
         iv.setImageDrawable(icon);
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
     } else {
-        // [FIX] Bỏ hẳn zoom 1.28x + FIT_XY (gây méo/lem 4 góc). Dùng chung 1 hệ số
-        // ICON_CONTENT_SCALE với Action/Shortcut -> 6 kiểu icon có cùng size nền.
-        // Icon vuông sắc cạnh không-Adaptive (MB Bank, Beta Cinema...) được đặt lên
-        // nền TRẮNG giống đúng hành vi launcher hệ thống, không kéo méo ảnh nữa.
-       // [FIX] Bỏ hẳn điều kiện isAdaptive khi chọn màu nền — bug gốc là ở đây:
-        // đa số app hiện đại (kể cả MB Bank) đều là AdaptiveIconDrawable, không
-        // riêng Messenger, nên nhánh cũ luôn rơi vào "nền trong suốt" cho GẦN NHƯ
-        // MỌI app -> MB Bank vẫn bị cắt mà không có nền trắng, còn app full-bleed
-        // như Messenger thì cắt style gần như không thấy khác biệt (icon đã đặc
-        // kín sẵn). Giờ LUÔN ép nền trắng cho mọi icon App khi áp Style (trừ style
-        // "System" đã xử lý riêng ở nhánh if phía trên) -> đồng nhất tuyệt đối,
-        // và khi cắt hình cũng LUÔN nhìn thấy rõ viền trắng + hình dạng đã đổi.
         int effectiveShape = (shape == 5) ? 0 : shape;
         Bitmap styled;
         if (icon instanceof AdaptiveIconDrawable) {
@@ -1310,7 +1238,6 @@ private void fastRenderPanelGrid(String id) {
     LinearLayout gridContainer = (LinearLayout) panel.getChildAt(0); 
 gridContainer.removeAllViews();
 
-// [FIX] Lọc bỏ khỏi "order" mọi ref không còn tồn tại trong apps/acts/shortcuts hiện tại
 java.util.Set<String> validRefs = new java.util.LinkedHashSet<>();
 for (String a : csvToList(prefs.getString(px+"apps",""))) validRefs.add(a);
 for (String a : csvToList(prefs.getString(px+"acts",""))) validRefs.add(a);

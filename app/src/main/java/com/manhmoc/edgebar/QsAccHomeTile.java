@@ -10,18 +10,6 @@ import android.provider.Settings;
 import android.service.quicksettings.Tile;
 import android.service.quicksettings.TileService;
 
-/**
- * IRON VEIL PHANTOM v19.12.3.6.0
- * QsAccHomeTile: CHỈ kiểm soát AccessibleHomeService.
- * KHÔNG toggle MorseLock. KHÔNG can thiệp HomescreenService trực tiếp.
- *
- * Fix Bug 4: ADB shortcut — bật AccHome → old Home bars tự ẩn qua pref
- * Fix Bug 8: Notification race — cancel TRƯỚC, delay đọc state SAU
- *
- * Battery/RAM opt (Pixel 2XL):
- * - Notification chỉ tạo khi thực sự cần (lazy init channel)
- * - postDelayed 150ms tránh race condition với service lifecycle
- */
 public class QsAccHomeTile extends TileService {
 
     private static final int NOTIF_ID = 77;

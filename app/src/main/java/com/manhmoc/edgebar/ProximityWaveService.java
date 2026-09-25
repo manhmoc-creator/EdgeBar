@@ -36,19 +36,13 @@ import android.util.Log;
 public class ProximityWaveService extends Service {
     public static boolean isRunning = false;
     private static final String TAG = "EdgeBar_Prox";
-
-// [FIX ĐỘ NHẠY] Vẫy tay tự nhiên 800-1400ms -> nới lên 1500ms
 private static final long MAX_NEAR_MS = 1500;
-// Giữ 650ms — đủ tách 2 vẫy liên tiếp nhưng không gộp 1 vẫy thành 2
 private static final long WAVE_GAP_MS = 650;
-// [FIX] 1000ms quá dài — user tắt màn xong vẫy ngay bị bỏ qua
 private static final long ARM_GRACE_MS = 400;
 private static final long POCKET_HOLD_MS = 20000;
-// [FIX] Chống double-fire khi 2 xung near/far sát nhau do rung cảm biến
 private long lastWaveFireMs = 0;
 private static final long WAVE_FIRE_COOLDOWN_MS = 250;
 
-// [FIX] Bỏ ngưỡng cm tuyệt đối — sensor đời cũ báo giá trị bất thường
 
     private static final java.util.Set<String> SCREEN_REQUIRED = new java.util.HashSet<>(java.util.Arrays.asList(
         "CAMERA", "SCREENSHOT", "POWER_DIALOG", "NOTIFICATIONS", "QUICK_SETTINGS", "SCAN_QR"));
@@ -173,8 +167,6 @@ private static final long WAVE_FIRE_COOLDOWN_MS = 250;
 
         boolean ok = false;
         try {
-// [FIX] SENSOR_DELAY_UI (60ms) — nhanh hơn NORMAL (200ms) gấp 3 lần,
-// vẫn tiết kiệm pin vì proximity sensor chỉ fire khi giá trị đổi.
 ok = sm.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_FASTEST, 0, h);
         } catch (Exception e) { Log.w(TAG, "register prox failed", e); }
         if (!ok) { Log.w(TAG, "registerListener trả về false"); return; }
@@ -295,9 +287,6 @@ ok = sm.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_FA
         stepCount = 0;
     };
 
-    // ---------- CHẠY HÀNH ĐỘNG ----------
-private void fireWave(int n) {
-    // [FIX] Cooldown chống double-fire
     long now = SystemClock.elapsedRealtime();
     if (now - lastWaveFireMs < WAVE_FIRE_COOLDOWN_MS) {
         Log.d(TAG, "Cooldown skip wave#" + n);

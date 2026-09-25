@@ -29,11 +29,6 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * V2 — "Recents Guard": KHÔNG blur, KHÔNG screenshot, KHÔNG bám theo thẻ.
- * Mở Recents từ app thuộc Blurlist/Locklist -> phủ 1 cửa sổ tĩnh (ảnh/màu) toàn màn hình.
- * Chạm vào thẻ (app lên foreground) hoặc về Home -> gỡ. Recents từ app thường -> không làm gì.
- */
 public class RecentsBlurHelper {
     private static final long SCAN_STEP_MS = 100;
     private static final int  SCAN_RETRIES = 6;          // ~600ms chờ thẻ Recents dựng xong

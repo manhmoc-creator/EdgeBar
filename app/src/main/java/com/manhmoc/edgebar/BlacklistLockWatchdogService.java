@@ -316,7 +316,6 @@ public class BlacklistLockWatchdogService extends Service {
                 int type = ev.getEventType();
                 boolean keep = keepPkgs.contains(p);
                 if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-    // [FIX] Launcher lên foreground + đã mở khoá = user về Home -> xoá sạch cờ "app che màn khoá"
     if (isLauncherPkg(p) && km != null && !km.isKeyguardLocked()) {
         coverFg.clear(); fgKeep.clear();
         continue;

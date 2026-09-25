@@ -14,9 +14,6 @@ import android.os.Build;
  */
 public class HomaccWatchdogReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context c, Intent i) {
-        // [FIX] "shortcut_acc_home_on" không hề được set true ở bất kỳ đâu trong app,
-        // khiến watchdog cũ luôn no-op. Đổi sang đúng bản chất: Homacc PHẢI sống bất cứ
-        // khi nào Accessibility đang bật (đúng vòng đời đã thiết kế).
         SharedPreferences p = c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
         if (p.getBoolean("edgebar_permanently_stopped", false)) return; // [MỚI] user đã bấm Dừng vĩnh viễn
 

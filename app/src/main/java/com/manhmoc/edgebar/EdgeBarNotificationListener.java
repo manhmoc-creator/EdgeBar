@@ -47,14 +47,6 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             boolean lockedOrOff = (km != null && km.isKeyguardLocked()) || (pm != null && !pm.isInteractive());
             if (!lockedOrOff) return;
-
-// CODE MỚI:
-// [FIX] Bỏ PAUSE_WM_OPS ở đây — nó ẩn sạch Lock bar/corner cũ TRƯỚC khi LockEbService
-// (bên trong begin()) kịp vẽ overlay thay thế, tạo khoảng trống "0 overlay" khiến app
-// Blacklist tưởng bị lộ và tự kill cuộc gọi. Lock bar cũ cứ hiển thị bình thường cho
-// tới khi Trợ năng thực sự bị thu hồi (EdgeBarService.onDestroy tự dọn nó).
-BlacklistLockWatchdogService.begin(this, pkg, false); // false = app CHƯA lên foreground
-
         } catch (Exception ignored) {}
     }
 }

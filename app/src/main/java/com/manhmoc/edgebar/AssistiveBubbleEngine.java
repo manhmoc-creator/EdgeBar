@@ -249,8 +249,6 @@ private int clampPx(int v, int min, int max) { return Math.max(min, Math.min(v, 
     if (bubbleView == null || bubbleLp == null) return;
     if (menuOverlay != null) closeMenu();
 
-    // [FIX] Đợi 180ms để Resources/WindowManager ổn định hẳn sau khi xoay,
-    // tránh đọc DisplayMetrics còn dở dang (nguyên nhân bong bóng "rơi vào giữa").
     bubbleIconHandler.postDelayed(() -> {
         if (bubbleView == null || bubbleLp == null) return;
         DisplayMetrics dm = getRealMetrics();
@@ -500,10 +498,6 @@ else pendingSingleTap[0].run();
                         
 ValueAnimator snapAnim = ValueAnimator.ofFloat(0f, 1f);
 snapAnim.setDuration(320); 
-// [FIX] OvershootInterpolator khiến giá trị vọt vượt quá 1.0 rồi tụt lại
-// -> đây chính là cảm giác "bật lại như quả bóng" khi gần đường tâm.
-// Đổi sang DecelerateInterpolator: mượt, giảm tốc dần về đích, không overshoot,
-// đường đi luôn là 1 đường thẳng liên tục từ vị trí thả tay tới điểm neo cạnh.
 snapAnim.setInterpolator(new DecelerateInterpolator(1.8f)); 
 int startX = bubbleLp.x; int startY = bubbleLp.y;
                         snapAnim.addUpdateListener(a -> {
@@ -554,8 +548,6 @@ private boolean hasDtapRule() {
         else v.vibrate(30);
     } catch (Exception ignored) {}
 }
-// [FIX] Bổ sung âm chạm — trước đây Bubble hoàn toàn thiếu nhánh này
-// khiến tick "Âm chạm" trong editor Bong bóng không có tác dụng gì.
 if (prefs.getBoolean("prule_" + rId + "_snd", false)) {
     TouchSoundHelper.play(ctx, prefs);
 }
@@ -993,8 +985,6 @@ tv.setTextSize(12f);
     }
 
     private void buildSubmenuGrid(LinearLayout card, String type) {
-    // [FIX] Bỏ hoàn toàn tvHeader tiêu đề — đã có nút Back trong nav bar hiển thị
-    // tên submenu rồi, không cần thêm dòng nữa làm panel cao lệch so với 9 nút chính.
     List<String> items = getSubItems(type);
     for (int i = 0; i < 3; i++) {
         LinearLayout row = new LinearLayout(ctx);
@@ -1548,9 +1538,6 @@ private void fireQsTile(String tileId) {
         if (d == null) { centerIconBmp = null; return; }
         // [MỚI] Trừ padding 15dp x2 để icon không chạm sát viền, giống bong bóng thật
         int iconSize = Math.max(20, prefs.getInt("bubble_size", 120) - 30);
-// [FIX] contentScale=1f khiến icon bị crop sát viền rồi phóng đầy khung -> to hơn hẳn
-// icon bubble nghỉ (vốn dùng FIT_CENTER giữ nguyên margin tự nhiên). Hạ còn 0.75f để
-// khớp đúng cỡ hiển thị thực tế của bubble nghỉ, không cấp phát Bitmap thêm nào cả.
 centerIconBmp = PanelEngine.normalizeIconBitmap(d, iconSize, 0.75f);
     }
 
@@ -1560,9 +1547,7 @@ centerIconBmp = PanelEngine.normalizeIconBitmap(d, iconSize, 0.75f);
         circleView.animate().alpha(1f).setDuration(90).start();
         circleView.invalidate();
     }
-// [MỚI] Hoán vị hiển thị RIÊNG cho Vòng đạn — không đụng vào dữ liệu/thứ tự của
-// Bubble Panel. Chỉ lưu 9 chỉ số (vị trí gốc -> vị trí hiển thị), Zero-RAM ngoài
-// lúc user thực sự đổi chỗ 2 nút.
+
 private int[] getCirclePerm(String key) {
     int[] perm = new int[9];
     for (int i = 0; i < 9; i++) perm[i] = i;
@@ -1577,8 +1562,6 @@ private int[] getCirclePerm(String key) {
     return perm;
 }
         private List<String[]> getCurrentCircleItems() {
-        // [SỬA] Nội dung 9 ô vẫn lấy từ nguồn dùng chung (Common Settings), nhưng
-        // THỨ TỰ hiển thị áp qua permKey riêng của Circle -> không còn ảnh hưởng Panel.
         List<String> base = (circleSubmenuType == null) ? getMainOrder() : getSubItems(circleSubmenuType);
         String permKey = (circleSubmenuType == null) ? "bubble_circle_perm_MAIN" : "bubble_circle_perm_" + circleSubmenuType;
         int[] perm = getCirclePerm(permKey);
@@ -1607,8 +1590,6 @@ private int[] getCirclePerm(String key) {
         }
         float getVelocityDegPerSec() {
             long dt = System.currentTimeMillis() - startTs;
-            // [FIX] dt quá nhỏ (mới reset) -> phép chia cho ra vận tốc ảo cực lớn dù
-            // chỉ lệch vài độ. Bắt buộc phải trôi qua ít nhất 60ms mới tin số liệu.
             if (dt < 60) return 0f;
             return accumDeg / (dt / 1000f);
         }
@@ -1929,24 +1910,19 @@ private Bitmap drawableToNodeBitmap(Drawable d, int size, boolean isApp) {
             float ny = cy + ringR * (float) Math.sin(angle);
 
             boolean selected = selectedNodeIdx != null && selectedNodeIdx == i;
-            // [MỚI] Nền TRẮNG cho node chưa-chọn — đồng bộ với Panel + Bubble Panel.
             pNodeBg.setColor(selected ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 58, 58, 58));
             canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeBg);
-            // [MỚI] Trên nền trắng, viền xám nhạt mất tương phản → dùng viền đậm
-            // (tone xám-đen) cho node chưa-chọn, viền trắng cho node đang chọn.
             pNodeStroke.setColor(selected ? Color.WHITE : Color.argb(90, 0x55, 0x55, 0x55));
 
 
             pNodeStroke.setStrokeWidth(selected ? 5f : 3f);
             canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeStroke);
 
-            // [MỚI] Vẽ ICON THẬT trong nút — thay cho việc chỉ ghi chữ như trước
             Bitmap icon = nodeIcons.get(i);
             if (icon != null) {
                 canvas.drawBitmap(icon, nx - icon.getWidth() / 2f, ny - icon.getHeight() / 2f, pIconPaint);
             }
 
-               // [MỚI] Nhãn ngắn hiện DƯỚI nút (không đè icon) để user vẫn biết đây là loại gì
                         String[] item = items.get(i);
             String label = item[0];
             if (label != null && !label.isEmpty()) {
@@ -1978,7 +1954,7 @@ private Bitmap drawableToNodeBitmap(Drawable d, int size, boolean isApp) {
     }
 
         @Override public boolean onTouchEvent(MotionEvent e) {
-        if (e.getActionMasked() == MotionEvent.ACTION_OUTSIDE) { closeCircleMenu(); return true; } // [FIX] đồng bộ với Panel: chạm ra ngoài = đóng ngay
+        if (e.getActionMasked() == MotionEvent.ACTION_OUTSIDE) { closeCircleMenu(); return true; } 
         float cx = getWidth() / 2f, cy = getHeight() / 2f;
         float x = e.getX(), y = e.getY();
         switch (e.getActionMasked()) {
@@ -2016,7 +1992,6 @@ private Bitmap drawableToNodeBitmap(Drawable d, int size, boolean isApp) {
     circleRotationDeg += delta;
     angTracker.addSample(delta);
     float v = angTracker.getVelocityDegPerSec();
-    // [FIX] Đổi hướng xoay giữa chừng -> huỷ hẹn giờ cũ ngay, không bắn nhầm hướng trước đó
     boolean directionFlipped = (Math.abs(v) > 5f) && lastSpinVelocity != 0f
         && Math.signum(v) != Math.signum(lastSpinVelocity);
     if (Math.abs(v) > 5f) lastSpinVelocity = v;

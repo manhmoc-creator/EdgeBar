@@ -131,8 +131,6 @@ private boolean recIndicatorTestPaused = false;
     private PanelEngine panelEngine;
     private AssistiveBubbleEngine bubbleEngine;
     private int lastKbdHeight = 0;
-    // [FIX] Bổ sung các biến này vì SidebarTouchListener bên dưới có gọi tới,
-    // nhưng HomescreenService trước đây chưa khai báo (khác với EdgeBarService).
     private volatile boolean isDispatchingSyntheticGesture = false;
     private float globalTouchStartX = -1f, globalTouchStartY = -1f, globalTouchEndX = -1f, globalTouchEndY = -1f;
     private long lastSyncMs = 0;
@@ -336,8 +334,6 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, pCore);
     }
 }
-    // ===== GESTURE RIPPLE VIEW (icon + sóng theo điểm chạm) =====
-    // ===== GESTURE RIPPLE VIEW (chấm sóng chạm + icon NHẢY LÊN xoay 1 vòng rồi RƠI XUỐNG) =====
     private class GestureRippleView extends View {
         private float touchX = -1, touchY = -1;
         private float rippleRadius = 0f, rippleAlpha = 0f;
@@ -852,9 +848,6 @@ if (Intent.ACTION_SCREEN_OFF.equals(action)) {
     if (BlacklistLockWatchdogService.shouldPreempt(prefs))
         BlacklistLockWatchdogService.beginPreempt(HomescreenService.this);
 
-    // [FIX] KHÔNG tự bật lại Trợ năng ở đây nữa — đã dời sang ACTION_SCREEN_ON bên dưới,
-    // chỉ bật khi màn BẬT LẠI và đang ở màn khoá, thay vì bật ngay lúc vừa tắt màn.
-
 } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
     startAppLockPolling();
     if (km != null && km.isKeyguardLocked() && !prefs.getBoolean("blacklist_lock_active", false)) {
@@ -1255,12 +1248,9 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         boolean pushForKbd = avoidKbd && lastKbdHeight > 0;
 
         // DUAL-SOUL: Chỉ 1 trong 2 động cơ được phép vẽ tại 1 thời điểm
-        // → tiết kiệm tuyệt đối RAM/GPU Adreno 540 trên Pixel 2XL
         boolean accHomeRunning = AccessibleHomeService.isRunning && isAccEnabled();
         boolean oldHomeEnabled = HomescreenService.isRunning && prefs.getBoolean("shortcut_home_on", false);
         boolean previewHomeOn = prefs.getBoolean("preview_home", false);
-        // [FIX] Cho phép xem trước Homeb ngay cả khi Homacc đang thật sự chạy song song —
-// preview chỉ để user nhìn/chỉnh, không nên bị luật "1 trong 2 engine" chặn.
 boolean shouldRenderOldHome = isUnlocked && !hideNormal && (previewHomeOn || (!accHomeRunning && oldHomeEnabled));
 
         if (accHomeRunning) {
@@ -1286,7 +1276,13 @@ boolean shouldRenderOldHome = isUnlocked && !hideNormal && (previewHomeOn || (!a
                int iconSize = prefs.getInt("home_" + BARS[i] + "_icon_size", prefs.getInt("home_bar_icon_size", 40)); 
                int iconAlpha = prefs.getInt("home_" + BARS[i] + "_icon_alpha", prefs.getInt("home_bar_icon_alpha", 255)); 
                 ((BarView)bars[i]).setIcons(resolveBarIcons(prefs.getString("home_" + BARS[i] + "_icons",""), iconSize), iconAlpha);
-                int priMode = prefs.getInt("home_" + BARS[i] + "_pri_mode", 0);
+                // [MỚI - BƯỚC 5] Split: Homeb đọc key _homeb, fallback về key gốc.
+                String priKey = "home_" + BARS[i] + "_pri_mode";
+                boolean priSplit = prefs.getBoolean(priKey + "_split", false);
+                int priMode = priSplit
+                    ? prefs.getInt(priKey + "_homeb", prefs.getInt(priKey, 0))
+                    : prefs.getInt(priKey, 0);
+
                 int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                 if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
                 else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
@@ -1316,7 +1312,12 @@ boolean shouldRenderOldHome = isUnlocked && !hideNormal && (previewHomeOn || (!a
                 boolean isAuto = (visMode == 1);
                 boolean isInv = (visMode == 2);
                 ((CornerView) corners[i]).updateProps(prefs.getInt("home_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv);
-                int priMode = prefs.getInt(ck + "pri_mode", 0);
+                // [MỚI - BƯỚC 5]
+                boolean priSplitC = prefs.getBoolean(ck + "pri_mode_split", false);
+                int priMode = priSplitC
+                    ? prefs.getInt(ck + "pri_mode_homeb", prefs.getInt(ck + "pri_mode", 0))
+                    : prefs.getInt(ck + "pri_mode", 0);
+
                 int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                 if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
                 else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
@@ -1440,8 +1441,13 @@ private void applyLockGateInstant() {
         handleAction(key, 0, true); 
     }
 
-    private void handleAction(String key, int depth, boolean applyVibAnim) {
-        String action = prefs.getString(key, "NONE");
+        private void handleAction(String key, int depth, boolean applyVibAnim) {
+        // [MỚI - BƯỚC 4] Homeb context: nếu Pattern có 2-nửa (_dual=true), đọc
+        // key "_lim" (nửa LIMITED) thay vì key gốc. Pattern cũ chưa migrate
+        // không có _dual → đọc key gốc như trước → tương thích 100%.
+        boolean isDual = prefs.getBoolean(key + "_dual", false);
+        String readKey = isDual ? (key + "_lim") : key;
+        String action = prefs.getString(readKey, "NONE");
         boolean isOn = prefs.getBoolean(key + "_on", true);
         if (action.equals("NONE") || !isOn) return;
 
@@ -1455,10 +1461,11 @@ private void applyLockGateInstant() {
         // xong, chỉ cần lên lịch xong là đủ tách rời 2 luồng công việc), để traversal
         // vẽ nặng của Anima không còn chen ngang & chặn Runnable touch nữa.
         boolean hasTriggerAction = action.contains("TRIGGER_");
-        if (applyVibAnim) {
-            if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
-            if (prefs.getBoolean(key + "_snd", false)) TouchSoundHelper.play(this, prefs);
-            if (prefs.getBoolean(key + "_anim", true)) {
+                if (applyVibAnim) {
+            if (prefs.getBoolean(readKey + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
+            if (prefs.getBoolean(readKey + "_snd", false)) TouchSoundHelper.play(this, prefs);
+            if (prefs.getBoolean(readKey + "_anim", true)) {
+
                 if (hasTriggerAction) {
                     int animDelay = prefs.getInt("sim_gesture_delay", 10) + 25;
                     new Handler(android.os.Looper.getMainLooper()).postDelayed(this::playAnim, animDelay);
@@ -1480,8 +1487,8 @@ private void applyLockGateInstant() {
                 hideSomeOverlay(key);
             } else if (at.equals("SHOW_ALL_OVERLAY")) {
                 showAllOverlay();
-            } else if (at.equals("RUN_SHORTCUT")) {
-                String scId = prefs.getString(key + "_shortcut_id", "");
+                        } else if (at.equals("RUN_SHORTCUT")) {
+                String scId = prefs.getString(readKey + "_shortcut_id", "");
                 if (!scId.isEmpty()) {
                     try {
                         String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
@@ -1492,8 +1499,8 @@ private void applyLockGateInstant() {
                         }
                     } catch (Exception ignored) {}
                 }
-            } else if (at.equals("LAUNCH_APP")) {
-                String pkg = prefs.getString(key + "_launch_pkg", "");
+                        } else if (at.equals("LAUNCH_APP")) {
+                String pkg = prefs.getString(readKey + "_launch_pkg", "");
                 if (!pkg.isEmpty()) {
                     try {
                         Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
@@ -1734,9 +1741,6 @@ private void applyLockGateInstant() {
                     break;
                 }
                 case "OPEN_STORAGE_SCAN": {
-                    // [FIX] Dùng cờ bền trong SharedPreferences thay vì Intent extra —
-                    // onResume() của MainActivity LUÔN chạy khi Activity hiện ra, đảm bảo
-                    // tuyệt đối nhảy đúng tab Storage. Zero RAM/pin thêm.
                     prefs.edit().putBoolean("pending_storage_scan", true).apply();
                     Intent openStorage = new Intent(this, MainActivity.class);
                     openStorage.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
@@ -1832,36 +1836,6 @@ default:
         } catch (Exception e) {}
     }
 
-    private void fireIntent(String idx) {
-        try {
-            String act = prefs.getString("i" + idx + "_act", "");
-            String pkg = prefs.getString("i" + idx + "_pkg", "");
-            Intent i;
-            if (act.isEmpty() && !pkg.isEmpty()) {
-                i = getPackageManager().getLaunchIntentForPackage(pkg);
-                if (i == null) return;
-            } else {
-                i = new Intent(act);
-                if (!pkg.isEmpty()) i.setPackage(pkg);
-                String cls = prefs.getString("i" + idx + "_cls", "");
-                if (!pkg.isEmpty() && !cls.isEmpty())
-                    i.setComponent(new android.content.ComponentName(pkg, cls));
-                String data = prefs.getString("i" + idx + "_data", "");
-                if (!data.isEmpty()) i.setData(android.net.Uri.parse(data));
-                String cat = prefs.getString("i" + idx + "_cat", "");
-                if (!cat.isEmpty()) i.addCategory(cat);
-                String flg = prefs.getString("i" + idx + "_flags", "");
-                if (!flg.isEmpty()) i.addFlags(Integer.parseInt(flg));
-            }
-            if (prefs.getBoolean("i" + idx + "_br", true) && !act.isEmpty()) {
-                sendBroadcast(i);
-            } else {
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(i);
-            }
-        } catch (Exception e) {}
-    }
-
     private class SidebarTouchListener implements View.OnTouchListener {
         private String prefKeyBase;
         private View myView;
@@ -1869,20 +1843,13 @@ default:
         private long st;
         private boolean longFired = false;
         private final Handler lpHandler = new Handler(android.os.Looper.getMainLooper());
-private void checkAndYieldOS(String actionKey) {
-            if (prefs.getBoolean(actionKey + "_os", false)) {
+        private void checkAndYieldOS(String actionKey) {
+            // [MỚI - BƯỚC 4] Homeb context: đọc _lim_os nếu Pattern có 2-nửa.
+            String osKey = prefs.getBoolean(actionKey + "_dual", false)
+                ? actionKey + "_lim_os" : actionKey + "_os";
+            if (prefs.getBoolean(osKey, false)) {
+
                 try {
-                    // [FIX] KHÔNG ẩn View đồng bộ ngay trong lúc đang xử lý ACTION_UP
-                    // của CHÍNH View này — làm vậy buộc hệ thống đồng bộ lại
-                    // WindowManager/InputDispatcher ngay giữa chừng (cùng gốc bug với
-                    // updateViewLayout() vô điều kiện từng làm hỏng bộ đếm long-press,
-                    // xem updateLayoutIfChanged()), gây khựng hẳn 1 nhịp TRƯỚC khi
-                    // TRIGGER_* kịp bắn cử chỉ thật xuống OS. Dời việc ẩn sang đúng
-                    // mốc VSYNC kế tiếp bằng postOnAnimation() thay vì Handler.post()
-                    // thường (tránh xếp hàng chung Looper với holdCheckRunnable/anim
-                    // callback — đây là lý do bản post() cũ từng bị giật) — vẫn xảy ra
-                    // gần như tức thời (≤1 frame, ~16ms), không còn chặn dispatch chạm
-                    // hiện tại nên không còn giật hình dù trùng lúc TRIGGER_* đang chạy.
                     String hideKey = prefKeyBase + "_manual_hide";
                     myView.postOnAnimation(() -> {
                         myView.setVisibility(View.GONE);
@@ -2276,8 +2243,6 @@ WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
 PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         lp.x = prefs.getInt("anim_rec_x", 1000) - 1000;
-        // [FIX] Ép khoảng cách an toàn tối thiểu 100px với mép dưới màn hình —
-        // tránh đè lên vùng cử chỉ vuốt-về (back gesture) của hệ thống.
         lp.y = Math.max(100, prefs.getInt("anim_rec_y", 1000) - 1000);
         try { wm.addView(recIndicatorView, lp); } catch (Exception ignored) {}
         recBlinkAnim = ValueAnimator.ofFloat(1f, 0.25f, 1f);

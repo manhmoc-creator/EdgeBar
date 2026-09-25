@@ -73,12 +73,6 @@ public class HomebWatchdogReceiver extends BroadcastReceiver {
         android.app.PendingIntent pi = android.app.PendingIntent.getBroadcast(
             c, 502, i,
             android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
-        // [FIX] setExactAndAllowWhileIdle() cần quyền SCHEDULE_EXACT_ALARM trên Android 13+.
-        // App chưa xin quyền này -> lệnh có thể ném SecurityException và bị catch() nuốt im
-        // lặng, khiến Homeb KHÔNG BAO GIỜ được kích hoạt tức thời (chỉ tự phục hồi sau 5 phút
-        // qua watchdog định kỳ). Đổi sang setAndAllowWhileIdle() — KHÔNG cần quyền đặc biệt,
-        // vẫn chạy được khi máy đang Doze, và tiết kiệm pin hơn vì hệ thống được phép dồn
-        // chung với báo thức khác thay vì phải đánh thức CPU đúng mili giây (setExact).
         try {
             am.setAndAllowWhileIdle(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 android.os.SystemClock.elapsedRealtime() + 150, pi);

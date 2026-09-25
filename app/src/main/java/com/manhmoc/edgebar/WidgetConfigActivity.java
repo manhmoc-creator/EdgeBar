@@ -28,16 +28,6 @@ import android.widget.Toast;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Cấu hình Widget — nay dùng ĐÚNG ngôn ngữ thị giác với mục "Common Settings"
- * của Bubble: mỗi cử chỉ (TAP/DTAP) là 1 card chuẩn (optCol | infoCol | ctrlCol),
- * optCol hiện icon cử chỉ + icon options đang bật (📳✨), ctrlCol có nút TEST,
- * tap vào card mở picker giàu 6 nhóm category (SYSTEM/UTILITIES/APP/SHORTCUT/
- * PANEL/INTENT/MACRO) giống Bubble rule editor.
- *
- * Schema prefs KHÔNG đổi — vẫn giữ đúng "widget_<wid>_<gesture>_act/_pkg/_shortcut_id"
- * để EdgeBarWidgetProvider.java không cần sửa.
- */
 public class WidgetConfigActivity extends Activity {
     private int widgetId = AppWidgetManager.INVALID_APPWIDGET_ID;
     private SharedPreferences prefs;
