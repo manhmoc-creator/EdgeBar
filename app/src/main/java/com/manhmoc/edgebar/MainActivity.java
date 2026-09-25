@@ -1599,12 +1599,6 @@ fab.setPadding(22, 22, 22, 22); // đồng bộ với padding mới trong create
 showMainMenu();
         setContentView(rootLayout);
 
-        // ============================================================
-        // [TỐI ƯU PIXEL 2XL] Toàn bộ logic đọc prefs được dời xuống ĐÂY,
-        // chạy SAU setContentView() → nếu có crash bất ngờ, UI đã vẽ xong
-        // trước, user không thấy màn hình đen. Đồng thời tránh mọi rủi ro NPE
-        // do prefs chưa kịp gán khi super.onCreate() gọi lại vòng đời con.
-        // ============================================================
                 prefs.edit().putBoolean("edgebar_permanently_stopped", false).apply();
         syncVolumeService();
         syncProximityService();
@@ -1612,14 +1606,9 @@ showMainMenu();
         isVi = prefs.getBoolean("lang_vi", true);
         reloadActionLabels();
         syncAllTileComponentsOnBoot();
-
-        // [MỚI - BƯỚC 6] Chạy migrate khi user update app (không cần restore).
-        // Cờ "v2_migrated" chỉ false lần đầu sau update → chạy 1 lần duy nhất
-        // trong suốt vòng đời app. Các lần mở sau chỉ tốn 1 lần prefs.getBoolean.
         if (!prefs.getBoolean("v2_migrated", false)) migrateLegacyBackupToV2();
-
         if (prefs.getBoolean("needs_sanitize", false)) sanitizeAllPrefsAfterRestore();
-
+        cleanStaleAppliedPacks();   // ← THÊM DÒNG NÀY
         syncAppShortcutLabels();
     }
 
@@ -2250,6 +2239,22 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
 private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState, boolean isFrontier) {
     String listKey = prefix + "applied_packs";
     java.util.List<String> appliedPacks = getDynamicIds(listKey);
+    java.util.List<String> validBarIds = getDynamicIds("pack_bar_ids");
+    java.util.List<String> validCornerIds = getDynamicIds("pack_corner_ids");
+    java.util.List<String> cleaned = new java.util.ArrayList<>();
+    boolean dirtFound = false;
+    for (String k : appliedPacks) {
+        boolean ok = false;
+        if (k.startsWith("bar_")) {
+            if (validBarIds.contains(k.substring(4))) ok = true;
+        } else if (k.startsWith("corner_")) {
+            if (validCornerIds.contains(k.substring(7))) ok = true;
+        }
+        if (ok) cleaned.add(k); else dirtFound = true;
+    }
+    if (dirtFound) prefs.edit().putString(listKey, TextUtils.join(",", cleaned)).apply();
+    appliedPacks = cleaned;
+
 appliedPacks.sort((keyA, keyB) -> {
     boolean bA = keyA.startsWith("bar_"), bB = keyB.startsWith("bar_");
     if (bA != bB) return bA ? -1 : 1;
@@ -2257,6 +2262,7 @@ appliedPacks.sort((keyA, keyB) -> {
     int locB = prefs.getInt((bB ? "pack_bar_" : "pack_corner_") + keyB.replace(bB ? "bar_" : "corner_", "") + "_loc", 0);
     return Integer.compare(locA, locB);
 });
+
     // [MULTI-SELECT] Thanh công cụ chỉ dựng khi ĐANG ở chế độ chọn nhiều —
     // Zero-RAM lúc bình thường, giống mọi khu vực lazy-inflate khác trong app.
     if (isFrontier && frontierSelectMode) {
@@ -8836,10 +8842,11 @@ if (type == 0) {
         prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[currentLoc], true).apply();
         content.addView(createSectionTitle("CẤU HÌNH BAR (FORMAT B)"));
 
-        LinearLayout locDropdown = createComboDropdown("Chọn vị trí Bar chính", prefix + id + "_loc", BAR_NAMES, 0);
+      LinearLayout locDropdown = createComboDropdown("Chọn vị trí Bar chính", prefix + id + "_loc", BAR_NAMES, 0);
         Spinner locSpinner = (Spinner) locDropdown.getChildAt(1);
-        locSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+                locSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
             public void onItemSelected(AdapterView<?> p, View v, int pos, long idx){
+                if (pos < 0 || pos >= BARS.length) pos = 0;
                 prefs.edit().putInt(prefix + id + "_loc", pos).apply();
                 for(int i=0; i<BARS.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[i], false).apply();
                 prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[pos], true).apply();
@@ -8849,9 +8856,10 @@ if (type == 0) {
         });
         content.addView(locDropdown);
 
-        previewListenerHolder[0] = (p, k) -> {
+                    previewListenerHolder[0] = (p, k) -> {
             if (k == null || !k.startsWith(prefix + id + "_")) return;
             int loc = prefs.getInt(prefix + id + "_loc", 0);
+            if (loc < 0 || loc >= BARS.length) loc = 0;
             boolean previewOn = prefs.getBoolean(prefix + id + "_preview_" + BARS[loc], false);
             if (!previewOn) { removeLivePreviewOverlay(); return; }
             updateLivePreviewBar(loc,
@@ -8861,7 +8869,8 @@ if (type == 0) {
                 prefs.getInt(prefix + id + "_x", 0),
                 prefs.getInt(prefix + id + "_y", 0));
         };
-        prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
+
+prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
         previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_alpha");
         
         content.addView(createSplitComboDropdown("Hiển thị", prefix + id + "_vis_mode",
@@ -8918,20 +8927,20 @@ btnIcons.setOnLongClickListener(v -> {
 });
 content.addView(btnIcons);
 
-    } else if (type == 1) {
+        } else if (type == 1) {
     String[] cKeys = {"br", "bl", "tr", "tl"};
-    // [BỎ UI PREVIEW] Không còn checkbox — Corner luôn xem-trước-sẵn đúng
-    // ngay vị trí đang chọn.
     int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
     if (currentLoc < 0 || currentLoc >= cKeys.length) currentLoc = 0;
     for(int i=0; i<cKeys.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[i], false).apply();
     prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[currentLoc], true).apply();
+
     content.addView(createSectionTitle("CẤU HÌNH CORNER (FORMAT C)"));
 
-    LinearLayout locDropdown = createComboDropdown("Chọn vị trí Corner chính", prefix + id + "_loc", CORNER_NAMES, 0);
+        LinearLayout locDropdown = createComboDropdown("Chọn vị trí Corner chính", prefix + id + "_loc", CORNER_NAMES, 0);
     Spinner locSpinner = (Spinner) locDropdown.getChildAt(1);
-    locSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+        locSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
         public void onItemSelected(AdapterView<?> p, View v, int pos, long idx){
+            if (pos < 0 || pos >= cKeys.length) pos = 0;
             prefs.edit().putInt(prefix + id + "_loc", pos).apply();
             for(int i=0; i<cKeys.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[i], false).apply();
             prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[pos], true).apply();
@@ -8941,13 +8950,15 @@ content.addView(btnIcons);
     });
     content.addView(locDropdown);
     // [FIX LIVE PREVIEW] Lắng nghe mọi thay đổi thuộc Data Pack này -> vẽ lại overlay thật
-    previewListenerHolder[0] = (p, k) -> {
+            previewListenerHolder[0] = (p, k) -> {
         if (k == null || !k.startsWith(prefix + id + "_")) return;
         int loc = prefs.getInt(prefix + id + "_loc", 0);
+        if (loc < 0 || loc >= cKeys.length) loc = 0;
         boolean previewOn = prefs.getBoolean(prefix + id + "_preview_" + cKeys[loc], false);
         if (!previewOn) { removeLivePreviewOverlay(); return; }
         updateLivePreviewCorner(loc, prefix + id + "_");
     };
+
     prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
     previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_x");
     content.addView(createSplitComboDropdown("Hiển thị", prefix + id + "_vis_mode",
@@ -10442,8 +10453,30 @@ private void migrateLegacyBackupToV2() {
     }
     ed.putBoolean("needs_sanitize", false).apply();
 }
-// [MỚI] Cập nhật longLabel của App Shortcut để hiện đúng tên action đang gán
-// ngay dưới "Slot N" trong menu long-press icon. Zero cost nếu SDK < 25.
+        /** [MỚI] Dọn key rác trong applied_packs của cả 3 không gian (lock/home/homacc).
+     *  Chạy 1 lần lúc mở app để dọn sạch data rác từ backup JSON cũ. */
+    private void cleanStaleAppliedPacks() {
+        java.util.List<String> validBarIds = getDynamicIds("pack_bar_ids");
+        java.util.List<String> validCornerIds = getDynamicIds("pack_corner_ids");
+        SharedPreferences.Editor ed = prefs.edit();
+        boolean changed = false;
+        for (String px : new String[]{"lock_", "home_", "homacc_"}) {
+            java.util.List<String> list = getDynamicIds(px + "applied_packs");
+            java.util.List<String> cleaned = new java.util.ArrayList<>();
+            for (String k : list) {
+                boolean ok = false;
+                if (k.startsWith("bar_")) {
+                    if (validBarIds.contains(k.substring(4))) ok = true;
+                } else if (k.startsWith("corner_")) {
+                    if (validCornerIds.contains(k.substring(7))) ok = true;
+                }
+                if (ok) cleaned.add(k); else changed = true;
+            }
+            if (cleaned.size() != list.size())
+                ed.putString(px + "applied_packs", TextUtils.join(",", cleaned));
+        }
+        if (changed) ed.apply();
+    }
 private String stripEmojiSafe(String s) {
     if (s == null) return "";
     StringBuilder sb = new StringBuilder();
