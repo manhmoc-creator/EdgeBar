@@ -465,6 +465,7 @@ private String computeSignature(String id) {
         + (forceTest != null && forceTest);
 }
 private boolean shouldPanelBodyExistNow(String id) {
+    String px = "pack_panel_" + id + "_"; // <-- THÊM DÒNG NÀY
     Boolean forceTest = forceTestOn.get(id);
     if (forceTest != null && forceTest) return true;
 

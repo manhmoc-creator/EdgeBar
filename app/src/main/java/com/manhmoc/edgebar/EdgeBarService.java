@@ -1368,7 +1368,9 @@ refreshFingerprintRegistration();
 lastAppliedEventMask = -1;
 refreshEventSubscription();
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
-
+@Override
+public void onInterrupt() {
+}
 @Override public void onAccessibilityEvent(AccessibilityEvent event) {
 int eventType = event.getEventType();
 if (recentsBlur != null) recentsBlur.onEvent(event);

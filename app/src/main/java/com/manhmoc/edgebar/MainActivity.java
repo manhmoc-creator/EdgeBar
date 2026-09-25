@@ -23,6 +23,8 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Vibrator;
+import android.os.VibrationEffect;
 import android.provider.Settings;
 import android.net.Uri;
 import android.text.TextUtils;
@@ -1301,6 +1303,7 @@ if (!prefs.getBoolean("v2_migrated", false)) migrateLegacyBackupToV2();
 // Nếu backup cũ chưa có _split nhưng có _homeb/_homacc → tự bật _split
 java.util.Map<String, ?> allSplit = prefs.getAll();
 boolean needSplitFix = false;
+SharedPreferences.Editor ed = prefs.edit();   // ← THÊM DÒNG NÀY
 for (java.util.Map.Entry<String, ?> e : allSplit.entrySet()) {
     String k = e.getKey();
     if (!k.endsWith("_homacc")) continue;
@@ -11205,12 +11208,38 @@ private void doRevokeAdminAndUninstall() {
         container.addView(header); container.addView(content); 
         return container; 
     }
-   // [MỚI - BƯỚC 5] Dropdown có "2 chế độ":
-//  - 1 tap   → mở ngăn kéo chọn bình thường (ghi vào key GỐC, cả 2 server dùng chung).
-//  - Long-press → rung 1 cái, mở dialog 2 nửa: nửa trái = Homeb, nửa phải = Homacc.
-//    Mỗi nửa có dropdown nhỏ chọn giá trị riêng cho server đó.
-//  - Long-press vào giữa (nút MERGE) → xoá 2 key specific, quay về shared.
-// Zero-RAM khi đóng: mọi dialog/adapter là local, GC thu hồi hoàn toàn.
+// [MỚI] Combo dropdown cơ bản — dùng cho openDataPackEditor() để chọn vị trí Bar/Corner/Panel.
+// Đã bị bỏ sót trong bản trước khiến compile fail 4 chỗ (dòng ~8877, 8969, 9003, 9021, 9029).
+private LinearLayout createComboDropdown(String title, String key, String[] items, int def) {
+    LinearLayout l = new LinearLayout(this);
+    l.setOrientation(LinearLayout.VERTICAL);
+    l.setPadding(0, 10, 0, 20);
+
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setGravity(Gravity.CENTER_VERTICAL);
+
+    TextView tv = new TextView(this);
+    tv.setText(title);
+    tv.setTextColor(Color.parseColor("#E91E63"));
+    tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    Spinner sp = createSpinner();
+    sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items));
+    sp.setSelection(Math.max(0, Math.min(items.length - 1, prefs.getInt(key, def))));
+    sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
+            prefs.edit().putInt(key, pos).apply();
+        }
+        public void onNothingSelected(AdapterView<?> p) {}
+    });
+    sp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.2f));
+
+    row.addView(tv);
+    row.addView(sp);
+    l.addView(row);
+    return l;
+}
 private LinearLayout createSplitComboDropdown(String title, String key, String[] items, int def) {
     LinearLayout l = new LinearLayout(this);
     l.setOrientation(LinearLayout.VERTICAL);
@@ -11592,6 +11621,36 @@ private void styleTabActive(Button b, boolean active) {
 }
     private TextView createSectionTitle(String s) { TextView tv = new TextView(this); tv.setText(s); tv.setTextColor(Color.parseColor("#8AB4F8")); tv.setPadding(0,10,0,20); return tv; }
     private Spinner createSpinner() { Spinner sp = new Spinner(this); sp.setBackground(getRounded("#2C2C2C", 20f)); sp.setPadding(20,20,20,20); return sp; }
+    private LinearLayout createComboDropdown(String title, String key, String[] items, int def) {
+    LinearLayout l = new LinearLayout(this);
+    l.setOrientation(LinearLayout.VERTICAL);
+    l.setPadding(0, 10, 0, 20);
+
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setGravity(Gravity.CENTER_VERTICAL);
+
+    TextView tv = new TextView(this);
+    tv.setText(title);
+    tv.setTextColor(Color.parseColor("#E91E63"));
+    tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+    Spinner sp = createSpinner();
+    sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items));
+    sp.setSelection(prefs.getInt(key, def));
+    sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
+            prefs.edit().putInt(key, pos).apply();
+        }
+        public void onNothingSelected(AdapterView<?> p) {}
+    });
+    sp.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.2f));
+
+    row.addView(tv);
+    row.addView(sp);
+    l.addView(row);
+    return l;
+}
     private EditText createInput(String h, String k) { EditText et = new EditText(this); et.setHint(h); et.setHintTextColor(Color.GRAY); et.setTextColor(Color.WHITE); et.setText(prefs.getString(k,"")); et.setBackground(getRounded("#2C2C2C", 20f)); et.setPadding(30,30,30,30); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,10,0,10); et.setLayoutParams(lp); et.addTextChangedListener(new android.text.TextWatcher(){public void afterTextChanged(android.text.Editable s){prefs.edit().putString(k,s.toString()).apply();}public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}}); return et; }
     private LinearLayout createCycleRow(String title, String key, String[] states) {
     LinearLayout l = new LinearLayout(this);
