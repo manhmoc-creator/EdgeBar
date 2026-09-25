@@ -661,9 +661,11 @@ if (prefs.getBoolean("blacklist_lock_active", false)
             }
         } catch (Exception ignored) {}
 
-        refreshPreview();
+                refreshPreview();
         checkPendingStorageScan();
         syncProximityService(); // tự bật lại service nếu bị hệ thống kill (chỉ đọc vài biến static, gần như 0 chi phí)
+        syncVolumeService();    // [FIX VOLKEY] tự bật lại VolKey nếu bị OS kill sau vài giờ
+
         if (btnWriteSettings != null) {
             btnWriteSettings.setVisibility(android.provider.Settings.System.canWrite(this) ? View.GONE : View.VISIBLE);
         }
@@ -2267,6 +2269,10 @@ private void syncProximityService() {
 }
 
 private void syncVolumeService() {
+    // [FIX VOLKEY] User đã bấm "Dừng vĩnh viễn" → KHÔNG tự khởi động lại.
+    // Tránh race với BootReceiver và tránh OS tự đánh dấu force-stopped.
+    if (prefs.getBoolean("edgebar_permanently_stopped", false)) return;
+
     boolean need = VolumeButtonService.hasAnyRule(prefs);
     Intent i = new Intent(this, VolumeButtonService.class);
     if (need && !VolumeButtonService.isRunning) {
@@ -2275,6 +2281,7 @@ private void syncVolumeService() {
         stopService(i);
     }
 }
+
    // Vân tay chỉ hỗ trợ 4 hướng swipe — ẩn các cử chỉ không khả dụng để tránh
 // người dùng gán nhầm (tap/long/diag/hold sẽ KHÔNG BAO GIỜ được phần cứng gửi lên)
 private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckBox> boxes) {
@@ -7260,7 +7267,9 @@ if (designTabState == 6) { renderBubbleSettings(); return; }
 dOpt.addView(createSlider("Tốc độ chuyển cảnh Bar/Corner ở Lock (ms)", "lock_anim_dur", 300, 100));
 dOpt.addView(createSlider("Thời gian hồi phục Overlay này (ms)", "os_yield_dur", 60000, 3000)); // THÊM DÒNG NÀY
     dOpt.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30));
-    dOpt.addView(createSlider(T("Touch Sound Volume","Cường độ Âm chạm (0 = tắt hẳn)"), "touch_sound_vol", 100, 40));
+        dOpt.addView(createSlider(T("Touch Sound Volume (% Alarm)","Cường độ Âm chạm (% Âm lượng Báo thức, 0=tắt)"), "touch_sound_vol", 100, 70));
+    dOpt.addView(createComboDropdown(T("Touch Sound Type","Kiểu Âm Chạm"), "touch_sound_type",
+        isVi ? TouchSoundHelper.TONE_TYPE_NAMES_VI : TouchSoundHelper.TONE_TYPE_NAMES_EN, 0));
 Button btnTestSnd = new Button(this);
 btnTestSnd.setText("🔊 " + T("TEST TOUCH SOUND", "THỬ ÂM CHẠM"));
 btnTestSnd.setBackground(getRounded("#FFC107", 20f));

@@ -61,9 +61,16 @@ private static final long KEEP_ALIVE_INTERVAL_MS = 900000; // [FIX PIN] 15 phút
     }
     private void stopKeepAlive() { if (keepAliveRunnable != null) keepAliveHandler.removeCallbacks(keepAliveRunnable); }
 
-    @Override public void onCreate() {
+        @Override public void onCreate() {
         super.onCreate();
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
+
+        // [FIX VOLKEY + TỐI ƯU PIN PIXEL 2XL]
+        // Thoát sớm TRƯỚC khi dựng FGS/MediaSession/WakeLock nếu không cần.
+        // Điều này ngăn OS "đánh dấu chết" service khi bị kill đúng lúc rỗng.
+        if (prefs.getBoolean("edgebar_permanently_stopped", false)) { stopSelf(); return; }
+        if (!hasAnyRule(prefs)) { stopSelf(); return; }
+
         if (!startForegroundQuiet()) return; 
         
         screenReceiver = new BroadcastReceiver() {

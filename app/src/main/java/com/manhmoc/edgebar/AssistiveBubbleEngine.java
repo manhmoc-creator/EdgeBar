@@ -1548,7 +1548,10 @@ private void fireQsTile(String tileId) {
         if (d == null) { centerIconBmp = null; return; }
         // [MỚI] Trừ padding 15dp x2 để icon không chạm sát viền, giống bong bóng thật
         int iconSize = Math.max(20, prefs.getInt("bubble_size", 120) - 30);
-        centerIconBmp = PanelEngine.normalizeIconBitmap(d, iconSize, 1f);
+// [FIX] contentScale=1f khiến icon bị crop sát viền rồi phóng đầy khung -> to hơn hẳn
+// icon bubble nghỉ (vốn dùng FIT_CENTER giữ nguyên margin tự nhiên). Hạ còn 0.75f để
+// khớp đúng cỡ hiển thị thực tế của bubble nghỉ, không cấp phát Bitmap thêm nào cả.
+centerIconBmp = PanelEngine.normalizeIconBitmap(d, iconSize, 0.75f);
     }
 
     private void refreshCirclePanel() {
