@@ -1235,17 +1235,14 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hideNormal = isBl;
         boolean pushForKbd = avoidKbd && lastKbdHeight > 0;
-
-        // DUAL-SOUL: Chỉ 1 trong 2 động cơ được phép vẽ tại 1 thời điểm
         boolean accHomeRunning = AccessibleHomeService.isRunning && isAccEnabled();
         boolean oldHomeEnabled = HomescreenService.isRunning && prefs.getBoolean("shortcut_home_on", false);
         boolean previewHomeOn = prefs.getBoolean("preview_home", false);
-boolean shouldRenderOldHome = isUnlocked && !hideNormal && (previewHomeOn || (!accHomeRunning && oldHomeEnabled));
-
-if (accHomeRunning && !previewHomeOn) {
-    for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
-    for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
-}
+        boolean shouldRenderOldHome = isUnlocked && !hideNormal && (previewHomeOn || (!accHomeRunning && oldHomeEnabled));
+        if (accHomeRunning && !previewHomeOn) {
+            for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
+            for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
+        }
 
                 boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
         int barLoopCount = Math.min(bars.length, BARS.length);
