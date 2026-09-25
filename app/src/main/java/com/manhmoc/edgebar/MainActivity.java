@@ -144,6 +144,7 @@ private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<
     private int ecoType = 0;
     private int soundMediaSubTab = -1; // -1 = menu chọn Ghi âm/Ghi màn hình, 0 = Ghi âm, 1 = Ghi màn hình
     private LinearLayout ecoContainer;
+    private boolean ecoRenderInFlight = false;
         // THÊM 2 field static này ngay dưới khai báo ecoContainer:
 private static List<String[]> cachedAppList = null; // mỗi phần tử: {name, pkg}
 private static long cachedAppListTs = 0;
@@ -1698,17 +1699,11 @@ navBackStack.clear(); // ← THÊM DÒNG NÀY
     gesMenuContainer = new LinearLayout(this);
     gesMenuContainer.setOrientation(LinearLayout.VERTICAL);
     pageConditions.addView(gesMenuContainer);
-
-// [MỚI - BƯỚC 1] Lock và Home là 2 entry ngang hàng với Texture/VolKey/Sensor.
-// Lock  = vào thẳng không gian Lock cũ (frontierSubTab=0).
-// Home  = vào thẳng không gian Homeb (frontierSubTab=1) trong bước 1 này;
-//         bước 2 sẽ mở rộng thành UI gộp Homeb+Homacc 2 nửa.
-// Không đụng dữ liệu, không đụng runtime — chỉ điều hướng menu.
     gesMenuContainer.addView(createSettingsRow("mobile_lock_portrait_24px", "Lock",
-    T("Lock Screen", "Màn hình khoá"),
+    T("Lock Screen bars & corners", "Bar/Corner màn hình khoá"),
     () -> openSpaceDirect(0)));
-gesMenuContainer.addView(createSettingsRow("routine_24px", "Home",
-    T("2 servers: Homeb (no Acc) · Homacc (Acc on)", "2 server: Homeb (không Acc) · Homacc (có Acc)"),
+    gesMenuContainer.addView(createSettingsRow("routine_24px", "Home",
+    T("Home screen bars & corners", "Bar/Corner màn hình chính"),
     () -> openSpaceDirect(1)));
     gesMenuContainer.addView(createSettingsRow("fingerprint_24px", "Texture",
         T("Fingerprint Gestures", "Cử chỉ vân tay"),
@@ -3734,6 +3729,15 @@ private void openHalfActionPicker(boolean isLeft, String kind,
         }
     }
 
+        // ==========================================================================
+    // [MỚI] ACTION 2-NỬA OR — Full ↔ Limited LOẠI TRỪ NHAU
+    // Quy tắc:
+    //  • Nửa NONE đầu tiên: tự do chọn FULL hoặc LIMITED.
+    //  • Nửa còn lại: chỉ được chọn loại NGƯỢC LẠI (nếu nửa kia FULL → chỉ LIMITED).
+    //  • Nửa kia đã có kind, nửa này NONE → bấm vào hiện dialog SAME (copy) / CHỌN MỚI.
+    //  • Nửa đã có kind → bấm vào mở thẳng picker action tương ứng kind đó.
+    //  • Long-press nửa → xoá nửa đó về NONE.
+    // ==========================================================================
     LinearLayout dualRow = new LinearLayout(this);
     dualRow.setOrientation(LinearLayout.HORIZONTAL);
     dualRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -3762,143 +3766,113 @@ private void openHalfActionPicker(boolean isLeft, String kind,
     btnRight.setPadding(20, 30, 20, 30);
     btnRight.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
-    dualRow.addView(btnLeft); dualRow.addView(tvOr); dualRow.addView(btnRight);
+    dualRow.addView(btnLeft);
+    dualRow.addView(tvOr);
+    dualRow.addView(btnRight);
     vAct.addView(dualRow);
 
-        // [SỬA - BƯỚC 3] Nút NONE tự đổi thành SAME khi bên kia đã có kind.
-    // Bấm SAME → clone y hệt kind + actions + pkg + shortcut từ bên kia.
-    // Xử lý tap SAME nằm ở listener btnLeft/btnRight bên dưới.
     Runnable updateLeftLabel = () -> {
         if (lKind[0].isEmpty()) {
-            if (!rKind[0].isEmpty()) {
-                btnLeft.setText("⬅ TRÁI: SAME\n(copy y hệt từ PHẢI)");
-                btnLeft.setBackground(getRounded("#2C2C2C", 20f));
-            } else {
-                btnLeft.setText("⬅ TRÁI: NONE");
-                btnLeft.setBackground(getRounded("#202124", 20f));
-            }
+            btnLeft.setText("⬅ TRÁI: NONE");
+            btnLeft.setBackground(getRounded("#202124", 20f));
         } else {
-            String kl = "FULL".equals(lKind[0]) ? "Full" : "Hạn chế";
+            String kl = "FULL".equals(lKind[0]) ? "Full" : T("Limited", "Hạn chế");
             btnLeft.setText("⬅ TRÁI: " + kl + " (" + selectedActsL.size() + ")\n"
                 + summarizeDualActions(selectedActsL));
-            btnLeft.setBackground(getRounded("#0D4A52", 20f));
+            btnLeft.setBackground(getRounded("FULL".equals(lKind[0]) ? "#0D4A52" : "#4A3D0D", 20f));
         }
     };
     Runnable updateRightLabel = () -> {
         if (rKind[0].isEmpty()) {
-            if (!lKind[0].isEmpty()) {
-                btnRight.setText("PHẢI ➡: SAME\n(copy y hệt từ TRÁI)");
-                btnRight.setBackground(getRounded("#2C2C2C", 20f));
-            } else {
-                btnRight.setText("PHẢI ➡: NONE");
-                btnRight.setBackground(getRounded("#202124", 20f));
-            }
+            btnRight.setText("PHẢI ➡: NONE");
+            btnRight.setBackground(getRounded("#202124", 20f));
         } else {
-            String kl = "FULL".equals(rKind[0]) ? "Full" : "Hạn chế";
+            String kl = "FULL".equals(rKind[0]) ? "Full" : T("Limited", "Hạn chế");
             btnRight.setText("PHẢI ➡: " + kl + " (" + selectedActsR.size() + ")\n"
                 + summarizeDualActions(selectedActsR));
-            btnRight.setBackground(getRounded("#4A3D0D", 20f));
+            btnRight.setBackground(getRounded("FULL".equals(rKind[0]) ? "#0D4A52" : "#4A3D0D", 20f));
         }
     };
     updateLeftLabel.run();
     updateRightLabel.run();
 
-        btnLeft.setOnClickListener(v -> {
-        // [SỬA - BƯỚC 3] Nhánh SAME: nửa TRÁI đang NONE, nửa PHẢI đã có kind
-        // → hỏi user có muốn copy y hệt từ PHẢI sang không.
+    // ---- Bấm TRÁI ----
+    btnLeft.setOnClickListener(v -> {
         if (lKind[0].isEmpty() && !rKind[0].isEmpty()) {
-            String kindLbl = "FULL".equals(rKind[0]) ? "Full action" : "Hạn chế action";
+            // Nửa PHẢI đã có kind → mời SAME (copy) hoặc CHỌN MỚI
             new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Copy cấu hình từ nửa PHẢI?")
-                .setMessage("Nửa TRÁI sẽ giống y hệt nửa PHẢI — cùng chế độ ("
-                    + kindLbl + ") và cùng " + selectedActsR.size() + " action.")
-                .setPositiveButton("COPY", (dd, w) -> {
+                .setTitle("Nửa TRÁI")
+                .setMessage("Nửa PHẢI đang có action. Bạn có thể copy y hệt sang TRÁI (SAME), hoặc tự chọn loại NGƯỢC LẠI.")
+                .setPositiveButton("SAME (copy)", (dd, w) -> {
                     lKind[0] = rKind[0];
-                    selectedActsL.clear();
-                    selectedActsL.addAll(selectedActsR);
-                    pkgL[0] = pkgR[0];
-                    scL[0] = scR[0];
+                    selectedActsL.clear(); selectedActsL.addAll(selectedActsR);
+                    pkgL[0] = pkgR[0]; scL[0] = scR[0];
                     updateLeftLabel.run();
-                    Toast.makeText(this, "Đã copy từ nửa PHẢI sang nửa TRÁI",
-                        Toast.LENGTH_SHORT).show();
                 })
-                .setNegativeButton("HỦY", null)
-                .show();
+                .setNeutralButton("CHỌN MỚI", (dd, w) -> {
+                    // Chỉ còn 1 lựa chọn — loại NGƯỢC LẠI với nửa PHẢI
+                    String forced = "FULL".equals(rKind[0]) ? "LIMITED" : "FULL";
+                    lKind[0] = forced;
+                    openHalfActionPicker(true, forced, selectedActsL, pkgL, scL, updateLeftLabel);
+                })
+                .setNegativeButton("HUỶ", null).show();
             return;
         }
-        String currentKind = lKind[0];
-        if (currentKind.isEmpty()) {
-            String otherKind = rKind[0];
-            final java.util.List<String> opts = new java.util.ArrayList<>();
-            final java.util.List<String> kinds = new java.util.ArrayList<>();
-            if (!"FULL".equals(otherKind)) { opts.add("Full action"); kinds.add("FULL"); }
-            if (!"LIMITED".equals(otherKind)) { opts.add("Hạn chế action"); kinds.add("LIMITED"); }
-            if (opts.isEmpty()) {
-                Toast.makeText(this, "Nửa phải đã chiếm cả 2 chế độ", Toast.LENGTH_SHORT).show();
-                return;
-            }
+        if (lKind[0].isEmpty()) {
+            // Cả 2 đều NONE → user tự do chọn FULL hoặc LIMITED
             new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Chọn chế độ cho nửa TRÁI")
-                .setItems(opts.toArray(new String[0]), (dd, w) -> {
-                    lKind[0] = kinds.get(w);
+                .setTitle("Chọn loại action cho nửa TRÁI")
+                .setItems(new String[]{"Full action (đầy đủ)", "Hạn chế action (Homeb)"}, (dd, w) -> {
+                    lKind[0] = (w == 0) ? "FULL" : "LIMITED";
                     openHalfActionPicker(true, lKind[0], selectedActsL, pkgL, scL, updateLeftLabel);
                 }).show();
-        } else {
-            openHalfActionPicker(true, currentKind, selectedActsL, pkgL, scL, updateLeftLabel);
+            return;
         }
+        // Đã có kind → mở lại picker để sửa
+        openHalfActionPicker(true, lKind[0], selectedActsL, pkgL, scL, updateLeftLabel);
     });
+
+    // ---- Bấm PHẢI ----
+    btnRight.setOnClickListener(v -> {
+        if (rKind[0].isEmpty() && !lKind[0].isEmpty()) {
+            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Nửa PHẢI")
+                .setMessage("Nửa TRÁI đang có action. Bạn có thể copy y hệt sang PHẢI (SAME), hoặc tự chọn loại NGƯỢC LẠI.")
+                .setPositiveButton("SAME (copy)", (dd, w) -> {
+                    rKind[0] = lKind[0];
+                    selectedActsR.clear(); selectedActsR.addAll(selectedActsL);
+                    pkgR[0] = pkgL[0]; scR[0] = scL[0];
+                    updateRightLabel.run();
+                })
+                .setNeutralButton("CHỌN MỚI", (dd, w) -> {
+                    String forced = "FULL".equals(lKind[0]) ? "LIMITED" : "FULL";
+                    rKind[0] = forced;
+                    openHalfActionPicker(false, forced, selectedActsR, pkgR, scR, updateRightLabel);
+                })
+                .setNegativeButton("HUỶ", null).show();
+            return;
+        }
+        if (rKind[0].isEmpty()) {
+            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Chọn loại action cho nửa PHẢI")
+                .setItems(new String[]{"Full action (đầy đủ)", "Hạn chế action (Homeb)"}, (dd, w) -> {
+                    rKind[0] = (w == 0) ? "FULL" : "LIMITED";
+                    openHalfActionPicker(false, rKind[0], selectedActsR, pkgR, scR, updateRightLabel);
+                }).show();
+            return;
+        }
+        openHalfActionPicker(false, rKind[0], selectedActsR, pkgR, scR, updateRightLabel);
+    });
+
+    // ---- Long-press để xoá nửa ----
     btnLeft.setOnLongClickListener(v -> {
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Xoá nửa TRÁI?")
             .setPositiveButton("XOÁ", (dd, w) -> {
                 lKind[0] = ""; selectedActsL.clear(); pkgL[0] = ""; scL[0] = "";
                 updateLeftLabel.run();
-            }).setNegativeButton("HỦY", null).show();
+            }).setNegativeButton("HUỶ", null).show();
         return true;
-    });
-
-        btnRight.setOnClickListener(v -> {
-        // [SỬA - BƯỚC 3] Nhánh SAME: nửa PHẢI đang NONE, nửa TRÁI đã có kind
-        if (rKind[0].isEmpty() && !lKind[0].isEmpty()) {
-            String kindLbl = "FULL".equals(lKind[0]) ? "Full action" : "Hạn chế action";
-            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Copy cấu hình từ nửa TRÁI?")
-                .setMessage("Nửa PHẢI sẽ giống y hệt nửa TRÁI — cùng chế độ ("
-                    + kindLbl + ") và cùng " + selectedActsL.size() + " action.")
-                .setPositiveButton("COPY", (dd, w) -> {
-                    rKind[0] = lKind[0];
-                    selectedActsR.clear();
-                    selectedActsR.addAll(selectedActsL);
-                    pkgR[0] = pkgL[0];
-                    scR[0] = scL[0];
-                    updateRightLabel.run();
-                    Toast.makeText(this, "Đã copy từ nửa TRÁI sang nửa PHẢI",
-                        Toast.LENGTH_SHORT).show();
-                })
-                .setNegativeButton("HỦY", null)
-                .show();
-            return;
-        }
-        String currentKind = rKind[0];
-        if (currentKind.isEmpty()) {
-            String otherKind = lKind[0];
-            final java.util.List<String> opts = new java.util.ArrayList<>();
-            final java.util.List<String> kinds = new java.util.ArrayList<>();
-            if (!"FULL".equals(otherKind)) { opts.add("Full action"); kinds.add("FULL"); }
-            if (!"LIMITED".equals(otherKind)) { opts.add("Hạn chế action"); kinds.add("LIMITED"); }
-            if (opts.isEmpty()) {
-                Toast.makeText(this, "Nửa trái đã chiếm cả 2 chế độ", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Chọn chế độ cho nửa PHẢI")
-                .setItems(opts.toArray(new String[0]), (dd, w) -> {
-                    rKind[0] = kinds.get(w);
-                    openHalfActionPicker(false, rKind[0], selectedActsR, pkgR, scR, updateRightLabel);
-                }).show();
-        } else {
-            openHalfActionPicker(false, currentKind, selectedActsR, pkgR, scR, updateRightLabel);
-        }
     });
     btnRight.setOnLongClickListener(v -> {
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
@@ -3906,7 +3880,7 @@ private void openHalfActionPicker(boolean isLeft, String kind,
             .setPositiveButton("XOÁ", (dd, w) -> {
                 rKind[0] = ""; selectedActsR.clear(); pkgR[0] = ""; scR[0] = "";
                 updateRightLabel.run();
-            }).setNegativeButton("HỦY", null).show();
+            }).setNegativeButton("HUỶ", null).show();
         return true;
     });
 
@@ -4191,16 +4165,22 @@ private String mergeCsv(String a, String b) {
             .putBoolean(barKey + "en", true)
             .putInt(barKey + "vis_mode", prefs.getInt(src + "vis_mode", 0))
             .putInt(barKey + "pri_mode", prefs.getInt(src + "pri_mode", 0));
-        if ("home_".equals(targetPrefix)) {
-            boolean split = prefs.getBoolean(src + "pri_mode_split", false);
-            if (split) {
-                edBar.putInt(barKey + "pri_mode_homeb", prefs.getInt(src + "pri_mode_homeb", 0))
-                     .putInt(barKey + "pri_mode_homacc", prefs.getInt(src + "pri_mode_homacc", 0))
-                     .putBoolean(barKey + "pri_mode_split", true);
-            } else {
-                edBar.remove(barKey + "pri_mode_homeb")
-                     .remove(barKey + "pri_mode_homacc")
-                     .remove(barKey + "pri_mode_split");
+                if ("home_".equals(targetPrefix)) {
+            // [MỞ RỘNG] Trước đây chỉ copy split cho pri_mode. Nay mở rộng cho
+            // cả vis_mode, lockmode, jumpdir — 4 field đều có thể split.
+            // Zero-cost khi không split: chỉ 1 boolean check + remove key dư.
+            for (String sfx : new String[]{"pri_mode", "vis_mode", "lockmode", "jumpdir"}) {
+                if (prefs.getBoolean(src + sfx + "_split", false)) {
+                    edBar.putInt(barKey + sfx + "_homeb",
+                            prefs.getInt(src + sfx + "_homeb", prefs.getInt(src + sfx, 0)))
+                         .putInt(barKey + sfx + "_homacc",
+                            prefs.getInt(src + sfx + "_homacc", prefs.getInt(src + sfx, 0)))
+                         .putBoolean(barKey + sfx + "_split", true);
+                } else {
+                    edBar.remove(barKey + sfx + "_homeb")
+                         .remove(barKey + sfx + "_homacc")
+                         .remove(barKey + sfx + "_split");
+                }
             }
         }
         edBar
@@ -4236,13 +4216,9 @@ private String mergeCsv(String a, String b) {
         String cornerKey = targetPrefix + "corner_" + CORNERS[loc] + "_";
         prefs.edit()
             .putBoolean(cornerKey + "en", true)
-            .putInt(cornerKey + "jumpdir", prefs.getInt(src + "jumpdir", 0))
+                        .putInt(cornerKey + "jumpdir", prefs.getInt(src + "jumpdir", 0))
             .putInt(cornerKey + "vis_mode", prefs.getInt(src + "vis_mode", 0))
             .putInt(cornerKey + "pri_mode", prefs.getInt(src + "pri_mode", 0))
-            // [MỚI - BƯỚC 5] Split keys cho corner — chỉ khi target là home_
-            .putInt(cornerKey + "pri_mode_homeb", "home_".equals(targetPrefix) ? prefs.getInt(src + "pri_mode_homeb", 0) : 0)
-            .putInt(cornerKey + "pri_mode_homacc", "home_".equals(targetPrefix) ? prefs.getInt(src + "pri_mode_homacc", 0) : 0)
-            .putBoolean(cornerKey + "pri_mode_split", "home_".equals(targetPrefix) && prefs.getBoolean(src + "pri_mode_split", false))
 
             .putInt(cornerKey + "lockmode", prefs.getInt(src + "lockmode", 1))
             .putInt(cornerKey + "shape", prefs.getInt(src + "shape", 0))
@@ -4257,7 +4233,27 @@ private String mergeCsv(String a, String b) {
             .putInt(cornerKey + "rad", prefs.getInt(src + "rad", 80))
             .putInt(cornerKey + "moon_rad", prefs.getInt(src + "moon_rad", 80))
             .apply();
-
+                 // [MỞ RỘNG] Copy split cho cả 4 field vis/pri/lock/jump — đồng bộ với
+        // applyBarPackToSpace(). Chỉ áp dụng khi target là home_ (Homeb/Homacc).
+        if ("home_".equals(targetPrefix)) {
+            for (String sfx : new String[]{"pri_mode", "vis_mode", "lockmode", "jumpdir"}) {
+                if (prefs.getBoolean(src + sfx + "_split", false)) {
+                    prefs.edit()
+                        .putInt(cornerKey + sfx + "_homeb",
+                            prefs.getInt(src + sfx + "_homeb", prefs.getInt(src + sfx, 0)))
+                        .putInt(cornerKey + sfx + "_homacc",
+                            prefs.getInt(src + sfx + "_homacc", prefs.getInt(src + sfx, 0)))
+                        .putBoolean(cornerKey + sfx + "_split", true)
+                        .apply();
+                } else {
+                    prefs.edit()
+                        .remove(cornerKey + sfx + "_homeb")
+                        .remove(cornerKey + sfx + "_homacc")
+                        .remove(cornerKey + sfx + "_split")
+                        .apply();
+                }
+            }
+        }
         applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + CORNERS[loc]); // [MỚI]
     }
     private void disableBarPackFromSpace(String id, String targetPrefix) {
@@ -5499,9 +5495,9 @@ private LinearLayout buildEcoSelectionToolbar() {
     return bar;
 }
     private void renderEcosystem() {
-    // [FIX CRASH] Chủ động bỏ focus + ẩn bàn phím TRƯỚC khi xoá View — chặn
-    // đứng mọi trường hợp EditText (như ô số thứ tự My Playlist) đang giữ
-    // focus bị removeAllViews() xoá giữa chừng, gây NPE trong hệ Focus/IME.
+    if (ecoRenderInFlight) return;
+    ecoRenderInFlight = true;
+    try {
     try {
         View cur = getCurrentFocus();
         if (cur != null) {
@@ -5948,9 +5944,12 @@ case "corner": typeLabel = "[Corner] "; name = packDisplayName(false, id); break
         flow.add(cardWrap, getPackSpanUnits("ui_span_trash_pack_ids_" + fKey));
     }
     flow.finish();
-    ecoContainer.addView(wrapCard(secTrash));
+        ecoContainer.addView(wrapCard(secTrash));
   }
-}
+    } finally {
+        ecoRenderInFlight = false;
+    }
+    } // đóng hàm renderEcosystem
     private String getActionLabel(String actionKey) {
         for (int i=0; i<ACT_KEYS.length; i++) {
             if (ACT_KEYS[i] != null && ACT_KEYS[i].equals(actionKey)) return ACT_LABS[i];
@@ -8845,8 +8844,9 @@ if (type == 0) {
         prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[currentLoc], true).apply();
         content.addView(createSectionTitle("CẤU HÌNH BAR (FORMAT B)"));
 
-      LinearLayout locDropdown = createComboDropdown("Chọn vị trí Bar chính", prefix + id + "_loc", BAR_NAMES, 0);
-        Spinner locSpinner = (Spinner) locDropdown.getChildAt(1);
+          LinearLayout locDropdown = createComboDropdown("Chọn vị trí Bar chính", prefix + id + "_loc", BAR_NAMES, 0);
+    Spinner locSpinner = (Spinner) ((LinearLayout) locDropdown.getChildAt(0)).getChildAt(1);
+
                 locSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
             public void onItemSelected(AdapterView<?> p, View v, int pos, long idx){
                 if (pos < 0 || pos >= BARS.length) pos = 0;
@@ -8939,8 +8939,9 @@ content.addView(btnIcons);
 
     content.addView(createSectionTitle("CẤU HÌNH CORNER (FORMAT C)"));
 
-        LinearLayout locDropdown = createComboDropdown("Chọn vị trí Corner chính", prefix + id + "_loc", CORNER_NAMES, 0);
-    Spinner locSpinner = (Spinner) locDropdown.getChildAt(1);
+     LinearLayout locDropdown = createComboDropdown("Chọn vị trí Corner chính", prefix + id + "_loc", CORNER_NAMES, 0);
+    Spinner locSpinner = (Spinner) ((LinearLayout) locDropdown.getChildAt(0)).getChildAt(1);
+
         locSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
         public void onItemSelected(AdapterView<?> p, View v, int pos, long idx){
             if (pos < 0 || pos >= cKeys.length) pos = 0;
@@ -10373,9 +10374,21 @@ private void migrateLegacyBackupToV2() {
         else continue;
         w62 = true;
     }
-    if (w62 || !homaccApplied.isEmpty()) ed.apply();
-
-    // 6.3 — Pattern G2 (chỉ có _acts) → schema 2-nửa
+        if (w62 || !homaccApplied.isEmpty()) ed.apply();
+    boolean w62b = false;
+    for (java.util.Map.Entry<String, ?> e : snap.entrySet()) {
+        String k = e.getKey();
+        if (!k.endsWith("_homacc")) continue;
+        String base = k.substring(0, k.length() - "_homacc".length());
+        boolean isSplitField = base.endsWith("_vis_mode") || base.endsWith("_lockmode")
+            || base.endsWith("_jumpdir") || base.endsWith("_pri_mode");
+        if (!isSplitField) continue;
+        if (!prefs.getBoolean(base + "_split", false)) {
+            ed.putBoolean(base + "_split", true);
+            w62b = true;
+        }
+    }
+    if (w62b) ed.apply();
     java.util.Set<String> homePackRules = new java.util.LinkedHashSet<>();
     for (String ik : getDynamicIds("home_applied_packs"))
         homePackRules.addAll(getDynamicIds(ik + "_pack_rules"));
@@ -10488,6 +10501,35 @@ private void migrateLegacyBackupToV2() {
                 changed = true;
             }
         }
+        for (String listKey : new String[]{"pack_bar_ids", "pack_corner_ids"}) {
+            java.util.List<String> ids = getDynamicIds(listKey);
+            java.util.List<String> aliveIds = new java.util.ArrayList<>();
+            for (String id : ids) {
+                String itemKey = (listKey.contains("bar") ? "bar_" : "corner_") + id;
+                boolean usedAnywhere = false;
+                for (String px : new String[]{"lock_", "home_"}) {
+                    if (getDynamicIds(px + "applied_packs").contains(itemKey)) {
+                        usedAnywhere = true; break;
+                    }
+                }
+                int w = prefs.getInt("pack_bar_" + id + "_w",
+                          prefs.getInt("pack_corner_" + id + "_w", 0));
+                int h = prefs.getInt("pack_bar_" + id + "_h",
+                          prefs.getInt("pack_corner_" + id + "_h", 0));
+                boolean suspiciousSize = (w > 2000 || h > 2000);
+                if (!usedAnywhere && suspiciousSize) {
+                    moveDataPackToTrash(itemKey);   // chuyển vào Kho Cũ, không xoá vĩnh viễn
+                    changed = true;
+                } else {
+                    aliveIds.add(id);
+                }
+            }
+            if (aliveIds.size() != ids.size()) {
+                ed.putString(listKey, TextUtils.join(",", aliveIds));
+                changed = true;
+            }
+        }
+
         if (changed) ed.apply();
     }
 private String stripEmojiSafe(String s) {

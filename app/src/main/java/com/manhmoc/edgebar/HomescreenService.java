@@ -1270,7 +1270,7 @@ boolean shouldRenderOldHome = isUnlocked && !hideNormal && (previewHomeOn || (!a
                 int h = prefs.getInt("home_" + BARS[i] + "_h", 60);
                 int x = prefs.getInt("home_" + BARS[i] + "_x", 0);
                 int y = prefs.getInt("home_" + BARS[i] + "_y", 0);
-                int visMode = prefs.getInt("home_" + BARS[i] + "_vis_mode", 0);
+                int visMode = readSplit(prefs, "home_" + BARS[i] + "_vis_mode", "homeb", 0);
                 int barHideDur = prefs.getInt("home_bar_hide_dur", 2500);
                 ((BarView)bars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2, prefs.getInt("home_bar_radius", 24));
                int iconSize = prefs.getInt("home_" + BARS[i] + "_icon_size", prefs.getInt("home_bar_icon_size", 40)); 
@@ -2309,5 +2309,10 @@ PixelFormat.TRANSLUCENT);
     // vĩnh viễn trên WindowManager dù Service đã chết, khiến Android/Play Protect
     // luôn coi mọi UI hệ thống (kể cả lúc Trợ năng đang chạy sạch) là đang bị
     // 1 app khác che phủ → báo "ứng dụng khác đang chặn màn hình" liên tục.
+  }
+  private int readSplit(SharedPreferences p, String baseKey, String server, int def) {
+      if (p.getBoolean(baseKey + "_split", false))
+          return p.getInt(baseKey + "_" + server, p.getInt(baseKey, def));
+      return p.getInt(baseKey, def);
   }
 }  // ← đây là dấu } cuối cùng đóng class HomescreenService, KHÔNG XÓA

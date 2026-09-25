@@ -2612,21 +2612,9 @@ if (!shouldShowBar && !isLocked) {
                 int h = prefs.getInt("lock_"+BARS[i]+"_h",60);
                 int x = prefs.getInt("lock_"+BARS[i]+"_x",0);
                 int y = prefs.getInt("lock_"+BARS[i]+"_y",0);
-                // [MỚI] Split cho vis_mode / lockmode / jumpdir
-String visKey = "lock_" + BARS[i] + "_vis_mode";
-int visMode = prefs.getBoolean(visKey + "_split", false)
-    ? prefs.getInt(visKey + "_homacc", prefs.getInt(visKey, 0))
-    : prefs.getInt(visKey, 0);
-
-String lockKey = "lock_" + BARS[i] + "_lockmode";
-int lockMode = prefs.getBoolean(lockKey + "_split", false)
-    ? prefs.getInt(lockKey + "_homacc", prefs.getInt(lockKey, 1))
-    : prefs.getInt(lockKey, 1);
-
-String jumpKey = "lock_" + BARS[i] + "_jumpdir";
-int jumpDir = prefs.getBoolean(jumpKey + "_split", false)
-    ? prefs.getInt(jumpKey + "_homacc", prefs.getInt(jumpKey, 0))
-    : prefs.getInt(jumpKey, 0);
+                int visMode  = readSplit(prefs, "lock_" + BARS[i] + "_vis_mode",  "homacc", 0);
+                int lockMode = readSplit(prefs, "lock_" + BARS[i] + "_lockmode",  "homacc", 1);
+                int jumpDir  = readSplit(prefs, "lock_" + BARS[i] + "_jumpdir",   "homacc", 0);
 
                 int barHideDur = prefs.getInt("lock_bar_hide_dur", 2500);
                 ((BarView)bars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2, prefs.getInt("lock_bar_radius", 24));
@@ -3495,5 +3483,10 @@ private void updateRecIndicator(String state, long sec) {
     } else {
         if (recBlinkAnim != null && !recBlinkAnim.isRunning()) recBlinkAnim.start();
     }
-}
+    }
+    private int readSplit(SharedPreferences p, String baseKey, String server, int def) {
+        if (p.getBoolean(baseKey + "_split", false))
+            return p.getInt(baseKey + "_" + server, p.getInt(baseKey, def));
+        return p.getInt(baseKey, def);
+    }
 } // <-- Dấu ngoặc nhọn kết thúc toàn bộ class EdgeBarService
