@@ -123,9 +123,7 @@ private WindowManager.LayoutParams livePreviewLp;
     private boolean recIndicatorTestOn = false;
     private int currentMainTab = 1; private int currentGesTab = 0; private int frontierSubTab = 0;
 private LinearLayout frontierBodyContainer, frontierBackRowRef;
-private boolean frontierSpaceBuilt = false;
-// ✅ MỚI
-private final LinearLayout[] frontierSpaceRows = new LinearLayout[2];
+private TextView tvFrontierSubTitle; // [MỚI] hoisted ra field để mở thẳng không cần build menu trung gian
 
 private final java.util.ArrayDeque<Runnable> navBackStack = new java.util.ArrayDeque<>();
 private Runnable currentLevelBackAction = null;
@@ -1718,10 +1716,10 @@ navBackStack.clear(); // ← THÊM DÒNG NÀY
 // Không đụng dữ liệu, không đụng runtime — chỉ điều hướng menu.
     gesMenuContainer.addView(createSettingsRow("mobile_lock_portrait_24px", "Lock",
     T("Lock Screen", "Màn hình khoá"),
-    () -> openFrontierSubSpace(0)));
-    gesMenuContainer.addView(createSettingsRow("routine_24px", "Home",
+    () -> openSpaceDirect(0)));
+gesMenuContainer.addView(createSettingsRow("routine_24px", "Home",
     T("2 servers: Homeb (no Acc) · Homacc (Acc on)", "2 server: Homeb (không Acc) · Homacc (có Acc)"),
-    () -> openFrontierSubSpace(1)));
+    () -> openSpaceDirect(1)));
     gesMenuContainer.addView(createSettingsRow("fingerprint_24px", "Texture",
         T("Fingerprint Gestures", "Cử chỉ vân tay"),
         () -> openGesTab(4, "Texture")));
@@ -1755,8 +1753,9 @@ navBackStack.clear(); // ← THÊM DÒNG NÀY
 private void openGesTab(int tab, String title) {
     currentGesTab = tab;
     refreshPreview();
-    if (tab == 5) frontierSpaceBuilt = false; // [FIX] mỗi lần vào lại Frontier -> dựng UI sạch từ đầu
      if (tab == 6) sensorSpaceBuilt = false; // THÊM DÒNG NÀY
+
+
     condBackRow.setVisibility(View.GONE);
     gesMenuContainer.setVisibility(View.GONE);
     gesSubHeader.setVisibility(View.VISIBLE);
@@ -1773,16 +1772,6 @@ tvGesSubTitle.setText("");
     updateFabVisibility();
 });
 }
-// ✅ MỚI — tách 2 giai đoạn: build UI trước, click sau (an toàn tuyệt đối)
-private void openFrontierSubSpace(int spaceIdx) {
-    if (spaceIdx < 0 || spaceIdx >= frontierSpaceRows.length) return;
-    openGesTab(5, "Frontier");
-    final LinearLayout row = frontierSpaceRows[spaceIdx];
-    if (row == null) return;
-    // Post sang frame kế — đảm bảo Frontier body đã attach xong
-    row.post(row::performClick);
-}
-
 private String getSpacePrefix() {
     if (currentGesTab == 3) return "volkey_";
     switch (currentGesTab) {
@@ -1796,14 +1785,12 @@ private String getSpacePrefix() {
 }
     private void renderRulesList() {
     if (currentGesTab == 5) {
-        if (!frontierSpaceBuilt) {
-            listRules.removeAllViews();
-            buildFrontierSpaceOnce();
-        } else if (frontierBackRowRef != null && frontierBackRowRef.getVisibility() == View.VISIBLE) {
+        if (frontierBackRowRef != null && frontierBackRowRef.getVisibility() == View.VISIBLE) {
             redrawFrontierBody(frontierBodyContainer);
         }
         return;
     }
+
     if (currentGesTab == 6) {
         if (!sensorSpaceBuilt) {
             listRules.removeAllViews();
@@ -3009,21 +2996,20 @@ ed.apply();
     d.show();
 }
 
-    private void buildFrontierSpaceOnce() {
+    private void ensureFrontierContainersBuilt() {
+    if (frontierSpaceBuilt) return;
     frontierSpaceBuilt = true;
-    LinearLayout subTab = new LinearLayout(this);
-    subTab.setOrientation(LinearLayout.VERTICAL);
-    subTab.setPadding(0, 0, 0, 10);
-    listRules.addView(subTab);
 
     LinearLayout frontierBackRow = new LinearLayout(this);
     frontierBackRow.setOrientation(LinearLayout.HORIZONTAL);
     frontierBackRow.setGravity(Gravity.CENTER_VERTICAL);
     frontierBackRow.setPadding(0, 0, 0, 20);
     frontierBackRow.setVisibility(View.GONE);
-    TextView tvFrontierSubTitle = new TextView(this);
-    tvFrontierSubTitle.setTextColor(Color.parseColor("#8AB4F8")); tvFrontierSubTitle.setTextSize(16);
-    LinearLayout.LayoutParams ftlp = new LinearLayout.LayoutParams(-2, -2); ftlp.setMargins(20, 0, 0, 0);
+    tvFrontierSubTitle = new TextView(this);
+    tvFrontierSubTitle.setTextColor(Color.parseColor("#8AB4F8"));
+    tvFrontierSubTitle.setTextSize(16);
+    LinearLayout.LayoutParams ftlp = new LinearLayout.LayoutParams(-2, -2);
+    ftlp.setMargins(20, 0, 0, 0);
     tvFrontierSubTitle.setLayoutParams(ftlp);
     frontierBackRow.addView(tvFrontierSubTitle);
     listRules.addView(frontierBackRow);
@@ -3034,82 +3020,53 @@ ed.apply();
     body.setVisibility(View.GONE);
     listRules.addView(body);
     frontierBodyContainer = body;
+}
 
-        // [MỚI - BƯỚC 2] HOMACC đã gộp vào HOME. Chỉ còn 2 sub-space: Home (gộp
-    // Homeb + Homacc) và Lock.
-    //
-    // Vì sao an toàn: rule editor (buildRuleEditor) vốn đã đọc/ghi động qua
-    // prefix "home_*", không hard-code theo spaceIdx. Khi chỉ còn 1 hàng Home
-    // với spaceIdx=1, mọi rule user tạo/sửa trong này đều ghi vào "home_*".
-    //
-    // Runtime Homacc (EdgeBarService) hiện đọc "homacc_*" — sẽ thấy rỗng và
-    // không vẽ gì. Đây là hành vi CHẤP NHẬN ĐƯỢC ở bước 2 vì bước 4 sẽ thêm
-    // fallback: Homacc đọc "homacc_*" → nếu rỗng thì fallback đọc "home_*".
-    // Backup JSON cũ restore vẫn chạy bình thường (giữ nguyên schema).
-    //
-    // Zero-RAM: bớt hẳn 1 hàng LinearLayout + 1 icon vector + 2 TextView khỏi
-    // cây View mỗi lần vào Frontier — tiết kiệm cho Pixel 2XL.
-    Object[][] spaces = {
-        {"routine_24px", "HOME",
-            T("No Accessibility · Auto-fallback when Accessibility on",
-              "Không cần Trợ năng · Tự chuyển khi có Trợ năng"),
-            1},
-        {"mobile_lock_portrait_24px", "LOCK",
-            T("Lock Screen", "Màn hình khoá"),
-            0},
-    };
-    for (Object[] space : spaces) {
-        final int spaceIdx = (int) space[3];
-        final String spaceLabel = (String) space[1];
-        LinearLayout row = createSettingsRow((String) space[0], spaceLabel, (String) space[2],
-            () -> {
-                frontierSubTab = spaceIdx;
-                
-                // [YÊU CẦU MỚI] Tự động hồi sinh Trợ năng nếu bấm vào Lock (0) hoặc Homacc (2)
-                if (spaceIdx == 0 || spaceIdx == 2) {
-                    try {
-                        String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
-                        String cur = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-                        if (cur == null) cur = "";
-                        if (!cur.contains(mySvc)) {
-                            // Tắt cờ Homeb & Dừng Service
-                            prefs.edit().putBoolean("shortcut_home_on", false).apply();
-                            stopService(new Intent(MainActivity.this, HomescreenService.class));
-                            
-                            // Bật Trợ năng
-                            String newVal = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
-                            android.provider.Settings.Secure.putString(getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
-                            android.provider.Settings.Secure.putString(getContentResolver(), android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
-                        }
-                    } catch (Exception ignored) {}
-                }
-                
-                // Gọi refreshPreview() - Hàm này đã được tinh chỉnh ở bản sửa trước 
-                // để tự động "Show Full Overlay" (reset cờ manual_hide) cho đúng không gian đang mở!
-// MỚI — chuyển refreshPreview() xuống SAU khi body đã VISIBLE
-if (spaceIdx == 1) ensureHomeServiceForPreview();
-subTab.setVisibility(View.GONE);
-gesSubHeader.setVisibility(View.GONE);
-frontierBackRow.setVisibility(View.VISIBLE);
-tvFrontierSubTitle.setText(spaceLabel);
-body.setVisibility(View.VISIBLE);
-redrawFrontierBody(body);
-refreshPreview(); 
-updateFabVisibility();
-                navBackStack.push(() -> {
-    body.setVisibility(View.GONE);
-    frontierBackRow.setVisibility(View.GONE);
-    subTab.setVisibility(View.VISIBLE);
-    gesSubHeader.setVisibility(View.GONE);
-    updateFabVisibility();
-    refreshPreview(); 
-});
-            });
-                // [MỚI - BƯỚC 1] Lưu tham chiếu hàng theo đúng spaceIdx (0=Lock, 1=Homeb, 2=Homacc)
-        // để openFrontierSubSpace() bấm hộ được từ menu hàng đầu.
-        frontierSpaceRows[spaceIdx] = row;
-        subTab.addView(row);
+private void openSpaceDirect(int spaceIdx) {
+    currentGesTab = 5;          // giữ 5 làm "mã không gian" để FAB/preview... vẫn nhận đúng
+    frontierSubTab = spaceIdx;  // 0 = Lock, 1 = Home
+    ensureFrontierContainersBuilt();
+
+    if (spaceIdx == 0) {
+        try {
+            String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
+            String cur = android.provider.Settings.Secure.getString(getContentResolver(),
+                android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (cur == null) cur = "";
+            if (!cur.contains(mySvc)) {
+                prefs.edit().putBoolean("shortcut_home_on", false).apply();
+                stopService(new Intent(MainActivity.this, HomescreenService.class));
+                String newVal = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
+                android.provider.Settings.Secure.putString(getContentResolver(),
+                    android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
+                android.provider.Settings.Secure.putString(getContentResolver(),
+                    android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
+            }
+        } catch (Exception ignored) {}
+    } else {
+        ensureHomeServiceForPreview();
     }
+
+    condBackRow.setVisibility(View.GONE);
+    gesMenuContainer.setVisibility(View.GONE);
+    gesSubHeader.setVisibility(View.GONE);      // bỏ hẳn header trung gian -> hết nháy màn
+    listRules.setVisibility(View.VISIBLE);
+    frontierBackRowRef.setVisibility(View.VISIBLE);
+    tvFrontierSubTitle.setText(spaceIdx == 0 ? "LOCK" : "HOME");
+    frontierBodyContainer.setVisibility(View.VISIBLE);
+    redrawFrontierBody(frontierBodyContainer);
+    refreshPreview();
+    updateFabVisibility();
+
+    navBackStack.push(() -> {
+        frontierBodyContainer.setVisibility(View.GONE);
+        frontierBackRowRef.setVisibility(View.GONE);
+        listRules.setVisibility(View.GONE);
+        gesMenuContainer.setVisibility(View.VISIBLE);
+        condBackRow.setVisibility(View.VISIBLE);
+        updateFabVisibility();
+        refreshPreview();
+    });
 }
 private void redrawFrontierBody(LinearLayout body) {
         body.removeAllViews();
