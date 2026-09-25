@@ -287,11 +287,13 @@ ok = sm.registerListener(proxListener, proxSensor, SensorManager.SENSOR_DELAY_FA
         stepCount = 0;
     };
 
+    private void fireWave(int n) {                                 // ← THÊM DÒNG NÀY
     long now = SystemClock.elapsedRealtime();
     if (now - lastWaveFireMs < WAVE_FIRE_COOLDOWN_MS) {
         Log.d(TAG, "Cooldown skip wave#" + n);
         return;
     }
+
     lastWaveFireMs = now;
 
     final String want = "wave" + n;
