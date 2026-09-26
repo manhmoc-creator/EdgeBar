@@ -12159,6 +12159,82 @@ private String formatPruleActionLabel(String rId) {
     }
     return sb.length() == 0 ? T("Error","Lỗi") : sb.toString();
 }
+private String formatActionCsvLabel(String csv, String launchPkg, String shortcutId) {
+    if (csv == null || csv.isEmpty() || csv.equals("NONE"))
+        return T("None", "Không có");
+    StringBuilder sb = new StringBuilder();
+    for (String a : csv.split(",")) {
+        String at = a.trim();
+        if (at.isEmpty() || at.equals("NONE")) continue;
+        if (sb.length() > 0) sb.append(" + ");
+        if (at.equals("LAUNCH_APP")) {
+            sb.append(getAppLabelCached(launchPkg));
+        } else if (at.equals("RUN_SHORTCUT")) {
+            sb.append("🔗 " + prefs.getString("shortcut_" + shortcutId + "_name", "Shortcut"));
+        } else if (at.startsWith("RUN_SHORTCUT_")) {
+            String scId = at.substring("RUN_SHORTCUT_".length());
+            sb.append("🔗 " + prefs.getString("shortcut_" + scId + "_name", "Shortcut"));
+        } else if (at.startsWith("PANEL_")) {
+            sb.append("📦 " + prefs.getString("pack_panel_" + at.substring(6) + "_name", "Panel"));
+        } else if (at.startsWith("INTENT_")) {
+            sb.append("⚡ " + prefs.getString("intent_" + at.substring(7) + "_name", "Intent"));
+        } else if (at.startsWith("MACRO_")) {
+            sb.append("🤖 " + prefs.getString("macro_" + at.substring(6) + "_name", "Macro"));
+        } else {
+            sb.append(getActionLabelSmart(at, ""));
+        }
+    }
+    return sb.length() == 0 ? T("None", "Không có") : sb.toString();
+}
+private View buildActionCategoryButton(String title, String emoji,
+        List<String[]> items, java.util.LinkedHashSet<String> selectedSet, String colorHex) {
+    return buildActionCategoryButton(title, emoji, items, selectedSet, colorHex, false);
+}
+private View buildActionCategoryButton(String title, String emoji,
+        List<String[]> items, java.util.LinkedHashSet<String> selectedSet,
+        String colorHex, boolean allowMulti) {
+
+    LinearLayout body = new LinearLayout(this);
+    body.setOrientation(LinearLayout.VERTICAL);
+    body.setPadding(20, 10, 20, 20);
+    body.setVisibility(View.GONE);
+
+    TextView header = new TextView(this);
+    header.setText(emoji + "  " + title);
+    header.setTextColor(Color.parseColor(colorHex));
+    header.setPadding(30, 30, 30, 30);
+    header.setTextSize(16);
+    header.setBackground(getRounded("#222222", 20f));
+
+    Runnable updateHeader = () -> {
+        int cnt = 0;
+        for (String[] it : items) if (selectedSet.contains(it[1])) cnt++;
+        header.setText(emoji + "  " + title + (cnt > 0 ? "  (" + cnt + ")" : ""));
+    };
+    updateHeader.run();
+
+    LinearLayout container = new LinearLayout(this);
+    container.setOrientation(LinearLayout.VERTICAL);
+    container.setBackground(getRounded("#222222", 20f));
+    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
+    clp.setMargins(0, 0, 0, 12);
+    container.setLayoutParams(clp);
+    container.addView(header);
+    container.addView(body);
+
+    final boolean[] inflated = {false};
+    header.setOnClickListener(v -> {
+        boolean willOpen = body.getVisibility() == View.GONE;
+        if (willOpen && !inflated[0]) {
+            inflated[0] = true;
+            body.addView(buildDrawerItemList(items, selectedSet, null, allowMulti, updateHeader));
+        }
+        body.setVisibility(willOpen ? View.VISIBLE : View.GONE);
+        header.setBackground(getRounded(willOpen ? "#333333" : "#222222", 20f));
+    });
+
+    return container;
+}
 private LinearLayout buildActionIconColumn(String rId, String px) {
     LinearLayout col = new LinearLayout(this);
     col.setOrientation(LinearLayout.VERTICAL);
