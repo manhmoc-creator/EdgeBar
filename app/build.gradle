@@ -5,9 +5,29 @@ android {
     signingConfigs { release { storeFile file("../edge.keystore"); storePassword "edge19"; keyAlias "edge19"; keyPassword "edge19" } }
     defaultConfig { applicationId "com.manhmoc.edgebar"; minSdk 26; targetSdk 34; versionCode 159; versionName "19.12.3.6.43" }
     buildTypes { debug { signingConfig signingConfigs.release }; release { signingConfig signingConfigs.release; minifyEnabled false } }
+
+    // ===== [MỚI] LINT cấu hình bắt lỗi tiềm ẩn gây crash runtime =====
+    lint {
+        abortOnError false          // không chặn build, nhưng vẫn BÁO CÁO đầy đủ
+        checkReleaseBuilds false
+        // Bật các check dễ gây crash thực tế
+        fatal 'NewApi', 'InlineApi', 'ResourceType',
+              'MissingSuperCall', 'WrongConstant', 'WrongThread',
+              'WrongThreadInterprocedural', 'Recycle',
+              'StaticFieldLeak', 'ObsoleteSdkInt'
+        htmlReport true
+        xmlReport true
+        textReport true
+    }
 }
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    // ===== [MỚI] Ép javac hiển thị TỐI ĐA lỗi + cảnh báo nghiêm trọng =====
+    options.compilerArgs += [
+        '-Xlint:all,-deprecation,-unchecked', // tắt cảnh báo deprecation/unchecked (ồn ào)
+        '-Xmaxerrs', '9999',                   // hiện tới 9999 lỗi (mặc định chỉ 100)
+        '-Xmaxwarns', '9999'
+    ]
 }
 dependencies {
     implementation 'com.google.zxing:core:3.5.3'

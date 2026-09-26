@@ -13,11 +13,40 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
-          gradle-version: '8.7' # Đã nâng cấp lên 8.7 để tránh bị block User-Agent
+          gradle-version: '8.7'
+
+      # === [MỚI] Bước 1: LINT — bắt lỗi tiềm ẩn gây crash runtime ===
+      # Chạy TRƯỚC assembleDebug, không chặn build (|| true) nhưng in đầy đủ report ra log
+      - name: Run Android Lint (detect crash-prone code)
+        run: gradle lintDebug --continue --warning-mode all || true
+
+      - name: Print Lint report to log
+        if: always()
+        run: |
+          echo "========= LINT REPORT (tóm tắt lỗi tiềm ẩn) ========="
+          if [ -f app/build/reports/lint-results-debug.txt ]; then
+            cat app/build/reports/lint-results-debug.txt
+          else
+            echo "(không có file lint report — lint có thể đã bị bỏ qua)"
+          fi
+          echo "===================================================="
+
+      # === [MỚI] Bước 2: BUILD — --continue cho phép chạy tiếp các module khác
+      # dù 1 module fail, --warning-mode all in ra mọi cảnh báo Gradle ===
       - name: Build with Gradle
-        run: gradle assembleDebug
+        run: gradle assembleDebug --continue --warning-mode all --stacktrace
+
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: EdgeBar-APK
           path: app/build/outputs/apk/debug/*.apk
+
+      # === [MỚI] Bước 3: Nếu build fail, upload log riêng để tải về xem ===
+      - name: Upload Lint report (khi fail)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lint-Report
+          path: app/build/reports/
