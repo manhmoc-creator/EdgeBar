@@ -510,7 +510,6 @@ private FrameLayout buildGestureHalfCard(String key, String compName, String ges
         card.setOnLongClickListener(v -> true);
     }
     return wrap;
-    return wrapPackCard(card, key + suffix);
 }
 private void openGestureHalfEditor(String key, boolean isLeft,
         String[] actKeysUsed, String[] actLabsUsed) {
