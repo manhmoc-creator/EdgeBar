@@ -12084,14 +12084,13 @@ private LinearLayout buildDualRow(String rId, String spanKey, String appliedItem
     row.setGravity(Gravity.CENTER_VERTICAL);
     row.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
 
-    // ─── Nửa TRÁI = Homacc Full ⚡ ───
-    LinearLayout leftCard = buildDualHalfCard(rId, spanKey, appliedItemKey, isHomebSpace,
+        // ─── Nửa TRÁI = Homacc Full ⚡ ───
+    FrameLayout leftCard = buildDualHalfCard(rId, spanKey, appliedItemKey, isHomebSpace,
         /* isFullSide */ true, onRefresh);
     LinearLayout.LayoutParams leftLp = new LinearLayout.LayoutParams(0, -2, 1f);
     leftCard.setLayoutParams(leftLp);
     row.addView(leftCard);
 
-    // ─── Cầu OR ─── 1 TextView, không animation, không listener → Zero-RAM dư
     TextView tvOr = new TextView(this);
     tvOr.setText("OR");
     tvOr.setTextColor(Color.parseColor("#FFC107"));
@@ -12102,8 +12101,8 @@ private LinearLayout buildDualRow(String rId, String spanKey, String appliedItem
     tvOr.setLayoutParams(orLp);
     row.addView(tvOr);
 
-    // ─── Nửa PHẢI = Homeb Common ✓ ───
-    LinearLayout rightCard = buildDualHalfCard(rId, spanKey, appliedItemKey, isHomebSpace,
+        // ─── Nửa PHẢI = Homeb Common ✓ ───
+    FrameLayout rightCard = buildDualHalfCard(rId, spanKey, appliedItemKey, isHomebSpace,
         /* isFullSide */ false, onRefresh);
     LinearLayout.LayoutParams rightLp = new LinearLayout.LayoutParams(0, -2, 1f);
     rightCard.setLayoutParams(rightLp);
@@ -12111,7 +12110,7 @@ private LinearLayout buildDualRow(String rId, String spanKey, String appliedItem
 
     return row;
 }
-private LinearLayout buildDualHalfCard(String rId, String spanKey, String appliedItemKey,
+private FrameLayout buildDualHalfCard(String rId, String spanKey, String appliedItemKey,
                                        boolean isHomebSpace, boolean isFullSide,
                                        Runnable onRefresh) {
     final String px = "prule_" + rId + "_";
