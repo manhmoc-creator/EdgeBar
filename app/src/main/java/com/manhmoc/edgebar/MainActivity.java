@@ -124,10 +124,11 @@ private TextView tvFrontierSubTitle; // [MỚI] hoisted ra field để mở th�
 
 private final java.util.ArrayDeque<Runnable> navBackStack = new java.util.ArrayDeque<>();
 private Runnable currentLevelBackAction = null;
-    // [MULTI-SELECT FRONTIER] Zero-RAM khi không dùng — chỉ 1 boolean + 1 Set rỗng
     private boolean frontierSelectMode = false;
+    private boolean gestureSelectMode = false;
+    private java.util.Set<String> gestureSelectedItems = new java.util.LinkedHashSet<>();
+    private final java.util.Set<String> openGestureDrawers = new java.util.LinkedHashSet<>();
     private java.util.Set<String> frontierSelectedItems = new java.util.LinkedHashSet<>();
-    // MỚI: multi-select cho Pattern (prule) bên trong 1 Data Pack
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
     private final String CURRENT_VERSION = "🕸️ 19.12.3.6.43";
@@ -141,7 +142,6 @@ private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<
     private int soundMediaSubTab = -1; // -1 = menu chọn Ghi âm/Ghi màn hình, 0 = Ghi âm, 1 = Ghi màn hình
     private LinearLayout ecoContainer;
     private boolean ecoRenderInFlight = false;
-        // THÊM 2 field static này ngay dưới khai báo ecoContainer:
 private static List<String[]> cachedAppList = null; // mỗi phần tử: {name, pkg}
 private static long cachedAppListTs = 0;
 private static final long APP_LIST_CACHE_MS = 5 * 60 * 1000; // 5 phút
@@ -231,9 +231,9 @@ private static final String[] PACK_SYS_KEYS_FULL = new String[]{
 private static final String[] PACK_SYS_KEYS_COMMON = new String[]{
     "HOME", "FLASH", "VOLUME", "CAMERA", "SCREEN_OFF", "SCREENSHOT",
     "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
-private static boolean isCommonKind(String kind) {
-    return "COMMON".equals(kind) || "LIMITED".equals(kind);
-}
+    private static boolean isCommonKind(String kind) {
+        return "COMMON".equals(kind) || "LIMITED".equals(kind); // giữ alias LIMITED cho backup cũ
+    }
 private static boolean isFullKind(String kind) {
     return "FULL".equals(kind);
 }
@@ -271,12 +271,9 @@ private class SpanFlow {
         }
     }
 }
-
-// Giữ chữ ký cũ để không phải sửa nơi đang gọi
 private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMultiSelect, Runnable rerender) {
     showPackLongPressMenu(anchor, spanKey, onMultiSelect, rerender, null);
 }
-// onMultiSelect = null -> ẩn "Chọn nhiều"; onDelete = null -> ẩn "Xoá"
 private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMultiSelect, Runnable rerender, Runnable onDelete) {
     showPackLongPressMenu(anchor, spanKey, onMultiSelect, rerender, onDelete, null);
 }
@@ -350,8 +347,6 @@ private void addSelDot(FrameLayout wrap, boolean sel) {
     lp.gravity = Gravity.BOTTOM | Gravity.START; lp.setMargins(10, 0, 0, 6);
     wrap.addView(dot, lp);
 }
-// Icon tuỳ chọn Rung/Sáng/Nhảy/Ẩn — thay emoji 📳✨🦘👻 bằng icon trong bộ 100 icon custom
-// Overload 4-tham-số giữ để không phải sửa hàng loạt chỗ gọi — mặc định snd=false
 private LinearLayout buildOptIcons(boolean vib, boolean anim, boolean jump, boolean hide) {
     return buildOptIcons(vib, anim, jump, hide, false);
 }
@@ -363,28 +358,190 @@ private LinearLayout buildOptIcons(boolean vib, boolean anim, boolean jump, bool
     for (int i = 0; i < 5; i++) if (on[i]) col.addView(makeMenuIcon(names[i], 34));
     return col;
 }
-
-// [MỚI] Format nhãn từ 1 chuỗi CSV action — dùng lại logic của formatPruleActionLabel
-// để mọi Data Pack đều hiển thị đẹp như Frontier (tên app/shortcut/panel + dấu +).
-private String formatActionCsvLabel(String actsCsv, String launchPkg, String shortcutId) {
-    if (actsCsv == null || actsCsv.isEmpty()) return T("None","Không có");
-    StringBuilder sb = new StringBuilder();
-    for (String a : actsCsv.split(",")) {
-        String at = a.trim();
-        if (at.isEmpty() || at.equals("NONE")) continue;
-        if (sb.length() > 0) sb.append(" + ");
-        if (at.equals("LAUNCH_APP")) { sb.append(getAppLabelCached(launchPkg)); continue; }
-        if (at.equals("RUN_SHORTCUT")) {
-            sb.append("🔗 " + prefs.getString("shortcut_" + shortcutId + "_name", "Shortcut")); continue;
-        }
-        if (at.startsWith("PANEL_")) { sb.append("📦 " + prefs.getString("pack_panel_" + at.substring(6) + "_name", "Panel")); continue; }
-        if (at.startsWith("INTENT_")) { sb.append("⚡ " + prefs.getString("intent_" + at.substring(7) + "_name", "Intent")); continue; }
-        if (at.startsWith("MACRO_")) { sb.append("🤖 " + prefs.getString("macro_" + at.substring(6) + "_name", "Macro")); continue; }
-        for (int i = 0; i < ACT_KEYS.length; i++) {
-            if (ACT_KEYS[i] != null && ACT_KEYS[i].equals(at)) { sb.append(ACT_LABS[i]); break; }
-        }
+private String getMergedActsForGesture(String key) {
+    if (!prefs.getBoolean(key + "_dual", false)) {
+        return prefs.getString(key, "NONE");
     }
-    return sb.length() == 0 ? T("Error","Lỗi") : sb.toString();
+    String l = prefs.getString(key + "_acts_l", "");
+    String r = prefs.getString(key + "_acts_r", "");
+    if (l.isEmpty()) return r.isEmpty() ? "NONE" : r;
+    if (r.isEmpty()) return l;
+    java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
+    for (String s : l.split(",")) if (!s.trim().isEmpty()) set.add(s.trim());
+    for (String s : r.split(",")) if (!s.trim().isEmpty()) set.add(s.trim());
+    return TextUtils.join(",", set);
+}
+    private View buildGestureActionPackCard(String key, String compName, String gestureName,
+            String[] actKeysUsed, String[] actLabsUsed) {
+
+        String action = getMergedActsForGesture(key);
+        LinearLayout iconCol = buildActionIconColumn(key, "");
+
+        Button btnTest = stdCardBtn("TEST", "#FFC107", Color.BLACK);
+        btnTest.setOnClickListener(v -> fireTestActions(
+            java.util.Arrays.asList(action.split(",")),
+            prefs.getString(key + "_launch_pkg", ""),
+            prefs.getString(key + "_shortcut_id", "")));
+
+        // Info 2 dòng: dòng 2 ghi rõ "dùng chung cho Homacc + Homeb · giữ để chỉnh riêng"
+        LinearLayout card = buildStdPackCard(
+            iconCol,
+            compName + " · " + gestureName,
+            T("Shared: Homacc + Homeb (long-press to customize)",
+              "Chung: Homacc + Homeb (nhấn giữ để chỉnh riêng)"),
+            formatActionCsvLabel(action,
+                prefs.getString(key + "_launch_pkg", ""),
+                prefs.getString(key + "_shortcut_id", "")),
+            btnTest);
+        card.setOnClickListener(v -> openRuleBuilderDialog(key, -1, -1, ""));
+        card.setOnLongClickListener(v -> {
+            gestureSelectMode = true;
+            gestureSelectedItems.clear();
+            gestureSelectedItems.add(key);
+            renderRulesList();
+            return true;
+        });
+        FrameLayout wrap = wrapPackCard(card, key);
+        if (gestureSelectMode) {
+            addSelDot(wrap, gestureSelectedItems.contains(key));
+            card.setOnClickListener(v -> {
+                if (gestureSelectedItems.contains(key)) gestureSelectedItems.remove(key);
+                else gestureSelectedItems.add(key);
+                renderRulesList();
+            });
+            card.setOnLongClickListener(v -> true);
+        }
+        return wrap;
+    }
+private void splitGestureToDual(String key) {
+    if (prefs.getBoolean(key + "_dual", false)) {
+        Toast.makeText(this, T("Already split", "Đã tách rồi"), Toast.LENGTH_SHORT).show();
+        return;
+    }
+    String curActs = prefs.getString(key, "NONE");
+    if (curActs == null || curActs.isEmpty()) curActs = "NONE";
+    String curPkg = prefs.getString(key + "_launch_pkg", "");
+    String curScId = prefs.getString(key + "_shortcut_id", "");
+
+    prefs.edit()
+        .putBoolean(key + "_dual", true)
+        .putString(key + "_acts_l", curActs)
+        .putString(key + "_acts_r", curActs)
+        .putString(key + "_launch_pkg_l", curPkg)
+        .putString(key + "_launch_pkg_r", curPkg)
+        .putString(key + "_shortcut_id_l", curScId)
+        .putString(key + "_shortcut_id_r", curScId)
+        .putBoolean(key + "_l_touched", false)
+        .putBoolean(key + "_r_touched", false)
+        .apply();
+    renderRulesList();
+}
+
+/** [MỚI] Row 2 pack con + cầu OR cho gesture đã Deep Customize. */
+private LinearLayout buildGestureDualRow(String key, String compName, String gestureName,
+        String[] actKeysUsed, String[] actLabsUsed) {
+
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setGravity(Gravity.CENTER_VERTICAL);
+    row.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+
+    FrameLayout leftCard = buildGestureHalfCard(key, compName, gestureName,
+        actKeysUsed, actLabsUsed, true);
+    leftCard.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    row.addView(leftCard);
+
+    TextView tvOr = new TextView(this);
+    tvOr.setText("OR");
+    tvOr.setTextColor(Color.parseColor("#FFC107"));
+    tvOr.setTextSize(15f);
+    tvOr.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    LinearLayout.LayoutParams orLp = new LinearLayout.LayoutParams(-2, -2);
+    orLp.setMargins(8, 0, 8, 0);
+    tvOr.setLayoutParams(orLp);
+    row.addView(tvOr);
+
+    FrameLayout rightCard = buildGestureHalfCard(key, compName, gestureName,
+        actKeysUsed, actLabsUsed, false);
+    rightCard.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    row.addView(rightCard);
+
+    return row;
+}
+
+/** [MỚI] 1 nửa (trái/phải) của Data Pack Action đã Deep Customize. */
+private FrameLayout buildGestureHalfCard(String key, String compName, String gestureName,
+        String[] actKeysUsed, String[] actLabsUsed, boolean isLeft) {
+
+    String suffix = isLeft ? "_l" : "_r";
+    String acts = prefs.getString(key + "_acts" + suffix, "NONE");
+    String pkg = prefs.getString(key + "_launch_pkg" + suffix, "");
+    String scId = prefs.getString(key + "_shortcut_id" + suffix, "");
+
+    LinearLayout iconCol = buildActionIconColumn(key, "");
+    String sideLabel = isLeft
+        ? T("Homacc ⚡ (full action)", "Homacc ⚡ (full action)")
+        : T("Homeb ✓ (common action)", "Homeb ✓ (common action)");
+
+    Button btnTest = stdCardBtn("TEST", "#FFC107", Color.BLACK);
+    final String fActs = acts, fPkg = pkg, fScId = scId;
+    btnTest.setOnClickListener(v -> fireTestActions(
+        java.util.Arrays.asList(fActs.split(",")), fPkg, fScId));
+
+    LinearLayout card = buildStdPackCard(iconCol, sideLabel, null,
+        formatActionCsvLabel(acts, pkg, scId), btnTest);
+
+    card.setOnClickListener(v -> openGestureHalfEditor(key, isLeft, actKeysUsed, actLabsUsed));
+        card.setOnLongClickListener(v -> {
+        gestureSelectMode = true;
+        gestureSelectedItems.clear();
+        gestureSelectedItems.add(key);
+        renderRulesList();
+        return true;
+    });
+        FrameLayout wrap = wrapPackCard(card, key + suffix);
+    if (gestureSelectMode) {
+        addSelDot(wrap, gestureSelectedItems.contains(key));
+        card.setOnClickListener(v -> {
+            if (gestureSelectedItems.contains(key)) gestureSelectedItems.remove(key);
+            else gestureSelectedItems.add(key);
+            renderRulesList();
+        });
+        card.setOnLongClickListener(v -> true);
+    }
+    return wrap;
+    return wrapPackCard(card, key + suffix);
+}
+private void openGestureHalfEditor(String key, boolean isLeft,
+        String[] actKeysUsed, String[] actLabsUsed) {
+        boolean thisTouched  = prefs.getBoolean(key + (isLeft ? "_l_touched" : "_r_touched"), false);
+        boolean otherTouched = prefs.getBoolean(key + (isLeft ? "_r_touched" : "_l_touched"), false);
+        boolean allowFull = thisTouched || !otherTouched;
+
+    java.util.LinkedHashSet<String> targetSet = new java.util.LinkedHashSet<>();
+    String curActs = prefs.getString(key + "_acts" + (isLeft ? "_l" : "_r"), "");
+    for (String s : curActs.split(",")) if (!s.trim().isEmpty()) targetSet.add(s.trim());
+
+    String[] pkgHolder = { prefs.getString(key + "_launch_pkg" + (isLeft ? "_l" : "_r"), "") };
+    String[] scHolder = { prefs.getString(key + "_shortcut_id" + (isLeft ? "_l" : "_r"), "") };
+
+    String kind = allowFull ? "FULL" : "COMMON";
+    openHalfActionPicker(isLeft, kind, targetSet, pkgHolder, scHolder, () -> {
+        prefs.edit()
+            .putString(key + "_acts" + (isLeft ? "_l" : "_r"), TextUtils.join(",", targetSet))
+            .putString(key + "_launch_pkg" + (isLeft ? "_l" : "_r"), pkgHolder[0])
+            .putString(key + "_shortcut_id" + (isLeft ? "_l" : "_r"), scHolder[0])
+            .putBoolean(key + (isLeft ? "_l_touched" : "_r_touched"), true)
+            .apply();
+        if (allowFull) {
+            prefs.edit()
+                .putString(key + "_acts" + (isLeft ? "_r" : "_l"), TextUtils.join(",", targetSet))
+                .putString(key + "_launch_pkg" + (isLeft ? "_r" : "_l"), pkgHolder[0])
+                .putString(key + "_shortcut_id" + (isLeft ? "_r" : "_l"), scHolder[0])
+                .apply();
+        }
+        renderRulesList();
+    });
 }
 
 private View buildActionPickCard(String title, String prefKey, List<String[]> items) {
@@ -955,8 +1112,14 @@ private String[] getVolKeyActLabs() {
         recreate();
     }
 }
-    private void performBack() {
-    if (frontierSelectMode) { frontierSelectMode = false; frontierSelectedItems.clear(); renderRulesList(); return; }
+        private void performBack() {
+        if (gestureSelectMode) {
+            gestureSelectMode = false;
+            gestureSelectedItems.clear();
+            renderRulesList();
+            return;
+        }
+        if (frontierSelectMode) { frontierSelectMode = false; frontierSelectedItems.clear(); renderRulesList(); return; }
     if (ecoSelectMode) { ecoSelectMode = false; ecoSelectedItems.clear(); renderEcosystem(); return; }
     if (panelSelectMode) { panelSelectMode = false; panelSelectedItems.clear(); renderPanelDesign(); return; }
     if (trashSelectMode) { trashSelectMode = false; trashSelectedItems.clear(); renderEcosystem(); return; }
@@ -1699,7 +1862,6 @@ navBackStack.clear(); // ← THÊM DÒNG NÀY
     updateFabVisibility();
     refreshPreview();
 }
-    // ==================== KHÔNG GIAN ĐIỀU KIỆN ====================
     private void buildConditionsSpace() {
     condBackRow = createBackRow(T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"));
     pageConditions.addView(condBackRow);
@@ -1775,193 +1937,209 @@ private String getSpacePrefix() {
         default: return "home_";
     }
 }
-    private void renderRulesList() {
-    if (currentGesTab == 5) {
-        if (frontierBackRowRef != null && frontierBackRowRef.getVisibility() == View.VISIBLE) {
-            redrawFrontierBody(frontierBodyContainer);
-        }
-        return;
-    }
-
-    if (currentGesTab == 6) {
-        if (!sensorSpaceBuilt) {
-            listRules.removeAllViews();
-            buildSensorSpaceOnce();
-        }
-        return;
-    }
-    listRules.removeAllViews();
-    final boolean isVolKeyMode = (currentGesTab == 3);
-    final boolean isTextureMode = (currentGesTab == 4);
-    String prefix = getSpacePrefix();
-    String[] compsUsed = isVolKeyMode ? VOLKEY_COMPS : (isTextureMode ? new String[]{"fingerprint"} : ALL_COMP_KEYS);
-    String[] compNamesUsed = isVolKeyMode ? VOLKEY_COMP_NAMES : (isTextureMode ? new String[]{T("Fingerprint", "Vân Tay")} : ALL_COMP_NAMES);
-    String[] gesturesUsed = isVolKeyMode ? VOLKEY_GESTURES : C_GESTURES;
-    String[] gestureNamesUsed = isVolKeyMode ? VOLKEY_GESTURE_NAMES : C_GESTURE_NAMES;
-    String[] actKeysUsed = isVolKeyMode ? getVolKeyActKeys() : ACT_KEYS;
-    String[] actLabsUsed = isVolKeyMode ? getVolKeyActLabs() : ACT_LABS;
-    // Thứ tự hiển thị được lưu riêng, kéo-thả đổi được, tự thêm rule mới vào cuối
-    List<String> ruleOrderKeys = new ArrayList<>();
-    java.util.Map<String, int[]> keyToCG = new java.util.HashMap<>();
-    for (int c = 0; c < compsUsed.length; c++)
-        for (int g = 0; g < gesturesUsed.length; g++) {
-            String k2 = prefix + compsUsed[c] + "_" + gesturesUsed[g];
-            if (!prefs.getString(k2, "NONE").equals("NONE")) {
-                keyToCG.put(k2, new int[]{c, g});
+        private void renderRulesList() {
+        if (currentGesTab == 5) {
+            if (frontierBackRowRef != null && frontierBackRowRef.getVisibility() == View.VISIBLE) {
+                redrawFrontierBody(frontierBodyContainer);
             }
+            return;
         }
-    List<String> savedOrder = getDynamicIds("rule_order_" + prefix);
-    for (String s : savedOrder) if (keyToCG.containsKey(s)) ruleOrderKeys.add(s);
-    for (String s : keyToCG.keySet()) if (!ruleOrderKeys.contains(s)) ruleOrderKeys.add(s);
-
-        final SpanFlow flow = new SpanFlow(listRules);
-    int count = 0;
-    for (String key : ruleOrderKeys) {
-        int[] cg = keyToCG.get(key);
-        final int c = cg[0];
-        final int g = cg[1];
-        String action = prefs.getString(key, "NONE");
-
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setBackground(getRounded("#202124", 24f));
-        card.setPadding(15, 24, 10, 24);
-
-    LinearLayout optCol = new LinearLayout(this);
-    optCol.setOrientation(LinearLayout.VERTICAL);
-    optCol.setGravity(Gravity.CENTER);
-    optCol.setPadding(0, 0, 15, 0);
-boolean v = prefs.getBoolean(key+"_vib", true);
-boolean a = prefs.getBoolean(key+"_anim", true);
-boolean j = prefs.getBoolean(key+"_jump_on", true);
-boolean s = prefs.getBoolean(key+"_snd", false);
-boolean o = prefs.getBoolean(key+"_os", false);
-if (j) optCol.addView(makeMenuIcon("rocket_launch_24px", 34));
-if (v) optCol.addView(makeMenuIcon("notifications_active_24px", 34));
-if (s) optCol.addView(makeMenuIcon("volume_up_24px", 34));
-if (a) optCol.addView(makeMenuIcon("flare_24px", 34));
-if (o) optCol.addView(makeMenuIcon("visibility_24px", 34));
-
-    // Cột 2 (Giữa): Thông tin Component, Gesture, Action
-    LinearLayout infoCol = new LinearLayout(this);
-    infoCol.setOrientation(LinearLayout.VERTICAL);
-    infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-    TextView tCond = new TextView(this); 
-    tCond.setText(compNamesUsed[c]); 
-    tCond.setTextColor(Color.parseColor("#E8EAED")); 
-    tCond.setTextSize(16); // Tăng lên 16, Font chữ thường
-    
-    TextView tGest = new TextView(this);
-    tGest.setText(gestureNamesUsed[g]);
-    tGest.setTextColor(Color.parseColor("#9AA0A6"));
-    tGest.setTextSize(12); tGest.setPadding(0, 5, 0, 5);
-
-    TextView tAct = new TextView(this); 
-    String[] acts = action.split(",");
-    StringBuilder actName = new StringBuilder();
-            for(String actStr : acts) {
-                String at = actStr.trim();
-        if (at.equals("LAUNCH_APP")) {
-            if(actName.length() > 0) actName.append(" + ");
-            actName.append(getAppLabelCached(prefs.getString(key + "_launch_pkg", "")));
-            continue;
+        if (currentGesTab == 6) {
+            if (!sensorSpaceBuilt) { listRules.removeAllViews(); buildSensorSpaceOnce(); }
+            return;
         }
-        if (at.equals("RUN_SHORTCUT")) {
-            if(actName.length() > 0) actName.append(" + ");
-            String scId = prefs.getString(key + "_shortcut_id", "");
-            actName.append("🔗 " + prefs.getString("shortcut_" + scId + "_name", "Shortcut"));
-            continue;
-        }
-        if (at.startsWith("PANEL_")) {
-            if(actName.length() > 0) actName.append(" + ");
-            actName.append("📦 " + prefs.getString("pack_panel_" + at.substring(6) + "_name", "Panel"));
-            continue;
-        }
-        if (at.startsWith("INTENT_")) {
-            if(actName.length() > 0) actName.append(" + ");
-            actName.append("⚡ " + prefs.getString("intent_" + at.substring(7) + "_name", "Intent"));
-            continue;
-        }
-        if (at.startsWith("MACRO_")) {
-            if(actName.length() > 0) actName.append(" + ");
-            actName.append("🤖 " + prefs.getString("macro_" + at.substring(6) + "_name", "Macro"));
-            continue;
-        }
-        for(int i = 0; i < actKeysUsed.length; i++) {
-            if (actKeysUsed[i] != null && actKeysUsed[i].equals(at)) {
-                if(actName.length() > 0) actName.append(" + ");
-                actName.append(actLabsUsed[i]);
-                break;
+        listRules.removeAllViews();
+        final boolean isVolKeyMode  = (currentGesTab == 3);
+        final boolean isTextureMode = (currentGesTab == 4);
+        String prefix = getSpacePrefix();
+        String[] compsUsed      = isVolKeyMode ? VOLKEY_COMPS : (isTextureMode ? new String[]{"fingerprint"} : ALL_COMP_KEYS);
+        String[] compNamesUsed  = isVolKeyMode ? VOLKEY_COMP_NAMES : (isTextureMode ? new String[]{T("Fingerprint", "Vân Tay")} : ALL_COMP_NAMES);
+        String[] gesturesUsed   = isVolKeyMode ? VOLKEY_GESTURES : C_GESTURES;
+        String[] gestureNamesUsed = isVolKeyMode ? VOLKEY_GESTURE_NAMES : C_GESTURE_NAMES;
+        String[] actKeysUsed    = isVolKeyMode ? getVolKeyActKeys() : ACT_KEYS;
+        String[] actLabsUsed    = isVolKeyMode ? getVolKeyActLabs() : ACT_LABS;
+        if (gestureSelectMode) listRules.addView(buildGestureSelectionToolbar(prefix));
+        int totalRules = 0;
+        for (int c = 0; c < compsUsed.length; c++) {
+            final java.util.List<String> compKeys = new java.util.ArrayList<>();
+            for (int g = 0; g < gesturesUsed.length; g++) {
+                String k = prefix + compsUsed[c] + "_" + gesturesUsed[g];
+                if (!prefs.getString(k, "NONE").equals("NONE")) compKeys.add(k);
             }
+            totalRules += compKeys.size();
+
+            final java.util.List<String> savedOrder = getDynamicIds("rule_order_" + prefix);
+            compKeys.sort((a, b) -> {
+                int ia = savedOrder.indexOf(a), ib = savedOrder.indexOf(b);
+                if (ia < 0) ia = 9999; if (ib < 0) ib = 9999;
+                return Integer.compare(ia, ib);
+            });
+
+            final String compKey  = prefix + compsUsed[c];
+            final String compName = compNamesUsed[c];
+            final boolean isOpen  = openGestureDrawers.contains(compKey);
+
+            listRules.addView(buildGestureComponentDrawer(
+                compKey, compName, compKeys, gesturesUsed, gestureNamesUsed,
+                actKeysUsed, actLabsUsed, isVolKeyMode, isOpen));
+        }
+
+        if (totalRules == 0) {
+            TextView empty = new TextView(this);
+            empty.setText(T("No rules yet.\nPress + NEW EB to create.",
+                            "Chưa có quy tắc nào.\nBấm + NEW EB để tạo."));
+            empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER);
+            empty.setPadding(0, 60, 0, 60);
+            listRules.addView(empty);
         }
     }
-    tAct.setText(actName.toString().isEmpty() ? "Lỗi" : actName.toString());
-tAct.setTextColor(Color.parseColor("#8AB4F8"));
-tAct.setTextSize(16f); // Giảm nhẹ về 16f và ép Truncate để chống lẹm dòng
-tAct.setMaxLines(1);
-tAct.setEllipsize(android.text.TextUtils.TruncateAt.END);
-tCond.setMaxLines(1); tCond.setEllipsize(android.text.TextUtils.TruncateAt.END);
-tGest.setMaxLines(1); tGest.setEllipsize(android.text.TextUtils.TruncateAt.END);
-infoCol.addView(tCond); infoCol.addView(tGest); infoCol.addView(tAct);
+    private View buildGestureComponentDrawer(String compKey, String compName,
+            java.util.List<String> compKeys, String[] gesturesUsed, String[] gestureNamesUsed,
+            String[] actKeysUsed, String[] actLabsUsed, boolean isVolKeyMode, boolean isOpen) {
 
-// Cột 3 (Phải cùng): Switch, Copy
-LinearLayout ctrlCol = new LinearLayout(this);
-ctrlCol.setOrientation(LinearLayout.VERTICAL);
-ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
-Switch swOn = new Switch(this);
-swOn.setChecked(prefs.getBoolean(key + "_on", true));
-        swOn.setOnCheckedChangeListener((swView, chk) -> prefs.edit().putBoolean(key + "_on", chk).apply());
-swOn.setPadding(0, 0, 0, 10);
-final int finalC = c; final int finalG = g; final String finalActs = action;
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setBackground(getRounded("#1A1A1A", 20f));
+        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(-1, -2);
+        wlp.setMargins(0, 0, 0, 16);
+        wrap.setLayoutParams(wlp);
 
-// Nút COPY phóng to +1.5 đơn vị (từ 11 lên 12.5sp), bố cục chống lẹm tuyệt đối
-Button btnCopy = new Button(this); btnCopy.setText("TEST");
-btnCopy.setBackground(getRounded("#FFC107", 14f));
-btnCopy.setTextColor(Color.BLACK);
-btnCopy.setTextSize(12.5f);
-btnCopy.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-btnCopy.setPadding(12, 10, 12, 10);
-LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-btnLp.setMargins(0, 8, 0, 0); btnCopy.setLayoutParams(btnLp);
-btnCopy.setMinimumHeight(88);
-final String finalKeyForTest = key;
-btnCopy.setOnClickListener(btnView -> fireTestActions(java.util.Arrays.asList(action.split(",")),
-    prefs.getString(finalKeyForTest + "_launch_pkg", ""), prefs.getString(finalKeyForTest + "_shortcut_id", "")));
+        // Header: số rule + mũi tên ▼/▲
+        TextView header = new TextView(this);
+        String arrow = isOpen ? "▲" : "▼";
+        header.setText("▸ " + compName + "  ·  " + compKeys.size() + " rule  " + arrow);
+        header.setTextColor(Color.parseColor("#8AB4F8"));
+        header.setTextSize(15f);
+        header.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        header.setPadding(30, 26, 30, 26);
+        header.setBackground(getRounded(isOpen ? "#333333" : "#222222", 20f));
+        wrap.addView(header);
 
-ctrlCol.addView(swOn); ctrlCol.addView(btnCopy);
-    card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
-    card.setTag(key);
+        // Body chỉ dựng khi mở
+        if (isOpen) {
+            LinearLayout body = new LinearLayout(this);
+            body.setOrientation(LinearLayout.VERTICAL);
+            body.setPadding(12, 12, 12, 12);
 
-    // THUẬT TOÁN UX: CHẠM 1 LẦN -> MỞ EDIT DIALOG
-    card.setOnClickListener(cardView -> openRuleBuilderDialog(key, finalC, finalG, ""));
-    attachDragReorder(card, ruleOrderKeys, "rule_order_" + prefix, this::renderRulesList);
-        // CHẠM GIỮ -> XOÁ QUY TẮC NÀY
-        card.setOnLongClickListener(longPressView -> {
-            showPackLongPressMenu(longPressView, "ui_span_rule_order_" + prefix + "_" + key, null, this::renderRulesList, () ->
-                new AlertDialog.Builder(this).setTitle(T("Delete this rule?", "Xoá quy tắc này?"))
-                    .setPositiveButton(T("DELETE", "XOÁ"), (d, w) -> {
-                        prefs.edit().putString(key, "NONE").apply();
-                        if (isVolKeyMode) syncVolumeService();
-                        renderRulesList();
-                    }).setNegativeButton(T("CANCEL", "HỦY"), null).show());
-            return true;
+            if (compKeys.isEmpty()) {
+                TextView empty = new TextView(this);
+                empty.setText(T("No rule for this component yet.", "Chưa có rule cho vùng này."));
+                empty.setTextColor(Color.parseColor("#777777"));
+                empty.setTextSize(12.5f);
+                empty.setPadding(30, 20, 30, 20);
+                body.addView(empty);
+            } else {
+                final SpanFlow flow = new SpanFlow(body);
+                for (String key : compKeys) {
+                    int gIdx = -1;
+                    for (int i = 0; i < gesturesUsed.length; i++)
+                        if (key.endsWith("_" + gesturesUsed[i])) { gIdx = i; break; }
+                    if (gIdx < 0) continue;
+                    final String gestureName = gestureNamesUsed[gIdx];
+                    final boolean isDual = prefs.getBoolean(key + "_dual", false);
+                    if (isDual) {
+                        LinearLayout dualRow = buildGestureDualRow(key, compName, gestureName, actKeysUsed, actLabsUsed);
+                        attachDragReorder(dualRow, compKeys, "rule_order_" + getSpacePrefix(), this::renderRulesList);
+                        flow.add(dualRow, 6);
+                    } else {
+                        View card = buildGestureActionPackCard(key, compName, gestureName, actKeysUsed, actLabsUsed);
+                        attachDragReorder((View) card, compKeys, "rule_order_" + getSpacePrefix(), this::renderRulesList);
+                        flow.add(card, getPackSpanUnits("ui_span_rule_order_" + getSpacePrefix() + "_" + key));
+                    }
+                }
+                flow.finish();
+            }
+            wrap.addView(body);
+        }
+        header.setOnClickListener(v -> {
+            if (openGestureDrawers.contains(compKey)) openGestureDrawers.remove(compKey);
+            else openGestureDrawers.add(compKey);
+            renderRulesList();
         });
-        flow.add(card, getPackSpanUnits("ui_span_rule_order_" + prefix + "_" + key));
-        count++;
+        return wrap;
     }
-    flow.finish();
-    if (count == 0) {
-        TextView empty = new TextView(this);
-        empty.setText(T("No rules yet.\nPress + NEW EB to create.", "Chưa có quy tắc nào.\nBấm + NEW EB để tạo."));
-        empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER);
-        empty.setPadding(0, 100, 0, 0);
-        listRules.addView(empty);
-    }
-}
+    private LinearLayout buildGestureSelectionToolbar(String prefix) {
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(0, 0, 0, 20);
+        bar.setBackground(getRounded("#1A1A1A", 20f));
+        bar.setPadding(30, 20, 30, 20);
 
-// [MỚI] Ngăn kéo tích chọn Bar/Corner sẽ bị ẩn khi action HIDE_SOME_OVERLAY chạy —
-// lưu TOÀN CỤC theo prefix (lock_/home_/homacc_), không còn theo từng Rule nữa.
+        TextView tvCount = new TextView(this);
+        tvCount.setText(gestureSelectedItems.size() + " " + T("selected", "đã chọn"));
+        tvCount.setTextColor(Color.parseColor("#8AB4F8"));
+        tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+        // Nút "Deep Customize" — chỉ hiện khi chọn đúng 1 pack CHƯA dual
+        Button btnDeep = null;
+        if (gestureSelectedItems.size() == 1) {
+            String singleKey = gestureSelectedItems.iterator().next();
+            if (!prefs.getBoolean(singleKey + "_dual", false)) {
+                btnDeep = new Button(this);
+                btnDeep.setText("⚡ " + T("Customize", "Tuỳ chỉnh sâu"));
+                btnDeep.setBackground(getRounded("#FF9800", 20f));
+                btnDeep.setTextColor(Color.BLACK);
+                btnDeep.setTextSize(12.5f);
+                btnDeep.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+                final String fKey = singleKey;
+                btnDeep.setOnClickListener(v -> {
+                    splitGestureToDual(fKey);
+                    gestureSelectMode = false;
+                    gestureSelectedItems.clear();
+                    renderRulesList();
+                });
+            }
+        }
+
+        Button btnAll = new Button(this);
+        btnAll.setText(T("All", "Tất cả"));
+        btnAll.setBackground(getRounded("#333333", 20f));
+        btnAll.setTextColor(Color.WHITE);
+        btnAll.setTextSize(12.5f);
+        LinearLayout.LayoutParams allLp = new LinearLayout.LayoutParams(-2, -2);
+        allLp.setMargins(10, 0, 10, 0);
+        btnAll.setLayoutParams(allLp);
+        btnAll.setOnClickListener(v -> {
+            // Toggle all: chọn tất cả rule đang có
+            String pfx = getSpacePrefix();
+            java.util.Set<String> all = new java.util.LinkedHashSet<>();
+            boolean isVolKey = (currentGesTab == 3);
+            String[] comps = isVolKey ? VOLKEY_COMPS : (currentGesTab == 4 ? new String[]{"fingerprint"} : ALL_COMP_KEYS);
+            String[] gests = isVolKey ? VOLKEY_GESTURES : C_GESTURES;
+            for (String c : comps) for (String g : gests) {
+                String k = pfx + c + "_" + g;
+                if (!prefs.getString(k, "NONE").equals("NONE")) all.add(k);
+            }
+            if (gestureSelectedItems.equals(all)) gestureSelectedItems.clear();
+            else { gestureSelectedItems.clear(); gestureSelectedItems.addAll(all); }
+            renderRulesList();
+        });
+
+        Button btnDelete = new Button(this);
+        btnDelete.setText("🗑️ " + T("Delete", "Xóa"));
+        btnDelete.setBackground(getRounded("#D32F2F", 20f));
+        btnDelete.setTextColor(Color.WHITE);
+        btnDelete.setTextSize(12.5f);
+        btnDelete.setOnClickListener(v -> {
+            new AlertDialog.Builder(this)
+                .setTitle(T("Delete selected rules?", "Xoá các rule đã chọn?"))
+                .setPositiveButton(T("DELETE", "XOÁ"), (d, w) -> {
+                    for (String k : new java.util.ArrayList<>(gestureSelectedItems)) {
+                        prefs.edit().putString(k, "NONE").apply();
+                    }
+                    gestureSelectMode = false;
+                    gestureSelectedItems.clear();
+                    renderRulesList();
+                }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
+        });
+
+        bar.addView(tvCount);
+        if (btnDeep != null) bar.addView(btnDeep);
+        bar.addView(btnAll);
+        bar.addView(btnDelete);
+        return bar;
+    }
 private void addHideTargetCheckboxes(LinearLayout container, String fullPrefKey, String[] keys, String[] names) {
     java.util.Set<String> selected = new java.util.LinkedHashSet<>();
     for (String s : prefs.getString(fullPrefKey, "").split(",")) if (!s.trim().isEmpty()) selected.add(s.trim());
@@ -2210,8 +2388,6 @@ private void syncProximityService() {
 }
 
 private void syncVolumeService() {
-    // [FIX VOLKEY] User đã bấm "Dừng vĩnh viễn" → KHÔNG tự khởi động lại.
-    // Tránh race với BootReceiver và tránh OS tự đánh dấu force-stopped.
     if (prefs.getBoolean("edgebar_permanently_stopped", false)) return;
 
     boolean need = VolumeButtonService.hasAnyRule(prefs);
@@ -2235,88 +2411,58 @@ private void updateGestureVisibilityForFingerprint(int compIdx, ArrayList<CheckB
         }
     }
 }
-private LinearLayout buildComponentAccordion(
-        String[] compNames,
-        java.util.List<Integer> visibleIdx,
-        int[] selectedComp,
-        boolean isVolKeyMode,
-        String prefix,
-        ArrayList<CheckBox> gestureBoxes,
-        ArrayList<String> gestureKeys,
+private LinearLayout buildComponentDrawers(
+        String[] compNames, java.util.List<Integer> visibleIdx,
+        int[] selectedComp, boolean isVolKeyMode, String prefix,
+        ArrayList<CheckBox> gestureBoxes, ArrayList<String> gestureKeys,
         boolean skipFingerprintFilter) {
 
     LinearLayout container = new LinearLayout(this);
     container.setOrientation(LinearLayout.VERTICAL);
-    LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, -2);
-    cLp.setMargins(0, 8, 0, 12);
-    container.setLayoutParams(cLp);
-
-    // 4 list reference — chỉ giữ con trỏ tới View đã add, không duplicate object
-    final java.util.List<TextView> headers = new java.util.ArrayList<>(compNames.length);
-    final java.util.List<LinearLayout> bodies = new java.util.ArrayList<>(compNames.length);
-    final java.util.List<String> bodyKeys = new java.util.ArrayList<>(compNames.length);
-    final java.util.List<String> bodyNames = new java.util.ArrayList<>(compNames.length);
+    container.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
 
     for (int i = 0; i < compNames.length; i++) {
-        final int localIdx = i;
         final int compKeyIdx = isVolKeyMode ? i : visibleIdx.get(i);
         final String compKey = isVolKeyMode ? VOLKEY_COMPS[i] : ALL_COMP_KEYS[compKeyIdx];
         final String compName = compNames[i];
 
-        // ─── Header — chỉ 1 TextView / component, siêu nhẹ ───
-        TextView header = new TextView(this);
-        header.setTextSize(14f);
-        header.setPadding(30, 24, 30, 24);
-        LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams(-1, -2);
-        hLp.setMargins(0, 3, 0, 3);
-        header.setLayoutParams(hLp);
-
-        // ─── Body — ẩn mặc định, chỉ inflate khi mở ───
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(24, 12, 24, 20);
-        GradientDrawable bbg = new GradientDrawable();
-        bbg.setColor(Color.parseColor("#181818"));
-        bbg.setCornerRadius(14f);
-        body.setBackground(bbg);
-        LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(-1, -2);
-        bLp.setMargins(0, 0, 0, 6);
-        body.setLayoutParams(bLp);
+        body.setBackground(getRounded("#181818", 14f));
         body.setVisibility(View.GONE);
 
-        headers.add(header);
-        bodies.add(body);
-        bodyKeys.add(compKey);
-        bodyNames.add(compName);
+        TextView header = new TextView(this);
+        header.setText(compName);
+        header.setTextColor(Color.parseColor("#E8EAED"));
+        header.setPadding(30, 24, 30, 24);
+        header.setTextSize(14f);
+        header.setBackground(getRounded("#1E1E1E", 16f));
 
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams boxLp = new LinearLayout.LayoutParams(-1, -2);
+        boxLp.setMargins(0, 6, 0, 6);
+        box.setLayoutParams(boxLp);
+        box.addView(header); box.addView(body);
+
+        final boolean[] inflated = {false};
         header.setOnClickListener(v -> {
-            boolean wasOpen = body.getVisibility() == View.VISIBLE;
-
-            if (wasOpen) {
-                // Đóng ngăn này — nhường RAM ngay. KHÔNG đổi active.
-                body.removeAllViews();
-                body.setVisibility(View.GONE);
-                applyHeaderInactive(header, compName);
-                return;
+            boolean willOpen = body.getVisibility() == View.GONE;
+            if (willOpen && !inflated[0]) {
+                inflated[0] = true;
+                selectedComp[0] = compKeyIdx;
+                fillComponentBody(body, prefix, compKey, isVolKeyMode);
+                refreshGestureChecksForComponent(gestureBoxes, gestureKeys, prefix, compKey);
+                if (!skipFingerprintFilter) {
+                    updateGestureVisibilityForFingerprint(compKeyIdx, gestureBoxes);
+                }
             }
-
-            // Mở ngăn này + set active
-            selectedComp[0] = compKeyIdx;
-            applyHeaderActive(header, compName);
-            fillComponentBody(body, prefix, compKey, isVolKeyMode);
-            body.setVisibility(View.VISIBLE);
-            refreshGestureChecksForComponent(gestureBoxes, gestureKeys, prefix, compKey);
-            if (!skipFingerprintFilter) {
-                updateGestureVisibilityForFingerprint(compKeyIdx, gestureBoxes);
-            }
+            body.setVisibility(willOpen ? View.VISIBLE : View.GONE);
+            header.setBackground(getRounded(willOpen ? "#333333" : "#1E1E1E", 16f));
+            header.setTextColor(Color.parseColor(willOpen ? "#8AB4F8" : "#E8EAED"));
         });
-
-        boolean isActive = selectedComp[0] == compKeyIdx;
-        if (isActive) applyHeaderActive(header, compName);
-        else          applyHeaderInactive(header, compName);
-
-        container.addView(header);
-        container.addView(body);
+        container.addView(box);
     }
     return container;
 }
@@ -3700,7 +3846,7 @@ private LinearLayout buildDualKindBanner() {
         start, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
     sb.setSpan(new android.text.style.ForegroundColorSpan(Color.parseColor("#4DD0E1")),
         start, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-    sb.append("   ").append(T("only Homacc (Accessibility)", "chỉ Homacc (cần Trợ năng)")).append("\n");
+    sb.append("   ").append(T("needs Accessibility (Homacc only)", "cần Trợ năng (chỉ Homacc)")).append("\n");
 
     start = sb.length();
     sb.append("✓ Common");
@@ -3708,7 +3854,7 @@ private LinearLayout buildDualKindBanner() {
         start, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
     sb.setSpan(new android.text.style.ForegroundColorSpan(Color.parseColor("#FFD54F")),
         start, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-    sb.append("   ").append(T("both Homacc + Homeb", "cả Homacc lẫn Homeb")).append("\n");
+    sb.append("   ").append(T("runs on both Homacc + Homeb", "chạy trên cả Homacc lẫn Homeb")).append("\n");
 
     start = sb.length();
     sb.append("🔀 OR");
@@ -3716,8 +3862,7 @@ private LinearLayout buildDualKindBanner() {
         start, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
     sb.setSpan(new android.text.style.ForegroundColorSpan(Color.parseColor("#8AB4F8")),
         start, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-    sb.append("   ").append(T("run when either side matches",
-        "bên nào có action thì bên đó chạy"));
+    sb.append("   ").append(T("side with action runs", "bên nào có action thì bên đó chạy"));
 
     tv.setText(sb);
     tv.setTextColor(Color.parseColor("#E8EAED"));
@@ -3736,8 +3881,10 @@ private void openHalfActionPicker(boolean isLeft, String kind,
     root.setPadding(30, 120, 30, 30);
 
     TextView title = new TextView(this);
-    title.setText((isLeft ? "Nửa TRÁI" : "Nửa PHẢI") + " — "
-    + (isLimited ? T("Common action", "Common action") : "Full action"));
+     title.setText((isLeft ? "Nửa TRÁI" : "Nửa PHẢI") + " — "
+    + (isLimited ? T("Common action (both servers)", "Common action (chạy cả 2 server)")
+                 : T("Full action (needs Accessibility)", "Full action (cần Trợ năng)")));
+
     title.setTextColor(Color.parseColor("#8AB4F8"));
     title.setTextSize(17f);
     title.setPadding(0, 0, 0, 20);
@@ -3761,8 +3908,8 @@ private void openHalfActionPicker(boolean isLeft, String kind,
     List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids","intent_","INTENT_","Intent");
     List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids","macro_","MACRO_","Macro");
 
-    content.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, targetSet, "#4CAF50"));
-    content.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, targetSet, "#FF9800"));
+        content.addView(buildActionCategoryDrawer("SYSTEM", "⚙️", "#4CAF50", SYS_ITEMS, targetSet, null, true));
+    content.addView(buildActionCategoryDrawer("UTILITIES", "🛠️", "#FF9800", UTIL_ITEMS, targetSet, null, true));
     if (!isLimited) {
         List<String[]> TRIGGER_ITEMS_PACK = buildItemsForKeys(new String[]{
             "TRIGGER_TAP","TRIGGER_DTAP","TRIGGER_LONG",
@@ -3770,11 +3917,11 @@ private void openHalfActionPicker(boolean isLeft, String kind,
             "TRIGGER_UP_DOWN","TRIGGER_DOWN_UP","TRIGGER_LEFT_RIGHT","TRIGGER_RIGHT_LEFT",
             "TRIGGER_UP_HOLD","TRIGGER_DOWN_HOLD","TRIGGER_LEFT_HOLD","TRIGGER_RIGHT_HOLD","TRIGGER_DIAG_HOLD"
         }, ACT_KEYS, ACT_LABS);
-        content.addView(buildActionCategoryButton("GESTURES", "🌀", TRIGGER_ITEMS_PACK, targetSet, "#009688"));
+        content.addView(buildActionCategoryDrawer("GESTURES", "🌀", "#009688", TRIGGER_ITEMS_PACK, targetSet, null, true));
     }
-    content.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, targetSet, "#9C27B0", true));
-    content.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, targetSet, "#D32F2F"));
-    content.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, targetSet, "#2196F3"));
+    content.addView(buildActionCategoryDrawer("PANEL", "🗂️", "#9C27B0", PANEL_ITEMS, targetSet, null, true));
+    content.addView(buildActionCategoryDrawer("INTENTS", "⚡", "#D32F2F", INTENT_ITEMS, targetSet, null, true));
+    content.addView(buildActionCategoryDrawer("MACROS", "🤖", "#2196F3", MACRO_ITEMS, targetSet, null, true));
 
     // Ô APP + SHORTCUT riêng cho nửa này (không còn dùng checkbox chung như cũ,
     // vì 2 nửa có thể chạy 2 pkg/2 shortcut khác nhau).
@@ -4571,16 +4718,10 @@ tabs.addView(bTrig); tabs.addView(bAct); root.addView(tabs);
     compNamesShown = new String[visibleIdx.size()];
             for (int vi=0; vi<visibleIdx.size(); vi++) compNamesShown[vi] = ALL_COMP_NAMES[visibleIdx.get(vi)];
         }
-        LinearLayout compAccordion = buildComponentAccordion(
-            compNamesShown,
-            visibleIdx,
-            selectedComp,
-            isVolKeyMode,
-            getSpacePrefix(),
-            gestureBoxes,
-            gestureKeys,
-            isTextureMode);
-        vTrig.addView(compAccordion);
+                LinearLayout compDrawers = buildComponentDrawers(
+            compNamesShown, visibleIdx, selectedComp, isVolKeyMode,
+            getSpacePrefix(), gestureBoxes, gestureKeys, isTextureMode);
+        vTrig.addView(compDrawers);
 
         final String[] gesturesShown = isVolKeyMode ? VOLKEY_GESTURES : C_GESTURES;
         final String[] gestureNamesShown = isVolKeyMode ? VOLKEY_GESTURE_NAMES : C_GESTURE_NAMES;
@@ -4645,9 +4786,9 @@ for (String sa : savedArray) {
         } else {
             sysKeys = new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE", "TRIGGER_ACC_MENU_2F"};
         }
-                List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeys, actKeysUsed, actLabsUsed);
-                List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
-        vAct.addView(buildActionCategoryButton("SYSTEM", "⚙️", SYS_ITEMS, selectedActs, "#4CAF50"));
+                        List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeys, actKeysUsed, actLabsUsed);
+        List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
+        vAct.addView(buildActionCategoryDrawer("SYSTEM", "⚙️", "#4CAF50", SYS_ITEMS, selectedActs, null, true));
         if (!isVolKeyMode && !isHomebSpace) {
             List<String[]> TRIGGER_ITEMS = buildItemsForKeys(new String[]{
                 "TRIGGER_TAP", "TRIGGER_DTAP", "TRIGGER_LONG",
@@ -4656,7 +4797,7 @@ for (String sa : savedArray) {
                 "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT",
                 "TRIGGER_UP_HOLD", "TRIGGER_DOWN_HOLD", "TRIGGER_LEFT_HOLD", "TRIGGER_RIGHT_HOLD", "TRIGGER_DIAG_HOLD"
             }, actKeysUsed, actLabsUsed);
-            vAct.addView(buildActionCategoryButton("GESTURES", "🌀", TRIGGER_ITEMS, selectedActs, "#009688"));
+            vAct.addView(buildActionCategoryDrawer("GESTURES", "🌀", "#009688", TRIGGER_ITEMS, selectedActs, null, true));
         }
         if (!isLockSpace && !isVolKeyMode) {
             LinearLayout rowApp = new LinearLayout(this);
@@ -4702,19 +4843,19 @@ for (String sa : savedArray) {
             launchAppSelected[0] = false;
             shortcutSelected[0] = false;
         }
-        if (isVolKeyMode) {
-           List<String[]> VOLKEY_UTIL_ITEMS = buildItemsForKeys(
+                if (isVolKeyMode) {
+            List<String[]> VOLKEY_UTIL_ITEMS = buildItemsForKeys(
                 new String[]{"TOGGLE_RECORD", "PAUSE_RECORD", "TOGGLE_OVERLAY", "PLAY_MY_PLAYLIST"},
                 actKeysUsed, actLabsUsed);
-            vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", VOLKEY_UTIL_ITEMS, selectedActs, "#FF9800"));
+            vAct.addView(buildActionCategoryDrawer("UTILITIES", "🛠️", "#FF9800", VOLKEY_UTIL_ITEMS, selectedActs, null, true));
         } else {
-                        List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"HIDE_SOME_OVERLAY", "SHOW_ALL_OVERLAY", "TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR", "PLAY_MY_PLAYLIST"}, actKeysUsed, actLabsUsed);
+            List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{"HIDE_SOME_OVERLAY", "SHOW_ALL_OVERLAY", "TOGGLE_OVERLAY", "TOGGLE_RECORD", "PAUSE_RECORD", "YTDL_DOWNLOAD", "TOGGLE_WORK_PROFILE", "OPEN_STORAGE_SCAN", "SCAN_QR", "PLAY_MY_PLAYLIST"}, actKeysUsed, actLabsUsed);
             List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids", "intent_", "INTENT_", "Intent");
             List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids", "macro_", "MACRO_", "Macro");
-            vAct.addView(buildActionCategoryButton("UTILITIES", "🛠️", UTIL_ITEMS, selectedActs, "#FF9800"));
-            vAct.addView(buildActionCategoryButton("PANEL", "🗂️", PANEL_ITEMS, selectedActs, "#9C27B0", true));
-            vAct.addView(buildActionCategoryButton("INTENTS", "⚡", INTENT_ITEMS, selectedActs, "#D32F2F"));
-            vAct.addView(buildActionCategoryButton("MACROS", "🤖", MACRO_ITEMS, selectedActs, "#2196F3"));
+            vAct.addView(buildActionCategoryDrawer("UTILITIES", "🛠️", "#FF9800", UTIL_ITEMS, selectedActs, null, true));
+            vAct.addView(buildActionCategoryDrawer("PANEL", "🗂️", "#9C27B0", PANEL_ITEMS, selectedActs, null, true));
+            vAct.addView(buildActionCategoryDrawer("INTENTS", "⚡", "#D32F2F", INTENT_ITEMS, selectedActs, null, true));
+            vAct.addView(buildActionCategoryDrawer("MACROS", "🤖", "#2196F3", MACRO_ITEMS, selectedActs, null, true));
         }
 CheckBox cbJump = new CheckBox(this);
 cbJump.setText(T("Icon Jump (icon nhảy khi kích hoạt)", "Icon Jump (Icon nhảy khi kích hoạt)"));
@@ -4875,9 +5016,6 @@ private List<String[]> buildItemsForKeys(String[] keys, String[] actKeysUsed, St
     List<String[]> out = new ArrayList<>();
     for (String gk : keys) {
         for (int i = 0; i < actKeysUsed.length; i++) {
-            // [FIX CRASH VOLKEY "NEW EB"] actKeysUsed có các ô null (phần Intent/Macro
-            // cũ không còn điền tĩnh nữa) — thiếu guard null khiến "SCREEN_ON" (chỉ có
-            // ở VolKey, nằm sau vùng null) làm .equals() ném NullPointerException.
             if (actKeysUsed[i] != null && actKeysUsed[i].equals(gk)) {
                 out.add(new String[]{actLabsUsed[i], gk});
                 break;
@@ -4893,29 +5031,96 @@ private List<String[]> buildItemsForPrefix(String prefix, String[] actKeysUsed, 
     }
     return out;
 }
-private Button buildActionCategoryButton(String title, String emoji, List<String[]> items, java.util.LinkedHashSet<String> selectedSet, String colorHex) {
-    return buildActionCategoryButton(title, emoji, items, selectedSet, colorHex, false);
+private LinearLayout buildActionCategoryDrawer(String title, String emoji, String colorHex,
+        List<String[]> items, java.util.LinkedHashSet<String> selectedSet,
+        Runnable onChange, boolean allowMulti) {
+
+    LinearLayout body = new LinearLayout(this);
+    body.setOrientation(LinearLayout.VERTICAL);
+    body.setPadding(20, 10, 20, 20);
+    body.setVisibility(View.GONE);
+
+    TextView header = new TextView(this);
+    header.setText(emoji + "  " + title);
+    header.setTextColor(Color.parseColor(colorHex));
+    header.setPadding(30, 30, 30, 30);
+    header.setTextSize(16);
+    header.setBackground(getRounded("#222222", 20f));
+
+    Runnable updateHeader = () -> {
+        int cnt = 0;
+        for (String[] it : items) if (selectedSet.contains(it[1])) cnt++;
+        header.setText(emoji + "  " + title + (cnt > 0 ? "  (" + cnt + ")" : ""));
+    };
+    updateHeader.run();
+
+    LinearLayout container = new LinearLayout(this);
+    container.setOrientation(LinearLayout.VERTICAL);
+    container.setBackground(getRounded("#222222", 20f));
+    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
+    clp.setMargins(0, 0, 0, 12);
+    container.setLayoutParams(clp);
+    container.addView(header);
+    container.addView(body);
+
+    final boolean[] inflated = {false};
+    header.setOnClickListener(v -> {
+        boolean willOpen = body.getVisibility() == View.GONE;
+        if (willOpen && !inflated[0]) {
+            inflated[0] = true;
+            body.addView(buildDrawerItemList(items, selectedSet, onChange, allowMulti, updateHeader));
+        }
+        body.setVisibility(willOpen ? View.VISIBLE : View.GONE);
+        header.setBackground(getRounded(willOpen ? "#333333" : "#222222", 20f));
+    });
+
+    return container;
 }
-private Button buildActionCategoryButton(String title, String emoji, List<String[]> items, java.util.LinkedHashSet<String> selectedSet, String colorHex, boolean allowMulti) {
-        Button btnPick = new Button(this);
-        btnPick.setBackground(getRounded(colorHex, 20f));
-        btnPick.setTextColor(Color.WHITE);
-        btnPick.setTextSize(13.5f);
-        btnPick.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, 20);
-        btnPick.setLayoutParams(lp);
+private ListView buildDrawerItemList(List<String[]> items,
+        java.util.LinkedHashSet<String> selectedSet, Runnable onChange,
+        boolean allowMulti, Runnable updateHeader) {
+    ListView lv = new ListView(this);
+    LinearLayout.LayoutParams lvp = new LinearLayout.LayoutParams(-1, -2);
+    lvp.height = Math.min(items.size() * 120, 900); // cap chiều cao, tránh chiếm hết scroll
+    lv.setLayoutParams(lvp);
 
-        Runnable updateCount = () -> {
-            int cnt = 0;
-            for (String[] it : items) if (selectedSet.contains(it[1])) cnt++;
-            btnPick.setText(emoji + " " + title + (cnt > 0 ? " (" + cnt + ")" : ""));
-        };
-        updateCount.run();
-
-        btnPick.setOnClickListener(v -> showActionCategoryPicker(title, items, selectedSet, updateCount, allowMulti));
-        return btnPick;
-    }
+    BaseAdapter ad = new BaseAdapter() {
+        public int getCount() { return items.size(); }
+        public Object getItem(int p) { return items.get(p); }
+        public long getItemId(int p) { return p; }
+        public View getView(int p, View cv, ViewGroup parent) {
+            LinearLayout row = new LinearLayout(MainActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(20, 22, 20, 22);
+            String[] it = items.get(p);
+            boolean checked = selectedSet.contains(it[1]);
+            android.widget.CompoundButton cb = allowMulti ? new CheckBox(MainActivity.this)
+                                                          : new RadioButton(MainActivity.this);
+            cb.setChecked(checked);
+            cb.setClickable(false);
+            TextView tv = new TextView(MainActivity.this);
+            tv.setText(it[0]); tv.setTextColor(Color.WHITE);
+            tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            row.addView(cb); row.addView(tv);
+            row.setOnClickListener(v -> {
+                if (allowMulti) {
+                    if (selectedSet.contains(it[1])) selectedSet.remove(it[1]);
+                    else selectedSet.add(it[1]);
+                } else {
+                    selectedSet.clear();
+                    if (!checked) selectedSet.add(it[1]);
+                }
+                updateHeader.run();
+                notifyDataSetChanged();
+                if (onChange != null) onChange.run();
+            });
+            return row;
+        }
+    };
+    lv.setAdapter(ad);
+    return lv;
+}
 private Button singleActionCategoryBtn(String title, String color, List<String[]> items,
         String[] chosenAct, String[] chosenPkg, String[] chosenScId, Runnable onChange) {
     Button b = new Button(this);
