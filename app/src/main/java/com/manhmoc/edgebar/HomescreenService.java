@@ -1431,11 +1431,8 @@ private void applyLockGateInstant() {
     }
 
         private void handleAction(String key, int depth, boolean applyVibAnim) {
-        // [MỚI - BƯỚC 4] Homeb context: nếu Pattern có 2-nửa (_dual=true), đọc
-        // key "_lim" (nửa LIMITED) thay vì key gốc. Pattern cũ chưa migrate
-        // không có _dual → đọc key gốc như trước → tương thích 100%.
-        boolean isDual = prefs.getBoolean(key + "_dual", false);
-        String readKey = isDual ? (key + "_lim") : key;
+boolean isDual = prefs.getBoolean(key + "_dual", false);
+String readKey = isDual ? (key + "_lim") : key;
         String action = prefs.getString(readKey, "NONE");
         boolean isOn = prefs.getBoolean(key + "_on", true);
         if (action.equals("NONE") || !isOn) return;
@@ -1833,9 +1830,8 @@ default:
         private boolean longFired = false;
         private final Handler lpHandler = new Handler(android.os.Looper.getMainLooper());
         private void checkAndYieldOS(String actionKey) {
-            // [MỚI - BƯỚC 4] Homeb context: đọc _lim_os nếu Pattern có 2-nửa.
-            String osKey = prefs.getBoolean(actionKey + "_dual", false)
-                ? actionKey + "_lim_os" : actionKey + "_os";
+String osKey = prefs.getBoolean(actionKey + "_dual", false)
+    ? actionKey + "_lim_os" : actionKey + "_os";
             if (prefs.getBoolean(osKey, false)) {
 
                 try {
