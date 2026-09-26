@@ -4024,10 +4024,8 @@ private void openPackRuleEditor(String appliedItemKey, String editId, String cop
     scroll.addView(content);
     root.addView(scroll);
     String sourceId = editId != null ? editId : copyId;
-    LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
-    // ĐỒNG BỘ với buildRuleEditor() (Homacc/Volkey) — cùng màu #E91E63, cùng padding 20.
-    // Pattern KHÔNG có mục "CHỌN COMPONENT" vì Pattern là Rule con nằm BÊN TRONG 1 Data Pack
-    // Bar/Corner cụ thể rồi — nó áp dụng cho chính vùng của Pack đó, không cần chọn lại vùng.
+final boolean isDualPack = editId != null && prefs.getBoolean("prule_" + editId + "_dual", false);
+LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
     ArrayList<CheckBox> gestureBoxes = new ArrayList<>();
     String savedGestures = sourceId != null ? prefs.getString("prule_" + sourceId + "_gestures", "") : "";
     int safeLimit = Math.min(C_GESTURES.length, C_GESTURE_NAMES.length);
@@ -4047,8 +4045,6 @@ private void openPackRuleEditor(String appliedItemKey, String editId, String cop
     }
     vTrig.addView(createDrawer("1. CHỌN CỬ CHỈ (OR LOGIC)", gestureContainer));
     LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
-    vAct.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (2 NỬA OR)"));
-    vAct.addView(buildDualKindBanner());
 
     String savedActsL = sourceId != null ? prefs.getString("prule_" + sourceId + "_acts_l", "") : "";
     String savedActsR = sourceId != null ? prefs.getString("prule_" + sourceId + "_acts_r", "") : "";
@@ -4122,7 +4118,6 @@ private void openPackRuleEditor(String appliedItemKey, String editId, String cop
     dualRow.addView(btnLeft);
     dualRow.addView(tvOr);
     dualRow.addView(btnRight);
-    vAct.addView(dualRow);
 
         Runnable updateLeftLabel = () -> {
         if (lKind[0].isEmpty()) {
@@ -4152,7 +4147,6 @@ private void openPackRuleEditor(String appliedItemKey, String editId, String cop
     updateRightLabel.run();
     final boolean[] leftPickerOpened  = { false };
     final boolean[] rightPickerOpened = { false };
-    final boolean isDualPack = editId != null && prefs.getBoolean("prule_" + editId + "_dual", false);
     if (isDualPack) {
         if (lKind[0].isEmpty()) lKind[0] = "FULL";
         if (rKind[0].isEmpty()) rKind[0] = "COMMON";
@@ -4270,7 +4264,62 @@ private void openPackRuleEditor(String appliedItemKey, String editId, String cop
             }).setNegativeButton("HUỶ", null).show();
         return true;
     });
+    // [MỚI] Khi CHƯA Deep Customize: ép 2 bên luôn đồng bộ ngầm
+if (!isDualPack) {
+    if (lKind[0].isEmpty()) lKind[0] = isHomebSpace ? "COMMON" : "FULL";
+    rKind[0] = lKind[0];
+    selectedActsR.clear(); selectedActsR.addAll(selectedActsL);
+    pkgR[0] = pkgL[0]; scR[0] = scL[0];
+}
 
+// [MỚI] Render: 1 thẻ TO nếu chưa split, 2 nửa OR nếu đã split
+if (isDualPack) {
+    vAct.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (2 NỬA OR)"));
+    vAct.addView(buildDualKindBanner());
+    vAct.addView(dualRow);
+} else {
+    Button btnTestSingle = stdCardBtn("TEST", "#FFC107", Color.BLACK);
+    btnTestSingle.setOnClickListener(v -> fireTestActions(selectedActsL, pkgL[0], scL[0]));
+
+    LinearLayout singleCard = buildStdPackCard(
+        buildActionIconColumn(editId != null ? editId : "", ""),
+        T("Data Pack Action", "Data Pack Action"),
+        T("Shared: Homacc + Homeb (long-press to customize)",
+          "Chung: Homacc + Homeb (nhấn giữ để chỉnh riêng)"),
+        formatActionCsvLabel(TextUtils.join(",", selectedActsL), pkgL[0], scL[0]),
+        btnTestSingle);
+
+    Runnable refreshSingleCard = () -> {
+        TextView t = singleCard.findViewWithTag("line3");
+        if (t != null) t.setText(formatActionCsvLabel(
+            TextUtils.join(",", selectedActsL), pkgL[0], scL[0]));
+        selectedActsR.clear(); selectedActsR.addAll(selectedActsL);
+        pkgR[0] = pkgL[0]; scR[0] = scL[0];
+    };
+
+    singleCard.setOnClickListener(v ->
+        openHalfActionPicker(true, "FULL", selectedActsL, pkgL, scL, refreshSingleCard));
+
+    singleCard.setOnLongClickListener(v -> {
+        if (editId == null) {
+            Toast.makeText(this,
+                T("Save this rule first, then long-press its card to Deep Customize",
+                  "Lưu Rule này trước, sau đó nhấn giữ thẻ ngoài danh sách để Tuỳ chỉnh sâu"),
+                Toast.LENGTH_LONG).show();
+            return true;
+        }
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setItems(new String[]{ "⚡ " + T("Deep Customize", "Tuỳ chỉnh sâu") },
+                (dg, which) -> splitDualPack(editId, () -> {
+                    d.dismiss();
+                    openPackRuleEditor(appliedItemKey, editId, null, onRefresh, isHomebSpace, "L");
+                })
+            ).show();
+        return true;
+    });
+
+    vAct.addView(singleCard);
+}
     TextView tvOpt = new TextView(this);
     tvOpt.setText(T("2. CHOOSE OPTIONS", "2. CHỌN TÙY CHỌN"));
     tvOpt.setTextColor(Color.parseColor("#E91E63"));
