@@ -4388,7 +4388,6 @@ if (isDual) {
         }
     }
 }
-trái-trước-phải-sau.
 private String mergeCsv(String a, String b) {
     if (a.isEmpty()) return b;
     if (b.isEmpty()) return a;
