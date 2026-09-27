@@ -192,7 +192,6 @@ private final Runnable reapplyRunnable = this::applyVisibility;
         for (View b : bars) if (b != null) b.setVisibility(View.GONE);
         for (View c : corners) if (c != null) c.setVisibility(View.GONE);
     }
-
     private void startForegroundQuiet() {
         String cid = "eb_lockeb";
         NotificationChannel c = new NotificationChannel(cid, "LockEb (Blacklist)", NotificationManager.IMPORTANCE_MIN);
@@ -204,23 +203,17 @@ private final Runnable reapplyRunnable = this::applyVisibility;
             startForeground(98, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         else startForeground(98, n);
     }
-private int readOrInt(String sp,String member,boolean isBar,String server,String field,int def){
-    String base = isBar
-        ? (sp + member + field)
-        : (sp + "corner_" + member + "_" + field.replaceFirst("^_", ""));
+private int readOrInt(String sp, String member, boolean isBar, String server, String field, int def){
+    String base = isBar ? (sp + member + field) : (sp + "corner_" + member + "_" + field.replaceFirst("^_", ""));
     boolean isLeft = member.equals("r") || member.equals("t_l") || member.equals("r_u")
                   || member.equals("l_d") || member.equals("l_c") || member.equals("b_c")
                   || member.equals("tl") || member.equals("bl");
-    String newKey = base + (isLeft ? "_L_" : "_R_") + server;
-    if (prefs.contains(newKey)) return prefs.getInt(newKey, def);
-    if (TwinPairStore.isOrSplit(prefs, base, isLeft)) {
-        int v = TwinPairStore.readOrValue(prefs, base, isLeft, server, Integer.MIN_VALUE);
-        if (v != Integer.MIN_VALUE) return v;
+    if(TwinPairStore.isOrSplit(prefs, base, isLeft)){
+        int v = TwinPairStore.readOrValue(prefs, base, isLeft, "bl", -1);
+        if(v >= 0) return v;   // LockEb = vai trò Blacklist's
     }
-    return prefs.getInt(base, def);
+    return TwinPairStore.readOrValue(prefs, base, isLeft, "acc", def);
 }
-
-
     private WindowManager.LayoutParams lp(int w, int hh, int gravity, int x, int y, int pri) {
         int flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
             | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
@@ -233,12 +226,11 @@ private int readOrInt(String sp,String member,boolean isBar,String server,String
         p.gravity = gravity; p.x = x; p.y = y;
         return p;
     }
-
     private void createViews() {
         for (int i = 0; i < 12; i++) {
             String k = "lock_" + BARS[i];
             if (!prefs.getBoolean(k + "_en", false)) continue;
-            int visMode = readOrInt("lock_", BARS[i], true, "acc", "_vis_mode", 0);
+                        int visMode = readOrInt("lock_", BARS[i], true, "acc", "_vis_mode", 0);
             int alpha = visMode == 0 ? prefs.getInt(k + "_alpha", 50) : 0;
             BarView v = new BarView(this, alpha, prefs.getInt("lock_bar_radius", 24));
             WindowManager.LayoutParams p = lp(prefs.getInt(k + "_w", 300), prefs.getInt(k + "_h", 60), GRAV[i],
@@ -249,7 +241,7 @@ private int readOrInt(String sp,String member,boolean isBar,String server,String
         for (int i = 0; i < 4; i++) {
             String ck = "lock_corner_" + CORNERS[i] + "_";
             if (!prefs.getBoolean("lock_corner_" + CORNERS[i] + "_en", false)) continue;
-            int visMode = readOrInt("lock_", CORNERS[i], false, "acc", "vis_mode", 0);
+            int visMode = readOrInt("lock_", CORNERS[i], false, "acc", "vis_mode", 0);v
             int moonA = visMode == 0 ? prefs.getInt("lock_corner_moon_alpha", 100) : 0;
             int strokeA = visMode == 0 ? prefs.getInt("lock_corner_stroke_alpha", 200) : 0;
             CornerView v = new CornerView(this, prefs, i, ck, prefs.getInt("lock_corner_thick", 8), moonA, strokeA);
@@ -263,31 +255,28 @@ private int readOrInt(String sp,String member,boolean isBar,String server,String
         }
     }
     private boolean blFg() { return prefs.getBoolean("blacklist_lock_fg", false); }
-
     private void applyVisibility() {
         boolean locked = km != null && km.isKeyguardLocked();
         if (!locked && SystemClock.elapsedRealtime() < unlockGraceUntil) { forceHideInstant(); return; }
         boolean fg = blFg();
-        // Đã mở khoá và không có app Blacklist ở foreground = đang ở Home/app thường
-        // -> LockEb nhường hẳn cho Homacc/Homeb, ẩn TẤT CẢ (kể cả bar "Luôn xuyên suốt")
         boolean show = locked || fg;
         boolean secure = !locked || fg;  // only-base: ẩn khi mở khoá hoặc app Blacklist che màn
         for (int i = 0; i < 12; i++) {
             if (bars[i] == null) continue;
-                        int lockMode = TwinPairStore.readOrValue(prefs, "lock_" + BARS[i] + "_lockmode",
+                       int lockMode = TwinPairStore.readOrValue(prefs, "lock_" + BARS[i] + "_lockmode",
                 isLeftMember(BARS[i]), "bl", prefs.getInt("lock_" + BARS[i] + "_lockmode", 1));
             boolean gate = show && (lockMode == 1 || !secure);
             bars[i].setVisibility(gate && !hiddenKeys.contains(BARS[i]) ? View.VISIBLE : View.GONE);
         }
         for (int i = 0; i < 4; i++) {
             if (corners[i] == null) continue;
-            int cLock = TwinPairStore.readOrValue(prefs, "lock_corner_" + CORNERS[i] + "_lockmode",
+                        int cLock = TwinPairStore.readOrValue(prefs, "lock_corner_" + CORNERS[i] + "_lockmode",
                 isLeftMember(CORNERS[i]), "bl", prefs.getInt("lock_corner_" + CORNERS[i] + "_lockmode", 1));
             boolean gate = show && (cLock == 1 || !secure);
             corners[i].setVisibility(gate && !hiddenKeys.contains("corner_" + CORNERS[i]) ? View.VISIBLE : View.GONE);
         }
     }
-    private boolean isLeftMember(String m){ return m.equals("l")||m.equals("t_l")||m.equals("l_u")||m.equals("l_d")||m.equals("l_c")||m.equals("tl")||m.equals("bl"); }
+private boolean isLeftMember(String m){ return m.equals("l")||m.equals("t_l")||m.equals("l_u")||m.equals("l_d")||m.equals("l_c")||m.equals("tl")||m.equals("bl"); }
 
 
     private class Gesture implements View.OnTouchListener {
@@ -334,7 +323,6 @@ private int readOrInt(String sp,String member,boolean isBar,String server,String
             return true;
         }
     }
-
     private void handleAction(String key) {
         String action = prefs.getString(key, "NONE");
         if (action.equals("NONE") || !prefs.getBoolean(key + "_on", true)) return;
@@ -347,7 +335,6 @@ private int readOrInt(String sp,String member,boolean isBar,String server,String
             else exec(at);
         }
     }
-
     private void handleIpc(Intent i) {
         String act = i.getStringExtra("act");
         if (act == null) return;
@@ -355,7 +342,6 @@ private int readOrInt(String sp,String member,boolean isBar,String server,String
         else if (act.equals("RUN_SHORTCUT")) runShortcut(i.getStringExtra("shortcut_id"));
         else exec(act);
     }
-
     private void doVibrate(int ms) {
         if (ms <= 0 || vibrator == null) return;
         try {
@@ -363,7 +349,6 @@ private int readOrInt(String sp,String member,boolean isBar,String server,String
             else vibrator.vibrate(ms);
         } catch (Exception ignored) {}
     }
-
     private void launchPkg(String pkg) {
         if (pkg == null || pkg.isEmpty()) return;
         try {
@@ -371,7 +356,6 @@ private int readOrInt(String sp,String member,boolean isBar,String server,String
             if (li != null) { li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(li); }
         } catch (Exception ignored) {}
     }
-
     private void runShortcut(String id) {
         if (id == null || id.isEmpty()) return;
         try {
@@ -382,7 +366,6 @@ private int readOrInt(String sp,String member,boolean isBar,String server,String
             startActivity(it);
         } catch (Exception ignored) {}
     }
-
     private void fireIntentById(String id) {
         try {
             String act = prefs.getString("intent_" + id + "_act", "");
@@ -408,8 +391,6 @@ private int readOrInt(String sp,String member,boolean isBar,String server,String
             else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); }
         } catch (Exception ignored) {}
     }
-
-    // ---------- Action không cần Trợ năng (giống Homeb) ----------
     private void exec(String a) {
         if (a == null || a.isEmpty() || a.equals("NONE")) return;
         try {

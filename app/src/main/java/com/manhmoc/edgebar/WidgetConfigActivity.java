@@ -1,5 +1,7 @@
 package com.manhmoc.edgebar;
+
 import android.app.Activity;
+
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.appwidget.AppWidgetManager;
@@ -22,15 +24,19 @@ import android.widget.ListView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import java.util.ArrayList;
 import java.util.List;
+
 public class WidgetConfigActivity extends Activity {
     private int widgetId = AppWidgetManager.INVALID_APPWIDGET_ID;
     private SharedPreferences prefs;
     private LinearLayout gestureBox;
+
     private static final String[] GESTURE_KEYS = {"tap", "dtap"};
     private static final String[] GESTURE_LABELS = {"TAP", "DOUBLE-TAP"};
     private static final String[] GESTURE_ICONS = {"👆", "✌️"};
+
     private static final String[] SYS_KEYS = {
         "BACK","HOME","RECENTS","SCREEN_OFF","FLASH","POWER_DIALOG","VOLUME",
         "SCREENSHOT","CAMERA","NOTIFICATIONS","QUICK_SETTINGS","SPLIT_SCREEN",
@@ -51,6 +57,7 @@ public class WidgetConfigActivity extends Activity {
         "Bật/tắt Ghi âm","Dừng/Tiếp Ghi âm","Tải YTDLnis",
         "Bật/tắt Hồ sơ CV","Quét dung lượng","Quét QR","Phát My Playlist"
     };
+
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         setResult(RESULT_CANCELED);
@@ -61,18 +68,21 @@ public class WidgetConfigActivity extends Activity {
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
         buildUI();
     }
+
     private void buildUI() {
         ScrollView sc = new ScrollView(this);
         sc.setBackgroundColor(Color.parseColor("#121212"));
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(30, 80, 30, 30);
+
         TextView tvTitle = new TextView(this);
         tvTitle.setText("⚡ Cấu hình Edge Bar Widget");
         tvTitle.setTextColor(Color.parseColor("#8AB4F8"));
         tvTitle.setTextSize(18);
         tvTitle.setPadding(0, 0, 0, 8);
         root.addView(tvTitle);
+
         TextView tvNote = new TextView(this);
         tvNote.setText("• Widget trong suốt 100%\n"
             + "• Chạm 1 lần / 2 lần để gọi hành động\n"
@@ -82,12 +92,17 @@ public class WidgetConfigActivity extends Activity {
         tvNote.setTextSize(11.5f);
         tvNote.setPadding(0, 0, 0, 24);
         root.addView(tvNote);
+
+        // ─── GESTURE CARDS ───
         root.addView(createSectionTitle("⚙️ CỬ CHỈ WIDGET"));
         gestureBox = new LinearLayout(this);
         gestureBox.setOrientation(LinearLayout.VERTICAL);
         root.addView(gestureBox);
         renderGestureCards();
+
+        // ─── OPTIONS (per-widget) ───
         root.addView(createSectionTitle("🔧 TÙY CHỌN"));
+
         CheckBox cbVib = new CheckBox(this);
         cbVib.setText("Rung khi kích hoạt (Haptic)");
         cbVib.setTextColor(Color.WHITE);
@@ -98,14 +113,15 @@ public class WidgetConfigActivity extends Activity {
         });
         root.addView(cbVib);
         CheckBox cbSnd = new CheckBox(this);
-        cbSnd.setText("Âm chạm (Touch Sound)");
-        cbSnd.setTextColor(Color.WHITE);
-        cbSnd.setChecked(prefs.getBoolean("widget_" + widgetId + "_snd", false));
-        cbSnd.setOnCheckedChangeListener((v, c) -> {
-            prefs.edit().putBoolean("widget_" + widgetId + "_snd", c).apply();
-            renderGestureCards();
-        });
-        root.addView(cbSnd);
+cbSnd.setText("Âm chạm (Touch Sound)");
+cbSnd.setTextColor(Color.WHITE);
+cbSnd.setChecked(prefs.getBoolean("widget_" + widgetId + "_snd", false));
+cbSnd.setOnCheckedChangeListener((v, c) -> {
+    prefs.edit().putBoolean("widget_" + widgetId + "_snd", c).apply();
+    renderGestureCards();
+});
+root.addView(cbSnd);
+
         CheckBox cbAnim = new CheckBox(this);
         cbAnim.setText("Hiệu ứng ánh sáng (Animation)");
         cbAnim.setTextColor(Color.WHITE);
@@ -115,17 +131,21 @@ public class WidgetConfigActivity extends Activity {
             renderGestureCards();
         });
         root.addView(cbAnim);
+        
+        // ─── FOOTER ───
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-1, -2);
         fLp.setMargins(0, 40, 0, 0);
         footer.setLayoutParams(fLp);
+
         Button bCancel = new Button(this);
         bCancel.setText("HỦY");
         bCancel.setBackground(getRounded("#333333", 20f));
         bCancel.setTextColor(Color.WHITE);
         bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         bCancel.setOnClickListener(v -> finish());
+
         Button bSave = new Button(this);
         bSave.setText("LƯU");
         bSave.setBackground(getRounded("#4CAF50", 20f));
@@ -134,12 +154,15 @@ public class WidgetConfigActivity extends Activity {
         slp.setMargins(20, 0, 0, 0);
         bSave.setLayoutParams(slp);
         bSave.setOnClickListener(v -> saveAndFinish());
+
         footer.addView(bCancel);
         footer.addView(bSave);
         root.addView(footer);
+
         sc.addView(root);
         setContentView(sc);
     }
+
     private void renderGestureCards() {
         if (gestureBox == null) return;
         gestureBox.removeAllViews();
@@ -148,11 +171,17 @@ public class WidgetConfigActivity extends Activity {
                 GESTURE_KEYS[i], GESTURE_LABELS[i], GESTURE_ICONS[i]));
         }
     }
+
+    /**
+     * Card chuẩn: optCol (icon cử chỉ + 📳✨) | infoCol (tên + action) | ctrlCol (TEST).
+     * Cùng ngôn ngữ với buildStdPackCard của Lenap và buildBubbleRuleCard của Bubble.
+     */
     private LinearLayout buildGestureCard(String key, String label, String icon) {
         String px = "widget_" + widgetId + "_" + key;
         String act = prefs.getString(px + "_act", "NONE");
         String pkg = prefs.getString(px + "_pkg", "");
         String scId = prefs.getString(px + "_shortcut_id", "");
+
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.HORIZONTAL);
         GradientDrawable bg = new GradientDrawable();
@@ -163,15 +192,19 @@ public class WidgetConfigActivity extends Activity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 6, 0, 6);
         card.setLayoutParams(lp);
+
+        // optCol
         LinearLayout optCol = new LinearLayout(this);
         optCol.setOrientation(LinearLayout.VERTICAL);
         optCol.setGravity(Gravity.CENTER);
         optCol.setPadding(0, 0, 15, 0);
+
         TextView tIcon = new TextView(this);
         tIcon.setText(icon);
         tIcon.setTextSize(26);
         tIcon.setGravity(Gravity.CENTER);
         optCol.addView(tIcon);
+
         boolean vib = prefs.getBoolean("widget_" + widgetId + "_vib", true);
         boolean anim = prefs.getBoolean("widget_" + widgetId + "_anim", true);
         boolean snd = prefs.getBoolean("widget_" + widgetId + "_snd", false);
@@ -187,9 +220,12 @@ public class WidgetConfigActivity extends Activity {
             tOpts.setPadding(0, 3, 0, 0);
             optCol.addView(tOpts);
         }
+
+        // infoCol
         LinearLayout infoCol = new LinearLayout(this);
         infoCol.setOrientation(LinearLayout.VERTICAL);
         infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
         TextView tTitle = new TextView(this);
         tTitle.setText(label);
         tTitle.setTextColor(Color.parseColor("#E8EAED"));
@@ -197,6 +233,7 @@ public class WidgetConfigActivity extends Activity {
         tTitle.setMaxLines(1);
         tTitle.setEllipsize(TextUtils.TruncateAt.END);
         infoCol.addView(tTitle);
+
         TextView tAct = new TextView(this);
         tAct.setText(buildActionLabel(act, pkg, scId));
         tAct.setTextColor(Color.parseColor("#8AB4F8"));
@@ -205,9 +242,12 @@ public class WidgetConfigActivity extends Activity {
         tAct.setMaxLines(2);
         tAct.setEllipsize(TextUtils.TruncateAt.END);
         infoCol.addView(tAct);
+
+        // ctrlCol
         LinearLayout ctrlCol = new LinearLayout(this);
         ctrlCol.setOrientation(LinearLayout.VERTICAL);
         ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
+
         Button btnTest = new Button(this);
         btnTest.setText("TEST");
         btnTest.setBackground(getRounded("#FFC107", 14f));
@@ -219,13 +259,16 @@ public class WidgetConfigActivity extends Activity {
         btnTest.setMinimumWidth(0);
         btnTest.setOnClickListener(v -> fireTest(key));
         ctrlCol.addView(btnTest);
+
         card.addView(optCol);
         card.addView(infoCol);
         card.addView(ctrlCol);
+
         final String fKey = key;
         card.setOnClickListener(v -> openActionPicker(fKey));
         return card;
     }
+
     private String buildActionLabel(String act, String pkg, String scId) {
         if (act == null || act.isEmpty() || "NONE".equals(act))
             return "Chưa chọn — chạm để đặt";
@@ -255,6 +298,8 @@ public class WidgetConfigActivity extends Activity {
             if (UTL_KEYS[i].equals(act)) return UTL_LABELS[i];
         return act;
     }
+
+    /** Picker giàu 6 nhóm category — giống Bubble rule editor. */
     private void openActionPicker(String gestureKey) {
         final String px = "widget_" + widgetId + "_" + gestureKey;
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
@@ -262,6 +307,7 @@ public class WidgetConfigActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
         root.setPadding(30, 80, 30, 30);
+
         TextView title = new TextView(this);
         title.setText("Chọn hành động cho " +
             (gestureKey.equals("tap") ? "TAP" : "DOUBLE-TAP"));
@@ -269,12 +315,14 @@ public class WidgetConfigActivity extends Activity {
         title.setTextSize(17);
         title.setPadding(0, 0, 0, 20);
         root.addView(title);
+
         ScrollView scroll = new ScrollView(this);
         scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(content);
         root.addView(scroll);
+
         Button btnClear = new Button(this);
         btnClear.setText("✖ Bỏ chọn (NONE)");
         btnClear.setBackground(getRounded("#333333", 20f));
@@ -292,6 +340,7 @@ public class WidgetConfigActivity extends Activity {
             d.dismiss();
         });
         content.addView(btnClear);
+
         Button btnApp = makeCategoryBtn("📱 CHỌN APP", "#8AB4F8", Color.BLACK);
         btnApp.setOnClickListener(v -> {
             d.dismiss();
@@ -305,6 +354,7 @@ public class WidgetConfigActivity extends Activity {
             });
         });
         content.addView(btnApp);
+
         Button btnSc = makeCategoryBtn("🔗 CHỌN SHORTCUT", "#7C4DFF", Color.WHITE);
         btnSc.setOnClickListener(v -> {
             d.dismiss();
@@ -318,6 +368,7 @@ public class WidgetConfigActivity extends Activity {
             });
         });
         content.addView(btnSc);
+
         content.addView(buildCategorySection("⚙️ SYSTEM", SYS_KEYS, SYS_LABELS, px, d));
         content.addView(buildCategorySection("🛠️ UTILITIES", UTL_KEYS, UTL_LABELS, px, d));
         content.addView(buildDynamicSection("🗂️ PANEL", "pack_panel_ids",
@@ -326,9 +377,11 @@ public class WidgetConfigActivity extends Activity {
             "intent_", "INTENT_", px, d));
         content.addView(buildDynamicSection("🤖 MACRO", "macro_ids",
             "macro_", "MACRO_", px, d));
+
         d.setContentView(root);
         d.show();
     }
+
     private Button makeCategoryBtn(String text, String bg, int fg) {
         Button b = new Button(this);
         b.setText(text);
@@ -341,6 +394,7 @@ public class WidgetConfigActivity extends Activity {
         b.setLayoutParams(lp);
         return b;
     }
+
     private LinearLayout buildCategorySection(String title, String[] keys,
             String[] labels, String px, Dialog parent) {
         LinearLayout box = new LinearLayout(this);
@@ -350,6 +404,7 @@ public class WidgetConfigActivity extends Activity {
         LinearLayout.LayoutParams boxLp = new LinearLayout.LayoutParams(-1, -2);
         boxLp.setMargins(0, 0, 0, 12);
         box.setLayoutParams(boxLp);
+
         TextView tvTitle = new TextView(this);
         tvTitle.setText(title);
         tvTitle.setTextColor(Color.parseColor("#8AB4F8"));
@@ -357,6 +412,7 @@ public class WidgetConfigActivity extends Activity {
         tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         tvTitle.setPadding(0, 0, 0, 12);
         box.addView(tvTitle);
+
         for (int i = 0; i < keys.length; i++) {
             final String key = keys[i];
             Button b = new Button(this);
@@ -380,12 +436,14 @@ public class WidgetConfigActivity extends Activity {
         }
         return box;
     }
+
     private LinearLayout buildDynamicSection(String title, String listKey,
             String namePrefix, String actionPrefix, String px, Dialog parent) {
         List<String> ids = new ArrayList<>();
         String csv = prefs.getString(listKey, "");
         for (String s : csv.split(",")) if (!s.trim().isEmpty()) ids.add(s.trim());
         if (ids.isEmpty()) return new LinearLayout(this);
+
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackground(getRounded("#1A1A1A", 16f));
@@ -393,6 +451,7 @@ public class WidgetConfigActivity extends Activity {
         LinearLayout.LayoutParams boxLp = new LinearLayout.LayoutParams(-1, -2);
         boxLp.setMargins(0, 0, 0, 12);
         box.setLayoutParams(boxLp);
+
         TextView tvTitle = new TextView(this);
         tvTitle.setText(title);
         tvTitle.setTextColor(Color.parseColor("#8AB4F8"));
@@ -400,6 +459,7 @@ public class WidgetConfigActivity extends Activity {
         tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         tvTitle.setPadding(0, 0, 0, 12);
         box.addView(tvTitle);
+
         for (String id : ids) {
             final String act = actionPrefix + id;
             String name = prefs.getString(namePrefix + id + "_name",
@@ -425,6 +485,7 @@ public class WidgetConfigActivity extends Activity {
         }
         return box;
     }
+
     private void showAppPicker(java.util.function.Consumer<String> onPicked) {
         List<String[]> all = new ArrayList<>();
         try {
@@ -440,11 +501,13 @@ public class WidgetConfigActivity extends Activity {
             }
         } catch (Exception ignored) {}
         all.sort((a, b) -> a[0].compareToIgnoreCase(b[0]));
+
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
         root.setPadding(30, 80, 30, 30);
+
         EditText etSearch = new EditText(this);
         etSearch.setHint("Tìm ứng dụng…");
         etSearch.setHintTextColor(Color.GRAY);
@@ -452,9 +515,11 @@ public class WidgetConfigActivity extends Activity {
         etSearch.setBackground(getRounded("#2C2C2C", 20f));
         etSearch.setPadding(30, 25, 30, 25);
         root.addView(etSearch);
+
         ListView lv = new ListView(this);
         lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
         root.addView(lv);
+
         final List<String[]> shown = new ArrayList<>(all);
         BaseAdapter adapter = new BaseAdapter() {
             public int getCount(){ return shown.size(); }
@@ -499,6 +564,7 @@ public class WidgetConfigActivity extends Activity {
         d.setContentView(root);
         d.show();
     }
+
     private void showShortcutPicker(java.util.function.BiConsumer<String,String> onPicked) {
         List<String> ids = new ArrayList<>();
         String csv = prefs.getString("shortcut_ids", "");
@@ -511,12 +577,14 @@ public class WidgetConfigActivity extends Activity {
         String[] names = new String[ids.size()];
         for (int i = 0; i < ids.size(); i++)
             names[i] = prefs.getString("shortcut_" + ids.get(i) + "_name", "Shortcut");
+
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Chọn Shortcut")
             .setItems(names, (dd, which) -> onPicked.accept(ids.get(which), names[which]))
             .setNegativeButton("HỦY", null)
             .show();
     }
+
     private void fireTest(String gestureKey) {
         String px = "widget_" + widgetId + "_" + gestureKey;
         String act = prefs.getString(px + "_act", "NONE");
@@ -541,6 +609,7 @@ public class WidgetConfigActivity extends Activity {
         sendBroadcast(ipc);
         Toast.makeText(this, "▶ Đang thử", Toast.LENGTH_SHORT).show();
     }
+
     private void saveAndFinish() {
         Intent upd = new Intent(this, EdgeBarWidgetProvider.class);
         upd.setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE);
@@ -551,6 +620,7 @@ public class WidgetConfigActivity extends Activity {
         setResult(RESULT_OK, res);
         finish();
     }
+
     private GradientDrawable getRounded(String hex, float r) {
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.parseColor(hex));

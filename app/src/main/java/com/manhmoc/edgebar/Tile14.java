@@ -1,4 +1,5 @@
 package com.manhmoc.edgebar;
+
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -15,8 +16,10 @@ import android.service.quicksettings.TileService;
  * Receiver chỉ active khi QS panel mở → ZERO background battery drain.
  */
 public class Tile14 extends TileService {
+
     // ICON_POOL phải khớp với TILE_ICON_NAMES trong MainActivity
     private static final int[] ICON_POOL = {
+                // ===== NHẠT (viền mảnh, đơn giản) =====
         android.R.drawable.ic_menu_search, android.R.drawable.ic_menu_compass,
         android.R.drawable.ic_menu_mylocation, android.R.drawable.ic_menu_agenda,
         android.R.drawable.ic_menu_always_landscape_portrait, android.R.drawable.ic_menu_day,
@@ -39,6 +42,8 @@ public class Tile14 extends TileService {
         android.R.drawable.ic_lock_idle_alarm, android.R.drawable.ic_lock_idle_charging,
         android.R.drawable.ic_lock_idle_low_battery, android.R.drawable.ic_lock_silent_mode,
         android.R.drawable.ic_lock_silent_mode_off,
+
+        // ===== TRUNG (đổ bóng, xám mờ) =====
         android.R.drawable.ic_menu_camera, android.R.drawable.ic_menu_call,
         android.R.drawable.ic_menu_upload, android.R.drawable.star_on,
         android.R.drawable.star_off, android.R.drawable.btn_star_big_off,
@@ -51,6 +56,8 @@ public class Tile14 extends TileService {
         android.R.drawable.ic_media_pause, android.R.drawable.ic_btn_speak_now,
         android.R.drawable.ic_secure, android.R.drawable.ic_lock_power_off,
         android.R.drawable.presence_offline, android.R.drawable.ic_dialog_alert,
+
+        // ===== ĐẬM (khối đặc, nổi bật nhất) =====
         android.R.drawable.ic_lock_idle_lock, android.R.drawable.ic_media_play,
         android.R.drawable.ic_menu_manage, android.R.drawable.ic_menu_delete,
         android.R.drawable.ic_lock_lock, android.R.drawable.ic_delete,
@@ -60,6 +67,7 @@ public class Tile14 extends TileService {
         android.R.drawable.presence_video_online, android.R.drawable.sym_def_app_icon,
         android.R.drawable.sym_action_call, android.R.drawable.sym_action_chat
     };
+
     private BroadcastReceiver configReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
     String act = intent.getAction();
@@ -86,32 +94,34 @@ public class Tile14 extends TileService {
         } catch (Exception ignored) {}
         updateTileUI();
     }
+
     @Override public void onStopListening() {
         try { unregisterReceiver(configReceiver); } catch (Exception ignored) {}
     }
+
     private int autoIconForAct(String act) {
 if (act == null) return 1;
-if (act.equals("LAUNCH_APP")) return 18;
-if (act.equals("RUN_SHORTCUT")) return 6;
-if (act.startsWith("INTENT_")) return 7;
-if (act.startsWith("MACRO_")) return 5;
-if (act.startsWith("PANEL_")) return 10;
+if (act.equals("LAUNCH_APP")) return 18; // star_on
+if (act.equals("RUN_SHORTCUT")) return 6; // send
+if (act.startsWith("INTENT_")) return 7; // next
+if (act.startsWith("MACRO_")) return 5; // play
+if (act.startsWith("PANEL_")) return 10; // manage
 switch (act) {
-case "BACK": return 1;
-case "HOME": return 4;
-case "RECENTS": return 17;
-case "SCREEN_OFF": return 2;
-case "FLASH": return 0;
-case "POWER_DIALOG": return 15;
-case "VOLUME": return 9;
-case "SCREENSHOT": return 4;
-case "CAMERA": return 3;
-case "NOTIFICATIONS": return 8;
-case "TOGGLE_ACC": return 10;
-case "TOGGLE_OVERLAY": return 17;
-case "YTDL_DOWNLOAD": return 16;
-case "VOICE_RECORD": return 6;
-case "SPLIT_SCREEN": return 12;
+case "BACK": return 1; // search
+case "HOME": return 4; // crop
+case "RECENTS": return 17; // view
+case "SCREEN_OFF": return 2; // lock
+case "FLASH": return 0; // compass
+case "POWER_DIALOG": return 15; // close_clear_cancel
+case "VOLUME": return 9; // info_details
+case "SCREENSHOT": return 4; // crop
+case "CAMERA": return 3; // camera
+case "NOTIFICATIONS": return 8; // share
+case "TOGGLE_ACC": return 10; // manage
+case "TOGGLE_OVERLAY": return 17; // view
+case "YTDL_DOWNLOAD": return 16; // upload
+case "VOICE_RECORD": return 6; // send
+case "SPLIT_SCREEN": return 12; // edit
 default: return 1;
 }
 }
@@ -143,6 +153,7 @@ private void updateTileUI() {
     t.setState(action.equals("NONE") ? Tile.STATE_INACTIVE : Tile.STATE_ACTIVE);
     t.updateTile();
 }
+
 @Override public void onClick() {
     super.onClick();
     SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);

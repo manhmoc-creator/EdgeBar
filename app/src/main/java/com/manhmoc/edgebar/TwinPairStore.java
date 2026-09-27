@@ -3,17 +3,15 @@ import android.content.SharedPreferences;
 public final class TwinPairStore {
     private TwinPairStore() {}
     public static final String[] BAR_PAIR_IDS = {
-        "barPair_b_rl","barPair_t_lr","barPair_lr_u","barPair_lr_d","barPair_bt_c","barPair_lr_c"};
+"barPair_b_rl","barPair_t_lr","barPair_lr_u","barPair_lr_d","barPair_bt_c","barPair_lr_c"};
     public static final String[][] BAR_PAIR_MEMBERS = {
         {"r","l"},{"t_l","t_r"},{"r_u","l_u"},{"l_d","r_d"},{"b_c","t_c"},{"l_c","r_c"}};
     public static final boolean[] BAR_PAIR_SPREAD_X = {true,true,false,false,false,true};
     public static final String[] CORNER_PAIR_IDS = {"cornerPair_t_lr","cornerPair_b_lr"};
     public static final String[][] CORNER_PAIR_MEMBERS = {{"tl","tr"},{"bl","br"}};
-
     public static final String F_ALPHA="alpha",F_W="w",F_H="h",F_Y="y",F_VIS="vis",
         F_PRI="pri",F_LOCK="lock",F_JUMP="jump",F_SPACING="sp",F_A_EN="a_en",F_B_EN="b_en";
     private static final String FLAG = "twin_pair_migrated_v1";
-
     public static String findPairOf(String m, boolean isBar){
         String[][] ms = isBar?BAR_PAIR_MEMBERS:CORNER_PAIR_MEMBERS;
         String[] ids = isBar?BAR_PAIR_IDS:CORNER_PAIR_IDS;
@@ -51,7 +49,6 @@ public final class TwinPairStore {
     private static String mk(String sp,String m,String f,boolean isBar){
         return isBar?(sp+m+"_"+f):(sp+"corner_"+m+"_"+f);
     }
-
     public static void migrateIfNeeded(SharedPreferences p){
         if(p.getBoolean(FLAG,false)) return;
         SharedPreferences.Editor ed = p.edit();
@@ -140,7 +137,6 @@ public static void writeOrValue(SharedPreferences.Editor ed, String base, boolea
 public static void writeOrSplit(SharedPreferences.Editor ed, String base, boolean isLeft, boolean split){
     ed.putBoolean(base + (isLeft?"_L_split":"_R_split"), split);
 }
-/** +1 = member A ở bên PHẢI (x dương khi giãn), -1 = A ở bên TRÁI. */
 public static final int[] BAR_PAIR_MEMBER_A_SIGN = {
     +1,  // barPair_b_rl: {r, l}     → r phải
     -1,  // barPair_t_lr: {t_l, t_r} → t_l trái
@@ -149,7 +145,6 @@ public static final int[] BAR_PAIR_MEMBER_A_SIGN = {
      0,  // barPair_bt_c: spread Y    → không dùng X
     -1   // barPair_lr_c: {l_c, r_c} → l_c trái
 };
-/** Corner: A luôn ở trái. */
 public static final int[] CORNER_PAIR_MEMBER_A_SIGN = {-1, -1};
 
 public static int signOfBarPair(String pairId){
@@ -162,66 +157,49 @@ public static int signOfCornerPair(String pairId){
         return CORNER_PAIR_MEMBER_A_SIGN[i];
     return -1;
 }
-public static final String DEFAULT_PACK_FLAG = "default_packs_v2"; // đổi flag để máy cũ tự nạp lại
-// 6 Bar pack — đúng thứ tự yêu cầu (KHÔNG còn defBarTopLR trùng lặp):
-//   defBarBTC (Top/Bottom Center) → defBarTLR (Top L/R) → defBarBRL (Bottom R/L)
-//   → defBarLRC (R/L Center) → defBarLRU (L/R Up) → defBarLRD (L/R Down)
+public static final String DEFAULT_PACK_FLAG = "default_packs_v";
 public static final String[] DEFAULT_BAR_PACK_IDS = {
     "defBarBTC","defBarTLR","defBarBRL","defBarLRC","defBarLRU","defBarLRD"};
-// 2 Corner pack
-public static final String[] DEFAULT_CORNER_PACK_IDS = {"defCornerTLR","defCornerBLR"};
 
+public static final String[] DEFAULT_CORNER_PACK_IDS = {"defCornerTLR","defCornerBLR"};
+public static final String[] DEFAULT_DISPLAY_ORDER = {
+    "corner_defCornerTLR",   // 1. Top Left/Right Corner
+    "bar_defBarBTC",         // 2. Top/Bottom Center
+    "bar_defBarTLR",         // 3. Top Left/Right
+    "bar_defBarBRL",         // 4. Bottom Right/Left
+    "bar_defBarLRC",         // 5. Right/Left Center
+    "bar_defBarLRU",         // 6. Left/Right Up
+    "bar_defBarLRD",         // 7. Left/Right Down
+    "corner_defCornerBLR"    // 8. Bottom Left/Right Corner
+};
 public static void ensureDefaultPacks(SharedPreferences p){
     if(p.getBoolean(DEFAULT_PACK_FLAG, false)) return;
     SharedPreferences.Editor ed = p.edit();
-    int[] barLocs = {
-        0,   // defBarBTC  → pair bt_c  member A = b_c  → loc 0
-        8,   // defBarTLR  → pair t_lr  member A = t_l  → loc 8
-        1,   // defBarBRL  → pair b_rl  member A = r    → loc 1
-        10,  // defBarLRC  → pair lr_c  member A = l_c  → loc 10
-        3,   // defBarLRU  → pair lr_u  member A = r_u  → loc 3
-        11   // defBarLRD  → pair lr_d  member A = l_d  → loc 11
-    };
-    String[] barPairs = {
-        "barPair_bt_c","barPair_t_lr","barPair_b_rl",
-        "barPair_lr_c","barPair_lr_u","barPair_lr_d"};
-
-    for(int i=0;i<DEFAULT_BAR_PACK_IDS.length;i++){
+    int[]    barLocs = { 0,       8,       1,       4,       3,       5      };
+    String[] barPairs = {"barPair_bt_c","barPair_t_lr","barPair_b_rl",
+                         "barPair_lr_c","barPair_lr_u","barPair_lr_d"};
+    String[] barNames = {"Top/Bottom Center","Top L/R","Bottom R/L",
+                         "Right/Left Center","Left/Right Up","Left/Right Down"};
+    for(int i = 0; i < DEFAULT_BAR_PACK_IDS.length; i++){
         String id = DEFAULT_BAR_PACK_IDS[i];
         String px = "pack_bar_" + id + "_";
-        if(p.contains(px + "loc")) continue;   // không ghi đè nếu user đã chỉnh
-        ed.putString(px + "name", defBarName(barPairs[i]));
-        ed.putInt(px + "loc", barLocs[i]);
-        ed.putInt(px + "pair_spacing", 0);
+        if(p.contains(px + "loc")) continue;
+        ed.putString(px + "name", barNames[i]);
+        ed.putInt   (px + "loc", barLocs[i]);
+        ed.putInt   (px + "pair_spacing", 0);
     }
-    int[] cornerLocs = {3, 1};   // tl=3, bl=1 — member A đại diện
-    for(int i=0;i<DEFAULT_CORNER_PACK_IDS.length;i++){
+    int[] cornerLocs = { 3, 1 };  // 3 = "tl", 1 = "bl"
+    for(int i = 0; i < DEFAULT_CORNER_PACK_IDS.length; i++){
         String id = DEFAULT_CORNER_PACK_IDS[i];
         String px = "pack_corner_" + id + "_";
         if(p.contains(px + "loc")) continue;
-        ed.putString(px + "name", i==0 ? "Top L/R Corner" : "Bottom L/R Corner");
-        ed.putInt(px + "loc", cornerLocs[i]);
-        ed.putInt(px + "pair_spacing", 0);
+        ed.putString(px + "name", i == 0 ? "Top L/R Corner" : "Bottom L/R Corner");
+        ed.putInt   (px + "loc", cornerLocs[i]);
+        ed.putInt   (px + "pair_spacing", 0);
     }
-    appendIds(p, ed, "pack_bar_ids", DEFAULT_BAR_PACK_IDS);
-appendIds(p, ed, "pack_corner_ids", DEFAULT_CORNER_PACK_IDS);
-String[] displayOrder = {
-    "corner_defCornerTLR",
-    "bar_defBarBTC",
-    "bar_defBarTLR",
-    "bar_defBarBRL",
-    "bar_defBarLRC",
-    "bar_defBarLRU",
-    "bar_defBarLRD",
-    "corner_defCornerBLR"
-};
-String defaultApplied = android.text.TextUtils.join(",", displayOrder);
-if (p.getString("lock_applied_packs", "").isEmpty())
-    ed.putString("lock_applied_packs", defaultApplied);
-if (p.getString("home_applied_packs", "").isEmpty())
-    ed.putString("home_applied_packs", defaultApplied);
-
-ed.putBoolean(DEFAULT_PACK_FLAG, true).apply();
+    appendIds(p, ed, "pack_bar_ids",    DEFAULT_BAR_PACK_IDS);
+    appendIds(p, ed, "pack_corner_ids", DEFAULT_CORNER_PACK_IDS);
+    ed.putBoolean(DEFAULT_PACK_FLAG, true).apply();
 }
 private static void appendIds(SharedPreferences p, SharedPreferences.Editor ed, String listKey, String[] newIds){
     java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();

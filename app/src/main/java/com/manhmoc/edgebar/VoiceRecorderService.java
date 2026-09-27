@@ -16,12 +16,6 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.MediaStore;
-
-/**
- * V19.12.3.6.37 — Toggle + Pause/Resume + Notification actions + broadcast tick
- * cho chỉ báo ghi âm (chấm đỏ) ở EdgeBarService/HomescreenService.
- * Pause/Resume dùng MediaRecorder.pause()/resume() (API 24+, minSdk app=26 nên luôn có).
- */
 public class VoiceRecorderService extends Service {
     public static boolean isRunning = false;
     public static boolean isPaused = false;
@@ -49,10 +43,8 @@ public class VoiceRecorderService extends Service {
     @Override public IBinder onBind(Intent i) { return null; }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        // BẮT BUỘC gọi ngay lập tức, trước mọi xử lý khác (yêu cầu cứng của Android FGS)
         startForegroundNotif();
         String action = intent != null ? intent.getAction() : null;
-
         if (ACTION_STOP.equals(action)) { stopRecording(false); return START_NOT_STICKY; }
         if (ACTION_STOP_AND_PLAY.equals(action)) { stopRecording(true); return START_NOT_STICKY; }
         if (ACTION_OPEN_CURRENT.equals(action)) { openCurrentFile(); return START_NOT_STICKY; } // [MỚI]
@@ -62,8 +54,6 @@ public class VoiceRecorderService extends Service {
             if (isPaused) resumeRecording(); else pauseRecording();
             return START_NOT_STICKY;
         }
-
-        // ACTION_TOGGLE hoặc không có action
         if (isRunning) { stopRecording(false); return START_NOT_STICKY; }
 
         if (android.content.pm.PackageManager.PERMISSION_GRANTED !=
@@ -234,7 +224,6 @@ public class VoiceRecorderService extends Service {
         return PendingIntent.getService(this, action.hashCode(), i, flags);
     }
 
-    // [MỚI] Zero-RAM: chạy đúng lúc user chạm notif, không giữ Thread/Handler nào chờ sẵn.
     private void openCurrentFile() {
         if (pendingUri == null) return;
         try {
@@ -275,8 +264,6 @@ public class VoiceRecorderService extends Service {
                     },
                     null, android.graphics.Shader.TileMode.CLAMP));
             canvas.drawRoundRect(0, 0, 256, 256, 32, 32, paint);
-
-            // Vẽ icon app lên trên cái nền neon đó
             android.graphics.drawable.Drawable d = getDrawable(R.drawable.ic_launcher);
             d.setBounds(32, 32, 224, 224);
             d.draw(canvas);

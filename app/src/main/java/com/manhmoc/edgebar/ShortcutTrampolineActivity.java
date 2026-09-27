@@ -1,5 +1,4 @@
 package com.manhmoc.edgebar;
-
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -12,10 +11,8 @@ public class ShortcutTrampolineActivity extends Activity {
 String shortcutId = getIntent().getStringExtra("eb_shortcut_id");
 if (shortcutId == null) shortcutId = getIntent().getStringExtra(Intent.EXTRA_SHORTCUT_ID); // dự phòng
 if (shortcutId == null) shortcutId = "";
-
         SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
         String act = prefs.getString("appicon_" + shortcutId + "_act", "NONE");
-
         if (!act.equals("NONE") && !act.isEmpty()) {
     if (act.equals("OPEN_APP_UI")) {
         Intent open = new Intent(this, MainActivity.class);

@@ -2,9 +2,6 @@
 import android.content.Intent;
 import android.service.quicksettings.Tile;
 import android.service.quicksettings.TileService;
-
-/** QS Tile TĨNH — luôn có sẵn, không phụ thuộc cấu hình nào, không thể lỗi.
- *  Zero-RAM: không đọc prefs, không giữ state, chỉ mở MainActivity. */
 public class QsOpenAppTile extends TileService {
     @Override public void onStartListening() {
         Tile t = getQsTile();
