@@ -13,22 +13,16 @@ public class QsLockTile extends TileService {
         } catch (Exception e) {
             hasSecureWrite = false;
         }
-
         if (!hasSecureWrite) {
-            // Chưa có quyền → mở trang Accessibility để user bật tay
             Intent i = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivityAndCollapse(i);
             return;
         }
-
-        // Đã có quyền -> Giao cho ToggleReceiver xử lý để kích hoạt chuẩn kịch bản đổi cờ, 
-        // Pause WM, bật Homeb và gọi Watchdog. Tránh lỗi tắt Homacc mà Homeb không lên.
+        // Đã có quyền -> Giao cho ToggleReceiver xử lý chuẩn kịch bản
         Intent toggleIntent = new Intent("com.manhmoc.edgebar.TOGGLE_ACC");
         toggleIntent.setPackage(getPackageName());
         sendBroadcast(toggleIntent);
-        
-        // Cập nhật UI tạm thời của Tile cho mượt mắt
         boolean en = isAccOn();
         Tile t = getQsTile();
         if (t != null) {

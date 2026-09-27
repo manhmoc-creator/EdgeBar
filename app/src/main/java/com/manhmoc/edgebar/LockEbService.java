@@ -76,10 +76,11 @@ private final Runnable reapplyRunnable = this::applyVisibility;
         }
     }
 
-    /** Bản sao đúng thuật toán CornerView của EdgeBarService (stroke + trăng lưỡi liềm). */
-    private static class CornerView extends View {
+        private static class CornerView extends View {
         private final Paint pFill = new Paint(Paint.ANTI_ALIAS_FLAG), pStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path moonPath = new Path(), strokePath = new Path(); // [TỐI ƯU] tái dùng
         private final int type; private final String ck; private final SharedPreferences prefs;
+
         CornerView(Context c, SharedPreferences prefs, int type, String ck, int thick, int moonAlpha, int strokeAlpha) {
             super(c);
             this.type = type; this.ck = ck; this.prefs = prefs;
@@ -98,7 +99,7 @@ private final Runnable reapplyRunnable = this::applyVisibility;
             float sRad = prefs.getInt(ck+"rad", 80) / 1000f, mRad = prefs.getInt(ck+"moon_rad", 80) / 1000f;
             float sw = prefs.getInt(ck+"w", 100), sh = prefs.getInt(ck+"h", 100);
             float mw = prefs.getInt(ck+"moon_w", 100), mh = prefs.getInt(ck+"moon_h", 100);
-            Path moonPath = new Path(), strokePath = new Path();
+            moonPath.reset(); strokePath.reset();
             float sRootX, sRootY, sTipX, sTipY, sCtrlX, sCtrlY, mRootX, mRootY, mTipX, mTipY, mCtrlX, mCtrlY;
             if (type == 0) { // BR
                 sRootX=tw-pad; sRootY=th-pad; sTipX=tw-sw+pad; sTipY=th-sh+pad; sCtrlX=sRootX-(1f-sRad)*(sw*0.7f); sCtrlY=sRootY-(1f-sRad)*(sh*0.7f);
@@ -126,8 +127,6 @@ private final Runnable reapplyRunnable = this::applyVisibility;
             canvas.restore();
         }
     }
-
-    // ---------- Vòng đời ----------
     @Override public IBinder onBind(Intent i) { return null; }
 
     @Override public void onCreate() {
@@ -136,6 +135,7 @@ private final Runnable reapplyRunnable = this::applyVisibility;
         km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+        TwinPairStore.migrateIfNeeded(prefs);
         cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         try { camId = cm.getCameraIdList()[0]; } catch (Exception ignored) {}
 
@@ -188,8 +188,6 @@ private final Runnable reapplyRunnable = this::applyVisibility;
         applyVisibility(); // LOCKEB_FG / SCREEN_ON
     }
 };
-
-    /** [MỚI] Ẩn toàn bộ bar/corner LockEb ngay lập tức, bỏ qua điều kiện keyguard. */
     private void forceHideInstant() {
         for (View b : bars) if (b != null) b.setVisibility(View.GONE);
         for (View c : corners) if (c != null) c.setVisibility(View.GONE);
@@ -206,8 +204,21 @@ private final Runnable reapplyRunnable = this::applyVisibility;
             startForeground(98, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         else startForeground(98, n);
     }
-
-    // ---------- Tạo view (chỉ cái đang bật) ----------
+private int readOrInt(String sp, String member, boolean isBar, String field, int def){
+    String base = isBar
+        ? (sp + member + field)
+        : (sp + "corner_" + member + "_" + field.replaceFirst("^_", ""));
+    boolean isLeft = member.equals("r") || member.equals("t_l") || member.equals("r_u")
+                  || member.equals("l_d") || member.equals("l_c") || member.equals("b_c")
+                  || member.equals("tl") || member.equals("bl");
+    String newKey = base + (isLeft ? "_L_bl" : "_R_bl");
+    if (prefs.contains(newKey)) return prefs.getInt(newKey, def);
+    if (TwinPairStore.isOrSplit(prefs, base, isLeft)) {
+        int v = TwinPairStore.readOrValue(prefs, base, isLeft, "bl", Integer.MIN_VALUE);
+        if (v != Integer.MIN_VALUE) return v;
+    }
+    return prefs.getInt(base, def);
+}
     private WindowManager.LayoutParams lp(int w, int hh, int gravity, int x, int y, int pri) {
         int flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
             | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
@@ -225,18 +236,18 @@ private final Runnable reapplyRunnable = this::applyVisibility;
         for (int i = 0; i < 12; i++) {
             String k = "lock_" + BARS[i];
             if (!prefs.getBoolean(k + "_en", false)) continue;
-            int visMode = prefs.getInt(k + "_vis_mode", 0);
+            int visMode = readOrInt("lock_", BARS[i], true, "acc", "_vis_mode", 0);
             int alpha = visMode == 0 ? prefs.getInt(k + "_alpha", 50) : 0;
             BarView v = new BarView(this, alpha, prefs.getInt("lock_bar_radius", 24));
             WindowManager.LayoutParams p = lp(prefs.getInt(k + "_w", 300), prefs.getInt(k + "_h", 60), GRAV[i],
-                prefs.getInt(k + "_x", 0), prefs.getInt(k + "_y", 0), prefs.getInt(k + "_pri_mode", 0));
+                prefs.getInt(k + "_x", 0), prefs.getInt(k + "_y", 0), readOrInt("lock_", BARS[i], true, "acc", "_pri_mode", 0));
             try { wm.addView(v, p); bars[i] = v; } catch (Exception ignored) { continue; }
             v.setOnTouchListener(new Gesture(k));
         }
         for (int i = 0; i < 4; i++) {
             String ck = "lock_corner_" + CORNERS[i] + "_";
             if (!prefs.getBoolean("lock_corner_" + CORNERS[i] + "_en", false)) continue;
-            int visMode = prefs.getInt(ck + "vis_mode", 0);
+            int visMode = readOrInt("lock_", CORNERS[i], false, "acc", "vis_mode", 0);
             int moonA = visMode == 0 ? prefs.getInt("lock_corner_moon_alpha", 100) : 0;
             int strokeA = visMode == 0 ? prefs.getInt("lock_corner_stroke_alpha", 200) : 0;
             CornerView v = new CornerView(this, prefs, i, ck, prefs.getInt("lock_corner_thick", 8), moonA, strokeA);
@@ -244,14 +255,11 @@ private final Runnable reapplyRunnable = this::applyVisibility;
             int mw = prefs.getInt(ck + "moon_w", 100), mh = prefs.getInt(ck + "moon_h", 100);
             int mx = Math.abs(prefs.getInt(ck + "moon_x", 1250) - 1250), my = Math.abs(prefs.getInt(ck + "moon_y", 1250) - 1250);
             WindowManager.LayoutParams p = lp(Math.max(10, Math.max(wp, mw) + mx), Math.max(10, Math.max(hp, mh) + my),
-                C_GRAV[i], prefs.getInt(ck + "x", 0), prefs.getInt(ck + "y", 0), prefs.getInt(ck + "pri_mode", 0));
+                C_GRAV[i], prefs.getInt(ck + "x", 0), prefs.getInt(ck + "y", 0), readOrInt("lock_", CORNERS[i], false, "acc", "pri_mode", 0));
             try { wm.addView(v, p); corners[i] = v; } catch (Exception ignored) { continue; }
             v.setOnTouchListener(new Gesture("lock_corner_" + CORNERS[i]));
         }
     }
-
-    /** Chế độ "Chỉ màn khoá gốc": ẩn khi máy đã mở khoá hoặc app Blacklist đang ở foreground. */
-    /** Có app Blacklist đang ở foreground không (cờ do Watchdog cập nhật). */
     private boolean blFg() { return prefs.getBoolean("blacklist_lock_fg", false); }
 
     private void applyVisibility() {
@@ -264,17 +272,22 @@ private final Runnable reapplyRunnable = this::applyVisibility;
         boolean secure = !locked || fg;  // only-base: ẩn khi mở khoá hoặc app Blacklist che màn
         for (int i = 0; i < 12; i++) {
             if (bars[i] == null) continue;
-            boolean gate = show && (prefs.getInt("lock_" + BARS[i] + "_lockmode", 1) == 1 || !secure);
+                        int lockMode = TwinPairStore.readOrValue(prefs, "lock_" + BARS[i] + "_lockmode",
+                isLeftMember(BARS[i]), "bl", prefs.getInt("lock_" + BARS[i] + "_lockmode", 1));
+            boolean gate = show && (lockMode == 1 || !secure);
             bars[i].setVisibility(gate && !hiddenKeys.contains(BARS[i]) ? View.VISIBLE : View.GONE);
         }
         for (int i = 0; i < 4; i++) {
             if (corners[i] == null) continue;
-            boolean gate = show && (prefs.getInt("lock_corner_" + CORNERS[i] + "_lockmode", 1) == 1 || !secure);
+            int cLock = TwinPairStore.readOrValue(prefs, "lock_corner_" + CORNERS[i] + "_lockmode",
+                isLeftMember(CORNERS[i]), "bl", prefs.getInt("lock_corner_" + CORNERS[i] + "_lockmode", 1));
+            boolean gate = show && (cLock == 1 || !secure);
             corners[i].setVisibility(gate && !hiddenKeys.contains("corner_" + CORNERS[i]) ? View.VISIBLE : View.GONE);
         }
     }
+    private boolean isLeftMember(String m){ return m.equals("l")||m.equals("t_l")||m.equals("l_u")||m.equals("l_d")||m.equals("l_c")||m.equals("tl")||m.equals("bl"); }
 
-    // ---------- Cử chỉ: tap / dtap / long / 4 hướng ----------
+
     private class Gesture implements View.OnTouchListener {
         final String keyBase; float sx, sy; boolean longFired, multi;
         long lastTapMs = 0; Runnable pendingTap;

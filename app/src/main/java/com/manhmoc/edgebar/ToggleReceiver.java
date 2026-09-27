@@ -15,23 +15,19 @@ public class ToggleReceiver extends BroadcastReceiver {
     String s = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
     return s != null && s.contains(c.getPackageName() + "/" + EdgeBarService.class.getName());
 }
-
 private void toggleAcc(Context c, String mySvc) {
     try {
         String cur0 = android.provider.Settings.Secure.getString(c.getContentResolver(),
             android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         boolean currentlyEnabled = cur0 != null && cur0.contains(mySvc);
-
         if (!currentlyEnabled) {
-            // Sắp BẬT Trợ năng => hiện đang ở Homeb. Đọc field static — ZERO chi phí
-            // UsageStats/IPC vì Homeb đang chạy và field này luôn cập nhật qua SYNC_STATE.
+            // Sắp BẬT Trợ năng => đang ở Homeb. Đọc field static — ZERO chi phí
             String fgPkg = HomescreenService.liveForegroundPkg;
             SharedPreferences sp = c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
             String bl = sp.getString("blacklist", "");
             boolean isBlacklisted = false;
             if (fgPkg != null && !fgPkg.isEmpty() && !bl.isEmpty())
                 for (String p : bl.split(",")) if (p.trim().equals(fgPkg)) { isBlacklisted = true; break; }
-
             if (isBlacklisted) {
                 Intent home = new Intent("com.manhmoc.edgebar.IPC_ACTION");
                 home.putExtra("act", "HOME");
@@ -40,34 +36,26 @@ private void toggleAcc(Context c, String mySvc) {
                     .postDelayed(() -> doToggleAccSwitch(c, mySvc), 200);
                 return;
             }
-            // KỊCH BẢN 2: không nằm trong Blacklist -> toggle ngay
         }
         doToggleAccSwitch(c, mySvc);
     } catch (Exception e) {}
 }
-
 private void doToggleAccSwitch(Context c, String mySvc) {
     try {
         c.sendBroadcast(new android.content.Intent("com.manhmoc.edgebar.PAUSE_WM_OPS"));
-
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             try {
                 String cur = android.provider.Settings.Secure.getString(
                     c.getContentResolver(),
                     android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
                 if (cur == null) cur = "";
-
                 String[] parts = cur.split(":");
                 java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
                 for (String pt : parts) { if (!pt.trim().isEmpty()) set.add(pt.trim()); }
-
                 boolean wasEnabled = set.contains(mySvc);
-
                 if (wasEnabled) HomebWatchdogReceiver.scheduleImmediate(c);
-
                 if (wasEnabled) set.remove(mySvc);
                 else set.add(mySvc);
-
                 String newVal = android.text.TextUtils.join(":", set);
                 android.provider.Settings.Secure.putString(
                     c.getContentResolver(),
@@ -76,7 +64,6 @@ private void doToggleAccSwitch(Context c, String mySvc) {
                 android.provider.Settings.Secure.putString(
                     c.getContentResolver(),
                     android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
-
                 new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                     c.sendBroadcast(
                         new android.content.Intent("com.manhmoc.edgebar.RESUME_WM_OPS")
@@ -85,10 +72,8 @@ private void doToggleAccSwitch(Context c, String mySvc) {
                         new android.content.Intent("com.manhmoc.edgebar.SYNC_STATE")
                             .putExtra("acc_cache_reset", true));
                 }, 500);
-
             } catch (Exception e) {}
         }, 150);
-
     } catch (Exception e) {}
  }
 }

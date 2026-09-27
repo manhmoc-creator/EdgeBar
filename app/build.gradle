@@ -24,8 +24,8 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     // ===== [MỚI] Ép javac hiển thị TỐI ĐA lỗi + cảnh báo nghiêm trọng =====
     options.compilerArgs += [
-        '-Xlint:all,-deprecation,-unchecked', // tắt cảnh báo deprecation/unchecked (ồn ào)
-        '-Xmaxerrs', '9999',                   // hiện tới 9999 lỗi (mặc định chỉ 100)
+        '-Xlint:all,-deprecation,-unchecked',
+        '-Xmaxerrs', '9999',
         '-Xmaxwarns', '9999'
     ]
 }

@@ -1,5 +1,4 @@
 package com.manhmoc.edgebar;
-
 import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProvider;
@@ -14,17 +13,13 @@ import android.os.Vibrator;
 import android.widget.RemoteViews;
 import java.util.HashMap;
 import java.util.Map;
-
 public class EdgeBarWidgetProvider extends AppWidgetProvider {
-
     private static final String ACTION_TAP = "com.manhmoc.edgebar.WIDGET_TAP";
     private static final String EXTRA_WIDGET_ID = "wid";
     private static final long DTAP_WINDOW_MS = 280;
-
     private static final Map<Integer, Long> lastTapMs = new HashMap<>();
     private static final Map<Integer, Runnable> pendingTap = new HashMap<>();
     private static final Handler dtapHandler = new Handler(Looper.getMainLooper());
-
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
         for (int id : ids) {
@@ -39,7 +34,6 @@ public class EdgeBarWidgetProvider extends AppWidgetProvider {
             mgr.updateAppWidget(id, v);
         }
     }
-
     @Override
     public void onReceive(Context ctx, Intent intent) {
         if (ACTION_TAP.equals(intent.getAction())) {
@@ -49,17 +43,14 @@ public class EdgeBarWidgetProvider extends AppWidgetProvider {
         }
         super.onReceive(ctx, intent);
     }
-
     private void handleTap(Context ctx, int wid) {
         SharedPreferences prefs = ctx.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
         String tap = prefs.getString("widget_" + wid + "_tap_act", "NONE");
         String dtap = prefs.getString("widget_" + wid + "_dtap_act", "NONE");
-
         if (dtap == null || dtap.equals("NONE") || dtap.isEmpty()) {
             fireAction(ctx, wid, "tap", tap);
             return;
         }
-
         long now = System.currentTimeMillis();
         Long last = lastTapMs.get(wid);
         if (last != null && (now - last) < DTAP_WINDOW_MS) {
@@ -81,11 +72,9 @@ public class EdgeBarWidgetProvider extends AppWidgetProvider {
             dtapHandler.postDelayed(r, DTAP_WINDOW_MS + 20);
         }
     }
-
     private void fireAction(Context ctx, int wid, String suffix, String action) {
         if (action == null || action.isEmpty() || action.equals("NONE")) return;
         SharedPreferences prefs = ctx.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
-
         if (prefs.getBoolean("widget_" + wid + "_vib", true)) {
             try {
                 Vibrator vb = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
@@ -103,7 +92,6 @@ public class EdgeBarWidgetProvider extends AppWidgetProvider {
             anim.setPackage(ctx.getPackageName());
             ctx.sendBroadcast(anim);
         }
-
         String[] acts = action.split(",");
         for (String a : acts) {
             String at = a.trim();
@@ -125,7 +113,6 @@ public class EdgeBarWidgetProvider extends AppWidgetProvider {
             ctx.sendBroadcast(ipc);
         }
     }
-
     @Override
     public void onDeleted(Context ctx, int[] ids) {
         SharedPreferences.Editor ed = ctx.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE).edit();
