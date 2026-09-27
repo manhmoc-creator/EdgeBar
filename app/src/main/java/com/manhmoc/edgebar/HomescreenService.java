@@ -1097,10 +1097,7 @@ if (accHomeRunning && !previewHomeOn) {
                 int h = prefs.getInt("home_" + BARS[i] + "_h", 60);
                 int x = prefs.getInt("home_" + BARS[i] + "_x", 0);
                 int y = prefs.getInt("home_" + BARS[i] + "_y", 0);
-boolean priSplit = prefs.getBoolean("home_" + BARS[i] + "_pri_mode_split", false);
-int priMode = priSplit
-    ? readBlInt(prefs, "home_" + BARS[i] + "_pri_mode", isLeftBar, 0)
-    : prefs.getInt("home_" + BARS[i] + "_pri_mode", 0);
+                int visMode = prefs.getInt("home_" + BARS[i] + "_vis_mode", 0);
                 int barHideDur = prefs.getInt("home_bar_hide_dur", 2500);
                 ((BarView)bars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2, prefs.getInt("home_bar_radius", 24));
                int iconSize = prefs.getInt("home_" + BARS[i] + "_icon_size", prefs.getInt("home_bar_icon_size", 40)); 

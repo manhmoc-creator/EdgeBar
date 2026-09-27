@@ -10661,9 +10661,12 @@ private LinearLayout buildOrColumn(String label, String orKey, String[] items, i
             // Ghi luôn key gốc để tương thích ngược (readOrValue fallback)
             String rootKey = orKey.substring(0, orKey.length() - 4);
             boolean isLeft = orKey.endsWith("_L_acc") || orKey.endsWith("_L_bl");
-            if (!TwinPairStore.isOrSplit(prefs, rootKey, isLeft))
-                TwinPairStore.writeOrValue(prefs.edit(), rootKey, isLeft,
-                    orKey.endsWith("_acc") ? "acc" : "bl", pos).apply();
+            if (!TwinPairStore.isOrSplit(prefs, rootKey, isLeft)) {
+    SharedPreferences.Editor edOr = prefs.edit();
+    TwinPairStore.writeOrValue(edOr, rootKey, isLeft,
+        orKey.endsWith("_acc") ? "acc" : "bl", pos);
+    edOr.apply();
+}
         }
         public void onNothingSelected(AdapterView<?> p){}
     });

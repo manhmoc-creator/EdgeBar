@@ -204,21 +204,23 @@ private final Runnable reapplyRunnable = this::applyVisibility;
             startForeground(98, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         else startForeground(98, n);
     }
-private int readOrInt(String sp, String member, boolean isBar, String field, int def){
+private int readOrInt(String sp,String member,boolean isBar,String server,String field,int def){
     String base = isBar
         ? (sp + member + field)
         : (sp + "corner_" + member + "_" + field.replaceFirst("^_", ""));
     boolean isLeft = member.equals("r") || member.equals("t_l") || member.equals("r_u")
                   || member.equals("l_d") || member.equals("l_c") || member.equals("b_c")
                   || member.equals("tl") || member.equals("bl");
-    String newKey = base + (isLeft ? "_L_bl" : "_R_bl");
+    String newKey = base + (isLeft ? "_L_" : "_R_") + server;
     if (prefs.contains(newKey)) return prefs.getInt(newKey, def);
     if (TwinPairStore.isOrSplit(prefs, base, isLeft)) {
-        int v = TwinPairStore.readOrValue(prefs, base, isLeft, "bl", Integer.MIN_VALUE);
+        int v = TwinPairStore.readOrValue(prefs, base, isLeft, server, Integer.MIN_VALUE);
         if (v != Integer.MIN_VALUE) return v;
     }
     return prefs.getInt(base, def);
 }
+
+
     private WindowManager.LayoutParams lp(int w, int hh, int gravity, int x, int y, int pri) {
         int flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
             | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
