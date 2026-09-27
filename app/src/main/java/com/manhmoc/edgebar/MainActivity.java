@@ -4107,7 +4107,40 @@ LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.V
     LinearLayout.LayoutParams orLp = new LinearLayout.LayoutParams(-2, -2);
     orLp.setMargins(20, 0, 20, 0);
     tvOr.setLayoutParams(orLp);
+    // [MỚI] Nhấn giữ nút OR để gộp 2 nửa về 1 Data Pack chung
+tvOr.setClickable(true);
+tvOr.setFocusable(true);
+tvOr.setPadding(30, 30, 30, 30); // nới vùng chạm, dễ long-press hơn
+tvOr.setOnLongClickListener(v -> {
+    try {
+        android.os.Vibrator vib = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+        if (vib != null) {
+            if (Build.VERSION.SDK_INT >= 26)
+                vib.vibrate(android.os.VibrationEffect.createOneShot(
+                    30, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+            else vib.vibrate(30);
+        }
+    } catch (Exception ignored) {}
 
+    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle(T("Merge back to 1 Data Pack?",
+                    "Gộp lại thành 1 Data Pack chung?"))
+        .setMessage(T(
+            "RIGHT half will be discarded. LEFT half (Homacc) becomes the shared action for both servers.",
+            "Nửa PHẢI sẽ bị bỏ. Nửa TRÁI (Homacc) sẽ trở thành action chung cho cả 2 server."))
+        .setPositiveButton(T("MERGE", "GỘP"), (dg, w) -> {
+            if (editId != null) {
+                mergeDualPack(editId, () -> {
+                    d.dismiss();
+                    openPackRuleEditor(appliedItemKey, editId, null,
+                        onRefresh, isHomebSpace, null);
+                });
+            }
+        })
+        .setNegativeButton(T("CANCEL", "HỦY"), null)
+        .show();
+    return true;
+});
     Button btnRight = new Button(this);
     btnRight.setTextColor(Color.parseColor("#E8EAED"));
     btnRight.setTextSize(12f);
@@ -4271,12 +4304,17 @@ if (!isDualPack) {
     selectedActsR.clear(); selectedActsR.addAll(selectedActsL);
     pkgR[0] = pkgL[0]; scR[0] = scL[0];
 }
-
-// [MỚI] Render: 1 thẻ TO nếu chưa split, 2 nửa OR nếu đã split
 if (isDualPack) {
     vAct.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (2 NỬA OR)"));
     vAct.addView(buildDualKindBanner());
     vAct.addView(dualRow);
+    dualRow.setAlpha(0f);
+    dualRow.setScaleX(0.85f);
+    dualRow.animate()
+        .alpha(1f).scaleX(1f)
+        .setDuration(260)
+        .setInterpolator(new android.view.animation.OvershootInterpolator(1.15f))
+        .start();
 } else {
     Button btnTestSingle = stdCardBtn("TEST", "#FFC107", Color.BLACK);
     btnTestSingle.setOnClickListener(v -> fireTestActions(selectedActsL, pkgL[0], scL[0]));
@@ -4300,7 +4338,7 @@ if (isDualPack) {
     singleCard.setOnClickListener(v ->
         openHalfActionPicker(true, "FULL", selectedActsL, pkgL, scL, refreshSingleCard));
 
-    singleCard.setOnLongClickListener(v -> {
+        singleCard.setOnLongClickListener(v -> {
         if (editId == null) {
             Toast.makeText(this,
                 T("Save this rule first, then long-press its card to Deep Customize",
@@ -4310,11 +4348,27 @@ if (isDualPack) {
         }
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setItems(new String[]{ "⚡ " + T("Deep Customize", "Tuỳ chỉnh sâu") },
-                (dg, which) -> splitDualPack(editId, () -> {
-                    d.dismiss();
-                    openPackRuleEditor(appliedItemKey, editId, null, onRefresh, isHomebSpace, "L");
+                (dg, which) -> {
+                    float origW = singleCard.getWidth();
+                    if (origW <= 0)
+                        origW = getResources().getDisplayMetrics().widthPixels - 100;
+
+                    singleCard.animate()
+                        .scaleX(0.5f)
+                        .translationX(-origW * 0.25f)
+                        .alpha(0f)
+                        .setDuration(280)
+                        .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                        .withEndAction(() -> {
+                            splitDualPack(editId, () -> {
+                                d.dismiss();
+                                // [FIX] focusSide = null → KHÔNG auto-mở picker
+                                openPackRuleEditor(appliedItemKey, editId, null,
+                                    onRefresh, isHomebSpace, null);
+                            });
+                        }).start();
                 })
-            ).show();
+            .show();
         return true;
     });
 
@@ -12404,6 +12458,35 @@ private void splitDualPack(String rId, Runnable onRefresh) {
         Toast.LENGTH_SHORT).show();
     if (onRefresh != null) onRefresh.run();
 }
+private void mergeDualPack(String rId, Runnable onRefresh) {
+    if (rId == null || rId.isEmpty()) return;
+    if (!prefs.getBoolean("prule_" + rId + "_dual", false)) {
+        Toast.makeText(this, T("Not split yet", "Chưa tách"), Toast.LENGTH_SHORT).show();
+        return;
+    }
+    String px = "prule_" + rId + "_";
+    String lActs = prefs.getString(px + "acts_l", "NONE");
+    if (lActs == null || lActs.isEmpty()) lActs = "NONE";
+    String lPkg  = prefs.getString(px + "launch_pkg_l", "");
+    String lScId = prefs.getString(px + "shortcut_id_l", "");
+
+    prefs.edit()
+        .putString(px + "acts", lActs)
+        .putString(px + "launch_pkg", lPkg)
+        .putString(px + "shortcut_id", lScId)
+        .putBoolean(px + "dual", false)
+        .remove(px + "acts_l").remove(px + "acts_r")
+        .remove(px + "launch_pkg_l").remove(px + "launch_pkg_r")
+        .remove(px + "shortcut_id_l").remove(px + "shortcut_id_r")
+        .remove(px + "l_kind").remove(px + "r_kind")
+        .remove(px + "l_touched").remove(px + "r_touched")
+        .apply();
+
+    Toast.makeText(this, T("Merged into 1 Data Pack",
+        "Đã gộp về 1 Data Pack chung"), Toast.LENGTH_SHORT).show();
+    if (onRefresh != null) onRefresh.run();
+}
+
 private LinearLayout buildDualRow(String rId, String spanKey, String appliedItemKey,
                                   boolean isHomebSpace, Runnable onRefresh) {
     final String px = "prule_" + rId + "_";
@@ -12429,8 +12512,6 @@ private LinearLayout buildDualRow(String rId, String spanKey, String appliedItem
     orLp.setMargins(8, 0, 8, 0);
     tvOr.setLayoutParams(orLp);
     row.addView(tvOr);
-
-        // ─── Nửa PHẢI = Homeb Common ✓ ───
     FrameLayout rightCard = buildDualHalfCard(rId, spanKey, appliedItemKey, isHomebSpace,
         /* isFullSide */ false, onRefresh);
     LinearLayout.LayoutParams rightLp = new LinearLayout.LayoutParams(0, -2, 1f);
