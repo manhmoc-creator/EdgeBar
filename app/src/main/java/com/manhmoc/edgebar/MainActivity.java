@@ -3457,49 +3457,31 @@ private void ensureHomeServiceForPreview() {
     formatPruleGestureLabel(rId),
     describePruleScope(rId),
     formatPruleActionLabel(rId), swOn, btnTest);
-                final boolean isDual = prefs.getBoolean(px + "dual", false);
+                FrameLayout cardWrap = wrapPackCard(card, rId);
 
-                if (isDual) {
-                    LinearLayout dualRow = buildDualRow(rId, spanKey, appliedItemKey,
-                        isHomebSpace, () -> renderRules[0].run());
-                    FrameLayout dualWrap = new FrameLayout(this);
-                    dualWrap.addView(dualRow, new FrameLayout.LayoutParams(-1, -2));
-                    dualWrap.setTag(rId);
-                    if (prulesSelectMode) {
-                        addSelDot(dualWrap, prulesSelectedItems.contains(rId));
-                        dualRow.setOnClickListener(v -> {
-                            if (prulesSelectedItems.contains(rId)) prulesSelectedItems.remove(rId);
-                            else prulesSelectedItems.add(rId);
-                            renderRules[0].run();
-                        });
-                        dualRow.setOnLongClickListener(v -> true);
-                    }
-                    attachDragReorder(dualWrap, rules, listKey, () -> renderRules[0].run());
-                    flow.add(dualWrap, 6); // luôn chiếm 1 hàng đầy
+                if (prulesSelectMode) {
+                    addSelDot(cardWrap, prulesSelectedItems.contains(rId));
+                    card.setOnClickListener(v -> {
+                        if (prulesSelectedItems.contains(rId)) prulesSelectedItems.remove(rId);
+                        else prulesSelectedItems.add(rId);
+                        renderRules[0].run();
+                    });
+                    card.setOnLongClickListener(v -> true);
                 } else {
-                    FrameLayout cardWrap = wrapPackCard(card, rId);
-
-                    if (prulesSelectMode) {
-                        addSelDot(cardWrap, prulesSelectedItems.contains(rId));
-                        card.setOnClickListener(v -> {
-                            if (prulesSelectedItems.contains(rId)) prulesSelectedItems.remove(rId);
-                            else prulesSelectedItems.add(rId);
-                            renderRules[0].run();
-                        });
-                        card.setOnLongClickListener(v -> true);
-                    } else {
-                        card.setOnClickListener(v -> openPackRuleEditor(appliedItemKey, rId, null, renderRules[0], isHomebSpace));
+                    card.setOnClickListener(v -> openPackRuleEditor(
+                        appliedItemKey, rId, null, renderRules[0], isHomebSpace));
                     card.setOnLongClickListener(v -> {
-    showPackLongPressMenu(v, spanKey, () -> {
-        prulesSelectMode = true; prulesSelectedItems.clear(); prulesSelectedItems.add(rId);
-        renderRules[0].run();
-    }, () -> renderRules[0].run());
-    return true;
-});
-                    }
-                    attachDragReorder(cardWrap, rules, listKey, () -> renderRules[0].run());
-                    flow.add(cardWrap, getPackSpanUnits(spanKey));
+                        showPackLongPressMenu(v, spanKey, () -> {
+                            prulesSelectMode = true;
+                            prulesSelectedItems.clear();
+                            prulesSelectedItems.add(rId);
+                            renderRules[0].run();
+                        }, () -> renderRules[0].run());
+                        return true;
+                    });
                 }
+                attachDragReorder(cardWrap, rules, listKey, () -> renderRules[0].run());
+                flow.add(cardWrap, getPackSpanUnits(spanKey));
             }
             flow.finish();
         };
