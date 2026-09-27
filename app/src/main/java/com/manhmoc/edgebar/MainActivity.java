@@ -4105,10 +4105,12 @@ LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.V
     LinearLayout.LayoutParams orLp = new LinearLayout.LayoutParams(-2, -2);
     orLp.setMargins(20, 0, 20, 0);
     tvOr.setLayoutParams(orLp);
-    // [MỚI] Nhấn giữ nút OR để gộp 2 nửa về 1 Data Pack chung
+final Runnable[] buildSingleCardRef = new Runnable[1];
+final int[] attachIndex = { -1 };
+// [MỚI] Nhấn giữ nút OR để gộp 2 nửa về 1 Data Pack chung — animation tại chỗ
 tvOr.setClickable(true);
 tvOr.setFocusable(true);
-tvOr.setPadding(30, 30, 30, 30); // nới vùng chạm, dễ long-press hơn
+tvOr.setPadding(30, 30, 30, 30);
 tvOr.setOnLongClickListener(v -> {
     try {
         android.os.Vibrator vib = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
@@ -4127,13 +4129,36 @@ tvOr.setOnLongClickListener(v -> {
             "RIGHT half will be discarded. LEFT half (Homacc) becomes the shared action for both servers.",
             "Nửa PHẢI sẽ bị bỏ. Nửa TRÁI (Homacc) sẽ trở thành action chung cho cả 2 server."))
         .setPositiveButton(T("MERGE", "GỘP"), (dg, w) -> {
-            if (editId != null) {
-                mergeDualPack(editId, () -> {
-                    d.dismiss();
-                    openPackRuleEditor(appliedItemKey, editId, null,
-                        onRefresh, isHomebSpace, null);
-                });
-            }
+            if (editId == null) return;
+
+            // 1) Ghi prefs (KHÔNG đóng dialog)
+            mergeDualPack(editId, null);
+
+            // 2) Đồng bộ state local — giữ left, xoá right
+            rKind[0] = "";
+            selectedActsR.clear();
+            pkgR[0] = ""; scR[0] = "";
+
+            // 3) Lấy dualSection = parent của dualRow
+            ViewGroup dualSection = (dualRow.getParent() instanceof ViewGroup)
+                ? (ViewGroup) dualRow.getParent() : null;
+            if (dualSection == null) return;
+
+            int idx = vAct.indexOfChild(dualSection);
+            if (idx < 0) return;
+
+            // 4) Animation co lại + mờ dần (giống hệt split ngược chiều)
+            dualSection.animate()
+                .alpha(0f)
+                .scaleX(0.5f)
+                .setDuration(240)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .withEndAction(() -> {
+                    // 5) Xoá dualSection, build lại singleCard tại đúng index cũ
+                    vAct.removeView(dualSection);
+                    attachIndex[0] = idx;
+                    if (buildSingleCardRef[0] != null) buildSingleCardRef[0].run();
+                }).start();
         })
         .setNegativeButton(T("CANCEL", "HỦY"), null)
         .show();
@@ -4275,8 +4300,6 @@ tvOr.setOnLongClickListener(v -> {
         }
         openHalfActionPicker(false, rKind[0], selectedActsR, pkgR, scR, updateRightLabel);
     });
-
-    // ---- Long-press để xoá nửa ----
     btnLeft.setOnLongClickListener(v -> {
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Xoá nửa TRÁI?")
@@ -4295,7 +4318,6 @@ tvOr.setOnLongClickListener(v -> {
             }).setNegativeButton("HUỶ", null).show();
         return true;
     });
-    // [MỚI] Khi CHƯA Deep Customize: ép 2 bên luôn đồng bộ ngầm
 if (!isDualPack) {
     if (lKind[0].isEmpty()) lKind[0] = isHomebSpace ? "COMMON" : "FULL";
     rKind[0] = lKind[0];
@@ -4318,95 +4340,106 @@ if (isDualPack) {
         .setInterpolator(new android.view.animation.OvershootInterpolator(1.15f))
         .start();
 } else {
-    Button btnTestSingle = stdCardBtn("TEST", "#FFC107", Color.BLACK);
-    btnTestSingle.setOnClickListener(v -> fireTestActions(selectedActsL, pkgL[0], scL[0]));
+    buildSingleCardRef[0] = () -> {
+        Button btnTestSingle = stdCardBtn("TEST", "#FFC107", Color.BLACK);
+        btnTestSingle.setOnClickListener(v ->
+            fireTestActions(selectedActsL, pkgL[0], scL[0]));
 
-    LinearLayout singleCard = buildStdPackCard(
-        buildActionIconColumn(editId != null ? editId : "", ""),
-        T("Data Pack Action", "Data Pack Action"),
-        T("Shared: Homacc + Homeb (long-press to customize)",
-          "Chung: Homacc + Homeb (nhấn giữ để chỉnh riêng)"),
-        formatActionCsvLabel(TextUtils.join(",", selectedActsL), pkgL[0], scL[0]),
-        btnTestSingle);
+        LinearLayout singleCard = buildStdPackCard(
+            buildActionIconColumn(editId != null ? editId : "", ""),
+            T("Data Pack Action", "Data Pack Action"),
+            T("Shared: Homacc + Homeb (long-press to customize)",
+              "Chung: Homacc + Homeb (nhấn giữ để chỉnh riêng)"),
+            formatActionCsvLabel(TextUtils.join(",", selectedActsL), pkgL[0], scL[0]),
+            btnTestSingle);
 
-    Runnable refreshSingleCard = () -> {
-        TextView t = singleCard.findViewWithTag("line3");
-        if (t != null) t.setText(formatActionCsvLabel(
-            TextUtils.join(",", selectedActsL), pkgL[0], scL[0]));
-        selectedActsR.clear(); selectedActsR.addAll(selectedActsL);
-        pkgR[0] = pkgL[0]; scR[0] = scL[0];
-    };
+        Runnable refreshSingleCard = () -> {
+            TextView t = singleCard.findViewWithTag("line3");
+            if (t != null) t.setText(formatActionCsvLabel(
+                TextUtils.join(",", selectedActsL), pkgL[0], scL[0]));
+            selectedActsR.clear(); selectedActsR.addAll(selectedActsL);
+            pkgR[0] = pkgL[0]; scR[0] = scL[0];
+        };
 
-    singleCard.setOnClickListener(v ->
-        openHalfActionPicker(true, "FULL", selectedActsL, pkgL, scL, refreshSingleCard));
+        singleCard.setOnClickListener(v ->
+            openHalfActionPicker(true, "FULL", selectedActsL, pkgL, scL, refreshSingleCard));
 
-            singleCard.setOnLongClickListener(v -> {
-        if (editId == null) {
-            Toast.makeText(this,
-                T("Save this rule first, then long-press its card to Deep Customize",
-                  "Lưu Rule này trước, sau đó nhấn giữ thẻ ngoài danh sách để Tuỳ chỉnh sâu"),
-                Toast.LENGTH_LONG).show();
+        singleCard.setOnLongClickListener(v -> {
+            if (editId == null) {
+                Toast.makeText(this,
+                    T("Save this rule first, then long-press its card to Deep Customize",
+                      "Lưu Rule này trước, sau đó nhấn giữ thẻ ngoài danh sách để Tuỳ chỉnh sâu"),
+                    Toast.LENGTH_LONG).show();
+                return true;
+            }
+            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setItems(new String[]{ "⚡ " + T("Deep Customize", "Tuỳ chỉnh sâu") },
+                    (dg, which) -> {
+
+                        // Bước 1: ghi prefs NGAY (không đóng dialog)
+                        splitDualPack(editId, null);
+
+                        // Bước 2: đồng bộ state local cho 2 nửa — mirror từ bên TRÁI
+                        lKind[0] = isHomebSpace ? "COMMON" : "FULL";
+                        rKind[0] = lKind[0];
+                        selectedActsR.clear(); selectedActsR.addAll(selectedActsL);
+                        pkgR[0] = pkgL[0]; scR[0] = scL[0];
+                        updateLeftLabel.run();
+                        updateRightLabel.run();
+
+                        // Bước 3: animation co singleCard về bên trái + mờ dần
+                        float origW = singleCard.getWidth();
+                        if (origW <= 0)
+                            origW = getResources().getDisplayMetrics().widthPixels - 100;
+                        singleCard.animate()
+                            .scaleX(0.5f)
+                            .translationX(-origW * 0.25f)
+                            .alpha(0f)
+                            .setDuration(280)
+                            .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                            .withEndAction(() -> {
+                                int idx = vAct.indexOfChild(singleCard);
+                                if (idx < 0) return;
+
+                                if (dualRow.getParent() != null)
+                                    ((ViewGroup) dualRow.getParent()).removeView(dualRow);
+
+                                LinearLayout dualSection = new LinearLayout(this);
+                                dualSection.setOrientation(LinearLayout.VERTICAL);
+                                dualSection.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (2 NỬA OR)"));
+                                dualSection.addView(buildDualKindBanner());
+                                dualSection.addView(dualRow);
+
+                                vAct.removeView(singleCard);
+                                vAct.addView(dualSection, idx);
+
+                                dualSection.setAlpha(0f);
+                                dualSection.setScaleX(0.85f);
+                                dualSection.animate()
+                                    .alpha(1f).scaleX(1f)
+                                    .setDuration(260)
+                                    .setInterpolator(new android.view.animation.OvershootInterpolator(1.15f))
+                                    .start();
+                            }).start();
+                    })
+                .show();
             return true;
+        });
+        if (attachIndex[0] >= 0 && attachIndex[0] <= vAct.getChildCount()) {
+            vAct.addView(singleCard, attachIndex[0]);
+        } else {
+            vAct.addView(singleCard);
         }
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setItems(new String[]{ "⚡ " + T("Deep Customize", "Tuỳ chỉnh sâu") },
-                (dg, which) -> {
-
-                    // Bước 1: ghi prefs NGAY (không đóng dialog)
-                    splitDualPack(editId, null);
-
-                    // Bước 2: đồng bộ state local cho 2 nửa — mirror từ bên TRÁI
-                    lKind[0] = isHomebSpace ? "COMMON" : "FULL";
-                    rKind[0] = lKind[0];
-                    selectedActsR.clear(); selectedActsR.addAll(selectedActsL);
-                    pkgR[0] = pkgL[0]; scR[0] = scL[0];
-                    updateLeftLabel.run();
-                    updateRightLabel.run();
-
-                    // Bước 3: animation co singleCard về bên trái + mờ dần
-                    float origW = singleCard.getWidth();
-                    if (origW <= 0)
-                        origW = getResources().getDisplayMetrics().widthPixels - 100;
-                    singleCard.animate()
-                        .scaleX(0.5f)
-                        .translationX(-origW * 0.25f)
-                        .alpha(0f)
-                        .setDuration(280)
-                        .setInterpolator(new android.view.animation.DecelerateInterpolator())
-                        .withEndAction(() -> {
-
-                            // Bước 4: tại chỗ — bỏ singleCard, chèn dualSection vào cùng vị trí
-                            int idx = vAct.indexOfChild(singleCard);
-                            if (idx < 0) return;
-
-                            // Build dualSection mới (dualRow đã có sẵn listener + label đúng)
-                            if (dualRow.getParent() != null)
-                                ((ViewGroup) dualRow.getParent()).removeView(dualRow);
-
-                            LinearLayout dualSection = new LinearLayout(this);
-                            dualSection.setOrientation(LinearLayout.VERTICAL);
-                            dualSection.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (2 NỬA OR)"));
-                            dualSection.addView(buildDualKindBanner());
-                            dualSection.addView(dualRow);
-
-                            vAct.removeView(singleCard);
-                            vAct.addView(dualSection, idx);
-
-                            // Bước 5: fade-in + nở nhẹ cho dualSection
-                            dualSection.setAlpha(0f);
-                            dualSection.setScaleX(0.85f);
-                            dualSection.animate()
-                                .alpha(1f).scaleX(1f)
-                                .setDuration(260)
-                                .setInterpolator(new android.view.animation.OvershootInterpolator(1.15f))
-                                .start();
-                        }).start();
-                })
-            .show();
-        return true;
-    });
-
-    vAct.addView(singleCard);
+        attachIndex[0] = -1;
+        singleCard.setAlpha(0f);
+        singleCard.setScaleX(0.85f);
+        singleCard.animate()
+            .alpha(1f).scaleX(1f)
+            .setDuration(260)
+            .setInterpolator(new android.view.animation.OvershootInterpolator(1.15f))
+            .start();
+    };
+    buildSingleCardRef[0].run();
 }
     TextView tvOpt = new TextView(this);
     tvOpt.setText(T("2. CHOOSE OPTIONS", "2. CHỌN TÙY CHỌN"));
@@ -5408,7 +5441,7 @@ private void showActionCategoryPicker(String title, List<String[]> items,
 private void buildMainMenuList() {
     pageMainMenu.removeAllViews();
     Object[][] items = {
-    {"touch_app_24px", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Frontier · Texture · VolKey · Sensor", (Runnable)() -> openSpace(1)},
+    {"touch_app_24px", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Lock · Home · Texture · VolKey · Sensor · App Icon", (Runnable)() -> openSpace(1)},
     {"light_mode_24px", T("Display","Hiển thị"), "Anima · Lenap · Bubble · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
     {"flash_on_24px", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)this::openEcosystemMenu},
     {"file_present_24px", T("Storage","Bộ nhớ"), T("Storage Scan","Quét dung lượng"), (Runnable)() -> openEco(3, false)},
