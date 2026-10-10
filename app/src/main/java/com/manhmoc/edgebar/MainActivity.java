@@ -273,6 +273,14 @@ private class SpanFlow {
         }
     }
 }
+private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMultiSelect, Runnable rerender) {
+    showPackLongPressMenu(anchor, spanKey, onMultiSelect, rerender, true);
+}
+
+private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMultiSelect, Runnable rerender, Runnable onDelete, Runnable onSplit) {
+    showPackLongPressMenu(anchor, spanKey, onMultiSelect, rerender, false);
+}
+
 private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMultiSelect, Runnable rerender, boolean isMainSpace) {
     android.widget.PopupMenu pm = new android.widget.PopupMenu(this, anchor);
     if (onMultiSelect != null) pm.getMenu().add(0, 0, 0, "Select multiple");
@@ -293,7 +301,6 @@ private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMulti
     });
     pm.show();
 }
-
 private LinearLayout buildStdPackCard(View optView, String title, String line2, String line3, View... ctrls) {
     LinearLayout card = new LinearLayout(this);
     card.setOrientation(LinearLayout.HORIZONTAL);
