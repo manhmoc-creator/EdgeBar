@@ -1713,6 +1713,7 @@ showMainMenu();
         }
         TwinPairStore.migrateIfNeeded(prefs);
         TwinPairStore.ensureDefaultPacks(prefs);
+        syncPairedPackToggles();
     }
     @Override
     protected void onNewIntent(Intent intent) {
@@ -2673,8 +2674,8 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
         card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
         cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
         cardWrap.setTag(itemKey);
-        
         if (isFrontier) {
+            final String spanKey = "ui_span_applied_" + prefix + "_" + itemKey;
             if (frontierSelectMode) {
                 TextView selDot = new TextView(this);
                 selDot.setText(frontierSelectedItems.contains(itemKey) ? "🔵" : "⚪");
@@ -2689,18 +2690,24 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
                     else frontierSelectedItems.add(itemKey);
                     renderRulesList();
                 });
+                flow.add(cardWrap, 6);
             } else {
                 card.setOnClickListener(v -> openDataPackEditor(isBar ? 0 : 1, id));
+                // [FIX] Long-press mở menu multi-select + span (1/2/3 pack per row) giống Lenap
                 card.setOnLongClickListener(v -> {
-                    frontierSelectMode = true;
-                    frontierSelectedItems.clear();
-                    frontierSelectedItems.add(itemKey);
-                    renderRulesList();
+                    showPackLongPressMenu(v, spanKey, () -> {
+                        frontierSelectMode = true;
+                        frontierSelectedItems.clear();
+                        frontierSelectedItems.add(itemKey);
+                        renderRulesList();
+                    }, this::renderRulesList);
                     return true;
                 });
+                flow.add(cardWrap, getPackSpanUnits(spanKey));
             }
+        } else {
+            flow.add(cardWrap, 6);
         }
-        flow.add(cardWrap, 6);
     }
     flow.finish();
 }
@@ -9148,27 +9155,88 @@ private LinearLayout buildDualSideSwitch(String prefix, String id, boolean isBar
     row.addView(buildSideSwitchCell(prefix, pairId, nameB, false, isBar));
     return row;
 }
-private LinearLayout buildSideSwitchCell(String prefix, String pairId,
-                                          String memberName, boolean isA, boolean isBar){
-    LinearLayout col = new LinearLayout(this);
-    col.setOrientation(LinearLayout.VERTICAL);
-    col.setGravity(Gravity.CENTER);
-    col.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    TextView tv = new TextView(this);
-    tv.setText(memberName.toUpperCase());
-    tv.setTextColor(Color.parseColor("#8AB4F8"));
-    tv.setTextSize(12f);
-    tv.setGravity(Gravity.CENTER);
-    col.addView(tv);
-    Switch sw = new Switch(this);
-    sw.setChecked(TwinPairStore.isSideEnabled(prefs, prefix, pairId, isA, isBar));
-    sw.setOnCheckedChangeListener((v, chk) -> {
-        TwinPairStore.setSideEnabled(prefs, prefix, pairId, isA, chk, isBar);
-        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-    });
-    col.addView(sw);
-    return col;
-}
+    private LinearLayout buildSideSwitchCell(String prefix, String pairId,
+                                              String memberName, boolean isA, boolean isBar){
+        final boolean enabled = TwinPairStore.isSideEnabled(prefs, prefix, pairId, isA, isBar);
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, -2, 1f);
+        clp.setMargins(10, 0, 10, 0);
+        col.setLayoutParams(clp);
+
+        // Chuyển mã bar/corner ngắn sang tên đọc được
+        String displayName = humanizeMember(memberName);
+
+        GradientDrawable cellBg = new GradientDrawable();
+        cellBg.setCornerRadius(24f);
+        cellBg.setColor(Color.parseColor(enabled ? "#8AB4F8" : "#202124"));
+        cellBg.setStroke(3, Color.parseColor(enabled ? "#FFFFFF" : "#3A3A3A"));
+        col.setBackground(cellBg);
+        col.setPadding(20, 24, 20, 24);
+
+        TextView tv = new TextView(this);
+        tv.setText(displayName);
+        tv.setTextColor(Color.parseColor(enabled ? "#000000" : "#9AA0A6"));
+        tv.setTextSize(13f);
+        tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        tv.setGravity(Gravity.CENTER);
+        col.addView(tv);
+
+        TextView tvState = new TextView(this);
+        tvState.setText(enabled ? "● ON" : "○ OFF");
+        tvState.setTextColor(Color.parseColor(enabled ? "#000000" : "#5F6368"));
+        tvState.setTextSize(11f);
+        tvState.setGravity(Gravity.CENTER);
+        tvState.setPadding(0, 8, 0, 0);
+        col.addView(tvState);
+
+        col.setOnClickListener(v -> {
+            boolean newState = !TwinPairStore.isSideEnabled(prefs, prefix, pairId, isA, isBar);
+            TwinPairStore.setSideEnabled(prefs, prefix, pairId, isA, newState, isBar);
+
+            // Cập nhật màu nền ngay lập tức
+            GradientDrawable bg = new GradientDrawable();
+            bg.setCornerRadius(24f);
+            bg.setColor(Color.parseColor(newState ? "#8AB4F8" : "#202124"));
+            bg.setStroke(3, Color.parseColor(newState ? "#FFFFFF" : "#3A3A3A"));
+            col.setBackground(bg);
+            tv.setTextColor(Color.parseColor(newState ? "#000000" : "#9AA0A6"));
+            tvState.setText(newState ? "● ON" : "○ OFF");
+            tvState.setTextColor(Color.parseColor(newState ? "#000000" : "#5F6368"));
+
+            try {
+                Vibrator vib = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+                if (vib != null) vib.vibrate(VibrationEffect.createOneShot(20, VibrationEffect.DEFAULT_AMPLITUDE));
+            } catch (Exception ignored) {}
+
+            sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+        });
+        return col;
+    }
+    private String humanizeMember(String m) {
+        if (m == null) return "?";
+        switch (m) {
+            case "r":   return "RIGHT";
+            case "l":   return "LEFT";
+            case "r_u": return "RIGHT UP";
+            case "l_u": return "LEFT UP";
+            case "r_d": return "RIGHT DOWN";
+            case "l_d": return "LEFT DOWN";
+            case "r_c": return "RIGHT CENTER";
+            case "l_c": return "LEFT CENTER";
+            case "t_c": return "TOP";
+            case "b_c": return "BOTTOM";
+            case "t_l": return "TOP LEFT";
+            case "t_r": return "TOP RIGHT";
+            case "br":  return "BOTTOM RIGHT";
+            case "bl":  return "BOTTOM LEFT";
+            case "tr":  return "TOP RIGHT";
+            case "tl":  return "TOP LEFT";
+            default:    return m.toUpperCase();
+        }
+    }
 private LinearLayout buildTwinButtonRow(String title, String key, String[] items, int def) {
     LinearLayout row = new LinearLayout(this);
     row.setOrientation(LinearLayout.HORIZONTAL);
@@ -9284,90 +9352,14 @@ private void openDataPackEditor(int type, String id) {
             new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"),
                 T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"),
                 T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
-                
-        // UI Icon on Bar cũng tách 2 nửa
         content.addView(createSectionTitle(T("ICON ON BAR", "ICON TRÊN BAR")));
         content.addView(buildTwinSettingRow("Hiển thị Icon", nameA, nameB, prefix + id + "_icon_en", prefix + id + "_icon_en_b",
             new String[]{"Không hiển thị", "Có hiển thị"}, 0));
-            
         content.addView(createSlider("Độ trong suốt", prefix + id + "_alpha", 255, 50));
         content.addView(createSlider("Chiều ngang", prefix + id + "_w", 3000, 300));
         content.addView(createSlider("Chiều dọc", prefix + id + "_h", 3000, 60));
         content.addView(createSignedSlider("Khoảng cách cặp (-=gần thêm, +=xa ra)", prefix + id + "_pair_spacing", -300, 900, 0));
         content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 3000, 0));
-        
-        content.addView(createSectionTitle(T("ICON ON BAR (optional)", "ICON TRÊN BAR (tuỳ chọn)")));
-        String iconsKey = prefix + id + "_icons";
-        LinearLayout iconDrawer = new LinearLayout(this);
-        iconDrawer.setOrientation(LinearLayout.VERTICAL);
-        iconDrawer.setBackground(getRounded("#222222", 20f));
-        LinearLayout.LayoutParams idwLp = new LinearLayout.LayoutParams(-1, -2);
-        idwLp.setMargins(0, 0, 0, 20);
-        iconDrawer.setLayoutParams(idwLp);
-        TextView iconHeader = new TextView(this);
-        iconHeader.setText(T("CHOOSE ICON ON BAR", "CHỌN ICON TRÊN BAR"));
-        iconHeader.setTextColor(Color.parseColor("#8AB4F8"));
-        iconHeader.setPadding(30, 30, 30, 30);
-        iconHeader.setTextSize(16);
-        iconHeader.setBackground(getRounded("#222222", 20f));
-        LinearLayout iconBody = new LinearLayout(this);
-        iconBody.setOrientation(LinearLayout.VERTICAL);
-        iconBody.setPadding(30, 10, 30, 20);
-        iconBody.setVisibility(View.GONE);
-        final Button btnIcons = new Button(this);
-        final Runnable refreshIconBtn = () -> {
-            boolean sp = prefs.getBoolean(iconsKey + "_split", false);
-            int cnt = prefs.getInt(iconsKey + "_count", 0);
-            btnIcons.setText(T("CHOOSE ICON (", "CHỌN ICON (") + cnt + ")" + (sp ? " 🔀" : ""));
-        };
-        refreshIconBtn.run();
-        btnIcons.setBackground(getRounded("#FFC107", 20f));
-        btnIcons.setTextColor(Color.BLACK);
-        btnIcons.setOnClickListener(v -> {
-            String readKey = prefs.getBoolean(iconsKey + "_split", false) ? iconsKey + "_homacc" : iconsKey;
-            showBarIconMultiPicker(readKey, () -> {
-                prefs.edit().putInt(iconsKey + "_count", csvToList(prefs.getString(readKey, "")).size()).apply();
-                refreshIconBtn.run();
-            });
-        });
-        iconBody.addView(btnIcons);
-        TextView iconBadge = new TextView(this);
-        iconBadge.setTextSize(11f);
-        iconBadge.setTextColor(Color.parseColor("#FFC107"));
-        iconBadge.setPadding(0, 8, 0, 0);
-        iconBody.addView(iconBadge);
-        Runnable refreshIconBadge = () -> {
-            boolean sp = prefs.getBoolean(iconsKey + "_split", false);
-            if (sp) {
-                int hbCnt = csvToList(prefs.getString(iconsKey + "_homeb", "")).size();
-                int haCnt = csvToList(prefs.getString(iconsKey + "_homacc", "")).size();
-                iconBadge.setText("🔀 Homeb: " + hbCnt + "  ·  Homacc: " + haCnt);
-            } else iconBadge.setText("");
-        };
-        refreshIconBadge.run();
-        iconDrawer.addView(iconHeader);
-        iconDrawer.addView(iconBody);
-        iconHeader.setOnClickListener(v -> {
-            boolean willOpen = iconBody.getVisibility() == View.GONE;
-            iconBody.setVisibility(willOpen ? View.VISIBLE : View.GONE);
-            iconHeader.setBackground(getRounded(willOpen ? "#333333" : "#222222", 20f));
-        });
-        iconHeader.setOnLongClickListener(v -> {
-            try {
-                Vibrator vib = (Vibrator) getSystemService(VIBRATOR_SERVICE);
-                if (vib != null) {
-                    if (Build.VERSION.SDK_INT >= 26) vib.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE));
-                    else vib.vibrate(30);
-                }
-            } catch (Exception ignored) {}
-            openSplitIconDialog(iconsKey, () -> {
-                refreshIconBtn.run();
-                refreshIconBadge.run();
-                sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-            });
-            return true;
-        });
-        content.addView(iconDrawer);
     } else if (type == 1) {
         String[] cKeys = {"br", "bl", "tr", "tl"};
         int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
@@ -12520,6 +12512,51 @@ private LinearLayout sensorBodyContainer, sensorBackRowRef;
             livePreviewLp.width = w; livePreviewLp.height = h;
             livePreviewLp.gravity = gravity;
             try { wm.updateViewLayout(livePreviewOverlay, livePreviewLp); } catch (Exception ignored) {}
+        }
+    }
+    /** Đồng bộ en_a/en_b của các pack đôi theo trạng thái APPLY của space.
+     *  Khi user cài đè APK, các pack đang dùng (b_c, r, l, ...) sẽ được
+     *  tự bật cả 2 nút vị trí trái/phải nếu cờ "en" gốc đang là true
+     *  nhưng en_a/en_b đang false (dữ liệu cũ trước khi có tính năng đôi). */
+    private void syncPairedPackToggles() {
+        String[] prefixes = {"lock_", "home_"};
+        for (String prefix : prefixes) {
+            for (String itemKey : getDynamicIds(prefix + "applied_packs")) {
+                boolean isBar = itemKey.startsWith("bar_");
+                String id = itemKey.replace(isBar ? "bar_" : "corner_", "");
+                String pp = (isBar ? "pack_bar_" : "pack_corner_") + id + "_";
+                String pk = prefix + itemKey + "_";
+                boolean packEnabled = prefs.getBoolean(pk + "en", false);
+                if (!packEnabled) continue;
+
+                // Nếu pack đang bật nhưng en_a/en_b chưa set -> tự bật cả 2.
+                String enKeyA = pp + "en_a";
+                String enKeyB = pp + "en_b";
+                boolean enA = prefs.getBoolean(enKeyA, true);
+                boolean enB = prefs.getBoolean(enKeyB, true);
+                if (!enA && !enB) {
+                    // Cả 2 chưa từng được user đụng vào -> tự bật cả 2.
+                    prefs.edit()
+                        .putBoolean(enKeyA, true)
+                        .putBoolean(enKeyB, true)
+                        .apply();
+
+                    // Đồng thời bật luôn các bar/corner con tương ứng
+                    String pairId = isBar
+                        ? TwinPairStore.pairIdForBarLoc(prefs.getInt(pp + "loc", 0))
+                        : TwinPairStore.pairIdForCornerLoc(prefs.getInt(pp + "loc", 0));
+                    String[] members = TwinPairStore.getMembers(pairId, isBar);
+                    if (members != null) {
+                        SharedPreferences.Editor ed = prefs.edit();
+                        for (String m : members) {
+                            String barKey = isBar ? (prefix + m + "_en")
+                                                  : (prefix + "corner_" + m + "_en");
+                            if (!prefs.getBoolean(barKey, false)) ed.putBoolean(barKey, true);
+                        }
+                        ed.apply();
+                    }
+                }
+            }
         }
     }
 }

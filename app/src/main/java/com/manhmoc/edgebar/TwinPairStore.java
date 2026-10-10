@@ -5,7 +5,13 @@ public final class TwinPairStore {
     public static final String[] BAR_PAIR_IDS = {
 "barPair_b_rl","barPair_t_lr","barPair_lr_u","barPair_lr_d","barPair_bt_c","barPair_lr_c"};
     public static final String[][] BAR_PAIR_MEMBERS = {
-        {"r","l"},{"t_l","t_r"},{"r_u","l_u"},{"l_d","r_d"},{"b_c","t_c"},{"l_c","r_c"}};
+        {"l","r"},       // barPair_b_rl   — Bottom Left (trái) / Bottom Right (phải)
+        {"t_l","t_r"},   // barPair_t_lr   — Top Left / Top Right
+        {"l_u","r_u"},   // barPair_lr_u   — Left Up / Right Up
+        {"l_d","r_d"},   // barPair_lr_d   — Left Down / Right Down
+        {"t_c","b_c"},   // barPair_bt_c   — Top Center / Bottom Center
+        {"l_c","r_c"}    // barPair_lr_c   — Left Center / Right Center
+    };
     public static final boolean[] BAR_PAIR_SPREAD_X = {true,true,false,false,false,true};
     public static final String[] CORNER_PAIR_IDS = {"cornerPair_t_lr","cornerPair_b_lr"};
     public static final String[][] CORNER_PAIR_MEMBERS = {{"tl","tr"},{"bl","br"}};
@@ -139,14 +145,15 @@ public static void writeOrValue(SharedPreferences.Editor ed, String base, boolea
 public static void writeOrSplit(SharedPreferences.Editor ed, String base, boolean isLeft, boolean split){
     ed.putBoolean(base + (isLeft?"_L_split":"_R_split"), split);
 }
-public static final int[] BAR_PAIR_MEMBER_A_SIGN = {
-    +1,  // barPair_b_rl: {r, l}     → r phải
-    -1,  // barPair_t_lr: {t_l, t_r} → t_l trái
-    +1,  // barPair_lr_u: {r_u, l_u} → r_u phải
-    -1,  // barPair_lr_d: {l_d, r_d} → l_d trái
-     0,  // barPair_bt_c: spread Y    → không dùng X
-    -1   // barPair_lr_c: {l_c, r_c} → l_c trái
-};
+    public static final int[] BAR_PAIR_MEMBER_A_SIGN = {
+        -1,  // barPair_b_rl: {l, r}
+        -1,  // barPair_t_lr: {t_l, t_r}
+        -1,  // barPair_lr_u: {l_u, r_u}
+        -1,  // barPair_lr_d: {l_d, r_d}
+         0,  // barPair_bt_c: {t_c, b_c} — spread theo Y
+        -1   // barPair_lr_c: {l_c, r_c}
+    };
+
 public static final int[] CORNER_PAIR_MEMBER_A_SIGN = {-1, -1};
 
 public static int signOfBarPair(String pairId){
