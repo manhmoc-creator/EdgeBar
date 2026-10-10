@@ -279,23 +279,16 @@ private class SpanFlow {
 private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMultiSelect, Runnable rerender) {
     showPackLongPressMenu(anchor, spanKey, onMultiSelect, rerender, true);
 }
-
-private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMultiSelect, Runnable rerender, Runnable onDelete, Runnable onSplit) {
-    showPackLongPressMenu(anchor, spanKey, onMultiSelect, rerender, false);
-}
-
 private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMultiSelect, Runnable rerender, boolean isMainSpace) {
     android.widget.PopupMenu pm = new android.widget.PopupMenu(this, anchor);
     if (onMultiSelect != null) pm.getMenu().add(0, 0, 0, "Select multiple");
     pm.getMenu().add(0, 1, 1, "1 pack / row");
     pm.getMenu().add(0, 2, 2, "2 packs / row");
     pm.getMenu().add(0, 3, 3, "3 packs / row");
-    if (!isMainSpace) pm.getMenu().add(0, 4, 4, "Share");
     
     pm.setOnMenuItemClickListener(mi -> {
         int id = mi.getItemId();
         if (id == 0 && onMultiSelect != null) onMultiSelect.run();
-        else if (id == 4 && !isMainSpace) showShareToSpaceDialog();
         else if (id >= 1 && id <= 3) {
             prefs.edit().putInt(spanKey, id == 1 ? 6 : (id == 2 ? 3 : 2)).apply();
             rerender.run();
@@ -304,6 +297,7 @@ private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMulti
     });
     pm.show();
 }
+
 private LinearLayout buildStdPackCard(View optView, String title, String line2, String line3, View... ctrls) {
     LinearLayout card = new LinearLayout(this);
     card.setOrientation(LinearLayout.HORIZONTAL);
