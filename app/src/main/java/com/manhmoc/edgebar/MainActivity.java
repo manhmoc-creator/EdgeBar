@@ -4525,8 +4525,9 @@ applySingleCorner(src, targetPrefix, members[1], xB, enB);
     applyPackRulesToSpace("bar_" + id, targetPrefix, members[0]);
     applyPackRulesToSpace("bar_" + id, targetPrefix, members[1]);
 }
-private void applySingleCorner(String src, String targetPrefix, String cKey,
-                               int xVal, boolean sideEnabled) {
+private void applySingleBar(String targetPrefix, String barKey, int alpha, int w, int h,
+                            int x, int y, int vis, int pri, int lockM, int jump,
+                            String icons, boolean sideEnabled) {
     String bk = targetPrefix + barKey + "_";
     prefs.edit()
         .putBoolean(bk + "en", sideEnabled)
@@ -4540,6 +4541,27 @@ private void applySingleCorner(String src, String targetPrefix, String cKey,
         .putInt(bk + "x", x)
         .putInt(bk + "y", y)
         .putString(bk + "icons", icons)
+        .apply();
+}
+private void applySingleCorner(String src, String targetPrefix, String cKey, int xVal, boolean sideEnabled) {
+    String ck = targetPrefix + "corner_" + cKey + "_";
+    prefs.edit()
+        .putBoolean(ck + "en", sideEnabled)
+        .putInt(ck + "jumpdir", prefs.getInt(src + "jumpdir", 0))
+        .putInt(ck + "vis_mode", prefs.getInt(src + "vis_mode", 0))
+        .putInt(ck + "pri_mode", prefs.getInt(src + "pri_mode", 0))
+        .putInt(ck + "lockmode", prefs.getInt(src + "lockmode", 1))
+        .putInt(ck + "shape", prefs.getInt(src + "shape", 0))
+        .putInt(ck + "w", prefs.getInt(src + "w", 100))
+        .putInt(ck + "h", prefs.getInt(src + "h", 100))
+        .putInt(ck + "x", xVal)
+        .putInt(ck + "y", prefs.getInt(src + "y", 0))
+        .putInt(ck + "moon_w", prefs.getInt(src + "moon_w", 100))
+        .putInt(ck + "moon_h", prefs.getInt(src + "moon_h", 100))
+        .putInt(ck + "moon_x", prefs.getInt(src + "moon_x", 1250))
+        .putInt(ck + "moon_y", prefs.getInt(src + "moon_y", 1250))
+        .putInt(ck + "rad", prefs.getInt(src + "rad", 80))
+        .putInt(ck + "moon_rad", prefs.getInt(src + "moon_rad", 80))
         .apply();
 }
     private void applyCornerPackToSpace(String id, String targetPrefix) {
@@ -4567,27 +4589,6 @@ applySingleCorner(src, targetPrefix, members[1], xB, enB);
     TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_SPACING, spacing, false);
     applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + members[0]);
     applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + members[1]);
-}
-private void applySingleCorner(String src, String targetPrefix, String cKey, int xVal, boolean sideEnabled) {
-    String ck = targetPrefix + "corner_" + cKey + "_";
-    prefs.edit()
-        .putBoolean(ck + "en", sideEnabled)
-        .putInt(ck + "jumpdir", prefs.getInt(src + "jumpdir", 0))
-        .putInt(ck + "vis_mode", prefs.getInt(src + "vis_mode", 0))
-        .putInt(ck + "pri_mode", prefs.getInt(src + "pri_mode", 0))
-        .putInt(ck + "lockmode", prefs.getInt(src + "lockmode", 1))
-        .putInt(ck + "shape", prefs.getInt(src + "shape", 0))
-        .putInt(ck + "w", prefs.getInt(src + "w", 100))
-        .putInt(ck + "h", prefs.getInt(src + "h", 100))
-        .putInt(ck + "x", xVal)
-        .putInt(ck + "y", prefs.getInt(src + "y", 0))
-        .putInt(ck + "moon_w", prefs.getInt(src + "moon_w", 100))
-        .putInt(ck + "moon_h", prefs.getInt(src + "moon_h", 100))
-        .putInt(ck + "moon_x", prefs.getInt(src + "moon_x", 1250))
-        .putInt(ck + "moon_y", prefs.getInt(src + "moon_y", 1250))
-        .putInt(ck + "rad", prefs.getInt(src + "rad", 80))
-        .putInt(ck + "moon_rad", prefs.getInt(src + "moon_rad", 80))
-        .apply();
 }
 private void disableBarPackFromSpace(String id, String targetPrefix) {
     int loc = prefs.getInt("pack_bar_" + id + "_loc", 0);
