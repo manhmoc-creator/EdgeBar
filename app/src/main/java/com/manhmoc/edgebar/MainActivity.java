@@ -708,7 +708,7 @@ private View buildBubbleRuleCard(String rId, Runnable rerender) {
 private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int targetSize, float contentScale) {
     if (d == null) return null;
     try {
-        int srcSize = targetSize * 5;
+        int srcSize = targetSize * 3;
         Bitmap raw = Bitmap.createBitmap(srcSize, srcSize, Bitmap.Config.ARGB_8888);
         Canvas rawCanvas = new Canvas(raw);
         android.graphics.drawable.Drawable dm = d.mutate();
@@ -1222,11 +1222,6 @@ private void fireAppIconSlotAction(String shortcutId) {
     }
     sendBroadcast(ipc);
 }
-// ==================== DRAG-TO-REORDER DÙNG CHUNG ====================
-// Nhấn giữ 1 card đã build sẵn -> kéo đổi vị trí với card khác trong cùng
-// list (áp dụng mọi lưới 2/3 cột). KHÔNG tạo View mới lúc kéo — chỉ hoán
-// đổi vị trí trong `order` rồi gọi lại `rerender` 1 lần khi thả tay, nên
-// Zero-RAM overhead ngoài lúc user thực sự đang kéo.
 private void attachDragReorder(View card, List<String> order, String key, Runnable rerender) {
     final float[] startXY = new float[2];
     final boolean[] dragging = {false};
@@ -1260,6 +1255,7 @@ private void attachDragReorder(View card, List<String> order, String key, Runnab
         }
         return false;
     });
+    card.setOnLongClickListener(v -> { dragging[0] = true; v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS); return true; });
 }
 private List<String> ruleOrderForKey(String prefix, String[] comps, String[] gestures) {
     List<String> saved = getDynamicIds("rule_order_" + prefix);
@@ -1303,9 +1299,6 @@ private void openDesignSpace() {
     designSliderContainer.setVisibility(View.GONE);
     designBackRow.setVisibility(View.GONE);
 }
-    // V19.12.3.6.10: FAB "+NEW EB" hiện ở mọi tab Điều kiện (kể cả LOCK) —
-// riêng option vân tay đã bị loại khỏi component list của LOCK ngay trong
-// buildRuleEditor(), nên không cần ẩn cả nút.
 private void updateFabVisibility() {
         if (fab == null) return;
         
@@ -1325,10 +1318,13 @@ if (currentMainTab == 0) {
                 fab.setOnClickListener(v -> openEmptyPillDialog());
             }
                 } else if (currentMainTab == 1) { // Condition Space
-                if (currentGesTab == 5) {
+                    if (currentGesTab == 5) {
             fab.setVisibility(View.VISIBLE);
-            fab.setOnClickListener(v -> showPremiumDialog());
-                } else if (currentGesTab == 6) { // SENSOR — FAB: tạo Data Pack nếu chưa có, ngược lại mở Premium
+            fab.setOnClickListener(v -> {
+                if (frontierSubTab == 1) ensureHomeServiceForPreview();
+                showCallPTDropdownFrontier();
+            });
+                } else if (currentGesTab == 6) {
             fab.setVisibility(View.VISIBLE);
             fab.setOnClickListener(v -> {
                 java.util.List<String> proxPacks = getDynamicIds("sensor_prox_pack_ids");
@@ -1416,6 +1412,23 @@ if (currentMainTab == 0) {
         fab.setVisibility(View.GONE);
     }
 }
+    private void showCallPTDropdownFrontier() {
+    String[] options = {"📊 " + T("Create Bar", "Tạo Bar"), "📐 " + T("Create Corner", "Tạo Corner")};
+    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle(T("New Data Pack", "Tạo Data Pack mới"))
+        .setItems(options, (d, which) -> {
+            String prefix = frontierSubTab==0 ? "lock_" : frontierSubTab==1 ? "home_" : "homacc_";
+            String listKey = prefix + "applied_packs";
+            java.util.List<String> currentPacks = getDynamicIds(listKey);
+            int type = which;
+            String newId = addDynamicId(type == 0 ? "pack_bar_ids" : "pack_corner_ids");
+            String itemKey = (type == 0 ? "bar_" : "corner_") + newId;
+            currentPacks.add(itemKey);
+            prefs.edit().putString(listKey, TextUtils.join(",", currentPacks)).apply();
+            new Handler(android.os.Looper.getMainLooper()).post(() -> openDataPackEditor(type, newId));
+        }).show();
+}
+
     private Button createCircleBtn(String icon, String color) { Button b = new Button(this); b.setText(icon); b.setTextColor(Color.WHITE); b.setTextSize(17); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setBackground(getRounded(color, 100f)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(130, 130); lp.setMargins(10, 0, 10, 0); b.setLayoutParams(lp); return b; }
         @Override protected void onCreate(Bundle savedInstanceState) {
     prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
@@ -1808,6 +1821,9 @@ navBackStack.clear(); // ← THÊM DÒNG NÀY
     gesMenuContainer.addView(createSettingsRow("routine_24px", "Home",
     T("Home screen bars & corners", "Bar/Corner màn hình chính"),
     () -> openSpaceDirect(1)));
+    gesMenuContainer.addView(createSettingsRow("accessible_menu_24px", "Homacc",
+    T("Accessible Home bars & corners", "Bar/Corner màn hình chính (có Trợ năng)"),
+    () -> openSpaceDirect(2)));
     gesMenuContainer.addView(createSettingsRow("fingerprint_24px", "Texture",
         T("Fingerprint Gestures", "Cử chỉ vân tay"),
         () -> openGesTab(4, "Texture")));
@@ -2200,7 +2216,6 @@ private LinearLayout buildGestureIconDrawer() {
     header.setOnClickListener(v -> {
         boolean willOpen = body.getVisibility() == View.GONE;
         if (willOpen && !inflated[0]) {
-            inflated[0] = true;
             inflated[0] = true;
             body.addView(createSlider(T("Jump Icon Size", "Kích thước Icon Nhảy"), "homacc_jump_icon_size", 160, 90));
 body.addView(createSlider(T("Jump Icon Opacity", "Độ đậm Icon Nhảy"), "homacc_jump_icon_alpha", 255, 255));
@@ -3143,7 +3158,7 @@ private void openSpaceDirect(int spaceIdx) {
     listRules.removeAllViews();
     frontierSpaceBuilt = false;
     ensureFrontierContainersBuilt();
-    if (spaceIdx == 0) {
+    if (spaceIdx == 0 || spaceIdx == 2) {
         try {
             String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
             String cur = android.provider.Settings.Secure.getString(getContentResolver(),
@@ -3185,11 +3200,8 @@ private void openSpaceDirect(int spaceIdx) {
 }
 private void redrawFrontierBody(LinearLayout body) {
         body.removeAllViews();
-// ✅ MỚI
-String prefix = frontierSubTab == 0 ? "lock_" : "home_";
-int packTabState = frontierSubTab; // 0 = LOCK, 1 = HOME
-
-
+String prefix = frontierSubTab == 0 ? "lock_" : frontierSubTab == 1 ? "home_" : "homacc_";
+int packTabState = frontierSubTab == 0 ? 0 : frontierSubTab == 1 ? 1 : 4;
         renderBarsCornersEditor(body, prefix, BARS, BAR_NAMES, frontierSubTab == 2);
     renderAppliedPacksForSpaceInto(body, prefix, packTabState, true);
 }
