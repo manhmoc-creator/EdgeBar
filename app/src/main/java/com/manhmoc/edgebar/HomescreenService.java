@@ -122,31 +122,37 @@ private boolean recIndicatorTestPaused = false;
     }
         private CameraManager cm;
     private String cId;
-        private boolean fOn = false, isKbd = false, isBl = false;
+            private boolean fOn = false, isKbd = false, isBl = false;
     private boolean isBouncerVisible = false; // [FIX] HomescreenService không tự theo dõi bouncer như EdgeBarService, luôn để false vì Homeb chỉ chạy khi unlocked
+    private boolean qrScannerOverlayActive = false; // [FIX] Thêm khai báo còn thiếu — Homeb không theo dõi QR Scanner thật (luôn false) nhưng biến này bắt buộc phải tồn tại để applyLockGateInstant() biên dịch được, vì hàm này được copy nguyên khối từ EdgeBarService.java
     private SharedPreferences prefs;
     private KeyguardManager km;
     private Vibrator vibrator;
     private PanelEngine panelEngine;
     private AssistiveBubbleEngine bubbleEngine;
     private int lastKbdHeight = 0;
-    // [FIX] Bổ sung các biến này vì SidebarTouchListener bên dưới có gọi tới,
-    // nhưng HomescreenService trước đây chưa khai báo (khác với EdgeBarService).
     private volatile boolean isDispatchingSyntheticGesture = false;
     private float globalTouchStartX = -1f, globalTouchStartY = -1f, globalTouchEndX = -1f, globalTouchEndY = -1f;
     private long lastSyncMs = 0;
     private final Handler appLockPollHandler = new Handler(android.os.Looper.getMainLooper());
     private String lastPolledFgPkg = "";
-    private static final long APPLOCK_POLL_MS = 400; // đủ nhanh, không tốn pin đáng kể
+    private static final long APPLOCK_POLL_MS = 800; // đủ nhanh, không tốn pin đáng kể
 
     private void startAppLockPolling() {
+        appLockPollHandler.removeCallbacks(appLockPollRunnable);
         appLockPollHandler.postDelayed(appLockPollRunnable, APPLOCK_POLL_MS);
     }
+    private void stopAppLockPolling() { appLockPollHandler.removeCallbacks(appLockPollRunnable); }
     private final Runnable appLockPollRunnable = new Runnable() {
         @Override public void run() {
+            boolean listEmpty = true;
             try {
                 String lockList = prefs.getString("applock_list", "");
-                if (!lockList.isEmpty()) {
+                listEmpty = lockList.isEmpty();
+                android.os.PowerManager pmP = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+                // Chỉ dò khi màn sáng + đã mở khoá + có app trong LockList
+                boolean active = pmP != null && pmP.isInteractive() && km != null && !km.isKeyguardLocked();
+                if (!listEmpty && active) {
                     android.app.usage.UsageStatsManager usm =
                         (android.app.usage.UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
                     long now = System.currentTimeMillis();
@@ -165,9 +171,11 @@ private boolean recIndicatorTestPaused = false;
                     }
                 }
             } catch (Exception ignored) {}
-            appLockPollHandler.postDelayed(this, APPLOCK_POLL_MS);
+            // LockList rỗng -> thưa hẳn (3s) thay vì đánh thức handler 400ms/lần
+            appLockPollHandler.postDelayed(this, listEmpty ? 5000 : APPLOCK_POLL_MS);
         }
     };
+
     private static final long SYNC_THROTTLE_MS = 150;
     private long accCheckTimestamp = 0;
     private static final int KBD_HEIGHT_CHANGE_THRESHOLD = 20;
@@ -278,14 +286,14 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
 
     private void applyGradient(int w, int h) {
         int[] cArr; switch(cTheme) {
-            case "NEON": cArr=new int[]{Color.parseColor("#FF0055"), Color.parseColor("#7000FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FF0055")}; break;
-            case "CYBERPUNK": cArr=new int[]{Color.parseColor("#F500FF"), Color.parseColor("#00E5FF"), Color.parseColor("#FFDF00"), Color.parseColor("#F500FF")}; break;
+            case "NEON": cArr=new int[]{Color.parseColor("#FF0055"), Color.parseColor("#7000FF"), Color.parseColor("#8AB4F8"), Color.parseColor("#FF0055")}; break;
+            case "CYBERPUNK": cArr=new int[]{Color.parseColor("#F500FF"), Color.parseColor("#8AB4F8"), Color.parseColor("#FFDF00"), Color.parseColor("#F500FF")}; break;
             case "LAVA": cArr=new int[]{Color.parseColor("#FF0000"), Color.parseColor("#FF5A00"), Color.parseColor("#FF9A00"), Color.parseColor("#FF0000")}; break;
             case "OCEAN": cArr=new int[]{Color.parseColor("#005BEA"), Color.parseColor("#00C6FB"), Color.parseColor("#005BEA")}; break;
             case "MATRIX": cArr=new int[]{Color.parseColor("#00FF00"), Color.parseColor("#008000"), Color.parseColor("#00FF00")}; break;
             case "SUNSET": cArr=new int[]{Color.parseColor("#FF512F"), Color.parseColor("#DD2476"), Color.parseColor("#FF512F")}; break;
             case "GOOGLE": cArr=new int[]{Color.parseColor("#4285F4"), Color.parseColor("#EA4335"), Color.parseColor("#FBBC05"), Color.parseColor("#34A853"), Color.parseColor("#4285F4")}; break;
-            case "AURORA": cArr=new int[]{Color.parseColor("#8E2DE2"), Color.parseColor("#4A00E0"), Color.parseColor("#00E5FF"), Color.parseColor("#8E2DE2")}; break;
+            case "AURORA": cArr=new int[]{Color.parseColor("#8E2DE2"), Color.parseColor("#4A00E0"), Color.parseColor("#8AB4F8"), Color.parseColor("#8E2DE2")}; break;
             case "ABYSS": cArr=new int[]{Color.parseColor("#0F2027"), Color.parseColor("#203A43"), Color.parseColor("#2C5364"), Color.parseColor("#0F2027")}; break;
             case "COSMIC": cArr=new int[]{Color.parseColor("#FF00CC"), Color.parseColor("#333399"), Color.parseColor("#FF00CC")}; break;
             case "FOREST": cArr=new int[]{Color.parseColor("#11998E"), Color.parseColor("#38EF7D"), Color.parseColor("#11998E")}; break;
@@ -326,8 +334,6 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, pCore);
     }
 }
-    // ===== GESTURE RIPPLE VIEW (icon + sóng theo điểm chạm) =====
-    // ===== GESTURE RIPPLE VIEW (chấm sóng chạm + icon NHẢY LÊN xoay 1 vòng rồi RƠI XUỐNG) =====
     private class GestureRippleView extends View {
         private float touchX = -1, touchY = -1;
         private float rippleRadius = 0f, rippleAlpha = 0f;
@@ -705,13 +711,6 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
         int mainDim = horizontal ? w : h;
         int crossDim = horizontal ? h : w;
         int userIconSize = icons.get(0).getWidth(); // kích thước user đã chọn ở slider
-
-        // [MỚI] Tự động lấp đầy thanh: nếu tổng chiều dài các icon (theo size user
-        // chọn) vượt quá chiều dài Bar, tự co đều lại để vừa khít — không tràn ra
-        // ngoài. Nếu đủ chỗ thì giữ nguyên kích thước user đã chọn (không phóng to
-        // thêm, tránh vỡ nét). Dùng drawBitmap(bitmap, null, destRect, paint) để co
-        // giãn ngay trên GPU khi vẽ — KHÔNG tạo Bitmap mới, Zero cấp phát thêm,
-        // tối ưu pin/RAM cho Pixel 2XL vì đây là hàm onDraw() gọi liên tục.
         int maxFit = Math.max(8, (mainDim - (n - 1) * gap) / n);
         int drawSize = Math.min(userIconSize, maxFit);
         drawSize = Math.min(drawSize, crossDim); // không vượt bề dày thanh
@@ -731,6 +730,7 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
 }
     private class CornerView extends View {
             private Paint pFill, pStroke; private int type; private String prefix;
+            private final Path moonPath = new Path(), strokePath = new Path();
             private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
             private boolean isInv = false;
 
@@ -790,7 +790,7 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
                 float sw = prefs.getInt(ck+"w", 100); float sh = prefs.getInt(ck+"h", 100);
                 float mw = prefs.getInt(ck+"moon_w", 100); float mh = prefs.getInt(ck+"moon_h", 100);
 
-                Path moonPath = new Path(); Path strokePath = new Path();
+                moonPath.reset(); strokePath.reset();
                 float sRootX=0, sRootY=0, sTipX=0, sTipY=0, sCtrlX=0, sCtrlY=0;
                 float mRootX=0, mRootY=0, mTipX=0, mTipY=0, mCtrlX=0, mCtrlY=0;
 
@@ -826,35 +826,31 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
         @Override
         public void onReceive(Context c, Intent i) {
             String action = i.getAction();
-            if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+// CODE MỚI:
+if (Intent.ACTION_SCREEN_OFF.equals(action)) {
     removeYtdlOverlay(); 
-    removeRippleViewIfIdle(); 
-    
-    // [YÊU CẦU MỚI] Tự động hồi sinh Trợ năng (cho màn Lock) khi tắt màn hình từ Homeb
-    try {
-        String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
-        String cur = android.provider.Settings.Secure.getString(c.getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        if (cur == null) cur = "";
-        if (!cur.contains(mySvc)) {
-            // 1. Tắt cờ Homeb
-            prefs.edit().putBoolean("shortcut_home_on", false).apply();
-            
-            // 2. Bật Trợ năng bằng lệnh Secure
-            String newVal = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
-            android.provider.Settings.Secure.putString(c.getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
-            android.provider.Settings.Secure.putString(c.getContentResolver(), android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
-            
-            // 3. Show full overlay cho không gian Lock (Hủy mọi thao tác Ẩn thủ công trước đó)
-            SharedPreferences.Editor ed = prefs.edit();
-            for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
-            for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
-            ed.apply();
-            
-            // 4. Tự sát Homeb Service để nhường quyền điều khiển ngay lập tức
-            stopSelf();
-        }
-    } catch (Exception ignored) {}
-    
+    removeRippleViewIfIdle();
+    stopAppLockPolling();
+
+    // [MỚI] Đang đứng trong 1 app Blacklist (Homeb đã tự thay Homacc nhờ
+    // blacklist_auto_homeb_en) mà bị khoá máy -> đẩy về Home NGAY cùng lúc tắt màn.
+    // Nếu không, lúc SCREEN_ON tự bật lại Trợ năng cho Lock (nhánh dưới) sẽ đụng độ
+    // với app Blacklist vẫn còn đứng foreground -> Homacc/Homeb lẫn lộn khi mở khoá
+    // lại gần như ngay sau đó.
+        if (prefs.getBoolean("blacklist_auto_homeb_en", false) && isBlacklisted(queryForegroundPkgNow()))
+        goHomeNow();
+    if (BlacklistLockWatchdogService.shouldPreempt(prefs))
+        BlacklistLockWatchdogService.beginPreempt(HomescreenService.this);
+
+} else if (Intent.ACTION_SCREEN_ON.equals(action)) {
+    startAppLockPolling();
+    if (km != null && km.isKeyguardLocked() && !prefs.getBoolean("blacklist_lock_active", false)) {
+        final boolean inBl = prefs.getBoolean("blacklist_auto_homeb_en", false)
+            && isBlacklisted(queryForegroundPkgNow());
+        if (inBl) goHomeNow(); // về Home trước, rồi mới bật Trợ năng
+        appLockPollHandler.postDelayed(() -> enableAccForLockNow(c), inBl ? 450 : 0);
+    }
+
 } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
     // [THAY BẰNG CODE HỒI SINH HOMEB Ở ĐÂY]
     SharedPreferences.Editor ed = prefs.edit();
@@ -939,7 +935,7 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
                     }
                     return;
                 }
-                if (act.startsWith("RUN_SHORTCUT_")) {
+                                if (act.startsWith("RUN_SHORTCUT_")) {
                     String scId = act.substring("RUN_SHORTCUT_".length());
                     try {
                         String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
@@ -948,7 +944,9 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
                             scIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             startActivity(scIntent);
                         }
-                    } catch (Exception ignored) {}
+                    } catch (Exception ex) {
+                        Toast.makeText(c, "Shortcut lỗi: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
                     return;
                 }
                 exec(act);
@@ -962,22 +960,73 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
             }
         }
     };
+        private boolean isBlacklisted(String pkg) {
+        if (pkg == null || pkg.isEmpty()) return false;
+        String bl = prefs.getString("blacklist", "");
+        return !bl.isEmpty() && ("," + bl + ",").contains("," + pkg + ",");
+    }
+    /** 1 lần query duy nhất khi bật/tắt màn — không polling, không tốn pin. */
+    private String queryForegroundPkgNow() {
+        try {
+            android.app.usage.UsageStatsManager usm = (android.app.usage.UsageStatsManager)
+                getSystemService(Context.USAGE_STATS_SERVICE);
+            long now = System.currentTimeMillis();
+            android.app.usage.UsageEvents evs = usm.queryEvents(now - 3 * 60 * 60 * 1000L, now);
+            android.app.usage.UsageEvents.Event ev = new android.app.usage.UsageEvents.Event();
+            String fg = "";
+            while (evs.hasNextEvent()) {
+                evs.getNextEvent(ev);
+                if (ev.getEventType() == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND)
+                    fg = ev.getPackageName();
+            }
+            return fg;
+        } catch (Exception e) { return ""; }
+    }
+    private void goHomeNow() {
+        try {
+            Intent home = new Intent(Intent.ACTION_MAIN);
+            home.addCategory(Intent.CATEGORY_HOME);
+            home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(home);
+        } catch (Exception ignored) {}
+    }
+    private void enableAccForLockNow(Context c) {
+        try {
+            String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
+            String cur = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (cur == null) cur = "";
+            if (cur.contains(mySvc)) return;
+            prefs.edit().putBoolean("shortcut_home_on", false).apply();
+            Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                cur.isEmpty() ? mySvc : cur + ":" + mySvc);
+            Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, "1");
+            SharedPreferences.Editor ed = prefs.edit();
+            for (String b : BARS) ed.putBoolean("lock_" + b + "_manual_hide", false);
+            for (String cn : CORNERS) ed.putBoolean("lock_corner_" + cn + "_manual_hide", false);
+            ed.apply();
+            stopSelf();
+        } catch (Exception ignored) {}
+    }
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         isRunning = true;
         sendSyncState();
         return START_STICKY;
     }
-
-    /**
-     * [MỤC 1/3/7] Kiểm tra điều kiện sống còn của service.
-     * Service chỉ cần chạy khi: old Home overlay ON, HOẶC MorseLock ON.
-     * Nếu cả hai đều OFF → tự dừng để giải phóng RAM (Pixel 2XL opt).
-     */
-    private boolean isAccEnabled() {
+private boolean isAccEnabled() {
+    if (EdgeBarService.isConnected) return true; // fast path: zero IPC
     String s = android.provider.Settings.Secure.getString(getContentResolver(),
         android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-    return s != null && s.contains(getPackageName() + "/" + EdgeBarService.class.getName());
+    if (s == null) return false;
+    android.content.ComponentName me =
+        new android.content.ComponentName(this, EdgeBarService.class);
+    for (String part : s.split(":")) {
+        String t = part.trim();
+        if (t.isEmpty()) continue;
+        // unflattenFromString() tự chuẩn hoá cả "pkg/Class" lẫn "pkg/.Class" về cùng ComponentName
+        if (me.equals(android.content.ComponentName.unflattenFromString(t))) return true;
+    }
+    return false;
 }
     private void sendSyncState() { Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
 
@@ -988,15 +1037,15 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        // [FIX OVERLAY "MA"] Mỗi lần Service THẬT SỰ khởi động lại (không phải do lỗi
-// UI runtime), coi như không có phiên xem trước hợp lệ nào — dọn sạch cờ preview_*
-// phòng trường hợp process trước bị OOM-kill giữa lúc đang xem trước, để lại
-// giá trị true vĩnh viễn gây overlay không tương tác được. Zero cost: 1 lần ghi.
-prefs.edit()
-    .putBoolean("preview_lock", false)
-    .putBoolean("preview_homacc", false)
-    .putBoolean("preview_home", false)
-    .apply();
+long uptimeMs = android.os.SystemClock.elapsedRealtime();
+if (uptimeMs < 3000) {
+    prefs.edit()
+        .putBoolean("preview_lock", false)
+        .putBoolean("preview_homacc", false)
+        .putBoolean("preview_home", false)
+        .apply();
+}
+        TwinPairStore.migrateIfNeeded(prefs);
         cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
         try { cId = cm.getCameraIdList()[0]; } catch (Exception e) {}
@@ -1008,17 +1057,13 @@ HomebWatchdogReceiver.scheduleRepeating(this);
 prefs.registerOnSharedPreferenceChangeListener(prefListener);
         IntentFilter filter = new IntentFilter();
 filter.addAction(Intent.ACTION_SCREEN_OFF);
-// ACTION_SCREEN_ON đã được xử lý qua ACTION_USER_PRESENT, bỏ ACTION_SCREEN_ON
+filter.addAction(Intent.ACTION_SCREEN_ON); // [FIX] cần lại để bắt đúng lúc màn bật + đang khoá
 filter.addAction(Intent.ACTION_USER_PRESENT);
 filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS); // giữ để bắt homekey/recentapps
-// [TÌM] đoạn setup IntentFilter trong onCreate():
 filter.addAction("com.manhmoc.edgebar.SYNC_STATE");
 filter.addAction("com.manhmoc.edgebar.TEST_ANIM");
-
-// [THÊM] 2 dòng ngay sau:
 filter.addAction("com.manhmoc.edgebar.PAUSE_WM_OPS");
 filter.addAction("com.manhmoc.edgebar.RESUME_WM_OPS");
-// CODE MỚI — thêm 2 dòng:
 filter.addAction("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
 filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
 filter.addAction(VoiceRecorderService.TICK_ACTION);
@@ -1046,13 +1091,6 @@ filter.addAction("com.manhmoc.edgebar.TEST_REC_INDICATOR");
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
         try { wm.addView(fV, fp); } catch (Exception e) {}
-
-        // [FIX CRASH] kbdSensorView trước đây CHƯA BAO GIỜ được khởi tạo (new View + addView)
-        // ở file này — chỉ có khai báo field rồi gọi thẳng setOnApplyWindowInsetsListener()
-        // trên biến null bên dưới, gây NullPointerException crash onCreate() ngay trên mọi
-        // máy Android 11+ (API >= 30). Bổ sung đúng phần dựng cửa sổ, dùng TYPE_APPLICATION_OVERLAY
-        // (không NO_LIMITS) để nhận đúng WindowInsets.Type.ime() — cùng cấu hình đã sửa bên
-        // EdgeBarService. Vẫn chỉ 1 View trong suốt, không thêm chi phí pin/RAM nào.
         int barCount = Math.min(bars.length, Math.min(BARS.length, GRAV.length));
 for (int i = 0; i < barCount; i++) {
     bars[i] = new BarView(this);
@@ -1100,7 +1138,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     {"lock_","home_","homacc_","anim_","vib_","hold_",
      "pack_panel_","lenap_","bubble_",
      "blacklist","locklist","avoid_kbd","shortcut_","preview_","lang_","ytdl_",
-     "intent_","tile_","macro_","i1_","i2_","i3_","i4_","i5_","i6_","i7_",
+     "intent_","tile_","tilev2_","macro_","i1_","i2_","i3_","i4_","i5_","i6_","i7_",
      "i8_","i9_","i10_","i11_","i12_","i13_","i14_","i15_"};
     for (String prefix : ourPrefixes)
         if (k.startsWith(prefix) || k.equals(prefix)) { isOurKey = true; break; }
@@ -1142,13 +1180,19 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     debounceHandler.postDelayed(debounceRunnable, 500);
 };
 
-    /** [FIX #2] Ẩn ĐỒNG THỜI nền đen + icon khóa + toàn bộ bar/corner Morse trong
-     *  CÙNG một lệnh gọi — không phụ thuộc broadcast SYNC_STATE bất đồng bộ (đây
-     *  chính là nguyên nhân nền đen biến mất trước, bar/corner biến mất trễ hoặc
-     *  thấp thoáng hiện lại trên Home). Zero RAM thêm: chỉ lặp lại View đã có sẵn.
-     */
     private void updateVisibility() {
-        if (panelEngine != null) panelEngine.rebuildAll();
+    if (panelEngine != null) panelEngine.rebuildAll();
+    if (prefs.getBoolean("blacklist_lock_active", false)) {
+        boolean reallyActive = BlacklistLockWatchdogService.isRunning
+            || System.currentTimeMillis() - prefs.getLong("blacklist_lock_start_ms", 0) < 5000;
+        if (reallyActive) {
+            for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
+            for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
+            return;
+        }
+        prefs.edit().putBoolean("blacklist_lock_active", false)
+            .remove("blacklist_lock_pkg").remove("blacklist_lock_start_ms").apply();
+    }
 
         boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
@@ -1156,16 +1200,15 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         boolean pushForKbd = avoidKbd && lastKbdHeight > 0;
 
         // DUAL-SOUL: Chỉ 1 trong 2 động cơ được phép vẽ tại 1 thời điểm
-        // → tiết kiệm tuyệt đối RAM/GPU Adreno 540 trên Pixel 2XL
         boolean accHomeRunning = AccessibleHomeService.isRunning && isAccEnabled();
         boolean oldHomeEnabled = HomescreenService.isRunning && prefs.getBoolean("shortcut_home_on", false);
         boolean previewHomeOn = prefs.getBoolean("preview_home", false);
-        boolean shouldRenderOldHome = isUnlocked && !hideNormal && !accHomeRunning && (oldHomeEnabled || previewHomeOn);
+boolean shouldRenderOldHome = isUnlocked && !hideNormal && (previewHomeOn || (!accHomeRunning && oldHomeEnabled));
 
-        if (accHomeRunning) {
-            for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
-            for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
-        }
+if (accHomeRunning && !previewHomeOn) {
+    for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
+    for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
+}
 
                 boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
         int barLoopCount = Math.min(bars.length, BARS.length);
@@ -1179,13 +1222,19 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
                 int h = prefs.getInt("home_" + BARS[i] + "_h", 60);
                 int x = prefs.getInt("home_" + BARS[i] + "_x", 0);
                 int y = prefs.getInt("home_" + BARS[i] + "_y", 0);
-                int visMode = prefs.getInt("home_" + BARS[i] + "_vis_mode", 0);
+                int visMode = readSplit(prefs, "home_" + BARS[i] + "_vis_mode", "homeb", 0);
                 int barHideDur = prefs.getInt("home_bar_hide_dur", 2500);
                 ((BarView)bars[i]).updateProps(alpha, visMode==1, barHideDur, visMode==2, prefs.getInt("home_bar_radius", 24));
                int iconSize = prefs.getInt("home_" + BARS[i] + "_icon_size", prefs.getInt("home_bar_icon_size", 40)); 
                int iconAlpha = prefs.getInt("home_" + BARS[i] + "_icon_alpha", prefs.getInt("home_bar_icon_alpha", 255)); 
                 ((BarView)bars[i]).setIcons(resolveBarIcons(prefs.getString("home_" + BARS[i] + "_icons",""), iconSize), iconAlpha);
-                int priMode = prefs.getInt("home_" + BARS[i] + "_pri_mode", 0);
+                // [MỚI - BƯỚC 5] Split: Homeb đọc key _homeb, fallback về key gốc.
+                String priKey = "home_" + BARS[i] + "_pri_mode";
+                boolean priSplit = prefs.getBoolean(priKey + "_split", false);
+                int priMode = priSplit
+                    ? prefs.getInt(priKey + "_homeb", prefs.getInt(priKey, 0))
+                    : prefs.getInt(priKey, 0);
+
                 int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                 if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
                 else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
@@ -1215,7 +1264,12 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
                 boolean isAuto = (visMode == 1);
                 boolean isInv = (visMode == 2);
                 ((CornerView) corners[i]).updateProps(prefs.getInt("home_corner_thick", 8), moonAlpha, strokeAlpha, isAuto, hideDelay, isInv);
-                int priMode = prefs.getInt(ck + "pri_mode", 0);
+                // [MỚI - BƯỚC 5]
+                boolean priSplitC = prefs.getBoolean(ck + "pri_mode_split", false);
+                int priMode = priSplitC
+                    ? prefs.getInt(ck + "pri_mode_homeb", prefs.getInt(ck + "pri_mode", 0))
+                    : prefs.getInt(ck + "pri_mode", 0);
+
                 int baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
                 if (priMode == 1) baseFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
                 else baseFlags |= (WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
@@ -1258,7 +1312,7 @@ private void setViewVisibilityAnimated(View v, boolean show) {
 private void applyLockGateInstant() {
     boolean isPreview = prefs.getBoolean("preview_lock", false);
     boolean isLocked = (km != null && km.isKeyguardLocked()) || isPreview;
-    boolean isSecureOverlayVisible = isBouncerVisible && !isPreview;
+    boolean isSecureOverlayVisible = (isBouncerVisible || qrScannerOverlayActive) && !isPreview;
     for (int i = 0; i < 12; i++) {
         if (bars[i] == null) continue;
         int lockMode = prefs.getInt("lock_" + BARS[i] + "_lockmode", 1);
@@ -1339,24 +1393,18 @@ private void applyLockGateInstant() {
         handleAction(key, 0, true); 
     }
 
-    private void handleAction(String key, int depth, boolean applyVibAnim) {
-        String action = prefs.getString(key, "NONE");
+        private void handleAction(String key, int depth, boolean applyVibAnim) {
+boolean isDual = prefs.getBoolean(key + "_dual", false);
+String readKey = isDual ? (key + "_lim") : key;
+        String action = prefs.getString(readKey, "NONE");
         boolean isOn = prefs.getBoolean(key + "_on", true);
         if (action.equals("NONE") || !isOn) return;
-
-        // [FIX KHỰNG HÌNH] Anima dùng LAYER_TYPE_SOFTWARE (bắt buộc cho BlurMaskFilter)
-        // -> vẽ CPU toàn màn hình, có thể mất vài chục ms. Nếu gọi playAnim() TRƯỚC
-        // khi xử lý TRIGGER_*, lượt vẽ software này chiếm main thread đúng lúc
-        // Runnable bắn touch giả lập (đã lên lịch qua postDelayed trong
-        // dispatchRealScreenGesture) tới giờ chạy -> touch bị delay theo, gây khựng
-        // hẳn 1-2 khung hình. Giải pháp: nếu action có TRIGGER_*, hoãn playAnim()
-        // ra SAU khi việc bắn touch đã chắc chắn được lên lịch xong (không phải chạy
-        // xong, chỉ cần lên lịch xong là đủ tách rời 2 luồng công việc), để traversal
-        // vẽ nặng của Anima không còn chen ngang & chặn Runnable touch nữa.
         boolean hasTriggerAction = action.contains("TRIGGER_");
-        if (applyVibAnim) {
-            if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
-            if (prefs.getBoolean(key + "_anim", true)) {
+                if (applyVibAnim) {
+            if (prefs.getBoolean(readKey + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
+            if (prefs.getBoolean(readKey + "_snd", false)) TouchSoundHelper.play(this, prefs);
+            if (prefs.getBoolean(readKey + "_anim", true)) {
+
                 if (hasTriggerAction) {
                     int animDelay = prefs.getInt("sim_gesture_delay", 10) + 25;
                     new Handler(android.os.Looper.getMainLooper()).postDelayed(this::playAnim, animDelay);
@@ -1378,8 +1426,8 @@ private void applyLockGateInstant() {
                 hideSomeOverlay(key);
             } else if (at.equals("SHOW_ALL_OVERLAY")) {
                 showAllOverlay();
-            } else if (at.equals("RUN_SHORTCUT")) {
-                String scId = prefs.getString(key + "_shortcut_id", "");
+                        } else if (at.equals("RUN_SHORTCUT")) {
+                String scId = prefs.getString(readKey + "_shortcut_id", "");
                 if (!scId.isEmpty()) {
                     try {
                         String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
@@ -1390,8 +1438,8 @@ private void applyLockGateInstant() {
                         }
                     } catch (Exception ignored) {}
                 }
-            } else if (at.equals("LAUNCH_APP")) {
-                String pkg = prefs.getString(key + "_launch_pkg", "");
+                        } else if (at.equals("LAUNCH_APP")) {
+                String pkg = prefs.getString(readKey + "_launch_pkg", "");
                 if (!pkg.isEmpty()) {
                     try {
                         Intent li = getPackageManager().getLaunchIntentForPackage(pkg);
@@ -1501,7 +1549,7 @@ private void applyLockGateInstant() {
 
         android.widget.Button bCancel = ytdlBtn("HỦY", "#333333", Color.WHITE);
         android.widget.Button bSave = ytdlBtn("LƯU LINK", "#4CAF50", Color.WHITE);
-        android.widget.Button bDownload = ytdlBtn("TẢI", "#00E5FF", Color.BLACK);
+        android.widget.Button bDownload = ytdlBtn("TẢI", "#8AB4F8", Color.BLACK);
         btnRow.addView(bCancel); btnRow.addView(bSave); btnRow.addView(bDownload);
         card.addView(btnRow);
 
@@ -1632,9 +1680,6 @@ private void applyLockGateInstant() {
                     break;
                 }
                 case "OPEN_STORAGE_SCAN": {
-                    // [FIX] Dùng cờ bền trong SharedPreferences thay vì Intent extra —
-                    // onResume() của MainActivity LUÔN chạy khi Activity hiện ra, đảm bảo
-                    // tuyệt đối nhảy đúng tab Storage. Zero RAM/pin thêm.
                     prefs.edit().putBoolean("pending_storage_scan", true).apply();
                     Intent openStorage = new Intent(this, MainActivity.class);
                     openStorage.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
@@ -1730,36 +1775,6 @@ default:
         } catch (Exception e) {}
     }
 
-    private void fireIntent(String idx) {
-        try {
-            String act = prefs.getString("i" + idx + "_act", "");
-            String pkg = prefs.getString("i" + idx + "_pkg", "");
-            Intent i;
-            if (act.isEmpty() && !pkg.isEmpty()) {
-                i = getPackageManager().getLaunchIntentForPackage(pkg);
-                if (i == null) return;
-            } else {
-                i = new Intent(act);
-                if (!pkg.isEmpty()) i.setPackage(pkg);
-                String cls = prefs.getString("i" + idx + "_cls", "");
-                if (!pkg.isEmpty() && !cls.isEmpty())
-                    i.setComponent(new android.content.ComponentName(pkg, cls));
-                String data = prefs.getString("i" + idx + "_data", "");
-                if (!data.isEmpty()) i.setData(android.net.Uri.parse(data));
-                String cat = prefs.getString("i" + idx + "_cat", "");
-                if (!cat.isEmpty()) i.addCategory(cat);
-                String flg = prefs.getString("i" + idx + "_flags", "");
-                if (!flg.isEmpty()) i.addFlags(Integer.parseInt(flg));
-            }
-            if (prefs.getBoolean("i" + idx + "_br", true) && !act.isEmpty()) {
-                sendBroadcast(i);
-            } else {
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(i);
-            }
-        } catch (Exception e) {}
-    }
-
     private class SidebarTouchListener implements View.OnTouchListener {
         private String prefKeyBase;
         private View myView;
@@ -1767,20 +1782,12 @@ default:
         private long st;
         private boolean longFired = false;
         private final Handler lpHandler = new Handler(android.os.Looper.getMainLooper());
-private void checkAndYieldOS(String actionKey) {
-            if (prefs.getBoolean(actionKey + "_os", false)) {
+        private void checkAndYieldOS(String actionKey) {
+String osKey = prefs.getBoolean(actionKey + "_dual", false)
+    ? actionKey + "_lim_os" : actionKey + "_os";
+            if (prefs.getBoolean(osKey, false)) {
+
                 try {
-                    // [FIX] KHÔNG ẩn View đồng bộ ngay trong lúc đang xử lý ACTION_UP
-                    // của CHÍNH View này — làm vậy buộc hệ thống đồng bộ lại
-                    // WindowManager/InputDispatcher ngay giữa chừng (cùng gốc bug với
-                    // updateViewLayout() vô điều kiện từng làm hỏng bộ đếm long-press,
-                    // xem updateLayoutIfChanged()), gây khựng hẳn 1 nhịp TRƯỚC khi
-                    // TRIGGER_* kịp bắn cử chỉ thật xuống OS. Dời việc ẩn sang đúng
-                    // mốc VSYNC kế tiếp bằng postOnAnimation() thay vì Handler.post()
-                    // thường (tránh xếp hàng chung Looper với holdCheckRunnable/anim
-                    // callback — đây là lý do bản post() cũ từng bị giật) — vẫn xảy ra
-                    // gần như tức thời (≤1 frame, ~16ms), không còn chặn dispatch chạm
-                    // hiện tại nên không còn giật hình dù trùng lúc TRIGGER_* đang chạy.
                     String hideKey = prefKeyBase + "_manual_hide";
                     myView.postOnAnimation(() -> {
                         myView.setVisibility(View.GONE);
@@ -2174,8 +2181,6 @@ WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
 PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         lp.x = prefs.getInt("anim_rec_x", 1000) - 1000;
-        // [FIX] Ép khoảng cách an toàn tối thiểu 100px với mép dưới màn hình —
-        // tránh đè lên vùng cử chỉ vuốt-về (back gesture) của hệ thống.
         lp.y = Math.max(100, prefs.getInt("anim_rec_y", 1000) - 1000);
         try { wm.addView(recIndicatorView, lp); } catch (Exception ignored) {}
         recBlinkAnim = ValueAnimator.ofFloat(1f, 0.25f, 1f);
@@ -2226,21 +2231,17 @@ PixelFormat.TRANSLUCENT);
     appLockPollHandler.removeCallbacksAndMessages(null); // [MỚI] dừng poll, tránh leak Handler
     try { unregisterReceiver(syncReceiver); } catch (Exception e) {}
     prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
-    removeYtdlOverlay(); // [FIX TAPJACKING] BẮT BUỘC gỡ trước tiên — đây là overlay
-    // TYPE_APPLICATION_OVERLAY + FLAG_LAYOUT_NO_LIMITS phủ toàn màn hình. Trước đây bị
-    // sót khỏi onDestroy(), nếu Service chết đúng lúc ô nhập YTDL đang mở, cửa sổ này
-    // "mồ côi" vĩnh viễn trên WindowManager (không còn ai gọi removeView được nữa) ->
-    // Android bật cơ chế lọc chạm chống tapjacking -> chặn thao tác toàn hệ thống.
+    removeYtdlOverlay(); 
     for (int i = 0; i < 12; i++) if (bars[i] != null) wm.removeView(bars[i]);
     for (int i = 0; i < 4; i++) if (corners[i] != null) wm.removeView(corners[i]);
     if (rippleView != null) wm.removeView(rippleView);
     if (recIndicatorView != null) { try { wm.removeView(recIndicatorView); } catch (Exception ignored) {} }
     if (recBlinkAnim != null) recBlinkAnim.cancel();
     if (fV != null) wm.removeView(fV);
-    // [FIX TAPJACKING GỐC] kbdSensorView trước đây KHÔNG bao giờ được gỡ khi
-    // Service bị stopService() — trở thành cửa sổ full-màn-hình mồ côi tồn tại
-    // vĩnh viễn trên WindowManager dù Service đã chết, khiến Android/Play Protect
-    // luôn coi mọi UI hệ thống (kể cả lúc Trợ năng đang chạy sạch) là đang bị
-    // 1 app khác che phủ → báo "ứng dụng khác đang chặn màn hình" liên tục.
   }
-}  // ← đây là dấu } cuối cùng đóng class HomescreenService, KHÔNG XÓA
+  private int readSplit(SharedPreferences p, String baseKey, String server, int def) {
+      if (p.getBoolean(baseKey + "_split", false))
+          return p.getInt(baseKey + "_" + server, p.getInt(baseKey, def));
+      return p.getInt(baseKey, def);
+  }
+}

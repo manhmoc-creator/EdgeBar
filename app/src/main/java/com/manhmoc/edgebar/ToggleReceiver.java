@@ -15,27 +15,7 @@ public class ToggleReceiver extends BroadcastReceiver {
     String s = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
     return s != null && s.contains(c.getPackageName() + "/" + EdgeBarService.class.getName());
 }
-    // [THÊM] method toggleAcc() mới — PAUSE/RESUME WM safeguard:
-/**
- * IRON VEIL PHANTOM v19.12.3.6.0
- * Fix Bug 6: PAUSE HomescreenService WM operations trước khi ghi Settings.
- * Tránh crash "WindowManager token is no longer valid" khi AccessibilityService
- * restart do thay đổi ENABLED_ACCESSIBILITY_SERVICES.
- *
- * Timeline:
- *   t=0ms   : broadcast PAUSE_WM_OPS → HomescreenService ẩn tất cả bars
- *   t=150ms : ghi Settings (trigger AccessibilityService restart)
- *   t=650ms : broadcast RESUME_WM_OPS → HomescreenService vẽ lại bars
- */
-/**
- * KỊCH BẢN 1: Đang ở app trong Blacklist -> đẩy về Home TRƯỚC (không cần Trợ năng
- * vì "HOME" đã được HomescreenService.exec() xử lý riêng, không phụ thuộc Accessibility)
- * rồi mới toggle Accessibility, tránh app Blacklist "lộ" ra khi Accessibility vừa bật.
- *
- * KỊCH BẢN 2: Đang ở Home / Quick Settings / app thường (không trong Blacklist)
- * -> toggle ngay lập tức, không cần đẩy về Home trước — mượt hơn, tiết kiệm 1 vòng
- * Handler.postDelayed(200ms) không cần thiết.
- */
+
 private void toggleAcc(Context c, String mySvc) {
     try {
         String cur0 = android.provider.Settings.Secure.getString(c.getContentResolver(),
@@ -66,17 +46,6 @@ private void toggleAcc(Context c, String mySvc) {
     } catch (Exception e) {}
 }
 
-/**
- * IRON VEIL PHANTOM v19.12.3.6.0
- * Fix Bug 6: PAUSE HomescreenService + EdgeBarService WM operations trước khi ghi Settings.
- * Tránh crash "WindowManager token is no longer valid" khi AccessibilityService
- * restart do thay đổi ENABLED_ACCESSIBILITY_SERVICES.
- *
- * Timeline:
- *   t=0ms   : broadcast PAUSE_WM_OPS → cả 2 service ẩn tất cả bars/corners
- *   t=150ms : ghi Settings (trigger AccessibilityService restart)
- *   t=650ms : broadcast RESUME_WM_OPS → vẽ lại bars/corners theo trạng thái mới
- */
 private void doToggleAccSwitch(Context c, String mySvc) {
     try {
         c.sendBroadcast(new android.content.Intent("com.manhmoc.edgebar.PAUSE_WM_OPS"));

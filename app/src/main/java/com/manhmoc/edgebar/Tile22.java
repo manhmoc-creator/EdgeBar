@@ -71,9 +71,6 @@ public class Tile22 extends TileService {
     private BroadcastReceiver configReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
     String act = intent.getAction();
-    // [MỚI] Vừa cập nhật đè bản mới xong — ép mọi service liên quan tới
-    // Panel dừng hẳn rồi khởi động lại sạch, để không còn tiến trình cũ
-    // nào giữ View "mồ côi" trên WindowManager.
     if ("android.intent.action.MY_PACKAGE_REPLACED".equals(act)) {
         try { context.stopService(new Intent(context, HomescreenService.class)); } catch (Exception ignored) {}
         SharedPreferences prefs = context.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
@@ -83,10 +80,7 @@ public class Tile22 extends TileService {
             if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(i);
             else context.startService(i);
         }
-        // AccessibilityService (EdgeBarService) KHÔNG thể tự start/stop bằng
-        // code — chỉ hệ thống mới bind được. Đây là lúc duy nhất nên báo cho
-        // người dùng biết cần thao tác tay.
-        android.widget.Toast.makeText(context,
+         android.widget.Toast.makeText(context,
             "Vừa cập nhật xong! Nếu Handle/Panel/Bar/Corner không phản hồi, vào Cài đặt > Trợ năng, tắt rồi bật lại Edge Bar Trợ Năng.",
             android.widget.Toast.LENGTH_LONG).show();
         return;

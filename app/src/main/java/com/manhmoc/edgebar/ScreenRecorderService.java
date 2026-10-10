@@ -285,7 +285,7 @@ private void pauseRecording() {
 
     String time = String.format("%02d:%02d", sec / 60, sec % 60);
         Notification n = new Notification.Builder(this, cid)
-            .setContentTitle((isPaused ? "⏸️ Đã tạm dừng — " : "🔴 Đang quay màn hình — ") + time)
+            .setContentTitle((isPaused ? "🔵 Đã tạm dừng — " : "🔴 Đang quay màn hình — ") + time)
             .setContentText("EdgeBar Screen")
             .setSmallIcon(android.R.drawable.presence_video_online)
             .addAction(android.R.drawable.ic_media_previous, "Dừng", screenRecActionPI(ACTION_STOP)) // Nút Trái
