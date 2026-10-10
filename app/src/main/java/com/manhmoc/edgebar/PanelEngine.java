@@ -157,16 +157,10 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
     "visibility_24px", "volume_up_24px", "warning_24px",
     "work_24px"
 };
-    // Cache resolve ID runtime — chỉ tính 1 lần, không tốn thêm CPU về sau.
-    private static int[] customIconPoolCache = null;
-// [MỚI] Dùng CHUNG cho mọi nơi vẽ icon THẬT lên Bar/Panel/QS Tile — dò vùng pixel
-    // không trong suốt (glyph thật), cắt sát viền rồi phóng lại theo đúng contentScale,
-    // đảm bảo mọi icon có cùng "sải cánh" thị giác dù file gốc rỗng nhiều/ít khác nhau.
-    // KHÔNG tự set màu — nơi gọi tự tint trước khi truyền Drawable vào đây.
     static Bitmap normalizeIconBitmap(Drawable d, int targetSize, float contentScale) {
     if (d == null) return null;
     try {
-        int srcSize = targetSize * 3;   // ← ĐỔI 5 → 3: ít downsample gắt hơn, mượt hơn
+        int srcSize = targetSize * 2;
         Bitmap raw = Bitmap.createBitmap(srcSize, srcSize, Bitmap.Config.ARGB_8888);
         Canvas rawCanvas = new Canvas(raw);
         Drawable dm = d.mutate();

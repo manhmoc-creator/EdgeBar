@@ -436,8 +436,6 @@ private void splitGestureToDual(String key) {
         .apply();
     renderRulesList();
 }
-
-/** [MỚI] Row 2 pack con + cầu OR cho gesture đã Deep Customize. */
 private LinearLayout buildGestureDualRow(String key, String compName, String gestureName,
         String[] actKeysUsed, String[] actLabsUsed) {
 
@@ -708,7 +706,7 @@ private View buildBubbleRuleCard(String rId, Runnable rerender) {
 private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int targetSize, float contentScale) {
     if (d == null) return null;
     try {
-        int srcSize = targetSize * 3;
+        int srcSize = targetSize * 2;
         Bitmap raw = Bitmap.createBitmap(srcSize, srcSize, Bitmap.Config.ARGB_8888);
         Canvas rawCanvas = new Canvas(raw);
         android.graphics.drawable.Drawable dm = d.mutate();
@@ -994,6 +992,7 @@ private String[] getVolKeyActLabs() {
                     while(k.hasNext()) {
                         String key = k.next(); Object v = j.get(key);
                         if(v instanceof Boolean) ed.putBoolean(key, (Boolean)v);
+                        else if (key.endsWith("_ts") || key.endsWith("_ms")) ed.putLong(key, ((Number)v).longValue());
                         else if (v instanceof Integer) ed.putInt(key, (Integer)v);
                         else if (v instanceof Long) ed.putLong(key, (Long)v);
                         else if (v instanceof String) ed.putString(key, (String)v);
@@ -1188,9 +1187,6 @@ private void fireTestActions(java.util.Collection<String> acts, String launchPkg
         delay += 120;
     }
 }
-// [MỚI] Dùng chung cho chế độ "1 chạm mở app -> chạy Slot X" — bắn IPC_ACTION
-// y hệt ShortcutTrampolineActivity, không mở UI, zero-cost lúc bình thường vì
-// chỉ chạy đúng 1 lần trong onCreate() khi user đã bật tính năng này.
 private void fireAppIconSlotAction(String shortcutId) {
     String act, pkg, scId;
     if (shortcutId.equals(prefs.getString("appicon_tap_override_id", ""))) {
@@ -1715,17 +1711,9 @@ fab.setPadding(22, 22, 22, 22); // đồng bộ với padding mới trong create
         rootLayout.addView(bottomBar);
 showMainMenu();
         setContentView(rootLayout);
-                prefs.edit().putBoolean("edgebar_permanently_stopped", false).apply();
-        syncVolumeService();
-        syncProximityService();
-        updateFabVisibility();
-        isVi = prefs.getBoolean("lang_vi", true);
-        reloadActionLabels();
-        syncAllTileComponentsOnBoot();
-                if (!prefs.getBoolean("v2_migrated", false)) migrateLegacyBackupToV2();
-        if (prefs.getBoolean("needs_sanitize", false)) sanitizeAllPrefsAfterRestore();
+        updateFabVisibility(); 
         cleanStaleAppliedPacks();
-        syncAppShortcutLabels();
+        new Handler(android.os.Looper.getMainLooper()).postDelayed(this::syncAppShortcutLabels, 1500);
         if (!prefs.getBoolean("action_pack_migrated_v1", false)) {
             ActionPackStore.migrateAllGestures(prefs, BARS, CORNERS, C_GESTURES);
             prefs.edit().putBoolean("action_pack_migrated_v1", true).apply();
@@ -2133,64 +2121,58 @@ private void addAutoColorOffCheckboxes(LinearLayout container, String fullPrefKe
 }
 private void renderBarsCornersEditor(LinearLayout container, String prefix,
         String[] bKeys, String[] bNames, boolean isHomaccStyle) {
-    LinearLayout gd = new LinearLayout(this);
-    gd.setOrientation(LinearLayout.VERTICAL); gd.setPadding(30,10,30,30);
-    gd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500));
-    gd.addView(createSlider("Độ mờ vùng TRĂNG NON", prefix+"corner_moon_alpha", 255, 100));
-    gd.addView(createSlider("Độ mờ VIỀN GÓC", prefix+"corner_stroke_alpha", 255, 200));
-    gd.addView(createSlider("Độ đậm viền", prefix+"corner_thick", 50, 8));
-    
-    LinearLayout gdHide = new LinearLayout(this);
-    gdHide.setOrientation(LinearLayout.VERTICAL); gdHide.setPadding(20,10,20,20);
+    container.addView(createLazyDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", () -> {
+        LinearLayout gd = new LinearLayout(this);
+        gd.setOrientation(LinearLayout.VERTICAL); gd.setPadding(30,10,30,30);
+        gd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"corner_hide_dur", 5000, 2500));
+        gd.addView(createSlider("Độ mờ vùng TRĂNG NON", prefix+"corner_moon_alpha", 255, 100));
+        gd.addView(createSlider("Độ mờ VIỀN GÓC", prefix+"corner_stroke_alpha", 255, 200));
+        gd.addView(createSlider("Độ đậm viền", prefix+"corner_thick", 50, 8));
+        LinearLayout gdHide = new LinearLayout(this);
+        gdHide.setOrientation(LinearLayout.VERTICAL); gdHide.setPadding(20,10,20,20);
         String[] cornerHideKeys = {"corner_tl", "corner_bl"};
-    String[] cornerPairNames = {T("Top L/R Corner","Đỉnh trái/phải"), T("Bottom L/R Corner","Đáy trái/phải")};
-    addHideTargetCheckboxes(gdHide, prefix + "corner_hide_targets", cornerHideKeys, cornerPairNames);
-    LinearLayout hideCornerWrap = new LinearLayout(this);
-    hideCornerWrap.setBackground(getRounded("#2C2C2C", 20f));
-    LinearLayout.LayoutParams hcLp = new LinearLayout.LayoutParams(-1, -2); hcLp.setMargins(0, 15, 0, 15);
-    hideCornerWrap.setLayoutParams(hcLp);
-    hideCornerWrap.addView(createDrawer("📁 " + T("Corners to hide","Góc viền cần ẩn") + " (▼)", gdHide));
-    gd.addView(hideCornerWrap);
-    
-    container.addView(createDrawer("TÙY CHỈNH CHUNG GÓC VIỀN", gd));
+        String[] cornerPairNames = {T("Top L/R Corner","Đỉnh trái/phải"), T("Bottom L/R Corner","Đáy trái/phải")};
+        addHideTargetCheckboxes(gdHide, prefix + "corner_hide_targets", cornerHideKeys, cornerPairNames);
+        LinearLayout hideCornerWrap = new LinearLayout(this);
+        hideCornerWrap.setBackground(getRounded("#2C2C2C", 20f));
+        LinearLayout.LayoutParams hcLp = new LinearLayout.LayoutParams(-1, -2);
+        hcLp.setMargins(0, 15, 0, 15);
+        hideCornerWrap.setLayoutParams(hcLp);
+        hideCornerWrap.addView(createDrawer("📁 " + T("Corners to hide","Góc viền cần ẩn") + " (▼)", gdHide));
+        gd.addView(hideCornerWrap);
+        return gd;
+    }));
 
-    LinearLayout bd = new LinearLayout(this);
-    bd.setOrientation(LinearLayout.VERTICAL); bd.setPadding(30,10,30,30);
-    bd.addView(createSlider(T("Bar Corner Radius","Độ bo tròn Thanh Cạnh"), prefix+"bar_radius", 100, 24));
-    bd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"bar_hide_dur", 5000, 2500));
-    bd.addView(createSlider(T("Icon Thickness on Bar","Độ đậm Icon trên Bar"), prefix+"bar_icon_alpha", 255, 255));
-    bd.addView(createSlider(T("Icon Size on Bar","Kích thước Icon trên Bar"), prefix+"bar_icon_size", 120, 40));
-    
-    LinearLayout bdHide = new LinearLayout(this);
-    bdHide.setOrientation(LinearLayout.VERTICAL); bdHide.setPadding(20,10,20,20);
+    container.addView(createLazyDrawer("TÙY CHỈNH CHUNG THANH CẠNH", () -> {
+        LinearLayout bd = new LinearLayout(this);
+        bd.setOrientation(LinearLayout.VERTICAL); bd.setPadding(30,10,30,30);
+        bd.addView(createSlider(T("Bar Corner Radius","Độ bo tròn Thanh Cạnh"), prefix+"bar_radius", 100, 24));
+        bd.addView(createSlider("Thời gian chờ tắt tàng hình (ms)", prefix+"bar_hide_dur", 5000, 2500));
+        bd.addView(createSlider(T("Icon Thickness on Bar","Độ đậm Icon trên Bar"), prefix+"bar_icon_alpha", 255, 255));
+        bd.addView(createSlider(T("Icon Size on Bar","Kích thước Icon trên Bar"), prefix+"bar_icon_size", 120, 40));
+        LinearLayout.LayoutParams hcLp = new LinearLayout.LayoutParams(-1, -2);
+        hcLp.setMargins(0, 15, 0, 15);
+        LinearLayout bdHide = new LinearLayout(this);
+        bdHide.setOrientation(LinearLayout.VERTICAL); bdHide.setPadding(20,10,20,20);
         String[] barPairKeys = {"r","t_l","r_u","l_d","b_c","l_c"};
-    String[] barPairNames = isVi ? TwinPairStore.BAR_PAIR_LABELS_VI : TwinPairStore.BAR_PAIR_LABELS_EN;
-    addHideTargetCheckboxes(bdHide, prefix + "bar_hide_targets", barPairKeys, barPairNames);
-    LinearLayout hideBarWrap = new LinearLayout(this);
-    hideBarWrap.setBackground(getRounded("#2C2C2C", 20f));
-    hideBarWrap.setLayoutParams(hcLp);
-    hideBarWrap.addView(createDrawer("📁 " + T("Bars to hide","Thanh cạnh cần ẩn") + " (▼)", bdHide));
-    bd.addView(hideBarWrap);
-
-    // [MỚI] Tự động đổi màu Icon theo nền — chỉ có tác dụng ở Lock/Homacc (cần Trợ năng)
-    LinearLayout autoColorBody = new LinearLayout(this);
-    autoColorBody.setOrientation(LinearLayout.VERTICAL); autoColorBody.setPadding(20,10,20,20);
-    addAutoColorOffCheckboxes(autoColorBody, prefix + "bar_auto_icon_color_off", BARS, BAR_NAMES);
-    LinearLayout autoColorWrap = new LinearLayout(this);
-    autoColorWrap.setBackground(getRounded("#2C2C2C", 20f));
-    autoColorWrap.setLayoutParams(hcLp);
-    autoColorWrap.addView(createDrawer("🎨 " + T("Auto Icon Color","Tự động đổi màu Icon") + " (▼)", autoColorBody));
-    bd.addView(autoColorWrap);
-
-    container.addView(createDrawer("TÙY CHỈNH CHUNG THANH CẠNH", bd));
+        String[] barPairNames = isVi ? TwinPairStore.BAR_PAIR_LABELS_VI : TwinPairStore.BAR_PAIR_LABELS_EN;
+        addHideTargetCheckboxes(bdHide, prefix + "bar_hide_targets", barPairKeys, barPairNames);
+        LinearLayout hideBarWrap = new LinearLayout(this);
+        hideBarWrap.setBackground(getRounded("#2C2C2C", 20f));
+        hideBarWrap.setLayoutParams(hcLp);
+        hideBarWrap.addView(createDrawer("📁 " + T("Bars to hide","Thanh cạnh cần ẩn") + " (▼)", bdHide));
+        bd.addView(hideBarWrap);
+        LinearLayout autoColorBody = new LinearLayout(this);
+        autoColorBody.setOrientation(LinearLayout.VERTICAL); autoColorBody.setPadding(20,10,20,20);
+        addAutoColorOffCheckboxes(autoColorBody, prefix + "bar_auto_icon_color_off", BARS, BAR_NAMES);
+        LinearLayout autoColorWrap = new LinearLayout(this);
+        autoColorWrap.setBackground(getRounded("#2C2C2C", 20f));
+        autoColorWrap.setLayoutParams(hcLp);
+        autoColorWrap.addView(createDrawer("🎨 " + T("Auto Icon Color","Tự động đổi màu Icon") + " (▼)", autoColorBody));
+        bd.addView(autoColorWrap);
+        return bd;
+    }));
 }
-    // [MỚI] Icon cho 13 cử chỉ — CHỈ hiện ở không gian Homacc, áp dụng CHUNG cho mọi
-    // Bar/Corner của Homacc (giống Homeb). Thuật toán vẽ animation kéo icon ra theo
-    // sóng làm sau — hiện tại chỉ lưu lựa chọn vào prefs.
-
-// [MỚI] UI rỗng chọn icon cho 13 cử chỉ, dùng CHUNG cho mọi Bar/Corner của Homacc.
-// Lazy-inflate (giống Panel Config/Handle Config) — 13 dòng chỉ thực sự dựng View
-// khi người dùng bấm mở lần đầu, Zero-RAM khi đóng, tiết kiệm cho Pixel 2XL.
 private LinearLayout buildGestureIconDrawer() {
     LinearLayout body = new LinearLayout(this);
     body.setOrientation(LinearLayout.VERTICAL);
@@ -2478,15 +2460,6 @@ private int indexInDefaultOrder(String itemKey){
 private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState, boolean isFrontier) {
     String listKey = prefix + "applied_packs";
     java.util.List<String> appliedPacksRaw = getDynamicIds(listKey);
-    if (isFrontier) {
-        for (String itemKey : appliedPacksRaw) {
-            if (!prefs.getBoolean(prefix + itemKey + "_en", false)) continue;
-            boolean isBarL = itemKey.startsWith("bar_");
-            String idL = itemKey.replace(isBarL ? "bar_" : "corner_", "");
-            if (isBarL) applyBarPackToSpace(idL, prefix);
-            else applyCornerPackToSpace(idL, prefix);
-        }
-    }
     java.util.List<String> validBarIds = getDynamicIds("pack_bar_ids");
     java.util.List<String> validCornerIds = getDynamicIds("pack_corner_ids");
     java.util.List<String> cleaned = new java.util.ArrayList<>();
@@ -3158,25 +3131,27 @@ private void openSpaceDirect(int spaceIdx) {
     listRules.removeAllViews();
     frontierSpaceBuilt = false;
     ensureFrontierContainersBuilt();
-    if (spaceIdx == 0 || spaceIdx == 2) {
-        try {
-            String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
-            String cur = android.provider.Settings.Secure.getString(getContentResolver(),
-                android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            if (cur == null) cur = "";
-            if (!cur.contains(mySvc)) {
-                prefs.edit().putBoolean("shortcut_home_on", false).apply();
-                stopService(new Intent(MainActivity.this, HomescreenService.class));
-                String newVal = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
-                android.provider.Settings.Secure.putString(getContentResolver(),
-                    android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
-                android.provider.Settings.Secure.putString(getContentResolver(),
-                    android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
-            }
-        } catch (Exception ignored) {}
-    } else {
-        ensureHomeServiceForPreview();
-    }
+    new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+        if (spaceIdx == 0 || spaceIdx == 2) {
+            try {
+                String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
+                String cur = android.provider.Settings.Secure.getString(getContentResolver(),
+                    android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+                if (cur == null) cur = "";
+                if (!cur.contains(mySvc)) {
+                    prefs.edit().putBoolean("shortcut_home_on", false).apply();
+                    stopService(new Intent(MainActivity.this, HomescreenService.class));
+                    String newVal = cur.isEmpty() ? mySvc : cur + ":" + mySvc;
+                    android.provider.Settings.Secure.putString(getContentResolver(),
+                        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
+                    android.provider.Settings.Secure.putString(getContentResolver(),
+                        android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
+                }
+            } catch (Exception ignored) {}
+        } else {
+            ensureHomeServiceForPreview();
+        }
+    }, 200);
     condBackRow.setVisibility(View.GONE);
     gesMenuContainer.setVisibility(View.GONE);
     gesSubHeader.setVisibility(View.GONE);      // bỏ hẳn header trung gian -> hết nháy màn
@@ -4402,19 +4377,12 @@ vTrig.addView(cbOs);
     d.show();
 }
 private void applyPackRulesToSpace(String itemKey, String targetPrefix, String compKey) {
+    final SharedPreferences.Editor ed = prefs.edit();
     for (String g : C_GESTURES) {
-        prefs.edit()
-            .remove(targetPrefix + compKey + "_" + g)
-            .remove(targetPrefix + compKey + "_" + g + "_lim")
-            .remove(targetPrefix + compKey + "_" + g + "_lim_vib")
-            .remove(targetPrefix + compKey + "_" + g + "_lim_snd")
-            .remove(targetPrefix + compKey + "_" + g + "_lim_anim")
-            .remove(targetPrefix + compKey + "_" + g + "_lim_jump_on")
-            .remove(targetPrefix + compKey + "_" + g + "_lim_os")
-            .remove(targetPrefix + compKey + "_" + g + "_lim_launch_pkg")
-            .remove(targetPrefix + compKey + "_" + g + "_lim_shortcut_id")
-            .remove(targetPrefix + compKey + "_" + g + "_dual")
-            .apply();
+        String b = targetPrefix + compKey + "_" + g;
+        ed.remove(b).remove(b + "_lim").remove(b + "_lim_vib").remove(b + "_lim_snd")
+          .remove(b + "_lim_anim").remove(b + "_lim_jump_on").remove(b + "_lim_os")
+          .remove(b + "_lim_launch_pkg").remove(b + "_lim_shortcut_id").remove(b + "_dual");
     }
     for (String rId : getDynamicIds(itemKey + "_pack_rules")) {
         if (!prefs.getBoolean("prule_" + rId + "_en", true)) continue;
@@ -4461,7 +4429,6 @@ if (isDual) {
             String gt = g.trim();
             if (gt.isEmpty()) continue;
             String finalKey = targetPrefix + compKey + "_" + gt;
-            SharedPreferences.Editor ed = prefs.edit();
             ed.putString(finalKey, fullActs.isEmpty() ? "NONE" : fullActs)
               .putBoolean(finalKey + "_vib", vib)
               .putBoolean(finalKey + "_snd", snd)
@@ -4481,8 +4448,8 @@ if (isDual) {
                   .putString(finalKey + "_lim_shortcut_id", limSc)
                   .putBoolean(finalKey + "_dual", true);
             }
-            ed.apply();
         }
+    ed.apply();
     }
 }
 private String mergeCsv(String a, String b) {
@@ -7261,8 +7228,6 @@ private LinearLayout buildScreenRecordControlCard() {
             permIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
             startActivity(permIntent);
         }
-        // Trạng thái Service chỉ cập nhật sau khi start/stop thực thi xong -> vẽ lại
-        // trễ 500ms để đọc đúng isRunning mới nhất, không cần Handler/Timer chạy nền.
         new Handler(android.os.Looper.getMainLooper()).postDelayed(this::renderEcosystem, 500);
     });
     btnRow.addView(btnMain);
@@ -8545,16 +8510,10 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
     refreshHolder[0] = () -> tTitle.setText(resolveTileActionLabel(chosenAct[0], chosenPkg[0], chosenScId[0]));
 
     btnIcon.setOnClickListener(v -> {
-    // [HƯỚNG B] Nếu slot này đang là action-tap (đã tick) → chọn icon cho
-    // vai trò "Mở Edge Bar" (key _open_icon). Ngược lại chọn icon action gốc.
     boolean isTapSlot = shortcutId.equals(prefs.getString("appicon_tap_override_id", ""));
     String key = isTapSlot ? (px + "open_icon") : (px + "icon");
     showIconPickerDialog(key, () -> syncAppShortcutLabels());
 });
-
-    // [MỚI] Chỉ Slot 1 & Slot 2 được phép làm "1 chạm = hành động" — Slot 3/4
-    // không có checkbox này (tapRadios[slotIdx] giữ nguyên null, đã null-safe
-    // ở vòng lặp tắt-bớt-nút-khác nên không cần sửa gì thêm chỗ đó).
         if (slotNum <= 2) {
         rb = new CheckBox(this);
         rb.setText(T("Tap app icon = run this action (long-press shows \"Open Edge Bar\")",
@@ -10813,8 +10772,6 @@ private void syncAppShortcutLabels() {
                 .setIntent(it).setIcon(icon).setRank(i).build());
         }
         sm.setDynamicShortcuts(list);
-        try { sm.removeAllDynamicShortcuts(); } catch (Exception ignored) {}
-        sm.setDynamicShortcuts(list);
     } catch (Exception ignored) {}
 }
 private android.graphics.drawable.Icon loadShortcutIcon(String ref, float iconScale) {
@@ -11365,6 +11322,32 @@ private void doRevokeAdminAndUninstall() {
     Intent uninstallIntent = new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + getPackageName()));
     uninstallIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
     startActivity(uninstallIntent);
+}
+private LinearLayout createLazyDrawer(String title, java.util.function.Supplier<View> factory) {
+    LinearLayout container = new LinearLayout(this);
+    container.setOrientation(LinearLayout.VERTICAL);
+    container.setBackground(getRounded("#222222", 20f));
+    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
+    clp.setMargins(0, 0, 0, 20);
+    container.setLayoutParams(clp);
+    TextView header = new TextView(this);
+    header.setText(title);
+    header.setTextColor(Color.parseColor("#8AB4F8"));
+    header.setPadding(30, 30, 30, 30);
+    header.setTextSize(16);
+    LinearLayout body = new LinearLayout(this);
+    body.setOrientation(LinearLayout.VERTICAL);
+    body.setVisibility(View.GONE);
+    final boolean[] built = {false};
+    header.setOnClickListener(v -> {
+        boolean open = body.getVisibility() == View.GONE;
+        if (open && !built[0]) { built[0] = true; body.addView(factory.get()); }
+        body.setVisibility(open ? View.VISIBLE : View.GONE);
+        header.setBackground(getRounded(open ? "#333333" : "#222222", 20f));
+    });
+    container.addView(header);
+    container.addView(body);
+    return container;
 }
     private LinearLayout createDrawer(String title, View content) { 
         LinearLayout container = new LinearLayout(this); container.setOrientation(LinearLayout.VERTICAL); container.setBackground(getRounded("#222222", 20f)); 

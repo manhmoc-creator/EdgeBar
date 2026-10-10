@@ -1013,27 +1013,6 @@ if (Intent.ACTION_SCREEN_OFF.equals(action)) {
         sendSyncState();
         return START_STICKY;
     }
-
-
-/**
- * [FIX MỤC 1 — Watchdog hiểu nhầm Trợ năng đã tắt]
- * Bản cũ dùng String.contains("pkg/Class") — framework có thể ghi Settings ở dạng
- * rút gọn "pkg/.Class" (bỏ tên package khỏi phần class), khiến contains() trả về
- * false dù Trợ năng ĐANG BẬT. Hệ quả: HomebWatchdogReceiver / HomaccWatchdogReceiver
- * tưởng Acc đã tắt → tự bật Homeb / dừng Homacc giữa chừng.
- *
- * [TỐI ƯU PIXEL 2XL — Zero IPC]
- * Dòng đầu tiên rút ngắn toàn bộ đường đi: nếu EdgeBarService đang connect (biến
- * static volatile, đọc trực tiếp từ RAM, không IPC, không Settings query) thì biết
- * chắc chắn Acc đang bật → return true ngay, KHÔNG cần đọc Settings.Secure.getString()
- * (đây là 1 Binder round-trip qua system_server, tốn CPU/wakeup).
- * Hàm này được gọi cực kỳ thường xuyên trong updateVisibility() mỗi khi có bất kỳ
- * sự kiện màn hình/khoá — tiết kiệm được hàng nghìn lượt IPC mỗi ngày.
- *
- * Khi Acc thực sự tắt (isConnected = false), mới fallback về đọc Settings và
- * so sánh bằng ComponentName.unflattenFromString() — xử lý đúng CẢ HAI dạng chuỗi
- * "pkg/Full.Class" và "pkg/.Class" mà framework có thể ghi.
- */
 private boolean isAccEnabled() {
     if (EdgeBarService.isConnected) return true; // fast path: zero IPC
     String s = android.provider.Settings.Secure.getString(getContentResolver(),
@@ -1081,14 +1060,10 @@ filter.addAction(Intent.ACTION_SCREEN_OFF);
 filter.addAction(Intent.ACTION_SCREEN_ON); // [FIX] cần lại để bắt đúng lúc màn bật + đang khoá
 filter.addAction(Intent.ACTION_USER_PRESENT);
 filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS); // giữ để bắt homekey/recentapps
-// [TÌM] đoạn setup IntentFilter trong onCreate():
 filter.addAction("com.manhmoc.edgebar.SYNC_STATE");
 filter.addAction("com.manhmoc.edgebar.TEST_ANIM");
-
-// [THÊM] 2 dòng ngay sau:
 filter.addAction("com.manhmoc.edgebar.PAUSE_WM_OPS");
 filter.addAction("com.manhmoc.edgebar.RESUME_WM_OPS");
-// CODE MỚI — thêm 2 dòng:
 filter.addAction("com.manhmoc.edgebar.OPEN_PANEL_REQUEST");
 filter.addAction("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED");
 filter.addAction(VoiceRecorderService.TICK_ACTION);
@@ -1116,13 +1091,6 @@ filter.addAction("com.manhmoc.edgebar.TEST_REC_INDICATOR");
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
         try { wm.addView(fV, fp); } catch (Exception e) {}
-
-        // [FIX CRASH] kbdSensorView trước đây CHƯA BAO GIỜ được khởi tạo (new View + addView)
-        // ở file này — chỉ có khai báo field rồi gọi thẳng setOnApplyWindowInsetsListener()
-        // trên biến null bên dưới, gây NullPointerException crash onCreate() ngay trên mọi
-        // máy Android 11+ (API >= 30). Bổ sung đúng phần dựng cửa sổ, dùng TYPE_APPLICATION_OVERLAY
-        // (không NO_LIMITS) để nhận đúng WindowInsets.Type.ime() — cùng cấu hình đã sửa bên
-        // EdgeBarService. Vẫn chỉ 1 View trong suốt, không thêm chi phí pin/RAM nào.
         int barCount = Math.min(bars.length, Math.min(BARS.length, GRAV.length));
 for (int i = 0; i < barCount; i++) {
     bars[i] = new BarView(this);
@@ -1431,16 +1399,6 @@ String readKey = isDual ? (key + "_lim") : key;
         String action = prefs.getString(readKey, "NONE");
         boolean isOn = prefs.getBoolean(key + "_on", true);
         if (action.equals("NONE") || !isOn) return;
-
-        // [FIX KHỰNG HÌNH] Anima dùng LAYER_TYPE_SOFTWARE (bắt buộc cho BlurMaskFilter)
-        // -> vẽ CPU toàn màn hình, có thể mất vài chục ms. Nếu gọi playAnim() TRƯỚC
-        // khi xử lý TRIGGER_*, lượt vẽ software này chiếm main thread đúng lúc
-        // Runnable bắn touch giả lập (đã lên lịch qua postDelayed trong
-        // dispatchRealScreenGesture) tới giờ chạy -> touch bị delay theo, gây khựng
-        // hẳn 1-2 khung hình. Giải pháp: nếu action có TRIGGER_*, hoãn playAnim()
-        // ra SAU khi việc bắn touch đã chắc chắn được lên lịch xong (không phải chạy
-        // xong, chỉ cần lên lịch xong là đủ tách rời 2 luồng công việc), để traversal
-        // vẽ nặng của Anima không còn chen ngang & chặn Runnable touch nữa.
         boolean hasTriggerAction = action.contains("TRIGGER_");
                 if (applyVibAnim) {
             if (prefs.getBoolean(readKey + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
