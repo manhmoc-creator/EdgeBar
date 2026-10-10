@@ -73,10 +73,12 @@ public final class TwinPairStore {
         ed.putBoolean(pp+F_A_EN,on).putBoolean(pp+F_B_EN,on);
     }
     private static void cp(SharedPreferences p,SharedPreferences.Editor ed,String kA,String kB,
-            String pp,String f,int def){
-        int v = p.getInt(kA+f,def);
-        ed.putInt(pp+f,v).putInt(kA+f,v).putInt(kB+f,v);
-    }
+        String pp,String f,int def){
+    int v = p.getInt(kA+f,def);
+    ed.putInt(pp+f,v);
+    if(!p.contains(kA+f)) ed.putInt(kA+f,v);
+    if(!p.contains(kB+f)) ed.putInt(kB+f,v);
+}
 public static String pairIdForBarLoc(int loc){
     if(loc==1||loc==2)   return "barPair_b_rl";   // r, l
     if(loc==7||loc==8)   return "barPair_t_lr";   // t_r, t_l

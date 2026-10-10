@@ -1806,12 +1806,9 @@ navBackStack.clear(); // ← THÊM DÒNG NÀY
         gesMenuContainer.addView(createSettingsRow("mobile_lock_portrait_24px", "Lock",
     T("Lock Screen bars & corners (Accessibility's / Blacklist's)", "Bar/Corner màn hình khoá (Accessibility's / Blacklist's)"),
     () -> openSpaceDirect(0)));
-    gesMenuContainer.addView(createSettingsRow("routine_24px", "Home",
-    T("Home screen bars & corners", "Bar/Corner màn hình chính"),
+gesMenuContainer.addView(createSettingsRow("routine_24px", "Home",
+    T("Home bars & corners (Homeb + Homacc)", "Bar/Corner màn hình chính (Homeb + Homacc)"),
     () -> openSpaceDirect(1)));
-    gesMenuContainer.addView(createSettingsRow("accessible_menu_24px", "Homacc",
-    T("Accessible Home bars & corners", "Bar/Corner màn hình chính (có Trợ năng)"),
-    () -> openSpaceDirect(2)));
     gesMenuContainer.addView(createSettingsRow("fingerprint_24px", "Texture",
         T("Fingerprint Gestures", "Cử chỉ vân tay"),
         () -> openGesTab(4, "Texture")));
@@ -2718,8 +2715,8 @@ private LinearLayout buildFrontierSelectionToolbar(String listKey, java.util.Lis
     return bar;
 }
 private void showShareToSpaceDialog(){
-    String[] spaces = {"LOCK","HOMEB","HOMACC"};
-    String[] prefixes = {"lock_","home_","homacc_"};
+    String[] spaces = {"LOCK","HOME"};
+    String[] prefixes = {"lock_","home_"};
     new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
         .setTitle(T("Share reference to space","Chia sẻ tham chiếu sang không gian"))
         .setItems(spaces, (d, which) -> {
@@ -3181,13 +3178,16 @@ int packTabState = frontierSubTab == 0 ? 0 : frontierSubTab == 1 ? 1 : 4;
     renderAppliedPacksForSpaceInto(body, prefix, packTabState, true);
 }
 private void ensureHomeServiceForPreview() {
-    Intent i = new Intent(this, HomescreenService.class);
-    try { if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i); }
-    catch (Exception ignored) {}
+    String cur = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+    boolean accOn = cur != null && cur.contains(getPackageName() + "/" + EdgeBarService.class.getName());
+    if (!accOn) {
+        Intent i = new Intent(this, HomescreenService.class);
+        try { if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i); }
+        catch (Exception ignored) {}
+    }
     new Handler(android.os.Looper.getMainLooper()).postDelayed(() ->
         sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE")), 300);
 }
-
     private void openPackRuleSpace(String appliedItemKey, int tabState) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     final boolean isHomebSpace = (tabState == 1);
@@ -3359,6 +3359,8 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
     bHomeb.setLayoutParams(tlp); bHomacc.setLayoutParams(tlp);
     bLock.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f));
     tabs.addView(bHomeb); tabs.addView(bHomacc); tabs.addView(bLock);
+    bHomacc.setVisibility(View.GONE);
+    bHomeb.setText("HOME");
     root.addView(tabs);
 
     TextView tvCount = new TextView(this);
