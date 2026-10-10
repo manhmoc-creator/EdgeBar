@@ -1002,8 +1002,9 @@ private String[] getVolKeyActLabs() {
                         else if (v instanceof String) ed.putString(key, (String)v);
                     }
                     ed.putBoolean("needs_sanitize", true)
-                      .putBoolean("action_pack_migrated_v1", false)
-                      .commit();
+  .putBoolean("action_pack_migrated_v1", false)
+ .remove("lock_applied_packs").remove("home_applied_packs").remove("homacc_applied_packs")
+  .commit();
                     Toast.makeText(this, T("Restored Successfully!", "Đã Khôi Phục Cấu Hình!"), Toast.LENGTH_LONG).show();
                     recreate();
 } else if (req == REQ_PICK_SONGS) {
@@ -2604,13 +2605,9 @@ java.util.List<String> appliedPacks = java.util.Arrays.asList(FIXED_PACK_IDS);
         optCol.setOrientation(LinearLayout.VERTICAL);
         optCol.setGravity(Gravity.CENTER);
         optCol.setPadding(0, 0, 15, 0);
-        
-        // Khởi tạo mặc định vị trí cho Pack cứng nếu chưa có
-        if (!prefs.contains(packPrefix + id + "_loc")) {
-            int locIndex = isBar ? java.util.Arrays.asList(BARS).indexOf(id) : java.util.Arrays.asList(CORNERS).indexOf(id);
-            prefs.edit().putInt(packPrefix + id + "_loc", Math.max(0, locIndex)).apply();
-        }
-        
+int locIndex = isBar ? java.util.Arrays.asList(BARS).indexOf(id) : java.util.Arrays.asList(CORNERS).indexOf(id);
+if (locIndex < 0) locIndex = 0;
+prefs.edit().putInt(packPrefix + id + "_loc", locIndex).apply();
         int visIdx = prefs.getInt(packPrefix + id + "_vis_mode", 0);
         int priIdx = prefs.getInt(packPrefix + id + "_pri_mode", 0);
         String visIcon = visIdx == 0 ? "☠️" : (visIdx == 1 ? "👻" : "👁️");
@@ -2641,15 +2638,23 @@ java.util.List<String> appliedPacks = java.util.Arrays.asList(FIXED_PACK_IDS);
         LinearLayout ctrlCol = new LinearLayout(this);
         ctrlCol.setOrientation(LinearLayout.VERTICAL);
         ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
-        
-        Switch swEn = new Switch(this);
-        swEn.setChecked(prefs.getBoolean(prefix + itemKey + "_en", false));
-        swEn.setScaleX(0.8f); swEn.setScaleY(0.8f);
-        swEn.setOnCheckedChangeListener((sw, chk) -> {
-            prefs.edit().putBoolean(prefix + itemKey + "_en", chk).apply();
-            sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-        });
-        
+Switch swEn = new Switch(this);
+swEn.setChecked(prefs.getBoolean(prefix + itemKey + "_en", false));
+swEn.setScaleX(0.8f); swEn.setScaleY(0.8f);
+final String fId = id;
+final boolean fIsBar = isBar;
+final String fPrefix = prefix;
+swEn.setOnCheckedChangeListener((sw, chk) -> {
+    prefs.edit().putBoolean(fPrefix + itemKey + "_en", chk).apply();
+    if (chk) {
+        if (fIsBar) applyBarPackToSpace(fId, fPrefix);
+        else applyCornerPackToSpace(fId, fPrefix);
+    } else {
+        if (fIsBar) disableBarPackFromSpace(fId, fPrefix);
+        else disableCornerPackFromSpace(fId, fPrefix);
+    }
+    sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+});
         Button btnTrigger = new Button(this);
         btnTrigger.setText("TRIGGER");
         btnTrigger.setBackground(getRounded("#8AB4F8", 14f));
@@ -4512,10 +4517,10 @@ private String mergeCsv(String a, String b) {
     int xB = spreadY ? 0 : -xA;
     int yA = spreadY ? -spacing / 2 : y;
     int yB = spreadY ?  spacing / 2 : y;
-    boolean enA = TwinPairStore.isSideEnabled(prefs, "pack_corner_", pairId, true, false);
-boolean enB = TwinPairStore.isSideEnabled(prefs, "pack_corner_", pairId, false, false);
-applySingleCorner(src, targetPrefix, members[0], xA, enA);
-applySingleCorner(src, targetPrefix, members[1], xB, enB);
+    boolean enA = TwinPairStore.isSideEnabled(prefs, "pack_bar_", pairId, true, true);
+boolean enB = TwinPairStore.isSideEnabled(prefs, "pack_bar_", pairId, false, true);
+applySingleBar(targetPrefix, members[0], alpha, w, h, xA, yA, vis, pri, lockM, jump, icons, enA);
+applySingleBar(targetPrefix, members[1], alpha, w, h, xB, yB, vis, pri, lockM, jump, icons, enB);
     TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_ALPHA, alpha, true);
     TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_W, w, true);
     TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_H, h, true);
