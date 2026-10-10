@@ -2120,14 +2120,6 @@ private LinearLayout buildTwinToggleRow(String leftName, String rightName, Strin
     row.addView(createHalfToggle(rightName, rightKey));
     return row;
 }
-private LinearLayout buildTwinToggleRow(String nameA, String nameB, String keyA, String keyB, Runnable onSync) {
-    LinearLayout row = new LinearLayout(this);
-    row.setOrientation(LinearLayout.HORIZONTAL);
-    row.setPadding(0, 20, 0, 20);
-    row.addView(createHalfToggle(nameA, keyA, onSync));
-    row.addView(createHalfToggle(nameB, keyB, onSync));
-    return row;
-}
     private LinearLayout createHalfToggle(String label, String prefKey) {
         return createHalfToggle(label, prefKey, null);
     }
@@ -2565,7 +2557,6 @@ String[] FIXED_PACK_IDS = {
 };
 
 java.util.List<String> appliedPacks = java.util.Arrays.asList(FIXED_PACK_IDS);
-
     if (isFrontier && frontierSelectMode) {
         // Toolbar Multi-select (CHỈ CÒN CHIA SẺ, KHÔNG CÒN DELETE)
         LinearLayout bar = new LinearLayout(this);
@@ -4521,10 +4512,10 @@ private String mergeCsv(String a, String b) {
     int xB = spreadY ? 0 : -xA;
     int yA = spreadY ? -spacing / 2 : y;
     int yB = spreadY ?  spacing / 2 : y;
-    boolean enA = TwinPairStore.isSideEnabled(prefs, "pack_bar_", pairId, true, true);
-boolean enB = TwinPairStore.isSideEnabled(prefs, "pack_bar_", pairId, false, true);
-applySingleBar(targetPrefix, members[0], alpha, w, h, xA, yA, vis, pri, lockM, jump, icons, enA);
-applySingleBar(targetPrefix, members[1], alpha, w, h, xB, yB, vis, pri, lockM, jump, icons, enB);
+    boolean enA = TwinPairStore.isSideEnabled(prefs, "pack_corner_", pairId, true, false);
+boolean enB = TwinPairStore.isSideEnabled(prefs, "pack_corner_", pairId, false, false);
+applySingleCorner(src, targetPrefix, members[0], xA, enA);
+applySingleCorner(src, targetPrefix, members[1], xB, enB);
     TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_ALPHA, alpha, true);
     TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_W, w, true);
     TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_H, h, true);
@@ -4534,8 +4525,8 @@ applySingleBar(targetPrefix, members[1], alpha, w, h, xB, yB, vis, pri, lockM, j
     applyPackRulesToSpace("bar_" + id, targetPrefix, members[0]);
     applyPackRulesToSpace("bar_" + id, targetPrefix, members[1]);
 }
-private void applySingleBar(String targetPrefix, String barKey, int alpha, int w, int h,
-                            int x, int y, int vis, int pri, int lockM, int jump, String icons, boolean sideEnabled) {
+private void applySingleCorner(String src, String targetPrefix, String cKey,
+                               int xVal, boolean sideEnabled) {
     String bk = targetPrefix + barKey + "_";
     prefs.edit()
         .putBoolean(bk + "en", sideEnabled)
@@ -9338,10 +9329,6 @@ private void openDataPackEditor(int type, String id) {
             sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
             refreshPreview();
         };
-
-        // UI Bật/Tắt 2 nửa
-        content.addView(buildTwinToggleRow(nameA, nameB, prefix + id + "_en_a", prefix + id + "_en_b", liveSync));
-
         // UI 2 nửa (mỗi nửa gọi mở cầu OR 2 server)
         content.addView(buildTwinSettingRow("Hiển thị", nameA, nameB, prefix + id + "_vis_mode", prefix + id + "_vis_mode_b",
             new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
