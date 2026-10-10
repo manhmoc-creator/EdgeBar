@@ -1204,12 +1204,12 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         boolean oldHomeEnabled = HomescreenService.isRunning && prefs.getBoolean("shortcut_home_on", false);
         boolean previewHomeOn = prefs.getBoolean("preview_home", false);
 boolean shouldRenderOldHome = isUnlocked && !hideNormal && (previewHomeOn || (!accHomeRunning && oldHomeEnabled));
-
 if (accHomeRunning && !previewHomeOn) {
     for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
     for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
+    if (panelEngine != null) panelEngine.rebuildAll();
+    return;
 }
-
                 boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
         int barLoopCount = Math.min(bars.length, BARS.length);
         for (int i = 0; i < barLoopCount; i++) {

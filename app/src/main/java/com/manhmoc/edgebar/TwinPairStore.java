@@ -172,23 +172,23 @@ public static final String[] DEFAULT_BAR_PACK_IDS = {
 
 public static final String[] DEFAULT_CORNER_PACK_IDS = {"defCornerTLR","defCornerBLR"};
 public static final String[] DEFAULT_DISPLAY_ORDER = {
-    "corner_defCornerTLR",   // 1. Top Left/Right Corner
-    "bar_defBarBTC",         // 2. Top/Bottom Center
-    "bar_defBarTLR",         // 3. Top Left/Right
-    "bar_defBarBRL",         // 4. Bottom Right/Left
-    "bar_defBarLRC",         // 5. Right/Left Center
-    "bar_defBarLRU",         // 6. Left/Right Up
-    "bar_defBarLRD",         // 7. Left/Right Down
-    "corner_defCornerBLR"    // 8. Bottom Left/Right Corner
+    "corner_defCornerTLR",
+    "bar_defBarTLR",
+    "bar_defBarBRL",
+    "bar_defBarBTC",
+    "bar_defBarLRC",
+    "bar_defBarLRU",
+    "bar_defBarLRD",
+    "corner_defCornerBLR"
 };
 public static void ensureDefaultPacks(SharedPreferences p){
     if(p.getBoolean(DEFAULT_PACK_FLAG, false)) return;
     SharedPreferences.Editor ed = p.edit();
-    int[]    barLocs = { 0,       8,       1,       4,       3,       5      };
-    String[] barPairs = {"barPair_bt_c","barPair_t_lr","barPair_b_rl",
-                         "barPair_lr_c","barPair_lr_u","barPair_lr_d"};
-    String[] barNames = {"Top/Bottom Center","Top L/R","Bottom R/L",
-                         "Right/Left Center","Left/Right Up","Left/Right Down"};
+   int[]    barLocs = { 8,       2,       6,       10,      9,       11     };
+String[] barPairs = {"barPair_t_lr","barPair_b_rl","barPair_bt_c",
+                     "barPair_lr_c","barPair_lr_u","barPair_lr_d"};
+String[] barNames = {"Top L/R","Bottom R/L","Top/Bottom Center",
+                     "Right/Left Center","Left/Right Up","Left/Right Down"};
     for(int i = 0; i < DEFAULT_BAR_PACK_IDS.length; i++){
         String id = DEFAULT_BAR_PACK_IDS[i];
         String px = "pack_bar_" + id + "_";
@@ -220,5 +220,11 @@ private static void appendIds(SharedPreferences p, SharedPreferences.Editor ed, 
 private static String defBarName(String pairId){
     for(int i=0;i<BAR_PAIR_IDS.length;i++) if(BAR_PAIR_IDS[i].equals(pairId)) return BAR_PAIR_LABELS_EN[i];
     return "Bar Pack";
+}
+public static void setSideTouched(SharedPreferences p, String sp, String id, boolean isA, boolean isBar){
+    String[] m = getMembers(id,isBar); if(m==null) return;
+    p.edit()
+        .putBoolean(sp+id+"_"+(isA?F_A_EN:F_B_EN), true)
+        .apply();
 }
 }

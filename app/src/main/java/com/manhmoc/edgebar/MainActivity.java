@@ -242,13 +242,15 @@ private static boolean isFullKind(String kind) {
 
 private static final int SPAN_UNITS = 6;
 private int getPackSpanUnits(String key) { return prefs.getInt(key, 3); }
-
 private String packDisplayName(boolean isBar, String id) {
     int loc = prefs.getInt((isBar ? "pack_bar_" : "pack_corner_") + id + "_loc", 0);
-    String[] names = isBar ? BAR_NAMES : CORNER_NAMES;
-    return (loc >= 0 && loc < names.length) ? names[loc] : "?";
+    int pairIdx = isBar ? TwinPairStore.pairIdxOfBarLoc(loc) : TwinPairStore.pairIdxOfCornerLoc(loc);
+    if (pairIdx < 0) return "?";
+    String[] labels = isBar
+        ? (isVi ? TwinPairStore.BAR_PAIR_LABELS_VI : TwinPairStore.BAR_PAIR_LABELS_EN)
+        : (isVi ? TwinPairStore.CORNER_PAIR_LABELS_VI : TwinPairStore.CORNER_PAIR_LABELS_EN);
+    return (pairIdx < labels.length) ? labels[pairIdx] : "?";
 }
-
 private class SpanFlow {
     final LinearLayout container; LinearLayout row; int used = 0;
     SpanFlow(LinearLayout c) { container = c; }
@@ -2551,20 +2553,19 @@ private int indexInDefaultOrder(String itemKey){
     return -1;
 }
 private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState, boolean isFrontier) {
-    // ÉP CỨNG 8 DATA PACK MẶC ĐỊNH - Bỏ qua toàn bộ mảng JSON cũ
-    String[] FIXED_PACK_IDS = {
-        "corner_t_l_r_c", // 1. Top Left/Right Corner
-        "bar_t_b_c",      // 2. Top/Bottom Center
-        "bar_t_l_r",      // 3. Top Left/Right
-        "bar_b_l_r",      // 4. Bottom Right/Left
-        "bar_l_r_c",      // 5. Right/Left Center
-        "bar_l_r_u",      // 6. Right/Left Up
-        "bar_l_r_d",      // 7. Right/Left Down
-        "corner_b_l_r_c"  // 8. Bottom Left/Right Corner
-    };
-    
-    java.util.List<String> appliedPacks = java.util.Arrays.asList(FIXED_PACK_IDS);
-    
+String[] FIXED_PACK_IDS = {
+    "corner_tl",
+    "bar_t_l",
+    "bar_l",
+    "bar_t_c",
+    "bar_l_c",
+    "bar_l_u",
+    "bar_l_d",
+    "corner_bl"
+};
+
+java.util.List<String> appliedPacks = java.util.Arrays.asList(FIXED_PACK_IDS);
+
     if (isFrontier && frontierSelectMode) {
         // Toolbar Multi-select (CHỈ CÒN CHIA SẺ, KHÔNG CÒN DELETE)
         LinearLayout bar = new LinearLayout(this);
@@ -2677,21 +2678,21 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
         if (isFrontier) {
             final String spanKey = "ui_span_applied_" + prefix + "_" + itemKey;
             if (frontierSelectMode) {
-                TextView selDot = new TextView(this);
-                selDot.setText(frontierSelectedItems.contains(itemKey) ? "🔵" : "⚪");
-                selDot.setTextSize(18);
-                FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(-2, -2);
-                dotLp.gravity = Gravity.BOTTOM | Gravity.START;
-                dotLp.setMargins(10, 0, 0, 6);
-                selDot.setLayoutParams(dotLp);
-                cardWrap.addView(selDot);
-                card.setOnClickListener(v -> {
-                    if (frontierSelectedItems.contains(itemKey)) frontierSelectedItems.remove(itemKey);
-                    else frontierSelectedItems.add(itemKey);
-                    renderRulesList();
-                });
-                flow.add(cardWrap, 6);
-            } else {
+    TextView selDot = new TextView(this);
+    selDot.setText(frontierSelectedItems.contains(itemKey) ? "🔵" : "⚪");
+    selDot.setTextSize(18);
+    FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(-2, -2);
+    dotLp.gravity = Gravity.BOTTOM | Gravity.START;
+    dotLp.setMargins(10, 0, 0, 6);
+    selDot.setLayoutParams(dotLp);
+    cardWrap.addView(selDot);
+    card.setOnClickListener(v -> {
+        if (frontierSelectedItems.contains(itemKey)) frontierSelectedItems.remove(itemKey);
+        else frontierSelectedItems.add(itemKey);
+        renderRulesList();
+    });
+    flow.add(cardWrap, getPackSpanUnits(spanKey));
+} else {
                 card.setOnClickListener(v -> openDataPackEditor(isBar ? 0 : 1, id));
                 // [FIX] Long-press mở menu multi-select + span (1/2/3 pack per row) giống Lenap
                 card.setOnLongClickListener(v -> {
@@ -4520,8 +4521,10 @@ private String mergeCsv(String a, String b) {
     int xB = spreadY ? 0 : -xA;
     int yA = spreadY ? -spacing / 2 : y;
     int yB = spreadY ?  spacing / 2 : y;
-        applySingleBar(targetPrefix, members[0], alpha, w, h, xA, yA, vis, pri, lockM, jump, icons);
-    applySingleBar(targetPrefix, members[1], alpha, w, h, xB, yB, vis, pri, lockM, jump, icons);
+    boolean enA = TwinPairStore.isSideEnabled(prefs, "pack_bar_", pairId, true, true);
+boolean enB = TwinPairStore.isSideEnabled(prefs, "pack_bar_", pairId, false, true);
+applySingleBar(targetPrefix, members[0], alpha, w, h, xA, yA, vis, pri, lockM, jump, icons, enA);
+applySingleBar(targetPrefix, members[1], alpha, w, h, xB, yB, vis, pri, lockM, jump, icons, enB);
     TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_ALPHA, alpha, true);
     TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_W, w, true);
     TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_H, h, true);
@@ -4532,10 +4535,10 @@ private String mergeCsv(String a, String b) {
     applyPackRulesToSpace("bar_" + id, targetPrefix, members[1]);
 }
 private void applySingleBar(String targetPrefix, String barKey, int alpha, int w, int h,
-                            int x, int y, int vis, int pri, int lockM, int jump, String icons) {
+                            int x, int y, int vis, int pri, int lockM, int jump, String icons, boolean sideEnabled) {
     String bk = targetPrefix + barKey + "_";
     prefs.edit()
-        .putBoolean(bk + "en", true)
+        .putBoolean(bk + "en", sideEnabled)
         .putInt(bk + "vis_mode", vis)
         .putInt(bk + "pri_mode", pri)
         .putInt(bk + "lockmode", lockM)
@@ -4563,19 +4566,21 @@ private void applySingleBar(String targetPrefix, String barKey, int alpha, int w
     int spacing = prefs.getInt(src + "pair_spacing", 0);
     String pairId = TwinPairStore.pairIdForCornerLoc(loc);
     String[] members = TwinPairStore.getMembers(pairId, false);
-        int sign = TwinPairStore.signOfCornerPair(pairId);   // luôn -1 (A ở trái)
-    int xA = sign * (spacing / 2);                        // A = tl hoặc bl → x âm
-    int xB = -xA;                                          // B = tr hoặc br → x dương
-    applySingleCorner(src, targetPrefix, members[0], xA);
-    applySingleCorner(src, targetPrefix, members[1], xB);
+    int sign = TwinPairStore.signOfCornerPair(pairId);
+int xA = sign * (spacing / 2);
+int xB = -xA;
+boolean enA = TwinPairStore.isSideEnabled(prefs, "pack_corner_", pairId, true, false);
+boolean enB = TwinPairStore.isSideEnabled(prefs, "pack_corner_", pairId, false, false);
+applySingleCorner(src, targetPrefix, members[0], xA, enA);
+applySingleCorner(src, targetPrefix, members[1], xB, enB);
     TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_SPACING, spacing, false);
     applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + members[0]);
     applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + members[1]);
 }
-private void applySingleCorner(String src, String targetPrefix, String cKey, int xVal) {
+private void applySingleCorner(String src, String targetPrefix, String cKey, int xVal, boolean sideEnabled) {
     String ck = targetPrefix + "corner_" + cKey + "_";
     prefs.edit()
-        .putBoolean(ck + "en", true)
+        .putBoolean(ck + "en", sideEnabled)
         .putInt(ck + "jumpdir", prefs.getInt(src + "jumpdir", 0))
         .putInt(ck + "vis_mode", prefs.getInt(src + "vis_mode", 0))
         .putInt(ck + "pri_mode", prefs.getInt(src + "pri_mode", 0))
@@ -4583,7 +4588,7 @@ private void applySingleCorner(String src, String targetPrefix, String cKey, int
         .putInt(ck + "shape", prefs.getInt(src + "shape", 0))
         .putInt(ck + "w", prefs.getInt(src + "w", 100))
         .putInt(ck + "h", prefs.getInt(src + "h", 100))
-        .putInt(ck + "x", xVal)                              // ← X đến từ spacing
+        .putInt(ck + "x", xVal)
         .putInt(ck + "y", prefs.getInt(src + "y", 0))
         .putInt(ck + "moon_w", prefs.getInt(src + "moon_w", 100))
         .putInt(ck + "moon_h", prefs.getInt(src + "moon_h", 100))
@@ -9195,8 +9200,7 @@ private LinearLayout buildDualSideSwitch(String prefix, String id, boolean isBar
         col.setOnClickListener(v -> {
             boolean newState = !TwinPairStore.isSideEnabled(prefs, prefix, pairId, isA, isBar);
             TwinPairStore.setSideEnabled(prefs, prefix, pairId, isA, newState, isBar);
-
-            // Cập nhật màu nền ngay lập tức
+            TwinPairStore.setSideTouched(prefs, prefix, pairId, isA, isBar);
             GradientDrawable bg = new GradientDrawable();
             bg.setCornerRadius(24f);
             bg.setColor(Color.parseColor(newState ? "#8AB4F8" : "#202124"));
@@ -10710,16 +10714,6 @@ private void migrateLegacyBackupToV2() {
         String tid = prefs.getString("tile_slot_" + s + "_id", "");
         if (!tid.isEmpty() && !tileIds.contains(tid)) { ed.remove("tile_slot_" + s + "_id"); setTileComponentEnabled(s, false); }
     }
-    List<String> barIds = getDynamicIds("pack_bar_ids"), cornerIds = getDynamicIds("pack_corner_ids");
-    for (String px : new String[]{"lock_", "home_", "homacc_"}) {
-        List<String> alive = new ArrayList<>();
-        for (String k : getDynamicIds(px + "applied_packs")) {
-            boolean isBar = k.startsWith("bar_");
-            String id = k.replace(isBar ? "bar_" : "corner_", "");
-            if (isBar ? barIds.contains(id) : cornerIds.contains(id)) alive.add(k);
-        }
-        ed.putString(px + "applied_packs", TextUtils.join(",", alive));
-    }
     String bi = prefs.getString("bubble_node_items_APP", "");
     if (!bi.isEmpty()) {
         String[] it = bi.split(",", -1);
@@ -10727,6 +10721,32 @@ private void migrateLegacyBackupToV2() {
         ed.putString("bubble_node_items_APP", TextUtils.join(",", it));
     }
     ed.putBoolean("needs_sanitize", false).apply();
+reapplyAllAppliedPacksAfterRestore();
+}
+private void reapplyAllAppliedPacksAfterRestore() {
+    java.util.LinkedHashSet<String> migratedApack = new java.util.LinkedHashSet<>();
+    for (String px : new String[]{"lock_", "home_"}) {
+        for (String itemKey : getDynamicIds(px + "applied_packs")) {
+            boolean isBar = itemKey.startsWith("bar_");
+            String id = itemKey.replace(isBar ? "bar_" : "corner_", "");
+            boolean enabled = prefs.getBoolean(px + itemKey + "_en", false);
+            if (!enabled) continue;
+            String packPrefix = isBar ? "pack_bar_" : "pack_corner_";
+            if (!prefs.contains(packPrefix + id + "_loc")) {
+                int loc = isBar ? java.util.Arrays.asList(BARS).indexOf(id)
+                                : java.util.Arrays.asList(CORNERS).indexOf(id);
+                prefs.edit().putInt(packPrefix + id + "_loc", Math.max(0, loc)).apply();
+            }
+            if (isBar) applyBarPackToSpace(id, px);
+            else applyCornerPackToSpace(id, px);
+            String packKey = px + itemKey + "_apack";
+            if (!prefs.getString(packKey, "").isEmpty()) migratedApack.add(packKey);
+        }
+    }
+    if (!prefs.getBoolean("action_pack_migrated_v1", false)) {
+        ActionPackStore.migrateAllGestures(prefs, BARS, CORNERS, C_GESTURES);
+        prefs.edit().putBoolean("action_pack_migrated_v1", true).apply();
+    }
 }
         private void cleanStaleAppliedPacks() {
         java.util.List<String> validBarIds = getDynamicIds("pack_bar_ids");
@@ -12514,10 +12534,6 @@ private LinearLayout sensorBodyContainer, sensorBackRowRef;
             try { wm.updateViewLayout(livePreviewOverlay, livePreviewLp); } catch (Exception ignored) {}
         }
     }
-    /** Đồng bộ en_a/en_b của các pack đôi theo trạng thái APPLY của space.
-     *  Khi user cài đè APK, các pack đang dùng (b_c, r, l, ...) sẽ được
-     *  tự bật cả 2 nút vị trí trái/phải nếu cờ "en" gốc đang là true
-     *  nhưng en_a/en_b đang false (dữ liệu cũ trước khi có tính năng đôi). */
     private void syncPairedPackToggles() {
         String[] prefixes = {"lock_", "home_"};
         for (String prefix : prefixes) {
@@ -12528,20 +12544,15 @@ private LinearLayout sensorBodyContainer, sensorBackRowRef;
                 String pk = prefix + itemKey + "_";
                 boolean packEnabled = prefs.getBoolean(pk + "en", false);
                 if (!packEnabled) continue;
-
-                // Nếu pack đang bật nhưng en_a/en_b chưa set -> tự bật cả 2.
-                String enKeyA = pp + "en_a";
-                String enKeyB = pp + "en_b";
+                String enKeyA = pp + "a_en";
+                String enKeyB = pp + "b_en";
                 boolean enA = prefs.getBoolean(enKeyA, true);
                 boolean enB = prefs.getBoolean(enKeyB, true);
                 if (!enA && !enB) {
-                    // Cả 2 chưa từng được user đụng vào -> tự bật cả 2.
                     prefs.edit()
                         .putBoolean(enKeyA, true)
                         .putBoolean(enKeyB, true)
                         .apply();
-
-                    // Đồng thời bật luôn các bar/corner con tương ứng
                     String pairId = isBar
                         ? TwinPairStore.pairIdForBarLoc(prefs.getInt(pp + "loc", 0))
                         : TwinPairStore.pairIdForCornerLoc(prefs.getInt(pp + "loc", 0));

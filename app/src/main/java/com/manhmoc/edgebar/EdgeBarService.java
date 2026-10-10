@@ -1451,12 +1451,6 @@ if (accShouldRun != lastAccHomeRunningState) {
     if (!accShouldRun && isHomaccDrawn) removeAccessibleHome();
 }
 if (accShouldRun) healHomaccIfNeeded(); // tự hồi sinh, sự kiện đã throttle 200ms nên gần như 0 chi phí
-
-    // [FIX PUSH-AWAY BÀN PHÍM] Không gating theo tên gói/class của sự kiện hiện tại
-    // nữa — sự kiện kích hoạt hàm này gần như luôn đến từ app đang mở chứ KHÔNG
-    // phải từ chính cửa sổ bàn phím, nên điều kiện cũ hầu như luôn sai. Quét thẳng
-    // danh sách cửa sổ (TYPE_INPUT_METHOD) mỗi lần có sự kiện — đã throttle 200ms
-    // ở trên (EVENT_THROTTLE_MS) nên không tốn thêm CPU/pin đáng kể.
     int newKbdHeight = computeKbdHeightPx();
     boolean newIsKbd = newKbdHeight > 0;
 String bl = prefs.getString("blacklist", "");
@@ -1475,20 +1469,14 @@ if (km != null && needBouncerTracking() && km.isKeyguardLocked()) {
 } else {
     isBouncerVisible = false;
 }
-
 boolean stateChanged = newIsKbd != lastIsKbd_cache
 || newIsBl != lastIsBl_cache
 || !pName.equals(lastEventPkg)
 || isBouncerVisible != prevBouncerState
-|| Math.abs(newKbdHeight - cachedKbdHeight) >=
-KBD_HEIGHT_CHANGE_THRESHOLD;
+|| Math.abs(newKbdHeight - cachedKbdHeight) >= KBD_HEIGHT_CHANGE_THRESHOLD;
 isKbd = newIsKbd;
 isBl = newIsBl;
 cachedKbdHeight = newKbdHeight;
-
-// [MỚI] Lưới an toàn: Accessibility đang bật (service này đang sống) thì Homeb
-// TUYỆT ĐỐI không được sống cùng lúc. Chỉ kiểm tra khi có sự kiện thật (đã
-// throttle 200ms bên trên) — zero cost polling, không phải vòng lặp định kỳ.
 if (HomescreenService.isRunning) {
     stopService(new Intent(this, HomescreenService.class));
 }
