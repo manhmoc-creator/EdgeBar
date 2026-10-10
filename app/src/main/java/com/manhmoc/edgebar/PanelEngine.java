@@ -21,14 +21,13 @@ public class PanelEngine {
     private final Map<String, Boolean> forceTestOn = new HashMap<>();
     private final Map<String, Integer> lastIconSizeCache = new HashMap<>();
     private final Map<String, AtomicInteger> renderGen = new HashMap<>();
-    // [MỚI] Theo dõi chuyển đổi Lock <-> Homacc — dùng để tự đóng Panel đang mở,
-    // không cho Panel "mang theo" từ không gian này sang không gian kia.
     private Boolean lastLockedForPanels = null;
-    private static final int ICON_CACHE_LIMIT = 80;
+        private static final int ICON_CACHE_LIMIT = 80;
     private static final LinkedHashMap<String, Drawable> iconCache =
         new LinkedHashMap<String, Drawable>(16, 0.75f, true) {
             protected boolean removeEldestEntry(Map.Entry<String, Drawable> e) { return size() > ICON_CACHE_LIMIT; }
         };
+    private static int[] customIconPoolCache = null;
     private static final java.util.Map<String,String> labelCache = new java.util.HashMap<>();
     private static final java.util.Map<String,String> ACT_LABEL_MAP = new java.util.HashMap<>();
 static {
