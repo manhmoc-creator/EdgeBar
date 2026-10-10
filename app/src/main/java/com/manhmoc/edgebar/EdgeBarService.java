@@ -115,12 +115,16 @@ private boolean recIndicatorTestPaused = false;
         rippleView = null; // không để lại view "ma" chưa gắn vào WindowManager
     }
 }
-
-    private void removeRippleViewIfIdle() {
-        if (rippleView == null) return;
-        try { wm.removeView(rippleView); } catch (Exception ignored) {}
-        rippleView = null;
-    }
+private void removeRippleViewIfIdle() {
+    if (rippleView == null) return;
+    try {
+        if (rippleView instanceof GestureRippleView) {
+            ((GestureRippleView) rippleView).shutdown();
+        }
+    } catch (Exception ignored) {}
+    try { wm.removeView(rippleView); } catch (Exception ignored) {}
+    rippleView = null;
+}
     private CameraManager cm;
     private String cId;
     private boolean fOn = false, isKbd = false, isBl = false;
@@ -803,7 +807,6 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, pCore);
     }
 }
-    // ===== GESTURE RIPPLE VIEW (chấm sóng chạm + icon NHẢY LÊN xoay 1 vòng rồi RƠI XUỐNG) =====
     private class GestureRippleView extends View {
         private float touchX = -1, touchY = -1;
         private float rippleRadius = 0f, rippleAlpha = 0f;
@@ -819,9 +822,34 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
         private float jumpAlpha = 0f;
         private ValueAnimator jumpUpAnim, fallAnim;
         private final Handler jumpHandler = new Handler(android.os.Looper.getMainLooper());
+private volatile boolean isDetached = false;
+private volatile boolean isShuttingDown = false;
+public GestureRippleView(Context c) { super(c); setLayerType(LAYER_TYPE_HARDWARE, null); }
 
-        public GestureRippleView(Context c) { super(c); setLayerType(LAYER_TYPE_HARDWARE, null); }
+@Override protected void onAttachedToWindow() {
+    super.onAttachedToWindow();
+    isDetached = false;
+}
 
+@Override protected void onDetachedFromWindow() {
+    isDetached = true;
+    try { jumpHandler.removeCallbacksAndMessages(null); } catch (Exception ignored) {}
+    if (popAnim != null) { try { popAnim.cancel(); } catch (Exception ignored) {} popAnim = null; }
+    if (jumpUpAnim != null) { try { jumpUpAnim.cancel(); } catch (Exception ignored) {} jumpUpAnim = null; }
+    if (fallAnim != null) { try { fallAnim.cancel(); } catch (Exception ignored) {} fallAnim = null; }
+    jumpIconBmp = null;
+    super.onDetachedFromWindow();
+}
+
+void shutdown() {
+    isShuttingDown = true;
+    isDetached = true;
+    try { jumpHandler.removeCallbacksAndMessages(null); } catch (Exception ignored) {}
+    if (popAnim != null) { try { popAnim.cancel(); } catch (Exception ignored) {} popAnim = null; }
+    if (jumpUpAnim != null) { try { jumpUpAnim.cancel(); } catch (Exception ignored) {} jumpUpAnim = null; }
+    if (fallAnim != null) { try { fallAnim.cancel(); } catch (Exception ignored) {} fallAnim = null; }
+    jumpIconBmp = null;
+}
         public void showAt(float x, float y) {
             touchX = x; touchY = y;
             rippleRadius = 10f; rippleAlpha = 1f;
@@ -840,14 +868,20 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
                 invalidate();
             });
             popAnim.addListener(new AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(Animator a) {
-                    if (jumpIconBmp == null) {
-                        rippleAlpha = 0f; rippleRadius = 0f; touchX = -1; touchY = -1;
-                        setVisibility(View.GONE);
-                        removeRippleViewIfIdle(); // Giải phóng View vĩnh viễn khỏi WM chống Tapjacking
-                    }
-                }
-            });
+    @Override public void onAnimationEnd(Animator a) {
+        if (isShuttingDown || isDetached) return;
+        try {
+            if (jumpIconBmp == null) {
+                rippleAlpha = 0f; rippleRadius = 0f; touchX = -1; touchY = -1;
+                setVisibility(View.GONE);
+                final Runnable cleanup = () -> {
+                    if (!isShuttingDown && !isDetached) removeRippleViewIfIdle();
+                };
+                jumpHandler.post(cleanup);
+            }
+        } catch (Exception ignored) {}
+    }
+});
             popAnim.start();
         }
 
@@ -880,39 +914,57 @@ private java.util.List<android.graphics.Bitmap> resolveBarIcons(String csv, int 
                 invalidate();
             });
             jumpUpAnim.addListener(new AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(Animator a) {
-                    jumpHandler.postDelayed(() -> startFall(), prefs.getInt("homacc_jump_hold_ms", 2000));
-                }
-            });
+    @Override public void onAnimationEnd(Animator a) {
+        if (isShuttingDown || isDetached || !isAttachedToWindow()) return;
+        try {
+            int holdMs = Math.max(50, prefs.getInt("homacc_jump_hold_ms", 2000));
+            jumpHandler.postDelayed(() -> {
+                if (isShuttingDown || isDetached || !isAttachedToWindow()) return;
+                try { startFall(); } catch (Exception ignored) {}
+            }, holdMs);
+        } catch (Exception ignored) {}
+    }
+});
             jumpUpAnim.start();
         }
         private void startFall() {
-            int fallDur = Math.max(60, prefs.getInt("homacc_jump_anim_dur", 1000));
-            fallAnim = ValueAnimator.ofFloat(0f, 1f);
-            fallAnim.setDuration((long) (fallDur * 0.55f));
-            fallAnim.setInterpolator(new android.view.animation.AccelerateInterpolator(1.4f));
-            float startOffset = jumpOffsetY;
-            float startOffsetX = jumpOffsetX;
-            fallAnim.addUpdateListener(a -> {
+    if (isShuttingDown || isDetached || !isAttachedToWindow()) return;
+    try {
+        int fallDur = Math.max(60, prefs.getInt("homacc_jump_anim_dur", 1000));
+        fallAnim = ValueAnimator.ofFloat(0f, 1f);
+        fallAnim.setDuration((long) (fallDur * 0.55f));
+        fallAnim.setInterpolator(new android.view.animation.AccelerateInterpolator(1.4f));
+        float startOffset = jumpOffsetY;
+        float startOffsetX = jumpOffsetX;
+        fallAnim.addUpdateListener(a -> {
+            if (isShuttingDown || isDetached) return;
+            try {
                 float v = (float) a.getAnimatedValue();
                 jumpOffsetY = startOffset + (140f - startOffset) * v;
                 jumpOffsetX = startOffsetX * (1f - v);
                 jumpAlpha = 1f - v;
                 invalidate();
-            });
-            fallAnim.addListener(new AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(Animator a) {
+            } catch (Exception ignored) {}
+        });
+        fallAnim.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator a) {
+                if (isShuttingDown) return;
+                try {
                     jumpIconBmp = null;
                     if (rippleAlpha <= 0f) {
                         setVisibility(View.GONE);
-                        removeRippleViewIfIdle(); // Giải phóng View vĩnh viễn khỏi WM chống Tapjacking
+                        final Runnable cleanup = () -> {
+                            if (!isShuttingDown && !isDetached) removeRippleViewIfIdle();
+                        };
+                        jumpHandler.post(cleanup);
                     }
                     invalidate();
-                }
-            });
-            fallAnim.start();
-        }
-
+                } catch (Exception ignored) {}
+            }
+        });
+        fallAnim.start();
+    } catch (Exception ignored) {}
+}
         @Override protected void onDraw(Canvas canvas) {
             if (touchX >= 0 && rippleAlpha > 0f) {
                 ripplePaint.setColor(Color.argb((int) (rippleAlpha * 160), 255, 255, 255));
@@ -2059,13 +2111,9 @@ private void fireIntentById(String id) {
 
         if (syntheticGuardResetRunnable != null) syntheticGuardHandler.removeCallbacks(syntheticGuardResetRunnable);
         syntheticGuardResetRunnable = () -> {
-            isDispatchingSyntheticGesture = false;
-            setTransientUntouchable(false); // Khôi phục lại trạng thái cảm ứng
-        };
-        // [FIX GIẬT TAP LIÊN TỤC] Mốc an toàn dự phòng giờ co giãn theo đúng "sức nặng"
-        // của từng loại trigger, thay vì cố định 350ms cho mọi trường hợp — TAP chỉ
-        // khoá cảm ứng ~150ms (đủ nhả tay ra là chạm lại được ngay), LONG/DTAP vẫn có
-        // đủ thời gian an toàn hơn cả duration thật của gesture.
+    isDispatchingSyntheticGesture = false;
+    try { setTransientUntouchable(false); } catch (Exception ignored) {}
+};
         int guardFallbackMs;
         if (trigger.equals("TRIGGER_TAP")) guardFallbackMs = 150;
         else if (trigger.equals("TRIGGER_DTAP")) guardFallbackMs = 220;
@@ -3292,7 +3340,10 @@ public void onDestroy() {
     try { removeAllIconLayers(); } catch (Exception ignored) {}
     try { removeAccessibleHome(); } catch (Exception ignored) {}
     try { removeYtdlOverlay(); } catch (Exception ignored) {}
-    try { removeRippleViewIfIdle(); } catch (Exception ignored) {}
+    if (rippleView instanceof GestureRippleView) {
+    try { ((GestureRippleView) rippleView).shutdown(); } catch (Exception ignored) {}
+}
+try { removeRippleViewIfIdle(); } catch (Exception ignored) {}
     if (recBlinkAnim != null) recBlinkAnim.cancel();
     if (recIndicatorView != null) { try { wm.removeView(recIndicatorView); } catch (Exception ignored) {} recIndicatorView = null; }
     for (int i = 0; i < 12; i++) if (bars[i] != null) { try { wm.removeView(bars[i]); } catch (Exception ignored) {} bars[i] = null; }
