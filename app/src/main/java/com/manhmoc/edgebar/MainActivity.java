@@ -252,6 +252,65 @@ private String packDisplayName(boolean isBar, String id) {
         : (isVi ? TwinPairStore.CORNER_PAIR_LABELS_VI : TwinPairStore.CORNER_PAIR_LABELS_EN);
     return (pairIdx < labels.length) ? labels[pairIdx] : "?";
 }
+private String curRuleSpace = "lock_";
+
+private String rulesKey(String space, String itemKey) {
+    return space + itemKey + "_pack_rules";
+}
+
+private void ensureScopedPack(String space, boolean isBar, String id) {
+    String base = isBar ? "pack_bar_" : "pack_corner_";
+    String gBase = base + id + "_";
+    String sBase = space + gBase;
+    String marker = sBase + "scoped";
+    if (prefs.getBoolean(marker, false)) return;
+    SharedPreferences.Editor ed = prefs.edit();
+    for (java.util.Map.Entry<String, ?> e : prefs.getAll().entrySet()) {
+        String k = e.getKey();
+        if (!k.startsWith(gBase)) continue;
+        String nk = sBase + k.substring(gBase.length());
+        if (prefs.contains(nk)) continue;
+        Object v = e.getValue();
+        if (v instanceof Boolean) ed.putBoolean(nk, (Boolean) v);
+        else if (v instanceof Integer) ed.putInt(nk, (Integer) v);
+        else if (v instanceof Long) ed.putLong(nk, (Long) v);
+        else if (v instanceof Float) ed.putFloat(nk, (Float) v);
+        else if (v instanceof String) ed.putString(nk, (String) v);
+    }
+    int loc = prefs.getInt(gBase + "loc", 0);
+    String pairId = isBar ? TwinPairStore.pairIdForBarLoc(loc) : TwinPairStore.pairIdForCornerLoc(loc);
+    if (pairId != null) {
+        String gSide = base + pairId + "_";
+        String sSide = space + gSide;
+        ed.putBoolean(sSide + TwinPairStore.F_A_EN, prefs.getBoolean(gSide + TwinPairStore.F_A_EN, true));
+        ed.putBoolean(sSide + TwinPairStore.F_B_EN, prefs.getBoolean(gSide + TwinPairStore.F_B_EN, true));
+    }
+    ed.putBoolean(marker, true);
+    ed.apply();
+}
+
+private void ensureScopedRules(String space, String itemKey) {
+    String sKey = rulesKey(space, itemKey);
+    if (prefs.contains(sKey)) return;
+    SharedPreferences.Editor ed = prefs.edit();
+    java.util.Map<String, ?> all = prefs.getAll();
+    List<String> newIds = new ArrayList<>();
+    for (String rId : getDynamicIds(itemKey + "_pack_rules")) {
+        String nId = java.util.UUID.randomUUID().toString().substring(0, 8);
+        newIds.add(nId);
+        String from = "prule_" + rId + "_";
+        for (java.util.Map.Entry<String, ?> e : all.entrySet()) {
+            if (!e.getKey().startsWith(from)) continue;
+            String nk = "prule_" + nId + "_" + e.getKey().substring(from.length());
+            Object v = e.getValue();
+            if (v instanceof Boolean) ed.putBoolean(nk, (Boolean) v);
+            else if (v instanceof Integer) ed.putInt(nk, (Integer) v);
+            else if (v instanceof String) ed.putString(nk, (String) v);
+        }
+    }
+    ed.putString(sKey, TextUtils.join(",", newIds));
+    ed.apply();
+}
 private class SpanFlow {
     final LinearLayout container; LinearLayout row; int used = 0;
     SpanFlow(LinearLayout c) { container = c; }
@@ -752,6 +811,10 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
         boolean pHomacc = (pageDesign != null && pageDesign.getVisibility()==View.VISIBLE && designTabState==4)
             || (currentMainTab==1 && currentGesTab==5 && frontierSubTab==2 && inFrontierSub);
         boolean pHome = (currentMainTab==1 && currentGesTab==5 && frontierSubTab==1 && inFrontierSub);
+        boolean sameAsBefore = prefs.getBoolean("preview_lock", false) == pLock
+            && prefs.getBoolean("preview_homacc", false) == pHomacc
+            && prefs.getBoolean("preview_home", false) == pHome;
+        if (sameAsBefore && !pLock && !pHomacc && !pHome) return;
         SharedPreferences.Editor ed = prefs.edit();
         ed.putBoolean("preview_lock", pLock)
           .putBoolean("preview_homacc", pHomacc)
@@ -866,9 +929,14 @@ if (prefs.getBoolean("blacklist_lock_active", false)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED ? View.VISIBLE : View.GONE);
         }
     }
-    @Override protected void onPause() { super.onPause();
+    @Override protected void onPause() {
+        super.onPause();
+        if (prefs.getBoolean("preview_lock", false) || prefs.getBoolean("preview_homacc", false) || prefs.getBoolean("preview_home", false)) {
+            prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply();
+            sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+        }
+    }
 
-prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply(); Intent i = new Intent("com.manhmoc.edgebar.SYNC_STATE"); sendBroadcast(i); }
 @Override
 protected void onDestroy() {
     if (prefs.getBoolean("appicon_kill_recents", false) && isFinishing()) {
@@ -1412,7 +1480,7 @@ fab.setOnClickListener(v -> showPremiumDialog());
             String itemKey = (type == 0 ? "bar_" : "corner_") + newId;
             currentPacks.add(itemKey);
             prefs.edit().putString(listKey, TextUtils.join(",", currentPacks)).apply();
-            new Handler(android.os.Looper.getMainLooper()).post(() -> openDataPackEditor(type, newId));
+            new Handler(android.os.Looper.getMainLooper()).post(() -> openDataPackEditor(type, newId, prefix));
         }).show();
 }
 
@@ -2493,31 +2561,30 @@ private int indexInDefaultOrder(String itemKey){
 private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState, boolean isFrontier) {
     container.addView(createSectionTitle(isFrontier
         ? T("DATA PACKS OF THIS SPACE", "DATA PACK CỦA KHÔNG GIAN NÀY") : "PACK"));
+    final SpanFlow flow = new SpanFlow(container);
     for (String itemKey : TwinPairStore.DEFAULT_DISPLAY_ORDER)
-        container.addView(buildMotherPackCard(prefix, itemKey, tabState));
+        flow.add(buildMotherPackCard(prefix, itemKey, tabState), getPackSpanUnits("ui_span_mother_" + prefix + itemKey));
+    flow.finish();
 }
-
 private View buildMotherPackCard(String prefix, String itemKey, int tabState) {
     final boolean isBar = itemKey.startsWith("bar_");
     final String id = itemKey.substring(isBar ? 4 : 7);
     final String packPrefix = isBar ? "pack_bar_" : "pack_corner_";
     final String enKey = prefix + itemKey + "_en";
-    int loc = prefs.getInt(packPrefix + id + "_loc", 0);
+    final String spanKey = "ui_span_mother_" + prefix + itemKey;
+    ensureScopedPack(prefix, isBar, id);
+    final String sBase = prefix + packPrefix + id + "_";
+    int loc = prefs.getInt(sBase + "loc", 0);
     String pairId = isBar ? TwinPairStore.pairIdForBarLoc(loc) : TwinPairStore.pairIdForCornerLoc(loc);
     String[] mem = pairId == null ? null : TwinPairStore.getMembers(pairId, isBar);
-    LinearLayout card = new LinearLayout(this);
-    card.setOrientation(LinearLayout.VERTICAL);
-    card.setBackground(getRounded(SURFACE_COLOR, 24f));
-    card.setPadding(28, 24, 28, 22);
-    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
-    clp.setMargins(0, 8, 0, 8);
-    card.setLayoutParams(clp);
-    LinearLayout head = new LinearLayout(this);
-    head.setOrientation(LinearLayout.HORIZONTAL);
-    head.setGravity(Gravity.CENTER_VERTICAL);
-    TextView tvName = stdLine(packDisplayName(isBar, id), "#E8EAED", 16.5f);
-    tvName.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    tvName.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    String sides = "";
+    if (mem != null) {
+        String sidePk = prefix + packPrefix;
+        sides = (TwinPairStore.isSideEnabled(prefs, sidePk, pairId, true, isBar) ? "● " : "○ ") + humanizeMember(mem[0])
+            + "  " + (TwinPairStore.isSideEnabled(prefs, sidePk, pairId, false, isBar) ? "● " : "○ ") + humanizeMember(mem[1]);
+    }
+    String stats = "W " + prefs.getInt(sBase + "w", isBar ? 300 : 100) + " · H " + prefs.getInt(sBase + "h", isBar ? 60 : 100);
+
     Switch swEn = new Switch(this);
     swEn.setChecked(prefs.getBoolean(enKey, false));
     swEn.setOnCheckedChangeListener((sw, chk) -> {
@@ -2529,63 +2596,18 @@ private View buildMotherPackCard(String prefix, String itemKey, int tabState) {
         }
         sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
     });
-    head.addView(tvName);
-    head.addView(swEn);
-    card.addView(head);
-    if (mem != null) {
-        LinearLayout pills = new LinearLayout(this);
-        pills.setOrientation(LinearLayout.HORIZONTAL);
-        pills.setPadding(0, 12, 0, 6);
-        pills.addView(sidePill(humanizeMember(mem[0]), TwinPairStore.isSideEnabled(prefs, packPrefix, pairId, true, isBar)));
-        pills.addView(sidePill(humanizeMember(mem[1]), TwinPairStore.isSideEnabled(prefs, packPrefix, pairId, false, isBar)));
-        card.addView(pills);
-    }
-    String stats = isBar
-        ? "W " + prefs.getInt(packPrefix + id + "_w", 300) + "  ·  H " + prefs.getInt(packPrefix + id + "_h", 60)
-            + "  ·  Gap " + prefs.getInt(packPrefix + id + "_pair_spacing", 0) + "  ·  Y " + prefs.getInt(packPrefix + id + "_y", 0)
-        : "W " + prefs.getInt(packPrefix + id + "_w", 100) + "  ·  H " + prefs.getInt(packPrefix + id + "_h", 100)
-            + "  ·  Gap " + prefs.getInt(packPrefix + id + "_pair_spacing", 0);
-    TextView tvStats = stdLine(stats, TEXT_MUTED_COLOR, 11.5f);
-    tvStats.setPadding(0, 4, 0, 14);
-    card.addView(tvStats);
-    LinearLayout btns = new LinearLayout(this);
-    btns.setOrientation(LinearLayout.HORIZONTAL);
-    Button btnEdit = packActionBtn(T("EDIT", "CHỈNH"), "#2C2C2C", Color.parseColor(ACCENT_COLOR));
-    Button btnTrig = packActionBtn("TRIGGER", ACCENT_COLOR, Color.BLACK);
-    btnEdit.setOnClickListener(v -> openDataPackEditor(isBar ? 0 : 1, id));
+    Button btnTrig = stdCardBtn("TRIGGER", ACCENT_COLOR, Color.BLACK);
     btnTrig.setOnClickListener(v -> openPackRuleSpace(itemKey, tabState));
-    btns.addView(btnEdit);
-    btns.addView(btnTrig);
-    card.addView(btns);
-    card.setOnClickListener(v -> openDataPackEditor(isBar ? 0 : 1, id));
-    return card;
-}
-private TextView sidePill(String text, boolean on) {
-    TextView t = new TextView(this);
-    t.setText((on ? "● " : "○ ") + text);
-    t.setTextSize(11.5f);
-    t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    t.setTextColor(Color.parseColor(on ? "#8AB4F8" : "#6F757B"));
-    t.setBackground(getRounded(on ? "#0D2A52" : "#1A1A1A", 100f));
-    t.setPadding(26, 10, 26, 10);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-    lp.setMargins(0, 0, 12, 0);
-    t.setLayoutParams(lp);
-    return t;
-}
-private Button packActionBtn(String text, String bg, int fg) {
-    Button b = new Button(this);
-    b.setText(text);
-    b.setBackground(getRounded(bg, 16f));
-    b.setTextColor(fg);
-    b.setTextSize(12f);
-    b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    b.setMinimumHeight(0);
-    b.setPadding(10, 18, 10, 18);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-    lp.setMargins(6, 0, 6, 0);
-    b.setLayoutParams(lp);
-    return b;
+
+    LinearLayout card = buildStdPackCard(null, packDisplayName(isBar, id), stats, sides, swEn, btnTrig);
+    TextView tvSides = card.findViewWithTag("line3");
+    if (tvSides != null) tvSides.setTextSize(12f);
+    card.setOnClickListener(v -> openDataPackEditor(isBar ? 0 : 1, id, prefix));
+    card.setOnLongClickListener(v -> {
+        showPackLongPressMenu(v, spanKey, null, this::renderRulesList);
+        return true;
+    });
+    return wrapPackCard(card, itemKey);
 }
 private String cloneDataPackDeep(String itemKey) {
     boolean isBar = itemKey.startsWith("bar_");
@@ -2999,10 +3021,10 @@ private void openSpaceDirect(int spaceIdx) {
                         android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
                 }
             } catch (Exception ignored) {}
-        } else {
+                } else {
             ensureHomeServiceForPreview();
         }
-    }, 200);
+    }, 60);
     condBackRow.setVisibility(View.GONE);
     gesMenuContainer.setVisibility(View.GONE);
     gesSubHeader.setVisibility(View.GONE);      // bỏ hẳn header trung gian -> hết nháy màn
@@ -3045,6 +3067,9 @@ private void ensureHomeServiceForPreview() {
     private void openPackRuleSpace(String appliedItemKey, int tabState) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     final boolean isHomebSpace = (tabState == 1);
+        final String ruleSpace = tabState == 1 ? "home_" : "lock_";
+    curRuleSpace = ruleSpace;
+    ensureScopedRules(ruleSpace, appliedItemKey);
     prulesSelectMode = false;
     prulesSelectedItems.clear();
     RelativeLayout rootLayout = new RelativeLayout(this);
@@ -3069,12 +3094,12 @@ private void ensureHomeServiceForPreview() {
         Runnable[] renderRules = new Runnable[1];
         renderRules[0] = () -> {
             listContainer.removeAllViews();
-            String listKey = appliedItemKey + "_pack_rules";
+            String listKey = rulesKey(ruleSpace, appliedItemKey);
             java.util.List<String> rules = getDynamicIds(listKey);
             rules.sort((rA, rB) -> naturalCompareName(
                 formatPruleGestureLabel(rA), formatPruleGestureLabel(rB)));
             if (prulesSelectMode) {
-                listContainer.addView(buildPruleSelectionToolbar(appliedItemKey, rules, renderRules));
+                listContainer.addView(buildPruleSelectionToolbar(appliedItemKey, listKey, rules, renderRules));
             }
             java.util.List<String> shownRules = new java.util.ArrayList<>();
             String q = searchQuery[0].trim().toLowerCase();
@@ -3246,8 +3271,7 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
         String spacePrefix = prefixes[curTab[0]];
         java.util.List<String> items = new java.util.ArrayList<>();
         for (String key : getDynamicIds(spacePrefix + "applied_packs"))
-            if (!key.equals(currentItemKey)) items.add(key);
-
+            if (!(spacePrefix + key).equals(curRuleSpace + currentItemKey)) items.add(key);
         if (items.isEmpty()) {
             TextView empty = new TextView(this);
             empty.setText(T("No Data Pack here", "Không có Data Pack nào"));
@@ -3269,8 +3293,7 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
             String pfx = isBar ? "pack_bar_" : "pack_corner_";
             String name = packDisplayName(isBar, id);
             String tag = isBar ? "B" : "C";
-            boolean sel = selectedTargets.contains(itemKey);
-
+            boolean sel = selectedTargets.contains(spacePrefix + itemKey);
             FrameLayout cardWrap = new FrameLayout(this);
             LinearLayout.LayoutParams wLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
             wLp.setMargins(6,6,6,6); cardWrap.setLayoutParams(wLp);
@@ -3293,8 +3316,7 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
             dLp.gravity = Gravity.BOTTOM | Gravity.END; dLp.setMargins(0,0,10,6);
             selDot.setLayoutParams(dLp);
             cardWrap.addView(selDot);
-
-            final String fKey = itemKey;
+            final String fKey = spacePrefix + itemKey;
             card.setOnClickListener(v -> {
                 if (selectedTargets.contains(fKey)) selectedTargets.remove(fKey);
                 else selectedTargets.add(fKey);
@@ -3334,6 +3356,8 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
         if (selectedTargets.isEmpty()) { Toast.makeText(this, T("Pick at least 1 target","Chọn ít nhất 1 nơi nhận"), Toast.LENGTH_SHORT).show(); return; }
         int totalCopied = 0;
         for (String targetItemKey : selectedTargets) {
+            String tSpace = targetItemKey.startsWith("home_") ? "home_" : "lock_";
+            ensureScopedRules(tSpace, targetItemKey.substring(tSpace.length()));
             String targetListKey = targetItemKey + "_pack_rules";
             java.util.List<String> targetRules = getDynamicIds(targetListKey);
             for (String rId : rIdsToShare) {
@@ -3367,8 +3391,7 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
     one.add(rId);
     showShareTargetPicker(one, currentItemKey, onDone);
 }
-   private LinearLayout buildPruleSelectionToolbar(String appliedItemKey, java.util.List<String> rules, Runnable[] renderRules) {
-    String listKey = appliedItemKey + "_pack_rules";
+   private LinearLayout buildPruleSelectionToolbar(String appliedItemKey, String listKey, java.util.List<String> rules, Runnable[] renderRules) {
     LinearLayout bar = new LinearLayout(this);
     bar.setOrientation(LinearLayout.HORIZONTAL);
     bar.setGravity(Gravity.CENTER_VERTICAL);
@@ -4163,7 +4186,7 @@ vTrig.addView(cbOs);
 
         String targetId = editId != null ? editId : java.util.UUID.randomUUID().toString().substring(0, 8);
         if (editId == null) {
-            String listKey = appliedItemKey + "_pack_rules";
+            String listKey = rulesKey(isHomebSpace ? "home_" : "lock_", appliedItemKey);
             java.util.List<String> curRules = getDynamicIds(listKey);
             curRules.add(targetId);
             prefs.edit().putString(listKey, android.text.TextUtils.join(",", curRules)).apply();
@@ -4224,8 +4247,7 @@ vTrig.addView(cbOs);
             .putBoolean("prule_" + targetId + "_os", cbOs.isChecked())
             .putBoolean("prule_" + targetId + "_en", true)
             .apply();
-        reapplyPackIfEnabledByItemKey(appliedItemKey);
-
+        reapplyPackIfEnabledByItemKey(appliedItemKey, isHomebSpace ? "home_" : "lock_");
         if (onRefresh != null) onRefresh.run();
         d.dismiss();
     });
@@ -4240,7 +4262,8 @@ private void applyPackRulesToSpace(String itemKey, String targetPrefix, String c
           .remove(b + "_lim_anim").remove(b + "_lim_jump_on").remove(b + "_lim_os")
           .remove(b + "_lim_launch_pkg").remove(b + "_lim_shortcut_id").remove(b + "_dual");
     }
-    for (String rId : getDynamicIds(itemKey + "_pack_rules")) {
+    ensureScopedRules(targetPrefix, itemKey);
+    for (String rId : getDynamicIds(rulesKey(targetPrefix, itemKey))) {
         if (!prefs.getBoolean("prule_" + rId + "_en", true)) continue;
         String gestures = prefs.getString("prule_" + rId + "_gestures", "");
         if (gestures.isEmpty()) continue;
@@ -4305,8 +4328,8 @@ if (isDual) {
                   .putBoolean(finalKey + "_dual", true);
             }
         }
-    ed.apply();
     }
+    ed.apply();
 }
 private String mergeCsv(String a, String b) {
     if (a.isEmpty()) return b;
@@ -4347,7 +4370,8 @@ private void writeSideFields(SharedPreferences.Editor ed, String packBase, Strin
 }
 
 private void applyBarPackToSpace(String id, String targetPrefix) {
-    String src = "pack_bar_" + id + "_";
+    ensureScopedPack(targetPrefix, true, id);
+    String src = targetPrefix + "pack_bar_" + id + "_";
     int loc = prefs.getInt(src + "loc", 0);
     if (loc < 0 || loc >= BARS.length) loc = 0;
     String pairId = TwinPairStore.pairIdForBarLoc(loc);
@@ -4366,7 +4390,7 @@ private void applyBarPackToSpace(String id, String targetPrefix) {
     SharedPreferences.Editor ed = prefs.edit();
     for (int s = 0; s < 2; s++) {
         boolean isA = s == 0;
-        boolean en = TwinPairStore.isSideEnabled(prefs, "pack_bar_", pairId, isA, true);
+        boolean en = TwinPairStore.isSideEnabled(prefs, targetPrefix + "pack_bar_", pairId, isA, true);
         boolean iconOn = sideVal(src + "icon_en", isA, false, 0) == 1 || sideVal(src + "icon_en", isA, true, 0) == 1;
         String bk = targetPrefix + m[s] + "_";
         ed.putBoolean(bk + "en", en).putInt(bk + "alpha", alpha).putInt(bk + "w", w).putInt(bk + "h", h)
@@ -4379,7 +4403,8 @@ private void applyBarPackToSpace(String id, String targetPrefix) {
 }
 
 private void applyCornerPackToSpace(String id, String targetPrefix) {
-    String src = "pack_corner_" + id + "_";
+    ensureScopedPack(targetPrefix, false, id);
+    String src = targetPrefix + "pack_corner_" + id + "_";
     int loc = prefs.getInt(src + "loc", 0);
     if (loc < 0 || loc >= CORNERS.length) loc = 0;
     String pairId = TwinPairStore.pairIdForCornerLoc(loc);
@@ -4390,7 +4415,7 @@ private void applyCornerPackToSpace(String id, String targetPrefix) {
     SharedPreferences.Editor ed = prefs.edit();
     for (int s = 0; s < 2; s++) {
         boolean isA = s == 0;
-        boolean en = TwinPairStore.isSideEnabled(prefs, "pack_corner_", pairId, isA, false);
+        boolean en = TwinPairStore.isSideEnabled(prefs, targetPrefix + "pack_corner_", pairId, isA, false);
         String ck = targetPrefix + "corner_" + m[s] + "_";
         ed.putBoolean(ck + "en", en)
           .putInt(ck + "shape", prefs.getInt(src + "shape", 0))
@@ -4429,23 +4454,22 @@ private void disableCornerPackFromSpace(String id, String targetPrefix) {
         .putBoolean(targetPrefix + "corner_" + m[1] + "_en", false)
         .apply();
 }
-
 private void reapplyPackIfEnabled(int type, String id) {
-    if (type == 2) return; // Panel dùng cơ chế khác (đọc trực tiếp qua PanelEngine), không cần
-    String itemKey = (type == 0 ? "bar_" : "corner_") + id;
-    for (String spacePrefix : new String[]{"lock_", "home_", "homacc_"}) {
-        boolean applied = getDynamicIds(spacePrefix + "applied_packs").contains(itemKey);
-        boolean enabled = prefs.getBoolean(spacePrefix + itemKey + "_en", false);
-        if (applied && enabled) {
-            if (type == 0) applyBarPackToSpace(id, spacePrefix);
-            else applyCornerPackToSpace(id, spacePrefix);
-        }
-    }
+    reapplyPackIfEnabled(type, id, "lock_");
+    reapplyPackIfEnabled(type, id, "home_");
 }
-private void reapplyPackIfEnabledByItemKey(String itemKey) {
+private void reapplyPackIfEnabled(int type, String id, String spacePrefix) {
+    if (type == 2) return;
+    String itemKey = (type == 0 ? "bar_" : "corner_") + id;
+    boolean applied = getDynamicIds(spacePrefix + "applied_packs").contains(itemKey);
+    boolean enabled = prefs.getBoolean(spacePrefix + itemKey + "_en", false);
+    if (!applied || !enabled) return;
+    if (type == 0) applyBarPackToSpace(id, spacePrefix); else applyCornerPackToSpace(id, spacePrefix);
+}
+private void reapplyPackIfEnabledByItemKey(String itemKey, String spacePrefix) {
     boolean isBar = itemKey.startsWith("bar_");
     String id = itemKey.replace(isBar ? "bar_" : "corner_", "");
-    reapplyPackIfEnabled(isBar ? 0 : 1, id);
+    reapplyPackIfEnabled(isBar ? 0 : 1, id, spacePrefix);
 }
     private void openRuleBuilderDialogNoComp(String copyActs) {
         Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
@@ -5506,17 +5530,18 @@ private void permanentlyDeleteDataPack(String itemKey) {
     java.util.Map<String, ?> all = prefs.getAll();
     SharedPreferences.Editor ed = prefs.edit();
     String fullPrefix = prefix + id + "_";
-    for (String k : all.keySet()) if (k.startsWith(fullPrefix)) ed.remove(k);
+    for (String k : all.keySet())
+        if (k.startsWith(fullPrefix) || k.startsWith("lock_" + fullPrefix) || k.startsWith("home_" + fullPrefix)) ed.remove(k);
     if (type.equals("shortcut")) {
         String iconPath = prefs.getString("shortcut_" + id + "_icon_path", "");
         if (!iconPath.isEmpty()) ShortcutScanner.deleteIconFile(iconPath);
     }
     if (type.equals("bar") || type.equals("corner")) {
-        java.util.List<String> rules = getDynamicIds(itemKey + "_pack_rules");
-        for (String rId : rules) {
-            for (String k : all.keySet()) if (k.startsWith("prule_" + rId + "_")) ed.remove(k);
+        for (String sp : new String[]{"", "lock_", "home_"}) {
+            for (String rId : getDynamicIds(sp + itemKey + "_pack_rules"))
+                for (String k : all.keySet()) if (k.startsWith("prule_" + rId + "_")) ed.remove(k);
+            ed.remove(sp + itemKey + "_pack_rules");
         }
-        ed.remove(itemKey + "_pack_rules");
     }
     ed.apply();
 }
@@ -7601,7 +7626,7 @@ if (designTabState == 6) { renderBubbleSettings(); return; }
     LinearLayout dOpt = new LinearLayout(this);
     dOpt.setOrientation(LinearLayout.VERTICAL); dOpt.setPadding(20,10,20,20);
     dOpt.addView(createSlider("Thời gian Vuốt+Giữ (All)", "hold_dur", 2000, 600));
-dOpt.addView(createSlider("Tốc độ chuyển cảnh Bar/Corner ở Lock (ms)", "lock_anim_dur", 300, 100));
+dOpt.addView(createSlider("Tốc độ chuyển cảnh Bar/Corner ở Lock (ms)", "lock_anim_dur", 300, 0));
 dOpt.addView(createSlider("Thời gian hồi phục Overlay này (ms)", "os_yield_dur", 60000, 3000)); // THÊM DÒNG NÀY
     dOpt.addView(createSlider("Độ rung (ms) (All)", "vib_dur", 100, 30));
         dOpt.addView(createSlider(T("Touch Sound Volume (% Alarm)","Cường độ Âm chạm (% Âm lượng Báo thức, 0=tắt)"), "touch_sound_vol", 100, 70));
@@ -8941,7 +8966,7 @@ private LinearLayout buildSideSwitchCell(String prefix, String id, String pairId
             Vibrator vib = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (vib != null) vib.vibrate(VibrationEffect.createOneShot(20, VibrationEffect.DEFAULT_AMPLITUDE));
         } catch (Exception ignored) {}
-        reapplyPackIfEnabled(isBar ? 0 : 1, id);
+        reapplyPackIfEnabled(isBar ? 0 : 1, id, prefix.substring(0, prefix.indexOf("pack_")));
     });
     return col;
 }
@@ -9142,6 +9167,9 @@ private TextView buildPackLiveHint() {
     return tv;
 }
 private void openDataPackEditor(int type, String id) {
+    openDataPackEditor(type, id, "");
+}
+private void openDataPackEditor(int type, String id, String space) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
@@ -9153,7 +9181,8 @@ private void openDataPackEditor(int type, String id) {
     content.setOrientation(LinearLayout.VERTICAL);
     scroll.addView(content);
     root.addView(scroll);   
-    String prefix = type == 0 ? "pack_bar_" : (type == 1 ? "pack_corner_" : "pack_panel_");
+    if (type != 2) ensureScopedPack(space, type == 0, id);
+    String prefix = type == 2 ? "pack_panel_" : space + (type == 0 ? "pack_bar_" : "pack_corner_");
     EditText etName = createEcoInput("Tên Data Pack", prefs.getString(prefix + id + "_name", ""));
     if (type == 2) content.addView(etName);
     
@@ -9344,7 +9373,7 @@ prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
             renderPanelDesign();
             sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
         } else {
-            reapplyPackIfEnabled(type, id);
+            reapplyPackIfEnabled(type, id, space);
             renderRulesList();
             renderSliders();
         }
@@ -10984,7 +11013,8 @@ private String queryDisplayName(Uri uri) {
     return "Song";
 }
     private SharedPreferences.OnSharedPreferenceChangeListener makePackLiveListener(String packBase, int type, String id) {
-    final Runnable apply = () -> reapplyPackIfEnabled(type, id);
+    final String space = packBase.substring(0, packBase.indexOf("pack_"));
+    final Runnable apply = () -> reapplyPackIfEnabled(type, id, space);
     return (p, k) -> {
         if (k == null || !k.startsWith(packBase)) return;
         packLiveHandler.removeCallbacks(apply);

@@ -441,8 +441,13 @@ private static final long HOMACC_DEBOUNCE_MS = 1000;
 private static final long LOCK_DEBOUNCE_MS = 400;
 
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
-    // TẦNG 1: Whitelist tuyệt đối — bỏ qua mọi key không thuộc EdgeBar
     if (!isOurKey(k)) return;
+        if (k.startsWith("preview_")) {
+        if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
+        debounceRunnable = () -> updateVisibility();
+        debounceHandler.post(debounceRunnable);
+        return;
+    }
     if (k.startsWith("recents_")) { refreshEventSubscription(); return; }
     if (k != null && k.startsWith("sensor_")) return; // ProximityWaveService tự đọc prefs khi cần, đỡ debounce updateVisibility() vô ích
 
@@ -546,23 +551,17 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             }
 
 } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
-    forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 800;
-    instantSwitchLockToHomacc();
-    if (AccessibleHomeService.isRunning) drawAccessibleHome();
-    refreshFingerprintRegistration();
+        forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 800;
     isDispatchingSyntheticGesture = false;
     setTransientUntouchable(false);
     SharedPreferences.Editor ed = prefs.edit();
     for (String b : BARS) ed.putBoolean("home_" + b + "_manual_hide", false);
     for (String cn : CORNERS) ed.putBoolean("home_corner_" + cn + "_manual_hide", false);
     ed.apply();
-
+    instantSwitchLockToHomacc();
+    if (AccessibleHomeService.isRunning && !isHomaccDrawn) drawAccessibleHome();
+    refreshFingerprintRegistration();
     updateVisibility();
-    // ✅ Dùng qualified-this trỏ đúng ra class ngoài
-    new Handler(android.os.Looper.getMainLooper()).postDelayed(EdgeBarService.this::updateVisibility, 60);
-    new Handler(android.os.Looper.getMainLooper()).postDelayed(EdgeBarService.this::updateVisibility, 220);
-
-// CODE MỚI — thay bằng:
 } else if (Intent.ACTION_SCREEN_ON.equals(act)) {
     lastBouncerCheckMs = 0;          // bỏ throttle cho lần kiểm tra đầu tiên
     refreshEventSubscription();      // bật ngay CONTENT_CHANGED để bắt bouncer
@@ -1358,24 +1357,16 @@ filter.addAction("com.manhmoc.edgebar.PAUSE_WM_OPS");
         accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_SLEEP");
         accFilter.addAction("com.manhmoc.edgebar.ACC_HOME_WAKE");
         registerReceiver(accHomeReceiver, accFilter);
-// FIX RACE CONDITION: không tin biến static isRunning sau khi process
-// vừa restart — đọc thẳng từ SharedPreferences (sống sót qua process death)
-// và tự khởi động lại AccessibleHomeService nếu prefs nói là "đang bật"
-// nhưng service thực tế chưa chạy (do broadcast ACC_HOME_DRAW bị rơi mất
-// lúc race giữa 2 service restart không cùng lúc).
-// [DUAL-SOUL] Accessibility vừa bật -> Homacc PHẢI bật theo NGAY, giống Lock.
-// Homeb PHẢI dừng hẳn (không chỉ ẩn) — 2 engine không bao giờ cùng sống.
-if (!AccessibleHomeService.isRunning) {
-    Intent accIntent = new Intent(this, AccessibleHomeService.class);
-    startService(accIntent);
-} else {
-    drawAccessibleHome();
-}
 if (HomescreenService.isRunning) {
     stopService(new Intent(this, HomescreenService.class));
 }
 prefs.edit().putBoolean("shortcut_home_on", false).apply();
+if (!AccessibleHomeService.isRunning) {
+    startService(new Intent(this, AccessibleHomeService.class));
+}
+drawAccessibleHome();
 createFloatingBars();
+
 if (!prefs.getBoolean("blacklist_lock_active", false))
     sendBroadcast(new Intent("com.manhmoc.edgebar.STOP_LOCK_EB").setPackage(getPackageName()));
 
@@ -2716,8 +2707,13 @@ if (panelEngine != null) panelEngine.rebuildAll();
 
 private void setViewVisibilityAnimated(View v, boolean show) {
     if (v == null) return;
-    int dur = prefs.getInt("lock_anim_dur", 100);
+    int dur = prefs.getInt("lock_anim_dur", 0);
     v.animate().cancel();
+    if (dur <= 0) {
+        v.setAlpha(1f);
+        v.setVisibility(show ? View.VISIBLE : View.GONE);
+        return;
+    }
     if (show) {
         if (v.getVisibility() != View.VISIBLE) { v.setAlpha(0f); v.setVisibility(View.VISIBLE); }
         v.animate().alpha(1f).setDuration(dur).start();
@@ -3230,10 +3226,11 @@ private void updateHomaccLive() {
     }
     if (!isHomaccDrawn) return;
 
-    boolean isPreviewHomacc = prefs.getBoolean("preview_home", false);
+        boolean isPreviewHomacc = prefs.getBoolean("preview_home", false);
+    boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
     boolean isLocked = km != null && km.isKeyguardLocked()
         && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs;
-    boolean shouldShowHomacc = !isLocked || isPreviewHomacc;
+    boolean shouldShowHomacc = isPreviewHomacc || (!isLocked && !isPreviewLock);
 
     for (int i = 0; i < 12; i++) {
         View v = accHomeBars[i];
@@ -3349,11 +3346,10 @@ try { removeRippleViewIfIdle(); } catch (Exception ignored) {}
     for (int i = 0; i < 12; i++) if (bars[i] != null) { try { wm.removeView(bars[i]); } catch (Exception ignored) {} bars[i] = null; }
     for (int i = 0; i < 4; i++) if (corners[i] != null) { try { wm.removeView(corners[i]); } catch (Exception ignored) {} corners[i] = null; }
     if (fV != null) { try { wm.removeView(fV); } catch (Exception ignored) {} fV = null; }
+    if (panelEngine != null) { try { panelEngine.destroy(); } catch (Exception ignored) {} panelEngine = null; }
     if (bubbleEngine != null) { try { bubbleEngine.destroy(); } catch (Exception ignored) {} bubbleEngine = null; }
     super.onDestroy();
 }
-
-// ===== CHỈ BÁO GHI ÂM (chấm đỏ + mm:ss) — bản dành cho EdgeBarService =====
 private void ensureRecIndicator() {
     if (recIndicatorView != null) return;
     recIndicatorView = new LinearLayout(this);

@@ -26,8 +26,6 @@ public class QsAccHomeTile extends TileService {
 
     @Override
     public void onStartListening() {
-        // FIX BUG 8: Delay 150ms để đọc state SAU khi service lifecycle hoàn tất
-        // Tránh race condition: onStartListening() chạy trước onDestroy() của service
         new Handler(getMainLooper()).postDelayed(() -> {
             Tile t = getQsTile();
             if (t == null) return;
@@ -39,8 +37,6 @@ public class QsAccHomeTile extends TileService {
                 boolean running = AccessibleHomeService.isRunning;
                 t.setState(running ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
                 t.setLabel(running ? "Homacc ON" : "Homacc OFF");
-                // FIX BUG 8: Đồng bộ notification với state thực tế
-                // nhưng KHÔNG tạo lại notification nếu đang trong quá trình tắt
                 syncNotification(running);
             }
             t.updateTile();

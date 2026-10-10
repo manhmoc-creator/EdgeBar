@@ -4,13 +4,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
-
-/**
- * Watchdog phục hồi Homeb khi Accessibility bị tắt (kể cả tắt qua ADB write secure setting —
- * ngữ cảnh "background" mà AccessibilityService.onDestroy() không được phép tự gọi
- * startForegroundService() trực tiếp). Kích hoạt qua AlarmManager — broadcast do Alarm kích
- * hoạt được hệ thống miễn trừ giới hạn khởi động FGS, y hệt HomaccWatchdogReceiver.
- */
 public class HomebWatchdogReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context c, Intent i) {
         SharedPreferences p = c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
@@ -29,8 +22,6 @@ public class HomebWatchdogReceiver extends BroadcastReceiver {
                 .remove("blacklist_lock_pkg").remove("blacklist_lock_start_ms").apply();
             try { c.stopService(new Intent(c, LockEbService.class)); } catch (Exception ignored) {}
         }
-
-        // Accessibility TẮT -> Homacc không thể hoạt động -> dừng hẳn để tiết kiệm RAM/pin
         if (AccessibleHomeService.isRunning) {
             c.stopService(new Intent(c, AccessibleHomeService.class));
         }
@@ -55,7 +46,6 @@ public class HomebWatchdogReceiver extends BroadcastReceiver {
     }
 
     private boolean isAccEnabled(Context c) {
-    if (EdgeBarService.isConnected) return true;
     String s = android.provider.Settings.Secure.getString(c.getContentResolver(),
         android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
     if (s == null) return false;
@@ -66,7 +56,6 @@ public class HomebWatchdogReceiver extends BroadcastReceiver {
     return false;
 }
 
-    /** Kiểm tra gần như tức thì (300ms) — gọi ngay khi vừa phát hiện Accessibility tắt. */
     public static void scheduleImmediate(Context c) {
         android.app.AlarmManager am = (android.app.AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
         Intent i = new Intent(c, HomebWatchdogReceiver.class);

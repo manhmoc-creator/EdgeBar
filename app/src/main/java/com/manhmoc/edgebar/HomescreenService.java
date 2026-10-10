@@ -171,8 +171,7 @@ private boolean recIndicatorTestPaused = false;
                     }
                 }
             } catch (Exception ignored) {}
-            // LockList rỗng -> thưa hẳn (3s) thay vì đánh thức handler 400ms/lần
-            appLockPollHandler.postDelayed(this, listEmpty ? 5000 : APPLOCK_POLL_MS);
+            if (!listEmpty) appLockPollHandler.postDelayed(this, APPLOCK_POLL_MS);
         }
     };
 
@@ -831,12 +830,6 @@ if (Intent.ACTION_SCREEN_OFF.equals(action)) {
     removeYtdlOverlay(); 
     removeRippleViewIfIdle();
     stopAppLockPolling();
-
-    // [MỚI] Đang đứng trong 1 app Blacklist (Homeb đã tự thay Homacc nhờ
-    // blacklist_auto_homeb_en) mà bị khoá máy -> đẩy về Home NGAY cùng lúc tắt màn.
-    // Nếu không, lúc SCREEN_ON tự bật lại Trợ năng cho Lock (nhánh dưới) sẽ đụng độ
-    // với app Blacklist vẫn còn đứng foreground -> Homacc/Homeb lẫn lộn khi mở khoá
-    // lại gần như ngay sau đó.
         if (prefs.getBoolean("blacklist_auto_homeb_en", false) && isBlacklisted(queryForegroundPkgNow()))
         goHomeNow();
     if (BlacklistLockWatchdogService.shouldPreempt(prefs))
@@ -845,12 +838,17 @@ if (Intent.ACTION_SCREEN_OFF.equals(action)) {
 } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
     startAppLockPolling();
     if (km != null && km.isKeyguardLocked() && !prefs.getBoolean("blacklist_lock_active", false)) {
+        for (int j = 0; j < 12; j++) if (bars[j] != null) bars[j].setVisibility(View.GONE);
+        for (int j = 0; j < 4; j++) if (corners[j] != null) corners[j].setVisibility(View.GONE);
         final boolean inBl = prefs.getBoolean("blacklist_auto_homeb_en", false)
             && isBlacklisted(queryForegroundPkgNow());
-        if (inBl) goHomeNow(); // về Home trước, rồi mới bật Trợ năng
-        appLockPollHandler.postDelayed(() -> enableAccForLockNow(c), inBl ? 450 : 0);
+        if (inBl) {
+            goHomeNow();
+            appLockPollHandler.postDelayed(() -> enableAccForLockNow(c), 450);
+        } else {
+            enableAccForLockNow(c);
+        }
     }
-
 } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
     // [THAY BẰNG CODE HỒI SINH HOMEB Ở ĐÂY]
     SharedPreferences.Editor ed = prefs.edit();
@@ -1123,16 +1121,13 @@ panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ false); // Home
 private Runnable debounceRunnable = null;
 private final Handler panelDebounceHandler = new Handler(android.os.Looper.getMainLooper());
 private Runnable panelDebounceRunnable = null;
-// [TỐI ƯU PIN/RAM] Throttle ghi prefs khi kéo Slider — leading-edge throttle +
-// write bắt buộc lúc nhả tay. Giảm số lần apply() từ "mỗi pixel kéo" (40-100+ lần
-// mỗi lần vuốt) xuống tối đa ~16 lần/giây, vẫn giữ cảm giác preview real-time.
 private final Handler sliderPrefHandler = new Handler(android.os.Looper.getMainLooper());
 private final java.util.Map<String, Long> sliderLastWriteMs = new java.util.HashMap<>();
 private final java.util.Map<String, Runnable> sliderPendingRunnable = new java.util.HashMap<>();
 private static final long SLIDER_WRITE_THROTTLE_MS = 60;
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     if (k == null) return;
-
+    if (k.equals("applock_list")) { startAppLockPolling(); return; }
     boolean isOurKey = false;
     String[] ourPrefixes =
     {"lock_","home_","homacc_","anim_","vib_","hold_",
@@ -1207,7 +1202,6 @@ boolean shouldRenderOldHome = isUnlocked && !hideNormal && (previewHomeOn || (!a
 if (accHomeRunning && !previewHomeOn) {
     for (int i = 0; i < 12; i++) if (bars[i] != null) bars[i].setVisibility(View.GONE);
     for (int i = 0; i < 4; i++) if (corners[i] != null) corners[i].setVisibility(View.GONE);
-    if (panelEngine != null) panelEngine.rebuildAll();
     return;
 }
                 boolean isPreviewLock = prefs.getBoolean("preview_lock", false);
@@ -2232,12 +2226,16 @@ PixelFormat.TRANSLUCENT);
     try { unregisterReceiver(syncReceiver); } catch (Exception e) {}
     prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
     removeYtdlOverlay(); 
-    for (int i = 0; i < 12; i++) if (bars[i] != null) wm.removeView(bars[i]);
-    for (int i = 0; i < 4; i++) if (corners[i] != null) wm.removeView(corners[i]);
-    if (rippleView != null) wm.removeView(rippleView);
-    if (recIndicatorView != null) { try { wm.removeView(recIndicatorView); } catch (Exception ignored) {} }
+    debounceHandler.removeCallbacksAndMessages(null);
+    panelDebounceHandler.removeCallbacksAndMessages(null);
+    sliderPrefHandler.removeCallbacksAndMessages(null);
+    if (panelEngine != null) { try { panelEngine.destroy(); } catch (Exception ignored) {} panelEngine = null; }
+    for (int i = 0; i < 12; i++) if (bars[i] != null) { try { wm.removeView(bars[i]); } catch (Exception ignored) {} bars[i] = null; }
+    for (int i = 0; i < 4; i++) if (corners[i] != null) { try { wm.removeView(corners[i]); } catch (Exception ignored) {} corners[i] = null; }
+    if (rippleView != null) { try { wm.removeView(rippleView); } catch (Exception ignored) {} rippleView = null; }
+    if (recIndicatorView != null) { try { wm.removeView(recIndicatorView); } catch (Exception ignored) {} recIndicatorView = null; }
     if (recBlinkAnim != null) recBlinkAnim.cancel();
-    if (fV != null) wm.removeView(fV);
+    if (fV != null) { try { wm.removeView(fV); } catch (Exception ignored) {} fV = null; }
   }
   private int readSplit(SharedPreferences p, String baseKey, String server, int def) {
       if (p.getBoolean(baseKey + "_split", false))

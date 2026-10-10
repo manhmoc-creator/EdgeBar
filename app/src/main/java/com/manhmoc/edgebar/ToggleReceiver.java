@@ -45,38 +45,28 @@ private void toggleAcc(Context c, String mySvc) {
         doToggleAccSwitch(c, mySvc);
     } catch (Exception e) {}
 }
-
 private void doToggleAccSwitch(Context c, String mySvc) {
     try {
         c.sendBroadcast(new android.content.Intent("com.manhmoc.edgebar.PAUSE_WM_OPS"));
-
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             try {
                 String cur = android.provider.Settings.Secure.getString(
                     c.getContentResolver(),
                     android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
                 if (cur == null) cur = "";
-
-                String[] parts = cur.split(":");
                 java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
-                for (String pt : parts) { if (!pt.trim().isEmpty()) set.add(pt.trim()); }
-
+                for (String pt : cur.split(":")) { if (!pt.trim().isEmpty()) set.add(pt.trim()); }
                 boolean wasEnabled = set.contains(mySvc);
-
-                if (wasEnabled) HomebWatchdogReceiver.scheduleImmediate(c);
-
                 if (wasEnabled) set.remove(mySvc);
                 else set.add(mySvc);
-
-                String newVal = android.text.TextUtils.join(":", set);
                 android.provider.Settings.Secure.putString(
                     c.getContentResolver(),
                     android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-                    newVal);
+                    android.text.TextUtils.join(":", set));
                 android.provider.Settings.Secure.putString(
                     c.getContentResolver(),
                     android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, "1");
-
+                if (wasEnabled) startHomebNow(c);
                 new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                     c.sendBroadcast(
                         new android.content.Intent("com.manhmoc.edgebar.RESUME_WM_OPS")
@@ -84,11 +74,22 @@ private void doToggleAccSwitch(Context c, String mySvc) {
                     c.sendBroadcast(
                         new android.content.Intent("com.manhmoc.edgebar.SYNC_STATE")
                             .putExtra("acc_cache_reset", true));
-                }, 500);
-
+                }, 150);
             } catch (Exception e) {}
-        }, 150);
-
+        }, 40);
     } catch (Exception e) {}
- }
+}
+
+private void startHomebNow(Context c) {
+    try {
+        c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE).edit()
+            .putBoolean("shortcut_home_on", true).apply();
+        c.stopService(new Intent(c, AccessibleHomeService.class));
+        Intent i = new Intent(c, HomescreenService.class);
+        if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i);
+        else c.startService(i);
+    } catch (Exception e) {
+        HomebWatchdogReceiver.scheduleImmediate(c);
+    }
+}
 }

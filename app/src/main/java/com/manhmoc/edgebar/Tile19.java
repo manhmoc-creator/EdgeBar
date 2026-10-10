@@ -9,12 +9,6 @@ import android.graphics.drawable.Icon;
 import android.os.Build;
 import android.service.quicksettings.Tile;
 import android.service.quicksettings.TileService;
-/**
- * V19.12.3.6.8 THE ETERNAL EGO — Tile19
- * Label + Icon động từ prefs. Auto-icon theo action.
- * ZERO RAM: Icon.createWithResource() chỉ lưu resource ID (4 bytes).
- * Receiver chỉ active khi QS panel mở → ZERO background battery drain.
- */
 public class Tile19 extends TileService {
 
     // ICON_POOL phải khớp với TILE_ICON_NAMES trong MainActivity
