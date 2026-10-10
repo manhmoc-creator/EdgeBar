@@ -2130,7 +2130,7 @@ private LinearLayout createHalfToggle(String label, String prefKey, Runnable onS
     LinearLayout half = new LinearLayout(this);
     half.setOrientation(LinearLayout.VERTICAL);
     half.setGravity(Gravity.CENTER);
-    half.setBackground(getRounded("#202124", 20f)); // NỀN BO GÓC TÁCH BIỆT
+    half.setBackground(getRounded("#202124", 20f));
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
     lp.setMargins(10, 0, 10, 0);
     half.setLayoutParams(lp);
@@ -2147,7 +2147,7 @@ private LinearLayout createHalfToggle(String label, String prefKey, Runnable onS
     sw.setChecked(prefs.getBoolean(prefKey, true));
     sw.setOnCheckedChangeListener((v, c) -> {
         prefs.edit().putBoolean(prefKey, c).apply();
-        if (onSync != null) onSync.run(); // REALTIME SYNC
+        if (onSync != null) onSync.run();
     });
     sw.setPadding(0, 20, 0, 0);
     
@@ -2177,7 +2177,7 @@ private Button createHalfSettingBtn(String label, String key, String[] items, in
     lp.setMargins(10, 0, 10, 0);
     btn.setLayoutParams(lp);
     btn.setOnClickListener(v -> openOrQuadDialog(label, key, items, def, isLeft, () -> {
-        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE")); // REALTIME SYNC
+        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
     }));
     return btn;
 }
@@ -9245,8 +9245,8 @@ if (type == 2) {
     prefs.edit().putBoolean(prefix + id + "_preview_handle", true).apply();
 }
 if (type == 0) {
-        int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
-        if (currentLoc < 0 || currentLoc >= BARS.length) currentLoc = 0;
+        int currentLocBar = prefs.getInt(prefix + id + "_loc", 0);
+        if (currentLocBar < 0 || currentLocBar >= BARS.length) currentLocBar = 0;
         for(int i=0; i<BARS.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[i], false).apply();
         prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[currentLoc], true).apply();
         content.addView(createSectionTitle("CẤU HÌNH BAR (FORMAT B)"));
