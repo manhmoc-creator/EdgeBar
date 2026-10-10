@@ -131,8 +131,6 @@ root.addView(cbSnd);
             renderGestureCards();
         });
         root.addView(cbAnim);
-        
-        // ─── FOOTER ───
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-1, -2);
@@ -171,11 +169,6 @@ root.addView(cbSnd);
                 GESTURE_KEYS[i], GESTURE_LABELS[i], GESTURE_ICONS[i]));
         }
     }
-
-    /**
-     * Card chuẩn: optCol (icon cử chỉ + 📳✨) | infoCol (tên + action) | ctrlCol (TEST).
-     * Cùng ngôn ngữ với buildStdPackCard của Lenap và buildBubbleRuleCard của Bubble.
-     */
     private LinearLayout buildGestureCard(String key, String label, String icon) {
         String px = "widget_" + widgetId + "_" + key;
         String act = prefs.getString(px + "_act", "NONE");
