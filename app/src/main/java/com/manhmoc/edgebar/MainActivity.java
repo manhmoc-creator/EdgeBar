@@ -273,27 +273,22 @@ private class SpanFlow {
         }
     }
 }
-private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMultiSelect, Runnable rerender) {
-    showPackLongPressMenu(anchor, spanKey, onMultiSelect, rerender, null);
-}
-private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMultiSelect, Runnable rerender, Runnable onDelete) {
-    showPackLongPressMenu(anchor, spanKey, onMultiSelect, rerender, onDelete, null);
-}
-private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMultiSelect,
-                                   Runnable rerender, Runnable onDelete, Runnable onSplit) {
+private void showPackLongPressMenu(View anchor, String spanKey, Runnable onMultiSelect, Runnable rerender, boolean isMainSpace) {
     android.widget.PopupMenu pm = new android.widget.PopupMenu(this, anchor);
-    if (onMultiSelect != null) pm.getMenu().add(0, 0, 0, "☑ " + T("Select multiple", "Chọn nhiều"));
-    if (onSplit != null)       pm.getMenu().add(0, 5, 1, "🔀 " + T("Split", "Tách"));
-    pm.getMenu().add(0, 1, 2, "▭ " + T("1 pack / row", "1 pack / hàng"));
-    pm.getMenu().add(0, 2, 3, "▭▭ " + T("2 packs / row", "2 pack / hàng"));
-    pm.getMenu().add(0, 3, 4, "▭▭▭ " + T("3 packs / row", "3 pack / hàng"));
-    if (onDelete != null) pm.getMenu().add(0, 4, 5, "🗑 " + T("Delete", "Xoá"));
+    if (onMultiSelect != null) pm.getMenu().add(0, 0, 0, "Select multiple");
+    pm.getMenu().add(0, 1, 1, "1 pack / row");
+    pm.getMenu().add(0, 2, 2, "2 packs / row");
+    pm.getMenu().add(0, 3, 3, "3 packs / row");
+    if (!isMainSpace) pm.getMenu().add(0, 4, 4, "Share");
+    
     pm.setOnMenuItemClickListener(mi -> {
         int id = mi.getItemId();
-        if (id == 0) onMultiSelect.run();
-        else if (id == 5) onSplit.run();
-        else if (id == 4) onDelete.run();
-        else { prefs.edit().putInt(spanKey, id == 1 ? 6 : (id == 2 ? 3 : 2)).apply(); rerender.run(); }
+        if (id == 0 && onMultiSelect != null) onMultiSelect.run();
+        else if (id == 4 && !isMainSpace) showShareToSpaceDialog();
+        else if (id >= 1 && id <= 3) {
+            prefs.edit().putInt(spanKey, id == 1 ? 6 : (id == 2 ? 3 : 2)).apply();
+            rerender.run();
+        }
         return true;
     });
     pm.show();
@@ -2106,6 +2101,109 @@ private void addAutoColorOffCheckboxes(LinearLayout container, String fullPrefKe
         });
         container.addView(cb);
     }
+}
+private LinearLayout buildTwinToggleRow(String leftName, String rightName, String leftKey, String rightKey) {
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setPadding(0, 20, 0, 20);
+    row.addView(createHalfToggle(leftName, leftKey));
+    row.addView(createHalfToggle(rightName, rightKey));
+    return row;
+}
+
+private LinearLayout createHalfToggle(String label, String prefKey) {
+    LinearLayout half = new LinearLayout(this);
+    half.setOrientation(LinearLayout.VERTICAL);
+    half.setGravity(Gravity.CENTER);
+    half.setBackground(getRounded("#202124", 20f));
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+    lp.setMargins(10, 0, 10, 0);
+    half.setLayoutParams(lp);
+    half.setPadding(20, 30, 20, 30);
+    TextView tv = new TextView(this);
+    tv.setText(label);
+    tv.setTextColor(Color.WHITE);
+    tv.setTextSize(13f);
+    tv.setGravity(Gravity.CENTER);
+    Switch sw = new Switch(this);
+    sw.setChecked(prefs.getBoolean(prefKey, true));
+    sw.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(prefKey, c).apply());
+    sw.setPadding(0, 20, 0, 0);
+    half.addView(tv);
+    half.addView(sw);
+    return half;
+}
+
+private LinearLayout buildTwinSettingRow(String title, String leftKey, String rightKey, boolean allowOrBridge) {
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setPadding(0, 10, 0, 10);
+    row.addView(createHalfSettingBtn(title + " — Left", leftKey, allowOrBridge));
+    row.addView(createHalfSettingBtn(title + " — Right", rightKey, allowOrBridge));
+    return row;
+}
+
+private Button createHalfSettingBtn(String label, String actionKey, boolean allowOrBridge) {
+    Button btn = new Button(this);
+    btn.setText(label);
+    btn.setBackground(getRounded("#2C2C2C", 16f));
+    btn.setTextColor(Color.parseColor("#8AB4F8"));
+    btn.setTextSize(12f);
+    btn.setAllCaps(false);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+    lp.setMargins(10, 0, 10, 0);
+    btn.setLayoutParams(lp);
+    btn.setOnClickListener(v -> {
+        if (allowOrBridge) openOrBridgeEditor(actionKey, label);
+        // else openStandardActionPicker(actionKey, label); // Gọi hàm mở picker mặc định của bạn
+    });
+    return btn;
+}
+
+private void openOrBridgeEditor(String baseKey, String title) {
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212"));
+    root.setPadding(30, 80, 30, 30);
+    TextView tvTitle = new TextView(this);
+    tvTitle.setText(title + " (Animation 2->4)");
+    tvTitle.setTextColor(Color.parseColor("#E91E63"));
+    tvTitle.setTextSize(16f);
+    root.addView(tvTitle);
+    LinearLayout dualRow = new LinearLayout(this);
+    dualRow.setOrientation(LinearLayout.HORIZONTAL);
+    dualRow.setPadding(0, 40, 0, 20);
+    Button btnAcc = new Button(this);
+    btnAcc.setText("Accessibility's Overlay");
+    btnAcc.setBackground(getRounded("#0D4A52", 20f));
+    btnAcc.setTextColor(Color.WHITE);
+    btnAcc.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    TextView tvOr = new TextView(this);
+    tvOr.setText("OR");
+    tvOr.setTextColor(Color.parseColor("#FFC107"));
+    tvOr.setTextSize(16f);
+    tvOr.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    tvOr.setPadding(20, 20, 20, 20);
+    Button btnBlk = new Button(this);
+    btnBlk.setText("Blacklist's Overlay");
+    btnBlk.setBackground(getRounded("#4A3D0D", 20f));
+    btnBlk.setTextColor(Color.WHITE);
+    btnBlk.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    
+    // btnAcc.setOnClickListener(v -> openStandardActionPicker(baseKey + "_acc", "Accessibility's"));
+    // btnBlk.setOnClickListener(v -> openStandardActionPicker(baseKey + "_blk", "Blacklist's"));
+    
+    dualRow.addView(btnAcc); dualRow.addView(tvOr); dualRow.addView(btnBlk);
+    root.addView(dualRow);
+    Button btnDone = new Button(this);
+    btnDone.setText("DONE");
+    btnDone.setBackground(getRounded("#4CAF50", 20f));
+    btnDone.setTextColor(Color.WHITE);
+    btnDone.setOnClickListener(v -> d.dismiss());
+    root.addView(btnDone);
+    d.setContentView(root);
+    d.show();
 }
 private void renderBarsCornersEditor(LinearLayout container, String prefix,
         String[] bKeys, String[] bNames, boolean isHomaccStyle) {
@@ -9015,6 +9113,29 @@ private LinearLayout buildSideSwitchCell(String prefix, String pairId,
     col.addView(sw);
     return col;
 }
+private LinearLayout buildTwinButtonRow(String title, String key, String[] items, int def) {
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setPadding(0, 10, 0, 10);
+    row.addView(createHalfSettingBtn(title + " — Left", key, items, def, true));
+    row.addView(createHalfSettingBtn(title + " — Right", key, items, def, false));
+    return row;
+}
+
+private Button createHalfSettingBtn(String label, String key, String[] items, int def, boolean isLeft) {
+    Button btn = new Button(this);
+    btn.setText(label);
+    btn.setBackground(getRounded("#202124", 20f));
+    btn.setTextColor(Color.parseColor("#8AB4F8"));
+    btn.setTextSize(14f);
+    btn.setAllCaps(false);
+    btn.setPadding(20, 35, 20, 35);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+    lp.setMargins(10, 0, 10, 0);
+    btn.setLayoutParams(lp);
+    btn.setOnClickListener(v -> openOrQuadDialog(label, key, items, def, isLeft, () -> {}));
+    return btn;
+}
 private void openDataPackEditor(int type, String id) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
@@ -9075,19 +9196,16 @@ content.addView(buildDualSideSwitch(prefix, id, true));
         };
 prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
         previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_alpha");        
-        content.addView(createSplitComboDropdown("Hiển thị", prefix + id + "_vis_mode",
-    new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
-content.addView(createSplitComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode",
-    new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
-content.addView(createSplitComboDropdown(T("Screen Visibility","Hiển thị màn hình"),
-    prefix + id + "_lockmode",
-    new String[]{T("Only base lockscreen","Chỉ màn khoá gốc"),
-                 T("Always on lock","Luôn xuyên suốt")}, 1));
-content.addView(createSplitComboDropdown(T("Icon Jump Direction","Hướng nhảy Icon"),
-    prefix + id + "_jumpdir",
-    new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"),
-        T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"),
-        T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
+        content.addView(buildTwinButtonRow("Hiển thị", prefix + id + "_vis_mode",
+            new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
+        content.addView(buildTwinButtonRow("Chế độ Cảm ứng", prefix + id + "_pri_mode",
+            new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+        content.addView(buildTwinButtonRow(T("Screen Visibility","Hiển thị màn hình"), prefix + id + "_lockmode",
+            new String[]{T("Only base lockscreen","Chỉ màn khoá gốc"), T("Always on lock","Luôn xuyên suốt")}, 1));
+        content.addView(buildTwinButtonRow(T("Icon Jump Direction","Hướng nhảy Icon"), prefix + id + "_jumpdir",
+            new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"),
+                T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"),
+                T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
         content.addView(createSlider("Độ trong suốt", prefix + id + "_alpha", 255, 50));
         content.addView(createSlider("Chiều ngang", prefix + id + "_w", 3000, 300));
         content.addView(createSlider("Chiều dọc", prefix + id + "_h", 3000, 60));
@@ -9186,19 +9304,16 @@ content.addView(buildDualSideSwitch(prefix, id, false));
     };
     prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
     previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_x");
-    content.addView(createSplitComboDropdown("Hiển thị", prefix + id + "_vis_mode",
-    new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
-content.addView(createSplitComboDropdown("Chế độ Cảm ứng", prefix + id + "_pri_mode",
-    new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
-content.addView(createSplitComboDropdown(T("Screen Visibility","Hiển thị màn hình"),
-    prefix + id + "_lockmode",
-    new String[]{T("Only base lockscreen","Chỉ màn khoá gốc"),
-                 T("Always on lock","Luôn xuyên suốt")}, 1));
-content.addView(createSplitComboDropdown(T("Icon Jump Direction","Hướng nhảy Icon"),
-    prefix + id + "_jumpdir",
-    new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"),
-        T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"),
-        T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
+    content.addView(buildTwinButtonRow("Hiển thị", prefix + id + "_vis_mode",
+            new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
+        content.addView(buildTwinButtonRow("Chế độ Cảm ứng", prefix + id + "_pri_mode",
+            new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
+        content.addView(buildTwinButtonRow(T("Screen Visibility","Hiển thị màn hình"), prefix + id + "_lockmode",
+            new String[]{T("Only base lockscreen","Chỉ màn khoá gốc"), T("Always on lock","Luôn xuyên suốt")}, 1));
+        content.addView(buildTwinButtonRow(T("Icon Jump Direction","Hướng nhảy Icon"), prefix + id + "_jumpdir",
+            new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"),
+                T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"),
+                T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
         content.addView(createComboDropdown("Hình dáng Góc", prefix + id + "_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0));
         content.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix + id + "_w", 2500, 100));
         content.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix + id + "_h", 2500, 100));
