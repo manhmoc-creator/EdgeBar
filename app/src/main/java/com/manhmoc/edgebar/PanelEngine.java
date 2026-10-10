@@ -4,13 +4,11 @@ import android.graphics.drawable.Drawable; import android.graphics.drawable.Adap
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.BitmapDrawable; // [MỚI] để nạp icon Shortcut từ file PNG
 import android.os.*; import android.view.*; import android.view.animation.*; import android.widget.*;
-import android.text.TextUtils; 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 public class PanelEngine {
     private Context ctx; private WindowManager wm; private SharedPreferences prefs;
     private boolean isAnyMode; // true = EdgeBarService (Lock+Homacc), false = HomescreenService (Homeb)
-    private boolean showLocked = false;
     private KeyguardManager km;
     // [THAY] Map theo UUID thay vì mảng cố định 3 phần tử — số Panel không giới hạn,
     // RAM chỉ tốn đúng bằng số Panel THẬT SỰ đang bật (không cấp phát dư slot rỗng).
@@ -21,13 +19,14 @@ public class PanelEngine {
     private final Map<String, Boolean> forceTestOn = new HashMap<>();
     private final Map<String, Integer> lastIconSizeCache = new HashMap<>();
     private final Map<String, AtomicInteger> renderGen = new HashMap<>();
+    // [MỚI] Theo dõi chuyển đổi Lock <-> Homacc — dùng để tự đóng Panel đang mở,
+    // không cho Panel "mang theo" từ không gian này sang không gian kia.
     private Boolean lastLockedForPanels = null;
-        private static final int ICON_CACHE_LIMIT = 80;
+    private static final int ICON_CACHE_LIMIT = 80;
     private static final LinkedHashMap<String, Drawable> iconCache =
         new LinkedHashMap<String, Drawable>(16, 0.75f, true) {
             protected boolean removeEldestEntry(Map.Entry<String, Drawable> e) { return size() > ICON_CACHE_LIMIT; }
         };
-    private static int[] customIconPoolCache = null;
     private static final java.util.Map<String,String> labelCache = new java.util.HashMap<>();
     private static final java.util.Map<String,String> ACT_LABEL_MAP = new java.util.HashMap<>();
 static {
@@ -36,6 +35,7 @@ static {
     ACT_LABEL_MAP.put("VOLUME","Âm lượng"); ACT_LABEL_MAP.put("NOTIFICATIONS","Thông báo");
     ACT_LABEL_MAP.put("BACK","Quay lại"); ACT_LABEL_MAP.put("HOME","Màn chính");
     ACT_LABEL_MAP.put("RECENTS","Đa nhiệm"); ACT_LABEL_MAP.put("VOICE_RECORD","Ghi âm");
+    // [FIX] Thiếu 4 key này khiến label fallback về nguyên key viết hoa (VD: "POWER_DIALOG")
     ACT_LABEL_MAP.put("POWER_DIALOG","Menu nguồn");
     ACT_LABEL_MAP.put("TOGGLE_OVERLAY","Bật/Tắt Trợ Năng");
     ACT_LABEL_MAP.put("YTDL_DOWNLOAD","Tải video");
@@ -156,92 +156,53 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
     "visibility_24px", "volume_up_24px", "warning_24px",
     "work_24px"
 };
+    // Cache resolve ID runtime — chỉ tính 1 lần, không tốn thêm CPU về sau.
+    private static int[] customIconPoolCache = null;
+// [MỚI] Dùng CHUNG cho mọi nơi vẽ icon THẬT lên Bar/Panel/QS Tile — dò vùng pixel
+    // không trong suốt (glyph thật), cắt sát viền rồi phóng lại theo đúng contentScale,
+    // đảm bảo mọi icon có cùng "sải cánh" thị giác dù file gốc rỗng nhiều/ít khác nhau.
+    // KHÔNG tự set màu — nơi gọi tự tint trước khi truyền Drawable vào đây.
     static Bitmap normalizeIconBitmap(Drawable d, int targetSize, float contentScale) {
-    if (d == null) return null;
-    try {
-        int srcSize = targetSize * 2;
-        Bitmap raw = Bitmap.createBitmap(srcSize, srcSize, Bitmap.Config.ARGB_8888);
-        Canvas rawCanvas = new Canvas(raw);
-        Drawable dm = d.mutate();
-        dm.setBounds(0, 0, srcSize, srcSize);
-        dm.draw(rawCanvas);
+        if (d == null) return null;
+        try {
+            int srcSize = targetSize * 3;
+            Bitmap raw = Bitmap.createBitmap(srcSize, srcSize, Bitmap.Config.ARGB_8888);
+            Canvas rawCanvas = new Canvas(raw);
+            Drawable dm = d.mutate();
+            dm.setBounds(0, 0, srcSize, srcSize);
+            dm.draw(rawCanvas);
 
-        int left = srcSize, top = srcSize, right = 0, bottom = 0;
-        int[] pixels = new int[srcSize * srcSize];
-        raw.getPixels(pixels, 0, srcSize, 0, 0, srcSize, srcSize);
-        for (int y = 0; y < srcSize; y++) {
-            int rowBase = y * srcSize;
-            for (int x = 0; x < srcSize; x++) {
-                if (((pixels[rowBase + x] >>> 24) & 0xFF) > 10) {
-                    if (x < left) left = x; if (x > right) right = x;
-                    if (y < top) top = y; if (y > bottom) bottom = y;
+            int left = srcSize, top = srcSize, right = 0, bottom = 0;
+            int[] pixels = new int[srcSize * srcSize];
+            raw.getPixels(pixels, 0, srcSize, 0, 0, srcSize, srcSize);
+            for (int y = 0; y < srcSize; y++) {
+                int rowBase = y * srcSize;
+                for (int x = 0; x < srcSize; x++) {
+                    if (((pixels[rowBase + x] >>> 24) & 0xFF) > 10) {
+                        if (x < left) left = x; if (x > right) right = x;
+                        if (y < top) top = y; if (y > bottom) bottom = y;
+                    }
                 }
             }
-        }
-        if (right <= left || bottom <= top) { raw.recycle(); return null; }
+            if (right <= left || bottom <= top) { raw.recycle(); return null; }
 
-        Bitmap cropped = Bitmap.createBitmap(raw, left, top, right - left + 1, bottom - top + 1);
-        raw.recycle();
+            Bitmap cropped = Bitmap.createBitmap(raw, left, top, right - left + 1, bottom - top + 1);
+            raw.recycle();
 
-        Bitmap out = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888);
-        Canvas outCanvas = new Canvas(out);
-        int drawSize = Math.round(targetSize * contentScale);
-        float scale = Math.min((float) drawSize / cropped.getWidth(), (float) drawSize / cropped.getHeight());
-        int dw = Math.round(cropped.getWidth() * scale);
-        int dh = Math.round(cropped.getHeight() * scale);
-        android.graphics.Rect dst = new android.graphics.Rect((targetSize - dw) / 2, (targetSize - dh) / 2,
-                (targetSize - dw) / 2 + dw, (targetSize - dh) / 2 + dh);
-
-        // [FIX RĂNG CƯA] Thêm DITHER (khử banding) + FILTER_BITMAP (bilinear downsample)
-        Paint p = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
-        p.setDither(true);        // ← THÊM: khử dải màu liti
-        p.setFilterBitmap(true);  // ← THÊM: ép bilinear filter khi scale
-        outCanvas.drawBitmap(cropped, null, dst, p);
-        cropped.recycle();
-        return out;
-    } catch (Exception e) { return null; }
-}
-        /**
-     * [MỚI] Vẽ lại glyph của bất kỳ Drawable nào theo dải "Midnight Neon"
-     * (Deep Blue → Purple → Neon Blue) giống hệt icon App Shortcut khi
-     * long-press ngoài Home — thay cho kiểu "tint trắng trên nền xám" đơn điệu.
-     *
-     * Trả về Bitmap CÓ NỀN TRONG SUỐT: chỉ glyph mang màu gradient, alpha
-     * giữ nguyên theo icon gốc → có thể ghép lên backdrop tùy ý.
-     *
-     * Zero-RAM: chỉ 2 Bitmap tạm (normalized + glyph) sống trong scope, recycle
-     * ngay khi thoát. Không Thread, không Handler, không prefs.
-     */
-    public static Bitmap buildNeonGradientIcon(Drawable icon, int size, float contentScale) {
-    if (icon == null) return null;
-    try {
-        Drawable tinted = icon.mutate();
-        tinted.setTint(Color.WHITE);
-        Bitmap normalized = normalizeIconBitmap(tinted, size, contentScale);
-        if (normalized == null) return null;
-        Bitmap glyph = normalized.copy(Bitmap.Config.ARGB_8888, true);
-        normalized.recycle();
-
-        Canvas gc = new Canvas(glyph);
-        // [FIX RĂNG CƯA] Thêm FILTER_BITMAP + DITHER — đây là paint phủ gradient SRC_IN,
-        // các pixel alpha-trung-gian ở viền glyph nhận màu gradient mượt mà không bị
-        // "dải liti" ở chỗ chuyển màu Deep Blue → Purple → Neon Blue.
-        Paint gp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        gp.setFilterBitmap(true); // ← THÊM
-        gp.setDither(true);       // ← THÊM
-        float pad = size * (1f - contentScale) / 2f;
-        gp.setShader(new android.graphics.LinearGradient(
-            pad, pad, size - pad, size - pad,
-            new int[]{ 0xFF1A237E, 0xFF7B1FA2, 0xFF03A9F4 },
-            new float[]{ 0f, 0.45f, 1f },
-            android.graphics.Shader.TileMode.CLAMP));
-        gp.setXfermode(new android.graphics.PorterDuffXfermode(
-            android.graphics.PorterDuff.Mode.SRC_IN));
-        gc.drawRect(0, 0, size, size, gp);
-        return glyph;
-    } catch (Exception e) { return null; }
-}
-
+            Bitmap out = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888);
+            Canvas outCanvas = new Canvas(out);
+            int drawSize = Math.round(targetSize * contentScale);
+            float scale = Math.min((float) drawSize / cropped.getWidth(), (float) drawSize / cropped.getHeight());
+            int dw = Math.round(cropped.getWidth() * scale);
+            int dh = Math.round(cropped.getHeight() * scale);
+            android.graphics.Rect dst = new android.graphics.Rect((targetSize - dw) / 2, (targetSize - dh) / 2,
+                    (targetSize - dw) / 2 + dw, (targetSize - dh) / 2 + dh);
+            Paint p = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+            outCanvas.drawBitmap(cropped, null, dst, p);
+            cropped.recycle();
+            return out;
+        } catch (Exception e) { return null; }
+    }
     static int[] getCustomIconPool(Context ctx) {
         if (customIconPoolCache != null) return customIconPoolCache;
         List<Integer> ids = new ArrayList<>();
@@ -272,18 +233,15 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
     }
     if (hasLegacy) cleanup.apply();
 }
-       public PanelEngine(Context ctx, WindowManager wm, SharedPreferences prefs, boolean isAnyMode, boolean showLocked) {
-       this(ctx, wm, prefs, isAnyMode);
-       this.showLocked = showLocked;
-   }
-   public void destroy() {
-       for (String id : new ArrayList<>(panels.keySet())) removePanelBody(id);
-       for (String id : new ArrayList<>(handles.keySet())) removeHandle(id);
-   }
-
     /** Gọi mỗi khi lock state / accessibility state đổi — decide xem instance này
      *  (Lock hay Homacc, tùy trạng thái) có được phép giữ panel hay không. */
     public void rebuildAll() {
+        // [FIX] Lock và Homacc dùng chung cờ isAnyMode nên shouldPanelBodyExistNow()
+        // trả về true khi LOCKED HOẶC Homacc đang chạy — nghĩa là khi khoá máy,
+        // điều kiện vẫn đúng (chỉ đổi lý do), Panel không bao giờ tự đóng dù đã
+        // đổi hẳn không gian. Phát hiện đúng thời điểm chuyển Lock <-> Homacc rồi
+        // tự đóng hết Panel đang mở tại đây — không cho Panel "mang theo" sang
+        // không gian mới, tránh treo overlay vô ích gây tốn pin/RAM.
         if (isAnyMode) {
             boolean lockedNow = km != null && km.isKeyguardLocked();
             if (lastLockedForPanels != null && lastLockedForPanels != lockedNow) {
@@ -307,33 +265,9 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
         if (!csv.isEmpty()) for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
         return out;
     }
-// Gọi trong rebuildOne(id) trước khi buildPanelBody
-private boolean pruneUninstalledFromPanel(String id) {
-    String px = "pack_panel_" + id + "_";
-    List<String> apps = csvToList(prefs.getString(px + "apps", ""));
-    List<String> alive = new ArrayList<>();
-    android.os.UserManager um = (android.os.UserManager) ctx.getSystemService(Context.USER_SERVICE);
-    for (String a : apps) {
-        boolean exists = isIslandRef(a)
-            ? (um != null && um.getUserForSerialNumber(islandRefSerial(a)) != null) // chỉ bỏ khi profile không còn tồn tại
-            : isPackageInstalled(a);
-        if (exists) alive.add(a);
-    }
-    if (alive.size() == apps.size()) return false;
-    List<String> order = csvToList(prefs.getString(px + "order", ""));
-    for (String a : apps) if (!alive.contains(a)) order.remove(a);
-    prefs.edit().putString(px + "apps", TextUtils.join(",", alive))
-                .putString(px + "order", TextUtils.join(",", order)).apply();
-    return true;
-}
-private boolean isPackageInstalled(String pkg) {
-    try { ctx.getPackageManager().getApplicationInfo(pkg, 0); return true; }
-    catch (Exception e) { return false; }
-}
     private void rebuildOne(String id) {
     String sig = computeSignature(id);
-boolean sigChanged = !sig.equals(lastSignature.get(id));
-if (sigChanged && pruneUninstalledFromPanel(id)) sig = computeSignature(id); // [MỚI] chỉ prune khi cấu hình đổi, không chạy mỗi lần updateVisibility()
+    boolean sigChanged = !sig.equals(lastSignature.get(id));
 
     boolean shouldPanel = shouldPanelBodyExistNow(id);
     boolean panelExists = panels.get(id) != null;
@@ -457,8 +391,11 @@ private String computeSignature(String id) {
         + prefs.getString(px+"apps","") + "|" + prefs.getString(px+"acts","") + "|"
         + (forceTest != null && forceTest);
 }
+// PANEL BODY: luôn theo đúng vòng đời Lock/Home, KHÔNG phụ thuộc vis nữa
 private boolean shouldPanelBodyExistNow(String id) {
-    String px = "pack_panel_" + id + "_"; // <-- THÊM DÒNG NÀY
+    String px = "pack_panel_" + id + "_";
+    // [FIX] Nút TEST phải bỏ qua điều kiện Enable/Lock — cho phép xem trước
+    // ngay cả khi Pack đang tắt hoặc đứng sai không gian.
     Boolean forceTest = forceTestOn.get(id);
     if (forceTest != null && forceTest) return true;
 
@@ -467,17 +404,24 @@ private boolean shouldPanelBodyExistNow(String id) {
     boolean locked = km != null && km.isKeyguardLocked();
     if (isAnyMode) {
         if (!locked && !AccessibleHomeService.isRunning) return false;
-       } else if (!showLocked) {
-           if (locked) return false;
-       }
+    } else {
+        if (locked) return false;
+    }
     return true;
 }
+// HANDLE: Cục Bộ chỉ hiện trong Design; Toàn Cục hiện như panel
 private boolean shouldHandleExistNow(String id) {
     String px = "pack_panel_" + id + "_";
     int visMode = prefs.getInt(px+"vis", 0);
+    // [FIX] Cục Bộ (visMode==0) là chế độ XEM TRƯỚC lúc setup — phải hoạt
+    // động ĐỘC LẬP với Enable, vì lúc đang dựng Panel người dùng thường
+    // CHƯA bật Enable. Bắt buộc "en" ở đây là nguyên nhân khiến tick
+    // Preview Handle không có tác dụng gì.
     if (visMode == 0) {
         return prefs.getBoolean(px+"preview_handle", false);
     }
+    // Toàn Cục (visMode==1) là hành vi production thật -> vẫn cần Enable
+    // để Handle không tự ý xuất hiện ngoài ý muốn khi user chưa bật Pack.
     if (!prefs.getBoolean(px+"en", false)) return false;
     return shouldPanelBodyExistNow(id);
 }
@@ -489,6 +433,9 @@ public void setForceTest(String id, boolean on) {
 }
     private boolean shouldOwnPanelNow() {
         if (!isAnyMode) return true; // Homeb: luôn được phép (chỉ cần unlock, check riêng bên dưới)
+        // isAnyMode=true dùng chung cho Lock + Homacc trong EdgeBarService.
+        // Loại trừ lẫn nhau y hệt logic bars/corners: locked -> Lock giữ panel,
+        // unlocked + Homacc chạy -> Homacc giữ panel. Không bao giờ cả hai cùng lúc.
         return true; // panel Lock vs Homacc tự phân biệt qua px+"owner" bên dưới nếu cần mở rộng
     }
     private void buildHandle(String id) {
@@ -520,7 +467,7 @@ public void setForceTest(String id, boolean on) {
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        | ((isAnyMode || showLocked) ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+        | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
         PixelFormat.TRANSLUCENT);
     hp.gravity = gravity;
     try { wm.addView(handle, hp); handles.put(id, handle); } catch (Exception e) { return; }
@@ -541,6 +488,9 @@ private void buildPanelBody(String id) {
 
     LinearLayout panel = new LinearLayout(ctx);
 panel.setOrientation(LinearLayout.VERTICAL);
+// [FIX] Căn giữa nội dung trong khung Panel — trước đây thiếu dòng này khiến
+// lưới icon dồn về góc trên khi Panel đặt dọc (trái/phải), tạo cảm giác
+// lệch hẳn xuống nửa trên, mất cân bằng trên/dưới.
 panel.setGravity(Gravity.CENTER);
 GradientDrawable pgd = new GradientDrawable();
     pgd.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
@@ -549,6 +499,8 @@ GradientDrawable pgd = new GradientDrawable();
     panel.setBackground(pgd);
     panel.setVisibility(View.GONE);
 
+    // [FIX] Thiếu "shortcuts" trong tổng số ô -> Panel bị đo kích thước thiếu chỗ
+// (hoặc Shortcut không có ô nào để hiện ra).
 int itemCount = csvToList(prefs.getString(px+"apps","")).size() +
                 csvToList(prefs.getString(px+"acts","")).size() +
                 csvToList(prefs.getString(px+"shortcuts","")).size();
@@ -571,7 +523,7 @@ int itemCount = csvToList(prefs.getString(px+"apps","")).size() +
         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-        | ((isAnyMode || showLocked) ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
+        | (isAnyMode ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0),
         PixelFormat.TRANSLUCENT);
     pp.gravity = edge.equals("left") ? (Gravity.LEFT|Gravity.CENTER_VERTICAL)
                : edge.equals("right") ? (Gravity.RIGHT|Gravity.CENTER_VERTICAL)
@@ -597,13 +549,14 @@ private void renderPanelGrid(String id) {
     if (panel == null) return;
     renderGen.putIfAbsent(id, new AtomicInteger(0));
     final int myGen = renderGen.get(id).incrementAndGet();
-    panel.removeAllViews(); 
     int cols = Math.max(1, prefs.getInt(px+"cols", 4));
     int iconSize = prefs.getInt(px+"icon_size", 110);
     int cellSize = iconSize + CELL_INNER_PAD;
 
+    // Dùng LinearLayout nhiều HÀNG thay GridLayout — mỗi hàng Gravity.CENTER_HORIZONTAL
+    // để hàng cuối (thiếu ô) tự canh giữa, KHÔNG dồn về bên trái như GridLayout mặc định
+    // (đây là nguyên nhân "bên phải trống nhiều hơn bên trái").
     LinearLayout gridContainer = new LinearLayout(ctx);
-
     gridContainer.setOrientation(LinearLayout.VERTICAL);
     gridContainer.setGravity(Gravity.CENTER_HORIZONTAL);
     gridContainer.setPadding(16, 24, 16, 24);
@@ -615,30 +568,29 @@ new Thread(() -> {
         class PanelItemObj { String type; String ref; int sortScore; int originalIndex; }
         List<PanelItemObj> allItems = new ArrayList<>();
         int seq = 0;
-        for (String pkg : apps) {
-    if (getCachedIcon(pkg) == null && !isIslandRef(pkg)) continue; // [FIX] app không còn cài -> bỏ khỏi hiển thị
-    PanelItemObj o = new PanelItemObj(); o.type = "APP"; o.ref = pkg; o.originalIndex = seq++; allItems.add(o);
-}
+        for (String pkg : apps) { PanelItemObj o = new PanelItemObj(); o.type = "APP"; o.ref = pkg; o.originalIndex = seq++; allItems.add(o); }
         for (String act : acts) { PanelItemObj o = new PanelItemObj(); o.type = "ACT"; o.ref = act; o.originalIndex = seq++; allItems.add(o); }
         for (String sc : shortcuts) { PanelItemObj o = new PanelItemObj(); o.type = "SC"; o.ref = sc; o.originalIndex = seq++; allItems.add(o); }
 
-                // Đọc thứ tự đã lưu trong "order"; nếu chưa có (data cũ hoặc lần đầu) thì
-        // khởi tạo bằng đúng thứ tự apps+acts+shortcuts hiện có.
-        List<String> order = csvToList(prefs.getString(px + "order", ""));
-        if (order.isEmpty()) {
-            for (PanelItemObj obj : allItems) {
-                order.add(obj.type.equals("SC") ? "SC:" + obj.ref : obj.ref);
+        List<String> letterList = Arrays.asList("-", "A", "B", "C", "D", "E", "F", "G", "H", "I");
+        List<String> romanList = Arrays.asList("-", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX");
+
+                for (PanelItemObj obj : allItems) {
+            String pos = prefs.getString(px + "posmap_" + obj.ref, "-,-");
+            String[] parts = pos.split(",");
+            if (parts.length == 2 && !parts[0].equals("-") && !parts[1].equals("-")) {
+                int lVal = letterList.indexOf(parts[0]); // trục X (cột) - chữ, trái→phải
+                int rVal = romanList.indexOf(parts[1]);  // trục Y (hàng) - số, trên→dưới
+                // [FIX] Lưới vẽ theo HÀNG trước (row-major): phải ưu tiên số (hàng) trước
+                // rồi mới tới chữ (cột), khớp đúng cách renderPanelGrid() đổ item theo "cols"
+                obj.sortScore = (rVal * 10) + lVal;
+            } else {
+                obj.sortScore = 9999; // Mục không set tọa độ sẽ rớt xuống cuối
             }
-            prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
         }
-        final List<String> finalOrder = order;
         Collections.sort(allItems, (a, b) -> {
-            String keyA = a.type.equals("SC") ? "SC:" + a.ref : a.ref;
-            String keyB = b.type.equals("SC") ? "SC:" + b.ref : b.ref;
-            int ia = finalOrder.indexOf(keyA), ib = finalOrder.indexOf(keyB);
-            if (ia == -1) ia = 9999; if (ib == -1) ib = 9999;
-            if (ia != ib) return Integer.compare(ia, ib);
-            return Integer.compare(a.originalIndex, b.originalIndex);
+            if (a.sortScore != b.sortScore) return Integer.compare(a.sortScore, b.sortScore);
+            return Integer.compare(a.originalIndex, b.originalIndex); // Fallback thuật toán tuần tự hiện tại
         });
 
         List<Object[]> loaded = new ArrayList<>();
@@ -796,20 +748,27 @@ private Bitmap maskBitmapToShape(Bitmap content, int shape, int size) {
     return result;
 }
 
+/** Vẽ nền màu (nếu có) + icon/emoji rồi cắt theo hình đã chọn. Cache theo
+ *  (cacheKey, shape, size, cover, backdropColor) — chỉ vẽ lại khi style/kích thước
+ *  thực sự đổi, không tốn CPU khi cuộn danh sách.
+ *  cover=true: phóng to 1.28x che kín 4 góc (dùng cho icon App).
+ *  cover=false: thu nhỏ 0.8x, chừa đệm quanh (dùng cho icon Action/Shortcut). */
+// [FIX] Bỏ hẳn tham số "cover" (nguồn gốc gây icon App bị phóng to 1.28x trong khi
+// Action/Shortcut chỉ 0.8x, khiến 6 kiểu icon lệch kích thước nền so với nhau).
+// Dùng DUY NHẤT 1 hệ số ICON_CONTENT_SCALE cho mọi loại icon (App/Shortcut/Action)
+// và mọi kiểu hình (Circle/Squircle/Pebble/Rough/Pentacle/System) -> nền đồng nhất.
+// Cache key cũng ngắn hơn (bớt biến cover) -> ít alloc String hơn, nhẹ hơn cho Pixel 2XL.
+// [FIX] Tăng từ 0.82 lên 0.92 — lấp đầy khung gần trọn vẹn, tránh cảm giác icon
+// "bị thu bé" so với trước (bản cũ App icon phóng to 1.28x, Action icon chỉ 0.8x —
+// giờ dùng chung 1 hệ số nên phải tăng lên để không còn bé hơn hẳn so với trước).
 private static final float ICON_CONTENT_SCALE = 0.77f;
     private float getIconCoreScale() { return prefs.getInt("lenap_global_icon_scale", 77) / 100f; }
     private int getPoolIconAlpha() { return prefs.getInt("lenap_global_alpha_pool", 255); }
 private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor) {
-    return getStyledIconBitmap(cacheKey, icon, emoji, shape, size, backdropColor, false, false);
+    return getStyledIconBitmap(cacheKey, icon, emoji, shape, size, backdropColor, false);
 }
 private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor, boolean useGlobalScale) {
-    return getStyledIconBitmap(cacheKey, icon, emoji, shape, size, backdropColor, useGlobalScale, false);
-}
-/** [SỬA] Thêm cờ `useNeon`: khi true && icon != null -> vẽ theo dải Neon gradient
- *  giống App Shortcut thay cho tint trắng. Cache key có thêm "_neon" nên entry cũ
- *  tự nhiên bị vô hiệu, không cần dọn maskedIconCache thủ công. */
-private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji, int shape, int size, int backdropColor, boolean useGlobalScale, boolean useNeon) {
-    String key = cacheKey + "_" + shape + "_" + size + "_" + backdropColor + "_" + (useGlobalScale ? getIconCoreScale() : 0) + (useNeon ? "_neon" : "");
+    String key = cacheKey + "_" + shape + "_" + size + "_" + backdropColor + "_" + (useGlobalScale ? getIconCoreScale() : 0);
     synchronized (maskedIconCache) {
         Bitmap cached = maskedIconCache.get(key);
         if (cached != null && !cached.isRecycled()) return cached;
@@ -819,53 +778,22 @@ private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji,
     if (backdropColor != 0) cc.drawColor(backdropColor);
     if (icon != null) {
         float scale = useGlobalScale ? getIconCoreScale() : ICON_CONTENT_SCALE;
-        if (useNeon) {
-            // [MỚI] Neon gradient glyph trên nền đã vẽ (xám cho Panel, trong suốt cho Bubble)
-            Bitmap neonGlyph = buildNeonGradientIcon(icon, size, scale);
-            if (neonGlyph != null) {
-                Paint p = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
-                if (useGlobalScale) p.setAlpha(getPoolIconAlpha());
-                cc.drawBitmap(neonGlyph, 0, 0, p);
-                neonGlyph.recycle();
-            } else {
-                // fallback: giữ nguyên đường vẽ cũ nếu vì lý do gì không tạo được neon
-                int targetSize = Math.round(size * scale);
-                int off = (size - targetSize) / 2;
-                Bitmap normIcon = normalizeIconBitmap(icon, targetSize, 1f);
-                if (normIcon != null) {
-                    Paint iconPaintDraw = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
-                    if (useGlobalScale) iconPaintDraw.setAlpha(getPoolIconAlpha());
-                    cc.drawBitmap(normIcon, off, off, iconPaintDraw);
-                    normIcon.recycle();
-                } else {
-                    if (useGlobalScale) icon.setAlpha(getPoolIconAlpha());
-                    icon.setBounds(off, off, off + targetSize, off + targetSize);
-                    icon.draw(cc);
-                }
-            }
+        int targetSize = Math.round(size * scale);
+        int off = (size - targetSize) / 2;
+        Bitmap normIcon = normalizeIconBitmap(icon, targetSize, 1f);
+        if (normIcon != null) {
+            Paint iconPaintDraw = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+            if (useGlobalScale) iconPaintDraw.setAlpha(getPoolIconAlpha());
+            cc.drawBitmap(normIcon, off, off, iconPaintDraw);
+            normIcon.recycle();
         } else {
-            // Đường vẽ cũ — nguyên vẹn (dùng cho icon App và chat bubble)
-            int targetSize = Math.round(size * scale);
-            int off = (size - targetSize) / 2;
-            Bitmap normIcon = normalizeIconBitmap(icon, targetSize, 1f);
-            if (normIcon != null) {
-                Paint iconPaintDraw = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
-                if (useGlobalScale) iconPaintDraw.setAlpha(getPoolIconAlpha());
-                cc.drawBitmap(normIcon, off, off, iconPaintDraw);
-                normIcon.recycle();
-            } else {
-                if (useGlobalScale) icon.setAlpha(getPoolIconAlpha());
-                icon.setBounds(off, off, off + targetSize, off + targetSize);
-                icon.draw(cc);
-            }
+            if (useGlobalScale) icon.setAlpha(getPoolIconAlpha());
+            icon.setBounds(off, off, off + targetSize, off + targetSize);
+            icon.draw(cc);
         }
     } else if (emoji != null) {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setTextSize(size * 0.5f); p.setTextAlign(Paint.Align.CENTER);
-        // [MỚI] Nền giờ là trắng → emoji glyph đơn sắc phải đổi sang màu tối
-        // (dùng tone Deep Blue #1A237E cho đồng bộ với dải neon) để không bị vô hình.
-        p.setColor(0xFF1A237E);
-
+        p.setTextSize(size * 0.5f); p.setTextAlign(Paint.Align.CENTER); p.setColor(Color.WHITE);
         Paint.FontMetrics fm = p.getFontMetrics();
         cc.drawText(emoji, size / 2f, size / 2f - (fm.ascent + fm.descent) / 2, p);
     }
@@ -874,34 +802,6 @@ private Bitmap getStyledIconBitmap(String cacheKey, Drawable icon, String emoji,
     synchronized (maskedIconCache) { maskedIconCache.put(key, result); }
     return result;
 }
-// Icon Adaptive: layer 108dp, vùng nhìn thấy ~72dp -> phóng layer ~1.4x rồi căn giữa,
-// nền tràn kín hình dạng, foreground vẫn nằm trong vùng an toàn của hình.
-private static final float ADAPTIVE_LAYER_SCALE = 1.4f;
-private Bitmap getFullBleedAdaptiveBitmap(String cacheKey, AdaptiveIconDrawable adaptive, int shape, int size) {
-    String key = "fb_" + cacheKey + "_" + shape + "_" + size;
-    synchronized (maskedIconCache) {
-        Bitmap cached = maskedIconCache.get(key);
-        if (cached != null && !cached.isRecycled()) return cached;
-    }
-    Bitmap content = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-    Canvas cc = new Canvas(content);
-    cc.drawColor(Color.WHITE); // phòng icon có nền trong suốt
-
-    Drawable.ConstantState cs = adaptive.getConstantState();
-    AdaptiveIconDrawable ad = (cs != null) ? (AdaptiveIconDrawable) cs.newDrawable().mutate() : adaptive;
-    int layer = Math.round(size * ADAPTIVE_LAYER_SCALE);
-    int off = (layer - size) / 2;
-    Drawable bg = ad.getBackground();
-    Drawable fg = ad.getForeground();
-    if (bg != null) { bg.setBounds(-off, -off, size + off, size + off); bg.draw(cc); }
-    if (fg != null) { fg.setBounds(-off, -off, size + off, size + off); fg.draw(cc); }
-
-    Bitmap result = maskBitmapToShape(content, shape, size);
-    content.recycle();
-    synchronized (maskedIconCache) { maskedIconCache.put(key, result); }
-    return result;
-}
-
     private Drawable getCachedShortcutIcon(String scId) {
         Drawable overrideIcon = getShortcutIconOverride(scId);
         if (overrideIcon != null) return overrideIcon;
@@ -992,6 +892,12 @@ private String humanizeActionKey(String key) {
     }
     return sb.length() == 0 ? key : sb.toString();
 }
+// Ngũ giác bo góc mềm — dùng Outline.setConvexPath() để clip, KHÔNG cần custom Drawable
+// riêng, tận dụng luôn backdrop trắng sẵn có -> nhẹ GPU, không thêm object vẽ nào.
+// [FIX] Toạ độ Q-curve LẤY ĐÚNG từ path SVG mẫu PENTACLE (viewBox 500x500) —
+// trước đây tự tính ngũ giác đều bo góc, giờ khớp chính xác dáng "giọt lệ 5 cạnh"
+// của file mẫu. Scale theo iconSize/500. Tên hàm giữ nguyên để không phải sửa
+// mọi nơi gọi buildRoundedPentagon(...).
 private Path buildRoundedPentagon(int size) {
     Path path = new Path();
     float s = size / 500f;
@@ -1015,7 +921,7 @@ private Path buildRoundedPentagon(int size) {
 private Path buildSquirclePath(int size) {
     Path path = new Path();
     float cx = size / 2f, cy = size / 2f, r = size / 2f;
-    float n = 2.9f; // càng nhỏ càng tròn/mềm (5 = vuông kiểu iOS, 2 = hình tròn). One UI ≈ 3.2–3.6
+    float n = 5f;
     int steps = 72;
     for (int i = 0; i <= steps; i++) {
         double t = (Math.PI * 2 * i) / steps;
@@ -1027,32 +933,29 @@ private Path buildSquirclePath(int size) {
     path.close();
     return path;
 }
+   // Pebble — 1 góc to, 3 góc nhỏ (kiểu Material You "pebble"). Path chỉ build lại khi
+// kích thước icon đổi (Android cache Outline) — rẻ ngang RoundRect, không tốn thêm CPU.
+// [FIX] Toạ độ Q-curve LẤY ĐÚNG từ path SVG mẫu PEBBLE (viewBox 480x480), đã lật
+// ngang (mirror x = 480-x) để khớp CSS "transform: scaleX(-1)" mà file mẫu áp dụng
+// lên đúng chiều hiển thị thật. Scale theo iconSize/480.
 private Path buildPebblePath(int size) {
-    // [FIX 100%] Chuyển NGUYÊN VẸN 6 lệnh quadTo() từ SVG path gốc (viewBox 480x480).
-    // Đây là path "PEBBLE" đúng như bản HTML tham chiếu — KHÔNG còn tự tính
-    // sin/cos 3-5 múi như bản cũ (nguồn gốc khiến shape bị bóp gầy + lệch dáng).
-    //
-    // Tối ưu Pixel 2XL:
-    //  • Chỉ 6 quadTo → 13 điểm, nhẹ nhất trong toàn bộ shape pool
-    //    (Squircle: 73 điểm, Rough: ~100 điểm, Pentacle: 12 điểm)
-    //  • Path được cache 1 lần trong shapePathCache[shape=2][size] → Zero-RAM
-    //    sau lần vẽ đầu tiên, không cấp phát lại mỗi frame
-    //  • Không loop, không Math.sin/cos → 0 CPU khi khởi tạo
     Path path = new Path();
-    float s = size / 480f;   // quy đổi đúng tỉ lệ viewBox SVG gốc
-    path.moveTo(413f * s, 339f * s);
-    path.quadTo(354f * s,   438f * s, 238f * s,   441f * s);
-    path.quadTo(122f * s,   444f * s, 82.5f * s,  342f * s);
-    path.quadTo(43f * s,    240f * s, 86f * s,    144f * s);
-    path.quadTo(129f * s,   48f * s,  234f * s,   58.5f * s);
-    path.quadTo(339f * s,   69f * s,  405.5f * s, 154.5f * s);
-    path.quadTo(472f * s,   240f * s, 413f * s,   339f * s);
+    float s = size / 480f;
+    path.moveTo(93f * s, 319.5f * s);
+    path.quadTo(148f * s, 399f * s, 247f * s, 411.5f * s);
+    path.quadTo(346f * s, 424f * s, 388f * s, 332f * s);
+    path.quadTo(430f * s, 240f * s, 384f * s, 155f * s);
+    path.quadTo(338f * s, 70f * s, 241.5f * s, 72.5f * s);
+    path.quadTo(145f * s, 75f * s, 91.5f * s, 157.5f * s);
+    path.quadTo(38f * s, 240f * s, 93f * s, 319.5f * s);
     path.close();
-    // Vẫn normalizeToFullSize để Pebble lấp đầy khung size×size đồng bộ với
-    // 5 shape khác (Circle/Squircle/Rough/Pentacle/System) — đảm bảo icon
-    // bên trong luôn có cùng kích thước hiển thị tuyệt đối.
     return normalizeToFullSize(path, size);
 }
+// Rough — viền lởm chởm kiểu "xé giấy". Toạ độ CỐ ĐỊNH (không Random) nên mọi icon
+// Rough trong cùng Panel vẽ giống hệt nhau, Zero jitter/Zero alloc thêm mỗi lần render.
+// [FIX] Toạ độ ĐẦY ĐỦ lấy đúng từ path SVG mẫu ROUGH (viewBox 500x500) — trước đây
+// chỉ có 20 điểm tự vẽ tay xấp xỉ, giờ dùng nguyên bộ ~100 điểm gốc để đúng hình
+// "xé giấy" như file mẫu. Scale theo iconSize/500.
 private static final float[][] ROUGH_PTS_500 = {
     {407.18f,250.00f},{411.17f,256.33f},{412.91f,262.82f},{413.20f,269.32f},{415.70f,276.24f},
     {419.13f,283.64f},{421.58f,291.19f},{417.25f,297.17f},{414.81f,303.55f},{411.09f,309.43f},
@@ -1112,10 +1015,8 @@ private Path buildRoughPath(int size) {
         box.addView(iv);
     } else {
         int effectiveShape = (shape == 5) ? 0 : shape;
-        int backdropColor = Color.WHITE;
-Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null,
-    effectiveShape, iconSize, backdropColor, true, true);
-
+        int backdropColor = Color.argb(230, 60, 64, 67);
+        Bitmap styled = getStyledIconBitmap(cacheKey, icon, icon == null ? emoji : null, effectiveShape, iconSize, backdropColor, true);
         ImageView iv = new ImageView(ctx);
         iv.setImageBitmap(styled);
         iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
@@ -1144,20 +1045,26 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
     ImageView iv = new ImageView(ctx);
     iv.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
     if (shape == 5 && isAdaptive) {
+        // Icon Adaptive thật của launcher -> giữ nguyên hình dạng + kích thước hệ thống
         iv.setImageDrawable(icon);
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
     } else {
+        // [FIX] Bỏ hẳn zoom 1.28x + FIT_XY (gây méo/lem 4 góc). Dùng chung 1 hệ số
+        // ICON_CONTENT_SCALE với Action/Shortcut -> 6 kiểu icon có cùng size nền.
+        // Icon vuông sắc cạnh không-Adaptive (MB Bank, Beta Cinema...) được đặt lên
+        // nền TRẮNG giống đúng hành vi launcher hệ thống, không kéo méo ảnh nữa.
+       // [FIX] Bỏ hẳn điều kiện isAdaptive khi chọn màu nền — bug gốc là ở đây:
+        // đa số app hiện đại (kể cả MB Bank) đều là AdaptiveIconDrawable, không
+        // riêng Messenger, nên nhánh cũ luôn rơi vào "nền trong suốt" cho GẦN NHƯ
+        // MỌI app -> MB Bank vẫn bị cắt mà không có nền trắng, còn app full-bleed
+        // như Messenger thì cắt style gần như không thấy khác biệt (icon đã đặc
+        // kín sẵn). Giờ LUÔN ép nền trắng cho mọi icon App khi áp Style (trừ style
+        // "System" đã xử lý riêng ở nhánh if phía trên) -> đồng nhất tuyệt đối,
+        // và khi cắt hình cũng LUÔN nhìn thấy rõ viền trắng + hình dạng đã đổi.
         int effectiveShape = (shape == 5) ? 0 : shape;
-        Bitmap styled;
-        if (icon instanceof AdaptiveIconDrawable) {
-            // Icon Adaptive: nền + foreground tràn kín hình dạng đã chọn (giống launcher)
-            styled = getFullBleedAdaptiveBitmap(cacheKey, (AdaptiveIconDrawable) icon, effectiveShape, iconSize);
-        } else {
-            // Icon cũ (bitmap vuông): giữ nền trắng như trước
-            styled = getStyledIconBitmap(cacheKey, icon, null, effectiveShape, iconSize, Color.WHITE);
-        }
+        int backdropColor = Color.WHITE;
+        Bitmap styled = getStyledIconBitmap(cacheKey, icon, null, effectiveShape, iconSize, backdropColor);
         iv.setImageBitmap(styled);
-
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
     }
     box.addView(iv);
@@ -1177,106 +1084,6 @@ private View wrapAppIconCell(String px, Drawable icon, String cacheKey, View.OnC
     box.setOnClickListener(onClick);
     return box;
 }
-private static String currentSwapPanelId = null;
-    private static String currentSwapRefKey = null;
-
-private View wrapWithSwapLogic(String panelId, String refKey, View cell, Runnable originalAction) {
-    cell.setOnLongClickListener(v -> {
-        currentSwapPanelId = panelId;
-        currentSwapRefKey = refKey;
-        cell.setBackground(getSwapHighlightBg(cell.getBackground()));
-        try {
-            Vibrator vib = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
-            if (vib != null) vib.vibrate(android.os.VibrationEffect.createOneShot(30, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
-        } catch (Exception ignored) {}
-        return true; 
-    });
-
-    cell.setOnClickListener(v -> {
-        if (currentSwapPanelId != null && currentSwapPanelId.equals(panelId) && currentSwapRefKey != null) {
-            String sel = currentSwapRefKey;
-            currentSwapPanelId = null;
-            currentSwapRefKey = null;
-
-            if (!sel.equals(refKey)) {
-                String px = "pack_panel_" + panelId + "_";
-                List<String> order = csvToList(prefs.getString(px + "order", ""));
-                int i1 = order.indexOf(sel), i2 = order.indexOf(refKey);
-                if (i1 >= 0 && i2 >= 0) {
-                    Collections.swap(order, i1, i2);
-                    prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
-                }
-            }
-            // Gọi hàm render đồng bộ cực nhanh
-            fastRenderPanelGrid(panelId); 
-            return; 
-        }
-
-        currentSwapPanelId = null;
-        currentSwapRefKey = null;
-        if (prefs.getInt("pack_panel_" + panelId + "_snd", 0) == 1) TouchSoundHelper.play(ctx, prefs);
-        originalAction.run();
-    });
-    return cell;
-}
-
-private void fastRenderPanelGrid(String id) {
-    String px = "pack_panel_" + id + "_";
-    LinearLayout panel = panels.get(id);
-    if (panel == null || panel.getChildCount() == 0) return;
-
-    int cols = Math.max(1, prefs.getInt(px+"cols", 4));
-    int iconSize = prefs.getInt(px+"icon_size", 110);
-    int cellSize = iconSize + CELL_INNER_PAD;
-
-    LinearLayout gridContainer = (LinearLayout) panel.getChildAt(0); 
-gridContainer.removeAllViews();
-
-java.util.Set<String> validRefs = new java.util.LinkedHashSet<>();
-for (String a : csvToList(prefs.getString(px+"apps",""))) validRefs.add(a);
-for (String a : csvToList(prefs.getString(px+"acts",""))) validRefs.add(a);
-for (String s : csvToList(prefs.getString(px+"shortcuts",""))) validRefs.add("SC:" + s);
-List<String> order = csvToList(prefs.getString(px + "order", ""));
-order.retainAll(validRefs);
-for (String ref : validRefs) if (!order.contains(ref)) order.add(ref);
-for (java.util.Iterator<String> it = order.iterator(); it.hasNext();) {
-    String r = it.next();
-    if (!r.startsWith("SC:") && r.contains(".") && getCachedIcon(r) == null) it.remove(); // app đã mất -> không vẽ ô trắng
-}
-
-prefs.edit().putString(px + "order", TextUtils.join(",", order)).apply();
-
-LinearLayout row = null;
-
-    for (int i = 0; i < order.size(); i++) {
-        if (i % cols == 0) {
-            row = new LinearLayout(ctx);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_HORIZONTAL);
-            gridContainer.addView(row);
-        }
-        String ref = order.get(i);
-        String type = ref.startsWith("SC:") ? "SC" : (ref.contains(".") ? "APP" : "ACT");
-        String cleanRef = ref.startsWith("SC:") ? ref.substring(3) : ref;
-
-        Drawable icon = getCachedIcon(cleanRef); 
-        View cell = buildCell(px, type, icon, cleanRef);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(cellSize, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(8, 8, 8, 8);
-        cell.setLayoutParams(lp);
-        row.addView(cell);
-    }
-}
-
-private Drawable getSwapHighlightBg(Drawable orig) {
-    // Viền tròn ôm quanh ô, nền trong suốt để icon vẫn hiện rõ trong lúc chọn
-    GradientDrawable g = new GradientDrawable();
-    g.setColor(Color.TRANSPARENT);
-    g.setStroke(6, Color.parseColor("#8AB4F8"));
-    g.setCornerRadius(100f);
-    return g;
-}
-
     private View buildCell(String px, String type, Object payload, String ref) {
     String panelId = px.startsWith("pack_panel_") ? px.substring("pack_panel_".length(), px.length()-1) : "";
     if (type.equals("APP")) {
@@ -1285,19 +1092,15 @@ private Drawable getSwapHighlightBg(Drawable orig) {
         Drawable overrideIcon = ovrVal.isEmpty() ? null : getIconOverride(panelId, ref);
         Drawable finalIcon = overrideIcon != null ? overrideIcon : (Drawable) payload;
         String cellCacheKey = overrideIcon != null ? (ref + "_ov_" + ovrVal) : ref;
-        View cell = wrapAppIconCell(px, finalIcon, cellCacheKey, v -> {
+        return wrapAppIconCell(px, finalIcon, cellCacheKey, v -> {
             launchAppRef(ref);
-            new Handler(Looper.getMainLooper()).post(() -> closeAllPanels());
+            closeAllPanels();
         }, getCachedAppLabel(ref));
-        return wrapWithSwapLogic(panelId, ref, cell, () -> { 
-            launchAppRef(ref); 
-            new Handler(Looper.getMainLooper()).post(() -> closeAllPanels()); 
-        });
     } else if (ref.startsWith("RUN_SHORTCUT_")) {
         String scId = ref.substring("RUN_SHORTCUT_".length());
         Drawable icon = getCachedShortcutIcon(scId);
         String label = prefs.getString("shortcut_" + scId + "_name", "Shortcut");
-        Runnable scAction = () -> {
+        return wrapIconCell(px, icon, icon == null ? "🔗" : null, "sc_" + scId, v -> {
             try {
                 String uri = prefs.getString("shortcut_" + scId + "_intent_uri", "");
                 if (!uri.isEmpty()) {
@@ -1306,12 +1109,8 @@ private Drawable getSwapHighlightBg(Drawable orig) {
                     ctx.startActivity(scIntent);
                 }
             } catch (Exception ignored) {}
-            new Handler(Looper.getMainLooper()).post(() -> closeAllPanels());
-        };
-
-        View cell = wrapIconCell(px, icon, icon == null ? "🔗" : null, "sc_" + scId, v -> scAction.run(), label);
-        // Khoá order key khớp đúng với "SC:" + id đã lưu lúc khởi tạo order trong renderPanelGrid()
-        return wrapWithSwapLogic(panelId, "SC:" + scId, cell, scAction);
+            closeAllPanels();
+        }, label);
     } else {
         String label = getActionLabelForPanel(ref);
         String overrideKey = "pack_panel_" + panelId + "_icon_override_" + ref;
@@ -1320,21 +1119,20 @@ private Drawable getSwapHighlightBg(Drawable orig) {
         Integer resId = ACT_ICON_RES.get(ref);
         Drawable sysIcon = overrideIcon != null ? overrideIcon
             : (resId != null ? ctx.getDrawable(resId) : null);
+        // [FIX] Chỉ giữ màu gốc khi override là icon APP thật (đã có màu riêng).
+        // Icon hệ thống — dù mặc định hay do người dùng tự chọn — luôn tint trắng
+        // để đồng nhất, tránh "cùng 1 icon lúc đen lúc trắng".
         boolean isAppOverride = overrideVal.startsWith("app:");
-if (sysIcon != null && !isAppOverride) {
-    sysIcon = sysIcon.mutate();
-    // [FIX QS] #E8EAED = xám-trắng giống icon Quick Settings Android
-    sysIcon.setTint(0xFFE8EAED);        // ← ĐỔI
-}
-        Runnable actAction = () -> {
+        if (sysIcon != null && !isAppOverride) {
+            sysIcon = sysIcon.mutate();
+            sysIcon.setTint(Color.WHITE);
+        }
+        return wrapIconCell(px, sysIcon, sysIcon == null ? actEmoji(ref) : null, "act_" + panelId + "_" + ref, v -> {
             Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
             ipc.putExtra("act", ref);
             ctx.sendBroadcast(ipc);
-            new Handler(Looper.getMainLooper()).post(() -> closeAllPanels());
-        };
-
-        View cell = wrapIconCell(px, sysIcon, sysIcon == null ? actEmoji(ref) : null, "act_" + panelId + "_" + ref, v -> actAction.run(), label);
-        return wrapWithSwapLogic(panelId, ref, cell, actAction);
+            closeAllPanels();
+        }, label);
     }
 }
     private String actEmoji(String key) {
@@ -1424,7 +1222,7 @@ if (sysIcon != null && !isAppOverride) {
             } catch (Exception ignored) {}
         }
     }
-private void closePanel(String id) {
+    private void closePanel(String id) {
         LinearLayout panel = panels.get(id);
         Boolean open = panelOpen.get(id);
         if (panel == null || open == null || !open) return;
@@ -1432,12 +1230,7 @@ private void closePanel(String id) {
         panel.setVisibility(View.GONE);
         View handle = handles.get(id);
         if (handle != null) handle.setVisibility(View.VISIBLE);
-if (id.equals(currentSwapPanelId)) {
-    currentSwapPanelId = null;
-    currentSwapRefKey = null;
-       }
     }
-
     private void closeAllPanels() { for (String id : new java.util.ArrayList<>(panels.keySet())) closePanel(id); }
     private void removeHandle(String id) {
     View handle = handles.get(id);

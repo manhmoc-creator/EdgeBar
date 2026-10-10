@@ -14,21 +14,7 @@ import android.os.Build;
 public class HomebWatchdogReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context c, Intent i) {
         SharedPreferences p = c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE);
-        if (p.getBoolean("edgebar_permanently_stopped", false)) return; // [MỚI] user đã bấm Dừng vĩnh viễn
         if (isAccEnabled(c)) return; // Accessibility đang bật -> không cần Homeb tự động
-
-                       // [MỚI] Đang trong chế độ Blacklist-Lock → KHÔNG bật Homeb (sẽ đè app Blacklist)
-        // [FIX SELF-HEAL] Nhưng nếu Watchdog thật sự đã chết (>5s) thì cờ bị kẹt →
-        // tự dọn để Homeb được phép bật lại (nguyên nhân chính khiến bar/corner
-        // không hiện trên MIUI sau khi MIUI kill tiến trình Watchdog).
-        if (p.getBoolean("blacklist_lock_active", false)) {
-            boolean reallyActive = BlacklistLockWatchdogService.isRunning
-                || System.currentTimeMillis() - p.getLong("blacklist_lock_start_ms", 0) < 5000;
-            if (reallyActive) return;
-            p.edit().putBoolean("blacklist_lock_active", false)
-                .remove("blacklist_lock_pkg").remove("blacklist_lock_start_ms").apply();
-            try { c.stopService(new Intent(c, LockEbService.class)); } catch (Exception ignored) {}
-        }
 
         // Accessibility TẮT -> Homacc không thể hoạt động -> dừng hẳn để tiết kiệm RAM/pin
         if (AccessibleHomeService.isRunning) {
@@ -55,16 +41,10 @@ public class HomebWatchdogReceiver extends BroadcastReceiver {
     }
 
     private boolean isAccEnabled(Context c) {
-    if (EdgeBarService.isConnected) return true;
-    String s = android.provider.Settings.Secure.getString(c.getContentResolver(),
-        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-    if (s == null) return false;
-    android.content.ComponentName me = new android.content.ComponentName(c, EdgeBarService.class);
-    for (String part : s.split(":")) {
-        if (me.equals(android.content.ComponentName.unflattenFromString(part.trim()))) return true;
+        String s = android.provider.Settings.Secure.getString(c.getContentResolver(),
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        return s != null && s.contains(c.getPackageName() + "/" + EdgeBarService.class.getName());
     }
-    return false;
-}
 
     /** Kiểm tra gần như tức thì (300ms) — gọi ngay khi vừa phát hiện Accessibility tắt. */
     public static void scheduleImmediate(Context c) {
@@ -73,6 +53,12 @@ public class HomebWatchdogReceiver extends BroadcastReceiver {
         android.app.PendingIntent pi = android.app.PendingIntent.getBroadcast(
             c, 502, i,
             android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
+        // [FIX] setExactAndAllowWhileIdle() cần quyền SCHEDULE_EXACT_ALARM trên Android 13+.
+        // App chưa xin quyền này -> lệnh có thể ném SecurityException và bị catch() nuốt im
+        // lặng, khiến Homeb KHÔNG BAO GIỜ được kích hoạt tức thời (chỉ tự phục hồi sau 5 phút
+        // qua watchdog định kỳ). Đổi sang setAndAllowWhileIdle() — KHÔNG cần quyền đặc biệt,
+        // vẫn chạy được khi máy đang Doze, và tiết kiệm pin hơn vì hệ thống được phép dồn
+        // chung với báo thức khác thay vì phải đánh thức CPU đúng mili giây (setExact).
         try {
             am.setAndAllowWhileIdle(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 android.os.SystemClock.elapsedRealtime() + 150, pi);
@@ -86,6 +72,6 @@ public class HomebWatchdogReceiver extends BroadcastReceiver {
             c, 503, i,
             android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
                 am.setInexactRepeating(android.app.AlarmManager.ELAPSED_REALTIME,
-    android.os.SystemClock.elapsedRealtime() + 15*60*1000, 15*60*1000, pi);
+            android.os.SystemClock.elapsedRealtime() + 60*1000, 60*1000, pi);
     }
 }

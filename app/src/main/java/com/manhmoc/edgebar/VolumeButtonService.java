@@ -28,28 +28,30 @@ public class VolumeButtonService extends Service {
     private BroadcastReceiver screenReceiver;
     private final Handler h = new Handler(Looper.getMainLooper());
     
-    // --- THUẬT TOÁN ĐIỀU KHIỂN VOLKEY SIÊU NHẠY ---
-    private static final long DEBOUNCE_MS = 60; // Lọc nhiễu cơ học của nút cứng
-    private static final long MAX_WAIT_MS = 480; // Chờ nhịp 2 tối đa
-    
-    private int pendingKey = 0; // 0: rảnh, 1: up, -1: down
-    private long lastPhysicalEventMs = 0;
-    private Runnable actionRunnable = null;
+    // Thuật toán Combo mới: Lưu phím chờ và số lần bấm liên tiếp
+    private Runnable volCheckRunnable;
+    private int pendingKey = 0; // 0=none, 1=up, -1=down
+    private int burstCount = 0;
+private long lastKeyEventMs = 0;
+private int lastKeyPressed = 0; // RAW key gần nhất - bất kể đã fire hay đang chờ combo/dtap
+private static final long MIN_GAP_SAME_KEY_MS = 70;
+
+    private static final long DTAP_WINDOW_MS = 240;  // Chờ ngắn — cùng 1 ngón tap 2 lần
+private static final long COMBO_WINDOW_MS = 660; // Chờ dài hơn — đổi phím, cần thời gian di chuyển ngón (1 tay)
+private long pendingWindowMs = 0;
     
     private final Handler keepAliveHandler = new Handler();
-private Runnable keepAliveRunnable;
-private static final long KEEP_ALIVE_INTERVAL_MS = 900000; // [FIX PIN] 15 phút — MediaSession vẫn đủ sống, giảm 3.75x số lần wake CPU
-
+    private Runnable keepAliveRunnable;
+    private static final long KEEP_ALIVE_INTERVAL_MS = 12000;
     private android.os.PowerManager.WakeLock kaWakeLock;
 
     private void startKeepAlive() {
-    stopKeepAlive();
-    keepAliveRunnable = () -> {
-        try {
-            android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-            kaWakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "EdgeBar:VolKeyAlive");
-            kaWakeLock.acquire(500);
-
+        stopKeepAlive();
+        keepAliveRunnable = () -> {
+            try {
+                android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+                kaWakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "EdgeBar:VolKeyAlive");
+                kaWakeLock.acquire(3000); 
                 if (mediaSession != null) {
                     mediaSession.setPlaybackState(new PlaybackState.Builder()
                             .setState(PlaybackState.STATE_PLAYING, 0, 1f).build());
@@ -61,12 +63,9 @@ private static final long KEEP_ALIVE_INTERVAL_MS = 900000; // [FIX PIN] 15 phút
     }
     private void stopKeepAlive() { if (keepAliveRunnable != null) keepAliveHandler.removeCallbacks(keepAliveRunnable); }
 
-        @Override public void onCreate() {
+    @Override public void onCreate() {
         super.onCreate();
         prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
-        if (prefs.getBoolean("edgebar_permanently_stopped", false)) { stopSelf(); return; }
-        if (!hasAnyRule(prefs)) { stopSelf(); return; }
-
         if (!startForegroundQuiet()) return; 
         
         screenReceiver = new BroadcastReceiver() {
@@ -94,85 +93,102 @@ private static final long KEEP_ALIVE_INTERVAL_MS = 900000; // [FIX PIN] 15 phút
         mediaSession.setCallback(new MediaSession.Callback() {});
         mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
         
-        VolumeProvider provider = new VolumeProvider(VolumeProvider.VOLUME_CONTROL_ABSOLUTE, 10, 5) {
-            @Override public void onAdjustVolume(int direction) {
-                setCurrentVolume(5);
-                if (direction > 0) handleSide(true);
-                else if (direction < 0) handleSide(false);
-            }
-        };
+                        VolumeProvider provider = new VolumeProvider(VolumeProvider.VOLUME_CONTROL_ABSOLUTE, 10, 5) {
+    @Override public void onAdjustVolume(int direction) {
+        setCurrentVolume(5);
+        if (direction > 0) handleSide(true);
+        else if (direction < 0) handleSide(false);
+    }
+};
 
         mediaSession.setPlaybackToRemote(provider);
-        mediaSession.setPlaybackState(new PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f).build());  
+        mediaSession.setPlaybackState(new PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f).build());	
         
         android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
         boolean screenOffNow = pm != null && !pm.isInteractive();
-        mediaSession.setActive(screenOffNow && !MyPlaylistService.isRunning);
+        mediaSession.setActive(screenOffNow);
         isRunning = true;
     }
-
-    private boolean isRuleSet(String key) {
+        private boolean isRuleSet(String key) {
         return !prefs.getString(key, "NONE").equals("NONE");
     }
 
-    private void handleSide(boolean isUp) {
-        h.post(() -> handleSideInternal(isUp));
+private void handleSide(boolean isUp) {
+   // [FIX] Ép chạy tuần tự trên main thread của Handler h — tránh trường hợp
+   // callback hệ thống tới không cùng thread với volCheckRunnable đang chờ,
+   // có thể gây đọc/ghi pendingKey lệch nhịp -> ra sai action (vd Combo lại
+   // fire action của Tap).
+   h.post(() -> handleSideInternal(isUp));
+}
+
+private void handleSideInternal(boolean isUp) {
+   int currentKey = isUp ? 1 : -1;
+   long now = android.os.SystemClock.elapsedRealtime();
+
+   // [FIX CHÍNH] So với RAW key gần nhất, áp dụng bộ lọc LUÔN LUÔN — bất kể
+   // đang có pendingKey hay không. Trước đây chỉ lọc khi pendingKey == 0,
+   // nên tín hiệu "echo" đến ngay sau lần bấm đầu tiên (khi đang chờ phân
+   // loại Tap/Dtap/Combo) bị coi là lần bấm thật thứ 2 -> Tap tự nhảy sang
+   // Dtap/Combo. Đây là nguyên nhân chính gây nhầm lẫn tap/2tap/combo.
+   if (lastKeyPressed == currentKey && (now - lastKeyEventMs) < MIN_GAP_SAME_KEY_MS) {
+       lastKeyEventMs = now;
+       return;
+   }
+   lastKeyEventMs = now;
+   lastKeyPressed = currentKey;
+
+   if (volCheckRunnable != null) {
+       h.removeCallbacks(volCheckRunnable);
+       volCheckRunnable = null;
+   }
+
+   if (pendingKey != 0) {
+       if (pendingKey == currentKey) {
+           fire(isUp ? "volkey_up_dtap" : "volkey_down_dtap");
+       } else {
+           fire(pendingKey == 1 ? "volkey_up_combo" : "volkey_down_combo");
+       }
+       pendingKey = 0;
+       burstCount = 0;
+       return;
+   }
+
+   String dtapKey = isUp ? "volkey_up_dtap" : "volkey_down_dtap";
+   String comboKey = isUp ? "volkey_up_combo" : "volkey_down_combo";
+   boolean hasCombo = isRuleSet(comboKey);
+   boolean hasDtap = isRuleSet(dtapKey);
+
+   if (!hasCombo && !hasDtap) {
+       fire(isUp ? "volkey_up_tap" : "volkey_down_tap");
+       return;
+   }
+
+   pendingWindowMs = hasCombo ? COMBO_WINDOW_MS : DTAP_WINDOW_MS;
+   pendingKey = currentKey;
+   burstCount = 1;
+   vibrateAck();
+   scheduleCheck();
+}
+        private void scheduleCheck() {
+        volCheckRunnable = () -> {
+            fire(pendingKey == 1 ? "volkey_up_tap" : "volkey_down_tap");
+            pendingKey = 0;
+            burstCount = 0;
+            volCheckRunnable = null;
+        };
+        h.postDelayed(volCheckRunnable, pendingWindowMs);
     }
-
-    private void handleSideInternal(boolean isUp) {
-        int currentKey = isUp ? 1 : -1;
-        long now = android.os.SystemClock.elapsedRealtime();
-
-        if (currentKey == pendingKey && (now - lastPhysicalEventMs) < DEBOUNCE_MS) {
-            return; 
-        }
-        lastPhysicalEventMs = now;
-
-        String prefix = isUp ? "volkey_up" : "volkey_down";
-        boolean hasDtap = isRuleSet(prefix + "_dtap");
-        boolean hasCombo = isRuleSet(prefix + "_combo");
-
-        if (pendingKey == 0) {
-            pendingKey = currentKey;
-            vibrateAck(); 
-
-            if (!hasDtap && !hasCombo) {
-                executeAndResetState(prefix + "_tap");
-            } else {
-                actionRunnable = () -> executeAndResetState(prefix + "_tap");
-                h.postDelayed(actionRunnable, MAX_WAIT_MS);
-            }
-        } else {
-            if (actionRunnable != null) {
-                h.removeCallbacks(actionRunnable);
-                actionRunnable = null;
-            }
-
-            if (pendingKey == currentKey) {
-                executeAndResetState(prefix + "_dtap");
-            } else {
-                String comboActionKey = (pendingKey == 1) ? "volkey_up_combo" : "volkey_down_combo";
-                executeAndResetState(comboActionKey);
-            }
-        }
-    }
-
-    private void executeAndResetState(String prefKey) {
-        pendingKey = 0;
-        actionRunnable = null;
-        fire(prefKey);
-    }
-
     private void resetBurst() {
-        if (actionRunnable != null) {
-            h.removeCallbacks(actionRunnable);
-            actionRunnable = null;
+        if (volCheckRunnable != null) {
+            h.removeCallbacks(volCheckRunnable);
+            volCheckRunnable = null;
         }
         pendingKey = 0;
-        lastPhysicalEventMs = 0;
+        burstCount = 0;
     }
-
     private void vibrateAck() {
+        // Rung rất nhẹ, ngắn — báo "đã ghi nhận lần bấm đầu, đang chờ phân biệt Tap/Dtap/Combo"
+        // để người dùng không tưởng nhầm là hệ thống không phản hồi rồi bấm lại quá sớm.
         try {
             Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (Build.VERSION.SDK_INT >= 26)
@@ -180,33 +196,19 @@ private static final long KEEP_ALIVE_INTERVAL_MS = 900000; // [FIX PIN] 15 phút
             else v.vibrate(12);
         } catch (Exception ignored) {}
     }
-
-    // [MỚI] Danh sách action BẮT BUỘC cần màn sáng mới có ý nghĩa — Camera/Chụp màn
-// hình/Menu nguồn/Thông báo/Cài đặt nhanh/Chia đôi màn/Quay màn/Tự xoay/Quét QR/
-// Quét dung lượng đều cần nhìn thấy UI. PLAY_MY_PLAYLIST, TOGGLE_RECORD,
-// PAUSE_RECORD, FLASH, VOLUME, TOGGLE_OVERLAY, TOGGLE_WORK_PROFILE KHÔNG cần
-// màn sáng, vẫn chạy ngầm bình thường khi màn tắt.
-private static final java.util.Set<String> SCREEN_REQUIRED_ACTS = new java.util.HashSet<>(java.util.Arrays.asList(
-    "CAMERA", "SCREENSHOT", "POWER_DIALOG", "NOTIFICATIONS", "QUICK_SETTINGS",
-    "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE", "SCAN_QR", "OPEN_STORAGE_SCAN"
-));
-
-private void fire(String key) {
-    if (!prefs.getBoolean(key + "_on", true)) return;
-    String action = prefs.getString(key, "NONE");
-    if (action.equals("NONE")) return;
-    if (prefs.getBoolean(key + "_vib", true)) {
-        try {
-            Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
-            if (Build.VERSION.SDK_INT >= 26)
-                v.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE));
-            else v.vibrate(25);
-        } catch (Exception ignored) {}
-    }
-    if (prefs.getBoolean(key + "_snd", false)) TouchSoundHelper.play(this, prefs);
-    String act = action.split(",")[0].trim();
-
-    Runnable doFire = () -> {
+    private void fire(String key) {
+        if (!prefs.getBoolean(key + "_on", true)) return;
+        String action = prefs.getString(key, "NONE");
+        if (action.equals("NONE")) return;
+        if (prefs.getBoolean(key + "_vib", true)) {
+            try {
+                Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+                if (Build.VERSION.SDK_INT >= 26)
+                    v.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE));
+                else v.vibrate(25);
+            } catch (Exception ignored) {}
+        }
+        String act = action.split(",")[0].trim();
         Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
         if (act.startsWith("RUN_SHORTCUT_")) {
             ipc.putExtra("act", "RUN_SHORTCUT");
@@ -215,24 +217,7 @@ private void fire(String key) {
             ipc.putExtra("act", act);
         }
         sendBroadcast(ipc);
-    };
-
-    android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-    boolean screenOff = pm != null && !pm.isInteractive();
-    if (screenOff && SCREEN_REQUIRED_ACTS.contains(act)) {
-        try {
-            android.os.PowerManager.WakeLock wl = pm.newWakeLock(
-                android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                "EdgeBar:VolKeyWake");
-            wl.acquire(3000);
-        } catch (Exception ignored) {}
-        // Đợi 350ms để màn hình + Lock bar kịp bật ổn định rồi mới bắn action,
-        // tránh trường hợp action chạy trước khi Trợ năng/Homeb kịp vẽ overlay.
-        new Handler(android.os.Looper.getMainLooper()).postDelayed(doFire, 350);
-    } else {
-        doFire.run();
     }
-}
 
     private boolean startForegroundQuiet() {
         try {
@@ -268,6 +253,7 @@ private void fire(String key) {
     }
 
     public static boolean hasAnyRule(SharedPreferences p) {
+        // Cập nhật Rule Check theo hệ combo mới
         String[] keys = {
             "volkey_up_tap", "volkey_up_dtap", "volkey_up_combo",
             "volkey_down_tap", "volkey_down_dtap", "volkey_down_combo"

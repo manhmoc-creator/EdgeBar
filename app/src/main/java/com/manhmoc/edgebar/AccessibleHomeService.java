@@ -15,6 +15,16 @@ public class AccessibleHomeService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        // [FIX] BẮT BUỘC gọi startForeground() vì service này được khởi động bằng
+        // startForegroundService() (QsAccHomeTile, HomaccWatchdogReceiver) và Manifest
+        // đã khai báo foregroundServiceType="specialUse". Không gọi trong 5s sẽ khiến
+        // hệ thống crash TOÀN BỘ tiến trình app (kéo cả EdgeBarService/overlay theo).
+        // Ngoài ra, nếu KHÔNG phải Foreground Service thật, Android sẽ tự dừng service
+        // này sau một khoảng chạy nền (Background Execution Limits) — đây chính là
+        // nguyên nhân Homacc "biến mất tự nhiên" dù không có thao tác gì.
+// [FIX] Dùng CHUNG id 99 + channel "eb_lacck_status" với EdgeBarService —
+// hệ thống chỉ giữ 1 notification duy nhất cho cùng (pkg, id), nên "Homacc" không
+// còn hiện thành dòng riêng, chỉ còn "EB Lacck" như trước.
 String cid = "eb_lacck_status";
 NotificationManager nmAcc = getSystemService(NotificationManager.class);
 if (nmAcc.getNotificationChannel(cid) == null) {
@@ -44,7 +54,7 @@ scheduleWatchdog();
         // inexact = OS tự gộp cùng các báo thức khác của hệ thống → tiết kiệm pin,
         // sai số vài phút không ảnh hưởng vì mục đích chỉ là "tự phục hồi", không cần chính xác
                 am.setInexactRepeating(android.app.AlarmManager.ELAPSED_REALTIME,
-    android.os.SystemClock.elapsedRealtime() + 15*60*1000, 15*60*1000, pi);
+            android.os.SystemClock.elapsedRealtime() + 60*1000, 60*1000, pi);
     }
 @Override
 public int onStartCommand(Intent intent, int flags, int startId) {

@@ -13,7 +13,6 @@
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.MODIFY_QUIET_MODE" tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
@@ -32,21 +31,13 @@
         android:label="Edge Bar"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
-<activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
-    <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LAUNCHER" />
-    </intent-filter>
-    <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
-</activity>
-<activity
-    android:name=".ShortcutTrampolineActivity"
-    android:theme="@android:style/Theme.Translucent.NoTitleBar"
-    android:excludeFromRecents="true"
-    android:taskAffinity=""
-    android:launchMode="singleInstance"
-    android:noHistory="true"
-    android:exported="true" />
+
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <activity android:name=".QrScanActivity" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:exported="false" />
 
@@ -117,27 +108,8 @@
     android:foregroundServiceType="mediaProjection" />
 <service android:name=".ScreenRecorderService" android:exported="false"
     android:foregroundServiceType="mediaProjection|mediaPlayback" />
-<service android:name=".LockEbService" android:exported="false"
-    android:foregroundServiceType="specialUse">
-    <property
-        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="edgebar_lockeb" />
-</service>
-
 <service android:name=".VolumeButtonService" android:exported="false"
     android:foregroundServiceType="mediaPlayback" />
-<service android:name=".ProximityWaveService" android:exported="false"
-    android:foregroundServiceType="specialUse">
-    <property
-        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="edgebar_proximity_wave" />
-</service>
-<service android:name=".BlacklistLockWatchdogService" android:exported="false"
-    android:foregroundServiceType="specialUse">
-    <property
-        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="edgebar_blacklist_lock_watchdog" />
-</service>
 <service android:name=".MyPlaylistService" android:exported="false"
     android:foregroundServiceType="mediaPlayback" />
 <service android:name=".VoiceRecorderService" android:exported="false"
@@ -156,16 +128,6 @@ android:exported="true">
 <intent-filter>
 <action android:name="android.service.quicksettings.action.QS_TILE" />
 </intent-filter>
-</service>
-<service
-    android:name=".QsOpenAppTile"
-    android:label="Mở Edge Bar"
-    android:icon="@android:drawable/stat_sys_warning"
-    android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-    android:exported="true">
-    <intent-filter>
-        <action android:name="android.service.quicksettings.action.QS_TILE" />
-    </intent-filter>
 </service>
 <service
             android:name=".EdgeBarNotificationListener"
@@ -206,22 +168,5 @@ android:exported="true">
         <service android:name=".Tile28" android:label="Tile 28" android:icon="@drawable/ic_launcher_fg" android:enabled="false" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
         <service android:name=".Tile29" android:label="Tile 29" android:icon="@drawable/ic_launcher_fg" android:enabled="false" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
         <service android:name=".Tile30" android:label="Tile 30" android:icon="@drawable/ic_launcher_fg" android:enabled="false" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true"><intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter></service>
-
-        <!-- [MỚI] Edge Bar Widget trong suốt — hỗ trợ Tap + Double-Tap -->
-        <receiver android:name=".EdgeBarWidgetProvider" android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.manhmoc.edgebar.WIDGET_TAP" />
-            </intent-filter>
-            <meta-data android:name="android.appwidget.provider"
-                android:resource="@xml/widget_edgebar_info" />
-        </receiver>
-        <activity android:name=".WidgetConfigActivity"
-            android:exported="true"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
-            </intent-filter>
-        </activity>
     </application>
 </manifest>
