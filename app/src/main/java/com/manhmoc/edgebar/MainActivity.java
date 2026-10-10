@@ -1970,7 +1970,7 @@ private String getSpacePrefix() {
                         flow.add(dualRow, 6);
                     } else {
                         View card = buildGestureActionPackCard(key, compName, gestureName, actKeysUsed, actLabsUsed);
-                        attachDragReorder((View) card, compKeys, "rule_order_" + getSpacePrefix(), this::renderRulesList);
+                        attachDragReorder(card, compKeys, "rule_order_" + getSpacePrefix(), this::renderRulesList);
                         flow.add(card, getPackSpanUnits("ui_span_rule_order_" + getSpacePrefix() + "_" + key));
                     }
                 }
@@ -2125,7 +2125,9 @@ private LinearLayout buildTwinToggleRow(String nameA, String nameB, String keyA,
     row.addView(createHalfToggle(nameB, keyB, onSync));
     return row;
 }
-
+    private LinearLayout createHalfToggle(String label, String prefKey) {
+        return createHalfToggle(label, prefKey, null);
+    }
 private LinearLayout createHalfToggle(String label, String prefKey, Runnable onSync) {
     LinearLayout half = new LinearLayout(this);
     half.setOrientation(LinearLayout.VERTICAL);
@@ -2163,23 +2165,6 @@ private LinearLayout buildTwinSettingRow(String title, String nameA, String name
     row.addView(createHalfSettingBtn(title + "\n(" + nameA + ")", keyA, items, def, true));
     row.addView(createHalfSettingBtn(title + "\n(" + nameB + ")", keyB, items, def, false));
     return row;
-}
-
-private Button createHalfSettingBtn(String label, String key, String[] items, int def, boolean isLeft) {
-    Button btn = new Button(this);
-    btn.setText(label);
-    btn.setBackground(getRounded("#2C2C2C", 16f));
-    btn.setTextColor(Color.WHITE);
-    btn.setTextSize(11.5f);
-    btn.setAllCaps(false);
-    btn.setPadding(10, 30, 10, 30);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-    lp.setMargins(10, 0, 10, 0);
-    btn.setLayoutParams(lp);
-    btn.setOnClickListener(v -> openOrQuadDialog(label, key, items, def, isLeft, () -> {
-        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-    }));
-    return btn;
 }
 private void openOrBridgeEditor(String baseKey, String title) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
