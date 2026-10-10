@@ -205,9 +205,7 @@ private final Runnable reapplyRunnable = this::applyVisibility;
     }
 private int readOrInt(String sp, String member, boolean isBar, String server, String field, int def){
     String base = isBar ? (sp + member + field) : (sp + "corner_" + member + "_" + field.replaceFirst("^_", ""));
-    boolean isLeft = member.equals("r") || member.equals("t_l") || member.equals("r_u")
-                  || member.equals("l_d") || member.equals("l_c") || member.equals("b_c")
-                  || member.equals("tl") || member.equals("bl");
+    boolean isLeft = isLeftMember(member);
     if(TwinPairStore.isOrSplit(prefs, base, isLeft)){
         int v = TwinPairStore.readOrValue(prefs, base, isLeft, "bl", -1);
         if(v >= 0) return v;   // LockEb = vai trò Blacklist's
@@ -276,9 +274,7 @@ private int readOrInt(String sp, String member, boolean isBar, String server, St
             corners[i].setVisibility(gate && !hiddenKeys.contains("corner_" + CORNERS[i]) ? View.VISIBLE : View.GONE);
         }
     }
-private boolean isLeftMember(String m){ return m.equals("l")||m.equals("t_l")||m.equals("l_u")||m.equals("l_d")||m.equals("l_c")||m.equals("tl")||m.equals("bl"); }
-
-
+private boolean isLeftMember(String m){ return m.equals("l")||m.equals("t_l")||m.equals("l_u")||m.equals("l_d")||m.equals("l_c")||m.equals("t_c")||m.equals("tl")||m.equals("bl"); }
     private class Gesture implements View.OnTouchListener {
         final String keyBase; float sx, sy; boolean longFired, multi;
         long lastTapMs = 0; Runnable pendingTap;

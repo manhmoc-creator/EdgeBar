@@ -42,16 +42,11 @@ public final class TwinPairStore {
             .putInt(mk(sp,m[0],f,isBar),v).putInt(mk(sp,m[1],f,isBar),v).apply();
     }
     public static boolean isSideEnabled(SharedPreferences p,String sp,String id,boolean isA,boolean isBar){
-        String pk = sp+id+"_"+(isA?F_A_EN:F_B_EN);
-        if(p.contains(pk)) return p.getBoolean(pk,true);
-        String[] m = getMembers(id,isBar); if(m==null) return true;
-        return p.getBoolean(sp+(isBar?(isA?m[0]:m[1]):("corner_"+(isA?m[0]:m[1])))+"_en",false);
-    }
-    public static void setSideEnabled(SharedPreferences p,String sp,String id,boolean isA,boolean en,boolean isBar){
-        String[] m = getMembers(id,isBar); if(m==null) return;
-        p.edit().putBoolean(sp+id+"_"+(isA?F_A_EN:F_B_EN),en)
-            .putBoolean(sp+(isBar?(isA?m[0]:m[1]):("corner_"+(isA?m[0]:m[1])))+"_en",en).apply();
-    }
+    return p.getBoolean(sp+id+"_"+(isA?F_A_EN:F_B_EN),true);
+}
+public static void setSideEnabled(SharedPreferences p,String sp,String id,boolean isA,boolean en,boolean isBar){
+    p.edit().putBoolean(sp+id+"_"+(isA?F_A_EN:F_B_EN),en).apply();
+}
     private static String mk(String sp,String m,String f,boolean isBar){
         return isBar?(sp+m+"_"+f):(sp+"corner_"+m+"_"+f);
     }
@@ -99,10 +94,10 @@ public static String pairIdForCornerLoc(int loc){
 }
 public static final String[] BAR_PAIR_LABELS_VI = {
     "Đáy phải/trái", "Đỉnh trái/phải", "Phải/trái trên",
-    "Trái/phải dưới", "Đáy/đỉnh giữa", "Trái/phải giữa"};
+    "Trái/phải dưới", "Đỉnh/đáy giữa", "Trái/phải giữa"};
 public static final String[] BAR_PAIR_LABELS_EN = {
     "Bottom R/L", "Top L/R", "Right/Left Up",
-    "Left/Right Down", "Bottom/Top Center", "Left/Right Center"};
+    "Left/Right Down", "Top/Bottom Center", "Left/Right Center"};
 public static final String[] CORNER_PAIR_LABELS_VI = {"Đỉnh trái/phải", "Đáy trái/phải"};
 public static final String[] CORNER_PAIR_LABELS_EN = {"Top L/R", "Bottom L/R"};
 public static int repLocOfBarPair(String pairId, String[] BARS){
@@ -181,34 +176,72 @@ public static final String[] DEFAULT_DISPLAY_ORDER = {
     "bar_defBarLRD",
     "corner_defCornerBLR"
 };
+public static final String[] DEFAULT_BAR_PAIR_IDS = {
+    "barPair_bt_c","barPair_t_lr","barPair_b_rl","barPair_lr_c","barPair_lr_u","barPair_lr_d"};
+
 public static void ensureDefaultPacks(SharedPreferences p){
-    if(p.getBoolean(DEFAULT_PACK_FLAG, false)) return;
     SharedPreferences.Editor ed = p.edit();
-   int[]    barLocs = { 8,       2,       6,       10,      9,       11     };
-String[] barPairs = {"barPair_t_lr","barPair_b_rl","barPair_bt_c",
-                     "barPair_lr_c","barPair_lr_u","barPair_lr_d"};
-String[] barNames = {"Top L/R","Bottom R/L","Top/Bottom Center",
-                     "Right/Left Center","Left/Right Up","Left/Right Down"};
-    for(int i = 0; i < DEFAULT_BAR_PACK_IDS.length; i++){
-        String id = DEFAULT_BAR_PACK_IDS[i];
-        String px = "pack_bar_" + id + "_";
-        if(p.contains(px + "loc")) continue;
-        ed.putString(px + "name", barNames[i]);
-        ed.putInt   (px + "loc", barLocs[i]);
-        ed.putInt   (px + "pair_spacing", 0);
-    }
-    int[] cornerLocs = { 3, 1 };  // 3 = "tl", 1 = "bl"
-    for(int i = 0; i < DEFAULT_CORNER_PACK_IDS.length; i++){
-        String id = DEFAULT_CORNER_PACK_IDS[i];
-        String px = "pack_corner_" + id + "_";
-        if(p.contains(px + "loc")) continue;
-        ed.putString(px + "name", i == 0 ? "Top L/R Corner" : "Bottom L/R Corner");
-        ed.putInt   (px + "loc", cornerLocs[i]);
-        ed.putInt   (px + "pair_spacing", 0);
-    }
-    appendIds(p, ed, "pack_bar_ids",    DEFAULT_BAR_PACK_IDS);
+    int[] barLocs = {6, 8, 2, 10, 9, 11};
+    String[] barNames = {"Top/Bottom Center","Top L/R","Bottom R/L",
+        "Left/Right Center","Left/Right Up","Left/Right Down"};
+    for(int i = 0; i < DEFAULT_BAR_PACK_IDS.length; i++)
+        seedPack(p, ed, true, DEFAULT_BAR_PACK_IDS[i], DEFAULT_BAR_PAIR_IDS[i], barLocs[i], barNames[i]);
+    int[] cornerLocs = {3, 1};
+    String[] cornerNames = {"Top L/R Corner", "Bottom L/R Corner"};
+    for(int i = 0; i < DEFAULT_CORNER_PACK_IDS.length; i++)
+        seedPack(p, ed, false, DEFAULT_CORNER_PACK_IDS[i], CORNER_PAIR_IDS[i], cornerLocs[i], cornerNames[i]);
+    appendIds(p, ed, "pack_bar_ids", DEFAULT_BAR_PACK_IDS);
     appendIds(p, ed, "pack_corner_ids", DEFAULT_CORNER_PACK_IDS);
-    ed.putBoolean(DEFAULT_PACK_FLAG, true).apply();
+    String joined = android.text.TextUtils.join(",", DEFAULT_DISPLAY_ORDER);
+    for(String sp : new String[]{"lock_", "home_"}){
+        ed.putString(sp + "applied_packs", joined);
+        for(String itemKey : DEFAULT_DISPLAY_ORDER){
+            if(p.contains(sp + itemKey + "_en")) continue;
+            boolean isBar = itemKey.startsWith("bar_");
+            String[] m = getMembers(defaultPairOf(itemKey), isBar);
+            if(m == null) continue;
+            boolean on = p.getBoolean(sp + (isBar ? m[0] : "corner_" + m[0]) + "_en", false)
+                || p.getBoolean(sp + (isBar ? m[1] : "corner_" + m[1]) + "_en", false);
+            ed.putBoolean(sp + itemKey + "_en", on);
+        }
+    }
+    ed.apply();
+}
+
+private static String defaultPairOf(String itemKey){
+    boolean isBar = itemKey.startsWith("bar_");
+    String id = itemKey.substring(isBar ? 4 : 7);
+    String[] ids = isBar ? DEFAULT_BAR_PACK_IDS : DEFAULT_CORNER_PACK_IDS;
+    String[] pairs = isBar ? DEFAULT_BAR_PAIR_IDS : CORNER_PAIR_IDS;
+    for(int i = 0; i < ids.length; i++) if(ids[i].equals(id)) return pairs[i];
+    return null;
+}
+private static void seedPack(SharedPreferences p, SharedPreferences.Editor ed, boolean isBar,
+        String id, String pairId, int loc, String name){
+    String base = isBar ? "pack_bar_" : "pack_corner_";
+    String px = base + id + "_";
+    ed.putInt(px + "loc", loc);
+    if(!p.contains(px + "name")) ed.putString(px + "name", name);
+    if(!p.contains(px + "pair_spacing")) ed.putInt(px + "pair_spacing", 0);
+    String[] m = getMembers(pairId, isBar);
+    if(m == null) return;
+    if(isBar && !p.contains(px + "w")){
+        String src = p.contains("home_" + m[0] + "_w") ? "home_" : "lock_";
+        ed.putInt(px + "alpha", p.getInt(src + m[0] + "_alpha", 50))
+          .putInt(px + "w", p.getInt(src + m[0] + "_w", 300))
+          .putInt(px + "h", p.getInt(src + m[0] + "_h", 60))
+          .putInt(px + "y", p.getInt(src + m[0] + "_y", 0));
+    }
+    String ak = base + pairId + "_" + F_A_EN;
+    if(!p.contains(ak)){
+        boolean a = memberOn(p, m[0], isBar), b = memberOn(p, m[1], isBar);
+        if(!a && !b){ a = true; b = true; }
+        ed.putBoolean(ak, a).putBoolean(base + pairId + "_" + F_B_EN, b);
+    }
+}
+private static boolean memberOn(SharedPreferences p, String m, boolean isBar){
+    String k = (isBar ? m : "corner_" + m) + "_en";
+    return p.getBoolean("lock_" + k, false) || p.getBoolean("home_" + k, false);
 }
 private static void appendIds(SharedPreferences p, SharedPreferences.Editor ed, String listKey, String[] newIds){
     java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
@@ -220,11 +253,5 @@ private static void appendIds(SharedPreferences p, SharedPreferences.Editor ed, 
 private static String defBarName(String pairId){
     for(int i=0;i<BAR_PAIR_IDS.length;i++) if(BAR_PAIR_IDS[i].equals(pairId)) return BAR_PAIR_LABELS_EN[i];
     return "Bar Pack";
-}
-public static void setSideTouched(SharedPreferences p, String sp, String id, boolean isA, boolean isBar){
-    String[] m = getMembers(id,isBar); if(m==null) return;
-    p.edit()
-        .putBoolean(sp+id+"_"+(isA?F_A_EN:F_B_EN), true)
-        .apply();
 }
 }

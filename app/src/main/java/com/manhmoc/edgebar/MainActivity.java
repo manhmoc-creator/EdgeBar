@@ -46,9 +46,9 @@ public class MainActivity extends Activity {
     private String T(String en, String vi) { return isVi ? vi : en; }
     
     private String[] ACT_KEYS = new String[60]; private String[] ACT_LABS = new String[60];
-    private String[] BARS = {"t_b_c", "t_l_r", "b_l_r", "l_r_c", "l_r_u", "l_r_d"};
+    private String[] BARS = {"b_c", "r", "l", "r_u", "r_c", "r_d", "t_c", "t_r", "t_l", "l_u", "l_c", "l_d"};
 private String[] BAR_NAMES;
-private String[] CORNERS = {"t_l_r_c", "b_l_r_c"};
+private String[] CORNERS = {"br", "bl", "tr", "tl"};
 private String[] CORNER_NAMES;
     private String[] COLOR_KEYS = {"WHITE", "NEON", "CYBERPUNK", "LAVA", "OCEAN", "MATRIX", "SUNSET", "GOOGLE", "AURORA", "ABYSS", "FOREST", "FLAME", "MIDNIGHT", "TROPICAL", "CANDY"}; private String[] COLOR_NAMES;
 private String[] ALL_COMP_KEYS = {"r", "l", "t_r", "t_l", "t_c", "b_c", "l_c", "r_c", "r_u", "r_d", "l_u", "l_d", "corner_br",
@@ -118,6 +118,7 @@ private android.widget.ListPopupWindow searchPopup;
 private View livePreviewOverlay;
 private WindowManager.LayoutParams livePreviewLp;
     private int designTabState = 0;
+    private final Handler packLiveHandler = new Handler(android.os.Looper.getMainLooper());
     private boolean recIndicatorTestOn = false;
     private int currentMainTab = 1; private int currentGesTab = 0; private int frontierSubTab = 0;
 private LinearLayout frontierBodyContainer, frontierBackRowRef;
@@ -1452,6 +1453,8 @@ for (java.util.Map.Entry<String, ?> e : allSplit.entrySet()) {
     if (!prefs.getBoolean(base + "_split", false)) { ed.putBoolean(base + "_split", true); needSplitFix = true; }
 }
 if (needSplitFix) ed.apply();
+TwinPairStore.migrateIfNeeded(prefs);
+TwinPairStore.ensureDefaultPacks(prefs);
 if (prefs.getBoolean("needs_sanitize", false)) sanitizeAllPrefsAfterRestore();
     rootLayout = new RelativeLayout(this);
     rootLayout.setBackgroundColor(Color.parseColor("#000000"));
@@ -1714,9 +1717,6 @@ showMainMenu();
             ActionPackStore.migrateAllGestures(prefs, BARS, CORNERS, C_GESTURES);
             prefs.edit().putBoolean("action_pack_migrated_v1", true).apply();
         }
-        TwinPairStore.migrateIfNeeded(prefs);
-        TwinPairStore.ensureDefaultPacks(prefs);
-        syncPairedPackToggles();
     }
     @Override
     protected void onNewIntent(Intent intent) {
@@ -2088,79 +2088,27 @@ private void addHideTargetCheckboxes(LinearLayout container, String fullPrefKey,
         container.addView(cb);
     }
 }
-// [MỚI] Ngược với addHideTargetCheckboxes(): mặc định TỰ ĐỘNG BẬT cho mọi bar,
-// tick vào bar nào để TẮT tự động đổi màu (giữ icon trắng cố định) cho bar đó.
 private void addAutoColorOffCheckboxes(LinearLayout container, String fullPrefKey, String[] keys, String[] names) {
     java.util.Set<String> offSet = new java.util.LinkedHashSet<>();
-
     for (String s : prefs.getString(fullPrefKey, "").split(",")) if (!s.trim().isEmpty()) offSet.add(s.trim());
     TextView tvNote = new TextView(this);
-    tvNote.setText(T("Auto: light bg→black icon, dark→white. Check a bar to always keep it white.",
-        "Tự động: nền sáng→icon đen, nền tối→icon trắng. Tick vào bar nào để LUÔN giữ trắng (tắt tự động)."));
+    tvNote.setText(T("Auto: light bg→black icon, dark→white. Check a pair to always keep it white.",
+        "Tự động: nền sáng→icon đen, nền tối→icon trắng. Tick cặp nào để LUÔN giữ trắng (tắt tự động)."));
     tvNote.setTextColor(Color.parseColor("#9AA0A6")); tvNote.setTextSize(11.5f); tvNote.setPadding(0,0,0,10);
     container.addView(tvNote);
     for (int i = 0; i < keys.length; i++) {
+        final String[] parts = keys[i].split(",");
         CheckBox cb = new CheckBox(this);
         cb.setText(names[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0,10,0,10);
-        cb.setChecked(offSet.contains(keys[i]));
-        final String fk = keys[i];
+        cb.setChecked(offSet.contains(parts[0]));
         cb.setOnCheckedChangeListener((v, checked) -> {
             java.util.Set<String> cur = new java.util.LinkedHashSet<>();
             for (String s : prefs.getString(fullPrefKey, "").split(",")) if (!s.trim().isEmpty()) cur.add(s.trim());
-            if (checked) cur.add(fk); else cur.remove(fk);
+            for (String part : parts) { if (checked) cur.add(part); else cur.remove(part); }
             prefs.edit().putString(fullPrefKey, TextUtils.join(",", cur)).apply();
         });
         container.addView(cb);
     }
-}
-private LinearLayout buildTwinToggleRow(String leftName, String rightName, String leftKey, String rightKey) {
-    LinearLayout row = new LinearLayout(this);
-    row.setOrientation(LinearLayout.HORIZONTAL);
-    row.setPadding(0, 20, 0, 20);
-    row.addView(createHalfToggle(leftName, leftKey));
-    row.addView(createHalfToggle(rightName, rightKey));
-    return row;
-}
-    private LinearLayout createHalfToggle(String label, String prefKey) {
-        return createHalfToggle(label, prefKey, null);
-    }
-private LinearLayout createHalfToggle(String label, String prefKey, Runnable onSync) {
-    LinearLayout half = new LinearLayout(this);
-    half.setOrientation(LinearLayout.VERTICAL);
-    half.setGravity(Gravity.CENTER);
-    half.setBackground(getRounded("#202124", 20f));
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-    lp.setMargins(10, 0, 10, 0);
-    half.setLayoutParams(lp);
-    half.setPadding(20, 30, 20, 30);
-    
-    TextView tv = new TextView(this);
-    tv.setText(label);
-    tv.setTextColor(Color.parseColor("#8AB4F8"));
-    tv.setTextSize(13f);
-    tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    tv.setGravity(Gravity.CENTER);
-    
-    Switch sw = new Switch(this);
-    sw.setChecked(prefs.getBoolean(prefKey, true));
-    sw.setOnCheckedChangeListener((v, c) -> {
-        prefs.edit().putBoolean(prefKey, c).apply();
-        if (onSync != null) onSync.run();
-    });
-    sw.setPadding(0, 20, 0, 0);
-    
-    half.addView(tv);
-    half.addView(sw);
-    return half;
-}
-
-private LinearLayout buildTwinSettingRow(String title, String nameA, String nameB, String keyA, String keyB, String[] items, int def) {
-    LinearLayout row = new LinearLayout(this);
-    row.setOrientation(LinearLayout.HORIZONTAL);
-    row.setPadding(0, 10, 0, 10);
-    row.addView(createHalfSettingBtn(title + "\n(" + nameA + ")", keyA, items, def, true));
-    row.addView(createHalfSettingBtn(title + "\n(" + nameB + ")", keyB, items, def, false));
-    return row;
 }
 private void openOrBridgeEditor(String baseKey, String title) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
@@ -2218,7 +2166,7 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
         gd.addView(createSlider("Độ đậm viền", prefix+"corner_thick", 50, 8));
         LinearLayout gdHide = new LinearLayout(this);
         gdHide.setOrientation(LinearLayout.VERTICAL); gdHide.setPadding(20,10,20,20);
-        String[] cornerHideKeys = {"corner_tl", "corner_bl"};
+        String[] cornerHideKeys = {"tl", "bl"};
         String[] cornerPairNames = {T("Top L/R Corner","Đỉnh trái/phải"), T("Bottom L/R Corner","Đáy trái/phải")};
         addHideTargetCheckboxes(gdHide, prefix + "corner_hide_targets", cornerHideKeys, cornerPairNames);
         LinearLayout hideCornerWrap = new LinearLayout(this);
@@ -2252,7 +2200,10 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
         bd.addView(hideBarWrap);
         LinearLayout autoColorBody = new LinearLayout(this);
         autoColorBody.setOrientation(LinearLayout.VERTICAL); autoColorBody.setPadding(20,10,20,20);
-        addAutoColorOffCheckboxes(autoColorBody, prefix + "bar_auto_icon_color_off", BARS, BAR_NAMES);
+        String[] autoKeys = new String[TwinPairStore.BAR_PAIR_MEMBERS.length];
+for (int i = 0; i < autoKeys.length; i++)
+    autoKeys[i] = TwinPairStore.BAR_PAIR_MEMBERS[i][0] + "," + TwinPairStore.BAR_PAIR_MEMBERS[i][1];
+addAutoColorOffCheckboxes(autoColorBody, prefix + "bar_auto_icon_color_off", autoKeys, barPairNames);
         LinearLayout autoColorWrap = new LinearLayout(this);
         autoColorWrap.setBackground(getRounded("#2C2C2C", 20f));
         autoColorWrap.setLayoutParams(hcLp);
@@ -2546,213 +2497,101 @@ private int indexInDefaultOrder(String itemKey){
     return -1;
 }
 private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefix, int tabState, boolean isFrontier) {
-String[] FIXED_PACK_IDS = {
-    "corner_tl",
-    "bar_t_l",
-    "bar_l",
-    "bar_t_c",
-    "bar_l_c",
-    "bar_l_u",
-    "bar_l_d",
-    "corner_bl"
-};
+    container.addView(createSectionTitle(isFrontier
+        ? T("DATA PACKS OF THIS SPACE", "DATA PACK CỦA KHÔNG GIAN NÀY") : "PACK"));
+    for (String itemKey : TwinPairStore.DEFAULT_DISPLAY_ORDER)
+        container.addView(buildMotherPackCard(prefix, itemKey, tabState));
+}
 
-java.util.List<String> appliedPacks = java.util.Arrays.asList(FIXED_PACK_IDS);
-    if (isFrontier && frontierSelectMode) {
-        // Toolbar Multi-select (CHỈ CÒN CHIA SẺ, KHÔNG CÒN DELETE)
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(0, 0, 0, 20);
-        TextView tvCount = new TextView(this);
-        tvCount.setText(frontierSelectedItems.size() + " " + T("selected","đã chọn"));
-        tvCount.setTextColor(Color.parseColor("#8AB4F8"));
-        tvCount.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        Button share = new Button(this);
-        share.setText("🔗 " + T("Share","Chia sẻ"));
-        share.setBackground(getRounded("#7C4DFF", 20f));
-        share.setTextColor(Color.WHITE);
-        share.setTextSize(12.5f);
-        share.setOnClickListener(v -> showShareToSpaceDialog());
-        Button cancel = new Button(this);
-        cancel.setText(T("Cancel","Hủy"));
-        cancel.setBackground(getRounded("#333333", 20f));
-        cancel.setTextColor(Color.WHITE);
-        cancel.setTextSize(12.5f);
-        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-2,-2);
-        clp.setMargins(10,0,0,0);
-        cancel.setLayoutParams(clp);
-        cancel.setOnClickListener(v -> { frontierSelectMode=false; frontierSelectedItems.clear(); renderRulesList(); });
-        bar.addView(tvCount); bar.addView(share); bar.addView(cancel);
-        container.addView(bar);
-    }
-    
-    container.addView(createSectionTitle(isFrontier ? T("DATA PACK OF THIS SPACE", "DATA PACK CỦA KHÔNG GIAN NÀY") : " PACK ĐÃ GỌI TỪ PIECE"));
-    final SpanFlow flow = new SpanFlow(container);
-    
-    for (String itemKey : appliedPacks) {
-        boolean isBar = itemKey.startsWith("bar_");
-        String id = itemKey.replace(isBar ? "bar_" : "corner_", "");
-        String packPrefix = isBar ? "pack_bar_" : "pack_corner_";
-        
-        FrameLayout cardWrap = new FrameLayout(this);
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setBackground(getRounded("#202124", 24f));
-        card.setPadding(15, 24, 10, 24);
-        
-        LinearLayout optCol = new LinearLayout(this);
-        optCol.setOrientation(LinearLayout.VERTICAL);
-        optCol.setGravity(Gravity.CENTER);
-        optCol.setPadding(0, 0, 15, 0);
-int locIndex = isBar ? java.util.Arrays.asList(BARS).indexOf(id) : java.util.Arrays.asList(CORNERS).indexOf(id);
-if (locIndex < 0) locIndex = 0;
-prefs.edit().putInt(packPrefix + id + "_loc", locIndex).apply();
-        int visIdx = prefs.getInt(packPrefix + id + "_vis_mode", 0);
-        int priIdx = prefs.getInt(packPrefix + id + "_pri_mode", 0);
-        String visIcon = visIdx == 0 ? "☠️" : (visIdx == 1 ? "👻" : "👁️");
-        String priIcon = priIdx == 0 ? "👆" : "👇";
-        
-        TextView tIcons = new TextView(this);
-        tIcons.setText(visIcon + "\n" + priIcon);
-        tIcons.setTextSize(15);
-        tIcons.setGravity(Gravity.CENTER);
-        optCol.addView(tIcons);
-        
-        LinearLayout infoCol = new LinearLayout(this);
-        infoCol.setOrientation(LinearLayout.VERTICAL);
-        infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        TextView tName = new TextView(this);
-        tName.setText(packDisplayName(isBar, id));
-        tName.setTextColor(Color.parseColor("#E8EAED"));
-        tName.setTextSize(16f);
-        tName.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        
-        TextView tSliders = new TextView(this);
-        tSliders.setText("W:" + prefs.getInt(packPrefix + id + "_w", 300) + " H:" + prefs.getInt(packPrefix + id + "_h", 60) + " DistX:" + prefs.getInt(packPrefix + id + "_x", 0));
-        tSliders.setTextColor(Color.parseColor("#8AB4F8"));
-        tSliders.setTextSize(11f);
-        
-        infoCol.addView(tName); infoCol.addView(tSliders);
-        
-        LinearLayout ctrlCol = new LinearLayout(this);
-        ctrlCol.setOrientation(LinearLayout.VERTICAL);
-        ctrlCol.setGravity(Gravity.CENTER_HORIZONTAL);
-Switch swEn = new Switch(this);
-swEn.setChecked(prefs.getBoolean(prefix + itemKey + "_en", false));
-swEn.setScaleX(0.8f); swEn.setScaleY(0.8f);
-final String fId = id;
-final boolean fIsBar = isBar;
-final String fPrefix = prefix;
-swEn.setOnCheckedChangeListener((sw, chk) -> {
-    prefs.edit().putBoolean(fPrefix + itemKey + "_en", chk).apply();
-    if (chk) {
-        if (fIsBar) applyBarPackToSpace(fId, fPrefix);
-        else applyCornerPackToSpace(fId, fPrefix);
-    } else {
-        if (fIsBar) disableBarPackFromSpace(fId, fPrefix);
-        else disableCornerPackFromSpace(fId, fPrefix);
-    }
-    sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-});
-        Button btnTrigger = new Button(this);
-        btnTrigger.setText("TRIGGER");
-        btnTrigger.setBackground(getRounded("#8AB4F8", 14f));
-        btnTrigger.setTextColor(Color.BLACK);
-        btnTrigger.setTextSize(11f);
-        btnTrigger.setPadding(10, 8, 10, 8);
-        LinearLayout.LayoutParams edLp = new LinearLayout.LayoutParams(-2, -2);
-        edLp.setMargins(0, 8, 0, 0);
-        btnTrigger.setLayoutParams(edLp);
-        btnTrigger.setMinimumHeight(64);
-        btnTrigger.setOnClickListener(v -> openPackRuleSpace(itemKey, tabState));
-        
-        ctrlCol.addView(swEn); ctrlCol.addView(btnTrigger);
-        card.addView(optCol); card.addView(infoCol); card.addView(ctrlCol);
-        cardWrap.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
-        cardWrap.setTag(itemKey);
-        if (isFrontier) {
-            final String spanKey = "ui_span_applied_" + prefix + "_" + itemKey;
-            if (frontierSelectMode) {
-    TextView selDot = new TextView(this);
-    selDot.setText(frontierSelectedItems.contains(itemKey) ? "🔵" : "⚪");
-    selDot.setTextSize(18);
-    FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(-2, -2);
-    dotLp.gravity = Gravity.BOTTOM | Gravity.START;
-    dotLp.setMargins(10, 0, 0, 6);
-    selDot.setLayoutParams(dotLp);
-    cardWrap.addView(selDot);
-    card.setOnClickListener(v -> {
-        if (frontierSelectedItems.contains(itemKey)) frontierSelectedItems.remove(itemKey);
-        else frontierSelectedItems.add(itemKey);
-        renderRulesList();
-    });
-    flow.add(cardWrap, getPackSpanUnits(spanKey));
-} else {
-                card.setOnClickListener(v -> openDataPackEditor(isBar ? 0 : 1, id));
-                // [FIX] Long-press mở menu multi-select + span (1/2/3 pack per row) giống Lenap
-                card.setOnLongClickListener(v -> {
-                    showPackLongPressMenu(v, spanKey, () -> {
-                        frontierSelectMode = true;
-                        frontierSelectedItems.clear();
-                        frontierSelectedItems.add(itemKey);
-                        renderRulesList();
-                    }, this::renderRulesList);
-                    return true;
-                });
-                flow.add(cardWrap, getPackSpanUnits(spanKey));
-            }
+private View buildMotherPackCard(String prefix, String itemKey, int tabState) {
+    final boolean isBar = itemKey.startsWith("bar_");
+    final String id = itemKey.substring(isBar ? 4 : 7);
+    final String packPrefix = isBar ? "pack_bar_" : "pack_corner_";
+    final String enKey = prefix + itemKey + "_en";
+    int loc = prefs.getInt(packPrefix + id + "_loc", 0);
+    String pairId = isBar ? TwinPairStore.pairIdForBarLoc(loc) : TwinPairStore.pairIdForCornerLoc(loc);
+    String[] mem = pairId == null ? null : TwinPairStore.getMembers(pairId, isBar);
+    LinearLayout card = new LinearLayout(this);
+    card.setOrientation(LinearLayout.VERTICAL);
+    card.setBackground(getRounded(SURFACE_COLOR, 24f));
+    card.setPadding(28, 24, 28, 22);
+    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
+    clp.setMargins(0, 8, 0, 8);
+    card.setLayoutParams(clp);
+    LinearLayout head = new LinearLayout(this);
+    head.setOrientation(LinearLayout.HORIZONTAL);
+    head.setGravity(Gravity.CENTER_VERTICAL);
+    TextView tvName = stdLine(packDisplayName(isBar, id), "#E8EAED", 16.5f);
+    tvName.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    tvName.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Switch swEn = new Switch(this);
+    swEn.setChecked(prefs.getBoolean(enKey, false));
+    swEn.setOnCheckedChangeListener((sw, chk) -> {
+        prefs.edit().putBoolean(enKey, chk).apply();
+        if (chk) {
+            if (isBar) applyBarPackToSpace(id, prefix); else applyCornerPackToSpace(id, prefix);
         } else {
-            flow.add(cardWrap, 6);
+            if (isBar) disableBarPackFromSpace(id, prefix); else disableCornerPackFromSpace(id, prefix);
         }
+        sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+    });
+    head.addView(tvName);
+    head.addView(swEn);
+    card.addView(head);
+    if (mem != null) {
+        LinearLayout pills = new LinearLayout(this);
+        pills.setOrientation(LinearLayout.HORIZONTAL);
+        pills.setPadding(0, 12, 0, 6);
+        pills.addView(sidePill(humanizeMember(mem[0]), TwinPairStore.isSideEnabled(prefs, packPrefix, pairId, true, isBar)));
+        pills.addView(sidePill(humanizeMember(mem[1]), TwinPairStore.isSideEnabled(prefs, packPrefix, pairId, false, isBar)));
+        card.addView(pills);
     }
-    flow.finish();
+    String stats = isBar
+        ? "W " + prefs.getInt(packPrefix + id + "_w", 300) + "  ·  H " + prefs.getInt(packPrefix + id + "_h", 60)
+            + "  ·  Gap " + prefs.getInt(packPrefix + id + "_pair_spacing", 0) + "  ·  Y " + prefs.getInt(packPrefix + id + "_y", 0)
+        : "W " + prefs.getInt(packPrefix + id + "_w", 100) + "  ·  H " + prefs.getInt(packPrefix + id + "_h", 100)
+            + "  ·  Gap " + prefs.getInt(packPrefix + id + "_pair_spacing", 0);
+    TextView tvStats = stdLine(stats, TEXT_MUTED_COLOR, 11.5f);
+    tvStats.setPadding(0, 4, 0, 14);
+    card.addView(tvStats);
+    LinearLayout btns = new LinearLayout(this);
+    btns.setOrientation(LinearLayout.HORIZONTAL);
+    Button btnEdit = packActionBtn(T("EDIT", "CHỈNH"), "#2C2C2C", Color.parseColor(ACCENT_COLOR));
+    Button btnTrig = packActionBtn("TRIGGER", ACCENT_COLOR, Color.BLACK);
+    btnEdit.setOnClickListener(v -> openDataPackEditor(isBar ? 0 : 1, id));
+    btnTrig.setOnClickListener(v -> openPackRuleSpace(itemKey, tabState));
+    btns.addView(btnEdit);
+    btns.addView(btnTrig);
+    card.addView(btns);
+    card.setOnClickListener(v -> openDataPackEditor(isBar ? 0 : 1, id));
+    return card;
 }
-private LinearLayout buildFrontierSelectionToolbar(String listKey, java.util.List<String> appliedPacks, String prefix){
-    LinearLayout bar = new LinearLayout(this);
-    bar.setOrientation(LinearLayout.HORIZONTAL);
-    bar.setGravity(Gravity.CENTER_VERTICAL);
-    bar.setPadding(0, 0, 0, 20);
-    TextView tv = new TextView(this);
-    tv.setText(frontierSelectedItems.size() + " " + T("selected","đã chọn"));
-    tv.setTextColor(Color.parseColor("#8AB4F8"));
-    tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    Button share = new Button(this);
-    share.setText("🔗 " + T("Share","Chia sẻ"));
-    share.setBackground(getRounded("#7C4DFF", 20f));
-    share.setTextColor(Color.WHITE);
-    share.setTextSize(12.5f);
-    share.setOnClickListener(v -> showShareToSpaceDialog());
-    Button cancel = new Button(this);
-    cancel.setText(T("Cancel","Hủy"));
-    cancel.setBackground(getRounded("#333333", 20f));
-    cancel.setTextColor(Color.WHITE);
-    cancel.setTextSize(12.5f);
-    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-2,-2);
-    clp.setMargins(10,0,0,0);
-    cancel.setLayoutParams(clp);
-    cancel.setOnClickListener(v -> { frontierSelectMode=false; frontierSelectedItems.clear(); renderRulesList(); });
-    bar.addView(tv); bar.addView(share); bar.addView(cancel);
-    return bar;
+private TextView sidePill(String text, boolean on) {
+    TextView t = new TextView(this);
+    t.setText((on ? "● " : "○ ") + text);
+    t.setTextSize(11.5f);
+    t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    t.setTextColor(Color.parseColor(on ? "#8AB4F8" : "#6F757B"));
+    t.setBackground(getRounded(on ? "#0D2A52" : "#1A1A1A", 100f));
+    t.setPadding(26, 10, 26, 10);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+    lp.setMargins(0, 0, 12, 0);
+    t.setLayoutParams(lp);
+    return t;
 }
-private void showShareToSpaceDialog(){
-    String[] spaces = {"LOCK","HOME"};
-    String[] prefixes = {"lock_","home_"};
-    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-        .setTitle(T("Share reference to space","Chia sẻ tham chiếu sang không gian"))
-        .setItems(spaces, (d, which) -> {
-            String targetPrefix = prefixes[which];
-            String targetListKey = targetPrefix + "applied_packs";
-            java.util.List<String> targetPacks = getDynamicIds(targetListKey);
-            int added = 0;
-            for(String itemKey : frontierSelectedItems){
-                if(!targetPacks.contains(itemKey)){ targetPacks.add(itemKey); added++; }
-            }
-            prefs.edit().putString(targetListKey, TextUtils.join(",", targetPacks)).apply();
-            frontierSelectMode = false; frontierSelectedItems.clear();
-            Toast.makeText(this, T("Shared","Đã chia sẻ") + " " + added + " pack!", Toast.LENGTH_SHORT).show();
-            renderRulesList();
-        }).show();
+private Button packActionBtn(String text, String bg, int fg) {
+    Button b = new Button(this);
+    b.setText(text);
+    b.setBackground(getRounded(bg, 16f));
+    b.setTextColor(fg);
+    b.setTextSize(12f);
+    b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    b.setMinimumHeight(0);
+    b.setPadding(10, 18, 10, 18);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+    lp.setMargins(6, 0, 6, 0);
+    b.setLayoutParams(lp);
+    return b;
 }
 private String cloneDataPackDeep(String itemKey) {
     boolean isBar = itemKey.startsWith("bar_");
@@ -4483,117 +4322,99 @@ private String mergeCsv(String a, String b) {
     for (String s : b.split(",")) if (!s.trim().isEmpty()) set.add(s.trim());
     return android.text.TextUtils.join(",", set);
 }
-    private void applyBarPackToSpace(String id, String targetPrefix) {
+private int sideVal(String pk, boolean isA, boolean bl, int def) {
+    int acc = TwinPairStore.readOrValue(prefs, pk, isA, "acc", def);
+    if (!bl) return acc;
+    return TwinPairStore.isOrSplit(prefs, pk, isA) ? TwinPairStore.readOrValue(prefs, pk, isA, "bl", acc) : acc;
+}
+
+private static final String[] SIDE_FIELDS = {"vis_mode", "pri_mode", "lockmode", "jumpdir"};
+private static final int[] SIDE_DEFS = {0, 0, 1, 0};
+
+private void writeSideFields(SharedPreferences.Editor ed, String packBase, String spaceBase, boolean isA, boolean isLock) {
+    for (int f = 0; f < SIDE_FIELDS.length; f++) {
+        String pk = packBase + SIDE_FIELDS[f];
+        int acc = sideVal(pk, isA, false, SIDE_DEFS[f]);
+        int bl = sideVal(pk, isA, true, SIDE_DEFS[f]);
+        String sk = spaceBase + SIDE_FIELDS[f];
+        ed.putInt(sk, acc);
+        if (isLock) {
+            String side = isA ? "_L_" : "_R_";
+            ed.putBoolean(sk + "_split", false)
+              .putInt(sk + side + "acc", acc)
+              .putInt(sk + side + "bl", bl)
+              .putBoolean(sk + (isA ? "_L_split" : "_R_split"), true);
+        } else {
+            ed.putBoolean(sk + "_split", true)
+              .putInt(sk + "_homacc", acc)
+              .putInt(sk + "_homeb", bl);
+        }
+    }
+}
+
+private void applyBarPackToSpace(String id, String targetPrefix) {
     String src = "pack_bar_" + id + "_";
     int loc = prefs.getInt(src + "loc", 0);
     if (loc < 0 || loc >= BARS.length) loc = 0;
-    String lastLocKey = src + "last_loc_" + targetPrefix;
-    int lastLoc = prefs.getInt(lastLocKey, -1);
-    if (lastLoc != -1 && lastLoc != loc) {
-        String oldBarKey = targetPrefix + BARS[lastLoc] + "_";
-        prefs.edit().putBoolean(oldBarKey + "en", false).apply();
-    }
-    prefs.edit().putInt(lastLocKey, loc).apply();
-    int alpha = prefs.getInt(src + "alpha", 50);
-    int w     = prefs.getInt(src + "w", 300);
-    int h     = prefs.getInt(src + "h", 60);
-    int y     = prefs.getInt(src + "y", 0);
-    int spacing = prefs.getInt(src + "pair_spacing", 0);
-    int vis   = prefs.getInt(src + "vis_mode", 0);
-    int pri   = prefs.getInt(src + "pri_mode", 0);
-    int lockM = prefs.getInt(src + "lockmode", 1);
-    int jump  = prefs.getInt(src + "jumpdir", 0);
-    String icons = prefs.getString(src + "icons", "");
     String pairId = TwinPairStore.pairIdForBarLoc(loc);
-    String[] members = pairId == null ? null : TwinPairStore.getMembers(pairId, true);
-    if (members == null) {
-    applySingleBar(targetPrefix, BARS[loc], alpha, w, h, 0, y,
-                   vis, pri, lockM, jump, icons, true);
-    return;
+    String[] m = pairId == null ? null : TwinPairStore.getMembers(pairId, true);
+    if (m == null) return;
+    int alpha = prefs.getInt(src + "alpha", 50);
+    int w = prefs.getInt(src + "w", 300);
+    int h = prefs.getInt(src + "h", 60);
+    int y = prefs.getInt(src + "y", 0);
+    int spacing = prefs.getInt(src + "pair_spacing", 0);
+    String icons = prefs.getString(src + "icons", "");
+    boolean spreadY = TwinPairStore.signOfBarPair(pairId) == 0;
+    int xs = spreadY ? 0 : -spacing / 2;
+    int ys = spreadY ? y - spacing / 2 : y;
+    boolean isLock = targetPrefix.equals("lock_");
+    SharedPreferences.Editor ed = prefs.edit();
+    for (int s = 0; s < 2; s++) {
+        boolean isA = s == 0;
+        boolean en = TwinPairStore.isSideEnabled(prefs, "pack_bar_", pairId, isA, true);
+        boolean iconOn = sideVal(src + "icon_en", isA, false, 0) == 1 || sideVal(src + "icon_en", isA, true, 0) == 1;
+        String bk = targetPrefix + m[s] + "_";
+        ed.putBoolean(bk + "en", en).putInt(bk + "alpha", alpha).putInt(bk + "w", w).putInt(bk + "h", h)
+          .putInt(bk + "x", xs).putInt(bk + "y", ys).putString(bk + "icons", iconOn ? icons : "");
+        writeSideFields(ed, src, bk, isA, isLock);
+    }
+    ed.apply();
+    applyPackRulesToSpace("bar_" + id, targetPrefix, m[0]);
+    applyPackRulesToSpace("bar_" + id, targetPrefix, m[1]);
 }
-        int sign = TwinPairStore.signOfBarPair(pairId);
-    boolean spreadY = (sign == 0);   // barPair_bt_c giãn theo Y
-    int xA = spreadY ? 0 : sign * (spacing / 2);
-    int xB = spreadY ? 0 : -xA;
-    int yA = spreadY ? -spacing / 2 : y;
-    int yB = spreadY ?  spacing / 2 : y;
-    boolean enA = TwinPairStore.isSideEnabled(prefs, "pack_bar_", pairId, true, true);
-boolean enB = TwinPairStore.isSideEnabled(prefs, "pack_bar_", pairId, false, true);
-applySingleBar(targetPrefix, members[0], alpha, w, h, xA, yA, vis, pri, lockM, jump, icons, enA);
-applySingleBar(targetPrefix, members[1], alpha, w, h, xB, yB, vis, pri, lockM, jump, icons, enB);
-    TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_ALPHA, alpha, true);
-    TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_W, w, true);
-    TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_H, h, true);
-    TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_Y, y, true);
-    TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_SPACING, spacing, true);
 
-    applyPackRulesToSpace("bar_" + id, targetPrefix, members[0]);
-    applyPackRulesToSpace("bar_" + id, targetPrefix, members[1]);
-}
-private void applySingleBar(String targetPrefix, String barKey, int alpha, int w, int h,
-                            int x, int y, int vis, int pri, int lockM, int jump,
-                            String icons, boolean sideEnabled) {
-    String bk = targetPrefix + barKey + "_";
-    prefs.edit()
-        .putBoolean(bk + "en", sideEnabled)
-        .putInt(bk + "vis_mode", vis)
-        .putInt(bk + "pri_mode", pri)
-        .putInt(bk + "lockmode", lockM)
-        .putInt(bk + "jumpdir", jump)
-        .putInt(bk + "alpha", alpha)
-        .putInt(bk + "w", w)
-        .putInt(bk + "h", h)
-        .putInt(bk + "x", x)
-        .putInt(bk + "y", y)
-        .putString(bk + "icons", icons)
-        .apply();
-}
-private void applySingleCorner(String src, String targetPrefix, String cKey, int xVal, boolean sideEnabled) {
-    String ck = targetPrefix + "corner_" + cKey + "_";
-    prefs.edit()
-        .putBoolean(ck + "en", sideEnabled)
-        .putInt(ck + "jumpdir", prefs.getInt(src + "jumpdir", 0))
-        .putInt(ck + "vis_mode", prefs.getInt(src + "vis_mode", 0))
-        .putInt(ck + "pri_mode", prefs.getInt(src + "pri_mode", 0))
-        .putInt(ck + "lockmode", prefs.getInt(src + "lockmode", 1))
-        .putInt(ck + "shape", prefs.getInt(src + "shape", 0))
-        .putInt(ck + "w", prefs.getInt(src + "w", 100))
-        .putInt(ck + "h", prefs.getInt(src + "h", 100))
-        .putInt(ck + "x", xVal)
-        .putInt(ck + "y", prefs.getInt(src + "y", 0))
-        .putInt(ck + "moon_w", prefs.getInt(src + "moon_w", 100))
-        .putInt(ck + "moon_h", prefs.getInt(src + "moon_h", 100))
-        .putInt(ck + "moon_x", prefs.getInt(src + "moon_x", 1250))
-        .putInt(ck + "moon_y", prefs.getInt(src + "moon_y", 1250))
-        .putInt(ck + "rad", prefs.getInt(src + "rad", 80))
-        .putInt(ck + "moon_rad", prefs.getInt(src + "moon_rad", 80))
-        .apply();
-}
-    private void applyCornerPackToSpace(String id, String targetPrefix) {
+private void applyCornerPackToSpace(String id, String targetPrefix) {
     String src = "pack_corner_" + id + "_";
     int loc = prefs.getInt(src + "loc", 0);
     if (loc < 0 || loc >= CORNERS.length) loc = 0;
-
-    String lastLocKey = src + "last_loc_" + targetPrefix;
-    int lastLoc = prefs.getInt(lastLocKey, -1);
-    if (lastLoc != -1 && lastLoc != loc) {
-        String oldKey = targetPrefix + "corner_" + CORNERS[lastLoc] + "_";
-        prefs.edit().putBoolean(oldKey + "en", false).apply();
-    }
-    prefs.edit().putInt(lastLocKey, loc).apply();
-    int spacing = prefs.getInt(src + "pair_spacing", 0);
     String pairId = TwinPairStore.pairIdForCornerLoc(loc);
-    String[] members = TwinPairStore.getMembers(pairId, false);
-    int sign = TwinPairStore.signOfCornerPair(pairId);
-int xA = sign * (spacing / 2);
-int xB = -xA;
-boolean enA = TwinPairStore.isSideEnabled(prefs, "pack_corner_", pairId, true, false);
-boolean enB = TwinPairStore.isSideEnabled(prefs, "pack_corner_", pairId, false, false);
-applySingleCorner(src, targetPrefix, members[0], xA, enA);
-applySingleCorner(src, targetPrefix, members[1], xB, enB);
-    TwinPairStore.writeInt(prefs, targetPrefix, pairId, TwinPairStore.F_SPACING, spacing, false);
-    applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + members[0]);
-    applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + members[1]);
+    String[] m = TwinPairStore.getMembers(pairId, false);
+    if (m == null) return;
+    int xs = -prefs.getInt(src + "pair_spacing", 0) / 2;
+    boolean isLock = targetPrefix.equals("lock_");
+    SharedPreferences.Editor ed = prefs.edit();
+    for (int s = 0; s < 2; s++) {
+        boolean isA = s == 0;
+        boolean en = TwinPairStore.isSideEnabled(prefs, "pack_corner_", pairId, isA, false);
+        String ck = targetPrefix + "corner_" + m[s] + "_";
+        ed.putBoolean(ck + "en", en)
+          .putInt(ck + "shape", prefs.getInt(src + "shape", 0))
+          .putInt(ck + "w", prefs.getInt(src + "w", 100))
+          .putInt(ck + "h", prefs.getInt(src + "h", 100))
+          .putInt(ck + "x", xs)
+          .putInt(ck + "y", prefs.getInt(src + "y", 0))
+          .putInt(ck + "moon_w", prefs.getInt(src + "moon_w", 100))
+          .putInt(ck + "moon_h", prefs.getInt(src + "moon_h", 100))
+          .putInt(ck + "moon_x", prefs.getInt(src + "moon_x", 1250))
+          .putInt(ck + "moon_y", prefs.getInt(src + "moon_y", 1250))
+          .putInt(ck + "rad", prefs.getInt(src + "rad", 80))
+          .putInt(ck + "moon_rad", prefs.getInt(src + "moon_rad", 80));
+        writeSideFields(ed, src, ck, isA, isLock);
+    }
+    ed.apply();
+    applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + m[0]);
+    applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + m[1]);
 }
 private void disableBarPackFromSpace(String id, String targetPrefix) {
     int loc = prefs.getInt("pack_bar_" + id + "_loc", 0);
@@ -5392,7 +5213,7 @@ private void buildEcosystemSpace() {
 
     ecoMenuContainer.addView(createSettingsRow("flash_on_24px", "Intents", T("Custom Scripts","Các kịch bản tùy chỉnh"), () -> openEcoSubTab(0, "Intents")));
     ecoMenuContainer.addView(createSettingsRow("routine_24px", "QS Tiles", T("Quick Settings Tiles","Các phím cài đặt nhanh"), () -> openEcoSubTab(1, "QS Tiles")));
-    ecoMenuContainer.addView(createSettingsRow("sports_soccer_24px", "Macros",
+    ecoMenuContainer.addView(createSettingsRow("all_inclusive_24px", "Macros",
 T("Multi-action Chains","Chuỗi hành động đa nhiệm"), () -> openEcoSubTab(2, "Macros")));
 
     ecoSubHeader = new LinearLayout(this);
@@ -9071,151 +8892,65 @@ private String ensureExclusiveOwnership(String itemKey, String currentPrefix) {
     prefs.edit().putString(listKey, TextUtils.join(",", list)).apply();
     return newItemKey;
 }
-private LinearLayout buildBarPairSelector(String prefix, String id){
-    LinearLayout box = new LinearLayout(this);
-    box.setOrientation(LinearLayout.VERTICAL);
-    box.setPadding(0,10,0,10);
-    TextView tv = new TextView(this);
-    tv.setText(T("Bar Pair Position", "Vị trí cặp Bar"));
-    tv.setTextColor(Color.parseColor("#E91E63"));
-    tv.setTextSize(14f);
-    box.addView(tv);
-
-    int curLoc = prefs.getInt(prefix + id + "_loc", 0);
-    int curPairIdx = Math.max(0, TwinPairStore.pairIdxOfBarLoc(curLoc));
-    String[] labels = isVi ? TwinPairStore.BAR_PAIR_LABELS_VI : TwinPairStore.BAR_PAIR_LABELS_EN;
-    Spinner sp = createSpinner();
-    sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, labels));
-    sp.setSelection(curPairIdx);
-    sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
-        public void onItemSelected(AdapterView<?> p, View v, int pos, long idx){
-            String pairId = TwinPairStore.BAR_PAIR_IDS[pos];
-            int newLoc = TwinPairStore.repLocOfBarPair(pairId, BARS);
-            SharedPreferences.Editor ed = prefs.edit();
-            ed.putInt(prefix + id + "_loc", newLoc);
-            for(int i=0;i<BARS.length;i++) ed.putBoolean(prefix + id + "_preview_" + BARS[i], false);
-            ed.putBoolean(prefix + id + "_preview_" + BARS[newLoc], true);
-            ed.apply();
-            sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-        }
-        public void onNothingSelected(AdapterView<?> p){}
-    });
-    box.addView(sp);
-    return box;
-}
-private LinearLayout buildCornerPairSelector(String prefix, String id){
-    LinearLayout box = new LinearLayout(this);
-    box.setOrientation(LinearLayout.VERTICAL);
-    box.setPadding(0,10,0,10);
-    TextView tv = new TextView(this);
-    tv.setText(T("Corner Pair Position", "Vị trí cặp Corner"));
-    tv.setTextColor(Color.parseColor("#E91E63"));
-    tv.setTextSize(14f);
-    box.addView(tv);
-    int curLoc = prefs.getInt(prefix + id + "_loc", 0);
-    int curPairIdx = Math.max(0, TwinPairStore.pairIdxOfCornerLoc(curLoc));
-    String[] labels = isVi ? TwinPairStore.CORNER_PAIR_LABELS_VI : TwinPairStore.CORNER_PAIR_LABELS_EN;
-    Spinner sp = createSpinner();
-    sp.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, labels));
-    sp.setSelection(curPairIdx);
-    sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
-        public void onItemSelected(AdapterView<?> p, View v, int pos, long idx){
-            String pairId = TwinPairStore.CORNER_PAIR_IDS[pos];
-            int newLoc = TwinPairStore.repLocOfCornerPair(pairId, CORNERS);
-            SharedPreferences.Editor ed = prefs.edit();
-            ed.putInt(prefix + id + "_loc", newLoc);
-            for(int i=0;i<CORNERS.length;i++) ed.putBoolean(prefix + id + "_preview_corner_" + CORNERS[i], false);
-            ed.putBoolean(prefix + id + "_preview_corner_" + CORNERS[newLoc], true);
-            ed.apply();
-            sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-        }
-        public void onNothingSelected(AdapterView<?> p){}
-    });
-    box.addView(sp);
-    return box;
-}
-private LinearLayout buildDualSideSwitch(String prefix, String id, boolean isBar){
+private LinearLayout buildDualSideSwitch(String prefix, String id, boolean isBar) {
     LinearLayout row = new LinearLayout(this);
     row.setOrientation(LinearLayout.HORIZONTAL);
-    row.setPadding(0,14,0,14);
-    String pairId;
-    String nameA, nameB;
-    if(isBar){
-        int loc = prefs.getInt(prefix + id + "_loc", 0);
-        pairId = TwinPairStore.pairIdForBarLoc(loc);
-        String[] m = TwinPairStore.getMembers(pairId, true);
-        nameA = m != null ? m[0] : "?";
-        nameB = m != null ? m[1] : "?";
-    } else {
-        int loc = prefs.getInt(prefix + id + "_loc", 0);
-        pairId = TwinPairStore.pairIdForCornerLoc(loc);
-        String[] m = TwinPairStore.getMembers(pairId, false);
-        nameA = m != null ? m[0] : "?";
-        nameB = m != null ? m[1] : "?";
-    }
-    row.addView(buildSideSwitchCell(prefix, pairId, nameA, true, isBar));
-    row.addView(buildSideSwitchCell(prefix, pairId, nameB, false, isBar));
+    row.setPadding(0, 10, 0, 10);
+    int loc = prefs.getInt(prefix + id + "_loc", 0);
+    String pairId = isBar ? TwinPairStore.pairIdForBarLoc(loc) : TwinPairStore.pairIdForCornerLoc(loc);
+    String[] m = pairId == null ? null : TwinPairStore.getMembers(pairId, isBar);
+    if (m == null) return row;
+    row.addView(buildSideSwitchCell(prefix, id, pairId, m[0], true, isBar));
+    row.addView(buildSideSwitchCell(prefix, id, pairId, m[1], false, isBar));
     return row;
 }
-    private LinearLayout buildSideSwitchCell(String prefix, String pairId,
-                                              String memberName, boolean isA, boolean isBar){
-        final boolean enabled = TwinPairStore.isSideEnabled(prefs, prefix, pairId, isA, isBar);
 
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, -2, 1f);
-        clp.setMargins(10, 0, 10, 0);
-        col.setLayoutParams(clp);
+private LinearLayout buildSideSwitchCell(String prefix, String id, String pairId, String member, boolean isA, boolean isBar) {
+    final LinearLayout col = new LinearLayout(this);
+    col.setOrientation(LinearLayout.VERTICAL);
+    col.setGravity(Gravity.CENTER);
+    col.setPadding(20, 26, 20, 26);
+    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, -2, 1f);
+    clp.setMargins(8, 0, 8, 0);
+    col.setLayoutParams(clp);
 
-        // Chuyển mã bar/corner ngắn sang tên đọc được
-        String displayName = humanizeMember(memberName);
+    final TextView tv = new TextView(this);
+    tv.setText(humanizeMember(member));
+    tv.setTextSize(13f);
+    tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    tv.setGravity(Gravity.CENTER);
+    final TextView tvState = new TextView(this);
+    tvState.setTextSize(11f);
+    tvState.setGravity(Gravity.CENTER);
+    tvState.setPadding(0, 8, 0, 0);
+    col.addView(tv);
+    col.addView(tvState);
 
-        GradientDrawable cellBg = new GradientDrawable();
-        cellBg.setCornerRadius(24f);
-        cellBg.setColor(Color.parseColor(enabled ? "#8AB4F8" : "#202124"));
-        cellBg.setStroke(3, Color.parseColor(enabled ? "#FFFFFF" : "#3A3A3A"));
-        col.setBackground(cellBg);
-        col.setPadding(20, 24, 20, 24);
+    final Runnable paint = () -> {
+        boolean on = TwinPairStore.isSideEnabled(prefs, prefix, pairId, isA, isBar);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(24f);
+        bg.setColor(Color.parseColor(on ? "#8AB4F8" : "#202124"));
+        bg.setStroke(3, Color.parseColor(on ? "#FFFFFF" : "#3A3A3A"));
+        col.setBackground(bg);
+        tv.setTextColor(Color.parseColor(on ? "#000000" : "#9AA0A6"));
+        tvState.setText(on ? "● ON" : "○ OFF");
+        tvState.setTextColor(Color.parseColor(on ? "#000000" : "#5F6368"));
+    };
+    paint.run();
 
-        TextView tv = new TextView(this);
-        tv.setText(displayName);
-        tv.setTextColor(Color.parseColor(enabled ? "#000000" : "#9AA0A6"));
-        tv.setTextSize(13f);
-        tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        tv.setGravity(Gravity.CENTER);
-        col.addView(tv);
-
-        TextView tvState = new TextView(this);
-        tvState.setText(enabled ? "● ON" : "○ OFF");
-        tvState.setTextColor(Color.parseColor(enabled ? "#000000" : "#5F6368"));
-        tvState.setTextSize(11f);
-        tvState.setGravity(Gravity.CENTER);
-        tvState.setPadding(0, 8, 0, 0);
-        col.addView(tvState);
-
-        col.setOnClickListener(v -> {
-            boolean newState = !TwinPairStore.isSideEnabled(prefs, prefix, pairId, isA, isBar);
-            TwinPairStore.setSideEnabled(prefs, prefix, pairId, isA, newState, isBar);
-            TwinPairStore.setSideTouched(prefs, prefix, pairId, isA, isBar);
-            GradientDrawable bg = new GradientDrawable();
-            bg.setCornerRadius(24f);
-            bg.setColor(Color.parseColor(newState ? "#8AB4F8" : "#202124"));
-            bg.setStroke(3, Color.parseColor(newState ? "#FFFFFF" : "#3A3A3A"));
-            col.setBackground(bg);
-            tv.setTextColor(Color.parseColor(newState ? "#000000" : "#9AA0A6"));
-            tvState.setText(newState ? "● ON" : "○ OFF");
-            tvState.setTextColor(Color.parseColor(newState ? "#000000" : "#5F6368"));
-
-            try {
-                Vibrator vib = (Vibrator) getSystemService(VIBRATOR_SERVICE);
-                if (vib != null) vib.vibrate(VibrationEffect.createOneShot(20, VibrationEffect.DEFAULT_AMPLITUDE));
-            } catch (Exception ignored) {}
-
-            sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-        });
-        return col;
-    }
+    col.setOnClickListener(v -> {
+        boolean next = !TwinPairStore.isSideEnabled(prefs, prefix, pairId, isA, isBar);
+        TwinPairStore.setSideEnabled(prefs, prefix, pairId, isA, next, isBar);
+        paint.run();
+        try {
+            Vibrator vib = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+            if (vib != null) vib.vibrate(VibrationEffect.createOneShot(20, VibrationEffect.DEFAULT_AMPLITUDE));
+        } catch (Exception ignored) {}
+        reapplyPackIfEnabled(isBar ? 0 : 1, id);
+    });
+    return col;
+}
     private String humanizeMember(String m) {
         if (m == null) return "?";
         switch (m) {
@@ -9238,28 +8973,179 @@ private LinearLayout buildDualSideSwitch(String prefix, String id, boolean isBar
             default:    return m.toUpperCase();
         }
     }
-private LinearLayout buildTwinButtonRow(String title, String key, String[] items, int def) {
-    LinearLayout row = new LinearLayout(this);
-    row.setOrientation(LinearLayout.HORIZONTAL);
-    row.setPadding(0, 10, 0, 10);
-    row.addView(createHalfSettingBtn(title + " — Left", key, items, def, true));
-    row.addView(createHalfSettingBtn(title + " — Right", key, items, def, false));
-    return row;
+private int[] readPairSide(String baseKey, boolean isA, int def, int max) {
+    int acc = Math.max(0, Math.min(max, TwinPairStore.readOrValue(prefs, baseKey, isA, "acc", def)));
+    int bl = TwinPairStore.isOrSplit(prefs, baseKey, isA)
+        ? Math.max(0, Math.min(max, TwinPairStore.readOrValue(prefs, baseKey, isA, "bl", acc))) : acc;
+    return new int[]{acc, bl};
 }
 
-private Button createHalfSettingBtn(String label, String key, String[] items, int def, boolean isLeft) {
-    Button btn = new Button(this);
-    btn.setText(label);
-    btn.setBackground(getRounded("#202124", 20f));
-    btn.setTextColor(Color.parseColor("#8AB4F8"));
-    btn.setTextSize(14f);
-    btn.setAllCaps(false);
-    btn.setPadding(20, 35, 20, 35);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-    lp.setMargins(10, 0, 10, 0);
-    btn.setLayoutParams(lp);
-    btn.setOnClickListener(v -> openOrQuadDialog(label, key, items, def, isLeft, () -> {}));
-    return btn;
+private void writePairSide(String baseKey, boolean isA, int acc, int bl) {
+    SharedPreferences.Editor ed = prefs.edit();
+    TwinPairStore.writeOrValue(ed, baseKey, isA, "acc", acc);
+    TwinPairStore.writeOrValue(ed, baseKey, isA, "bl", bl);
+    TwinPairStore.writeOrSplit(ed, baseKey, isA, acc != bl);
+    ed.apply();
+}
+
+private void pickPairValue(String title, String[] items, int current, java.util.function.IntConsumer onPick) {
+    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle(title)
+        .setSingleChoiceItems(items, current, (dlg, which) -> { onPick.accept(which); dlg.dismiss(); })
+        .show();
+}
+
+private TextView pairChip(String bgHex, String fgHex) {
+    TextView t = new TextView(this);
+    t.setTextColor(Color.parseColor(fgHex));
+    t.setTextSize(12.5f);
+    t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    t.setGravity(Gravity.CENTER);
+    t.setBackground(getRounded(bgHex, 14f));
+    t.setPadding(14, 16, 14, 16);
+    t.setMaxLines(2);
+    t.setEllipsize(TextUtils.TruncateAt.END);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+    lp.setMargins(0, 8, 0, 0);
+    t.setLayoutParams(lp);
+    return t;
+}
+
+private TextView pairLabel(String text, String colorHex) {
+    TextView t = new TextView(this);
+    t.setText(text);
+    t.setTextColor(Color.parseColor(colorHex));
+    t.setTextSize(10.5f);
+    t.setPadding(0, 10, 0, 0);
+    return t;
+}
+
+private View buildPairSettingCard(String title, String baseKey, String[] items, int def, String nameA, String nameB) {
+    final LinearLayout card = new LinearLayout(this);
+    card.setOrientation(LinearLayout.VERTICAL);
+    card.setBackground(getRounded("#1A1A1A", 22f));
+    card.setPadding(24, 20, 24, 20);
+    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
+    clp.setMargins(0, 8, 0, 8);
+    card.setLayoutParams(clp);
+
+    TextView tvTitle = new TextView(this);
+    tvTitle.setText(title);
+    tvTitle.setTextColor(Color.parseColor("#E8EAED"));
+    tvTitle.setTextSize(13.5f);
+    tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    card.addView(tvTitle);
+    TextView tvHint = new TextView(this);
+    tvHint.setText(T("Hold to split Accessibility's / Blacklist's", "Nhấn giữ để tách Accessibility's / Blacklist's"));
+    tvHint.setTextColor(Color.parseColor("#6F757B"));
+    tvHint.setTextSize(10.5f);
+    card.addView(tvHint);
+
+    final boolean[] expanded = {TwinPairStore.isOrSplit(prefs, baseKey, true) || TwinPairStore.isOrSplit(prefs, baseKey, false)};
+    final Runnable[] refreshers = new Runnable[2];
+    final View.OnLongClickListener toggle = v -> {
+        android.transition.TransitionManager.beginDelayedTransition(card);
+        expanded[0] = !expanded[0];
+        refreshers[0].run();
+        refreshers[1].run();
+        return true;
+    };
+    card.setOnLongClickListener(toggle);
+
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setPadding(0, 12, 0, 0);
+    final int max = items.length - 1;
+    for (int s = 0; s < 2; s++) {
+        final boolean isA = s == 0;
+        final int idx = s;
+        LinearLayout half = new LinearLayout(this);
+        half.setOrientation(LinearLayout.VERTICAL);
+        half.setBackground(getRounded("#202124", 18f));
+        half.setPadding(18, 16, 18, 16);
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(0, -2, 1f);
+        hlp.setMargins(6, 0, 6, 0);
+        half.setLayoutParams(hlp);
+        half.setOnLongClickListener(toggle);
+
+        TextView tvName = new TextView(this);
+        tvName.setText(isA ? nameA : nameB);
+        tvName.setTextColor(Color.parseColor("#9AA0A6"));
+        tvName.setTextSize(11f);
+        half.addView(tvName);
+
+        final TextView merged = pairChip("#2C2C2C", "#8AB4F8");
+        merged.setOnLongClickListener(toggle);
+        half.addView(merged);
+
+        final LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        final TextView chipAcc = pairChip("#0D4A52", "#4DD0E1");
+        final TextView chipBl = pairChip("#4A3D0D", "#FFD54F");
+        chipAcc.setOnLongClickListener(toggle);
+        chipBl.setOnLongClickListener(toggle);
+        box.addView(pairLabel("Accessibility's", "#4DD0E1"));
+        box.addView(chipAcc);
+        box.addView(pairLabel("Blacklist's", "#FFD54F"));
+        box.addView(chipBl);
+        half.addView(box);
+
+        refreshers[idx] = () -> {
+            int[] v = readPairSide(baseKey, isA, def, max);
+            merged.setText(v[0] != v[1] ? "⚡ " + items[v[0]] + "\n✓ " + items[v[1]] : items[v[0]]);
+            chipAcc.setText(items[v[0]]);
+            chipBl.setText(items[v[1]]);
+            merged.setVisibility(expanded[0] ? View.GONE : View.VISIBLE);
+            box.setVisibility(expanded[0] ? View.VISIBLE : View.GONE);
+        };
+        refreshers[idx].run();
+
+        merged.setOnClickListener(v -> {
+            int[] cur = readPairSide(baseKey, isA, def, max);
+            pickPairValue(title, items, cur[0], pick -> { writePairSide(baseKey, isA, pick, pick); refreshers[idx].run(); });
+        });
+        chipAcc.setOnClickListener(v -> {
+            int[] cur = readPairSide(baseKey, isA, def, max);
+            pickPairValue("Accessibility's", items, cur[0], pick -> { writePairSide(baseKey, isA, pick, cur[1]); refreshers[idx].run(); });
+        });
+        chipBl.setOnClickListener(v -> {
+            int[] cur = readPairSide(baseKey, isA, def, max);
+            pickPairValue("Blacklist's", items, cur[1], pick -> { writePairSide(baseKey, isA, cur[0], pick); refreshers[idx].run(); });
+        });
+        row.addView(half);
+    }
+    card.addView(row);
+    return card;
+}
+
+private void addPairSettingRows(LinearLayout content, String packBase, String nameA, String nameB, boolean withIcon) {
+    boolean isLockSpace = frontierSubTab == 0;
+    String scrTitle = isLockSpace ? T("Lock Screen Visibility", "Hiển thị màn khoá")
+        : T("Home Screen Visibility", "Hiển thị màn chính");
+    String[] scrItems = isLockSpace
+        ? new String[]{T("Only base lockscreen", "Chỉ màn khoá gốc"), T("Always on", "Luôn xuyên suốt")}
+        : new String[]{T("Only base home", "Chỉ màn chính gốc"), T("Always on", "Luôn xuyên suốt")};
+    content.addView(buildPairSettingCard(T("Visibility", "Hiển thị"), packBase + "vis_mode",
+        new String[]{T("Fully visible", "Hiện hoàn toàn"), T("Stealth", "Tàng hình"), T("Invisible", "Ẩn vô hình")}, 0, nameA, nameB));
+    content.addView(buildPairSettingCard(T("Touch mode", "Chế độ cảm ứng"), packBase + "pri_mode",
+        new String[]{T("Priority (hard lock)", "Ưu tiên (Khóa cứng)"), T("Yield to OS (pass-through)", "Nhường OS (Xuyên thấu)")}, 0, nameA, nameB));
+    content.addView(buildPairSettingCard(scrTitle, packBase + "lockmode", scrItems, 1, nameA, nameB));
+    content.addView(buildPairSettingCard(T("Icon jump direction", "Hướng nhảy Icon"), packBase + "jumpdir",
+        new String[]{T("Auto", "Tự động"), T("Diagonal Up", "Chéo lên"), T("Diagonal Down", "Chéo xuống"),
+            T("Straight Up", "Thẳng lên"), T("Straight Down", "Thẳng xuống"),
+            T("Straight Left", "Thẳng trái"), T("Straight Right", "Thẳng phải")}, 0, nameA, nameB));
+    if (withIcon) content.addView(buildPairSettingCard(T("Icon on bar", "Icon trên Bar"), packBase + "icon_en",
+        new String[]{T("Hidden", "Không hiển thị"), T("Shown", "Có hiển thị")}, 0, nameA, nameB));
+}
+
+private TextView buildPackLiveHint() {
+    TextView tv = new TextView(this);
+    tv.setText(T("Turn on this pack's switch in the list to preview on the real bars.",
+        "Bật công tắc của pack này ngoài danh sách để xem trực tiếp trên bar thật."));
+    tv.setTextColor(Color.parseColor("#9AA0A6"));
+    tv.setTextSize(11.5f);
+    tv.setPadding(0, 0, 0, 14);
+    return tv;
 }
 private void openDataPackEditor(int type, String id) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
@@ -9299,99 +9185,35 @@ private void openDataPackEditor(int type, String id) {
         prefs.edit().putBoolean(prefix + id + "_preview_handle", true).apply();
     }
     
-    if (type == 0) {
+        if (type == 0) {
         int currentLocBar = prefs.getInt(prefix + id + "_loc", 0);
         if (currentLocBar < 0 || currentLocBar >= BARS.length) currentLocBar = 0;
-        for(int i=0; i<BARS.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[i], false).apply();
-        prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[currentLocBar], true).apply();
-        
-        content.addView(createSectionTitle("CẤU HÌNH BAR (FORMAT B)"));
-        content.addView(buildBarPairSelector(prefix, id));
+        String pairId = TwinPairStore.pairIdForBarLoc(currentLocBar);
+        boolean topBottom = "barPair_bt_c".equals(pairId);
+        String nameA = topBottom ? T("Top", "Đỉnh") : T("Left", "Trái");
+        String nameB = topBottom ? T("Bottom", "Đáy") : T("Right", "Phải");
+        content.addView(createSectionTitle(packDisplayName(true, id).toUpperCase()));
+        content.addView(buildPackLiveHint());
         content.addView(buildDualSideSwitch(prefix, id, true));
-        
-        previewListenerHolder[0] = (p, k) -> {
-            if (k == null || !k.startsWith(prefix + id + "_")) return;
-            int loc = prefs.getInt(prefix + id + "_loc", 0);
-            if (loc < 0 || loc >= BARS.length) loc = 0;
-            boolean previewOn = prefs.getBoolean(prefix + id + "_preview_" + BARS[loc], false);
-            if (!previewOn) { removeLivePreviewOverlay(); return; }
-            updateLivePreviewBar(loc,
-                prefs.getInt(prefix + id + "_alpha", 50),
-                prefs.getInt(prefix + id + "_w", 300),
-                prefs.getInt(prefix + id + "_h", 60),
-                prefs.getInt(prefix + id + "_x", 0),
-                prefs.getInt(prefix + id + "_y", 0));
-        };
+        addPairSettingRows(content, prefix + id + "_", nameA, nameB, true);
+        content.addView(createSectionTitle(T("SIZE & POSITION (whole pair)", "KÍCH THƯỚC & VỊ TRÍ (cả cặp)")));
+        content.addView(createSlider(T("Opacity", "Độ trong suốt"), prefix + id + "_alpha", 255, 50));
+        content.addView(createSlider(T("Width", "Chiều ngang"), prefix + id + "_w", 3000, 300));
+        content.addView(createSlider(T("Height", "Chiều dọc"), prefix + id + "_h", 3000, 60));
+        content.addView(createSignedSlider(T("Pair gap (- closer, + wider)", "Khoảng cách cặp (- gần, + xa)"), prefix + id + "_pair_spacing", -300, 900, 0));
+        content.addView(createSlider(T("Position Y", "Tọa độ Y"), prefix + id + "_y", 3000, 0));
+        previewListenerHolder[0] = makePackLiveListener(prefix + id + "_", type, id);
         prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
-        previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_alpha");        
-        
-        // Tự nhận diện nhãn (Left/Right hay Bottom/Top)
-        String nameA = "Left", nameB = "Right";
-        if (currentLocBar == 0) { // Nếu là cặp Top/Bottom Center
-            nameA = "Bottom"; nameB = "Top";
-        }
-
-        Runnable liveSync = () -> {
-            sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-            refreshPreview();
-        };
-        // UI 2 nửa (mỗi nửa gọi mở cầu OR 2 server)
-        content.addView(buildTwinSettingRow("Hiển thị", nameA, nameB, prefix + id + "_vis_mode", prefix + id + "_vis_mode_b",
-            new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
-            
-        content.addView(buildTwinSettingRow("Cảm ứng", nameA, nameB, prefix + id + "_pri_mode", prefix + id + "_pri_mode_b",
-            new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
-            
-        content.addView(buildTwinSettingRow(T("Screen Visibility","Hiển thị màn hình"), nameA, nameB, prefix + id + "_lockmode", prefix + id + "_lockmode_b",
-            new String[]{T("Only base lockscreen","Chỉ màn khoá gốc"), T("Always on lock","Luôn xuyên suốt")}, 1));
-            
-        content.addView(buildTwinSettingRow(T("Icon Jump Direction","Hướng nhảy Icon"), nameA, nameB, prefix + id + "_jumpdir", prefix + id + "_jumpdir_b",
-            new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"),
-                T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"),
-                T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
-        content.addView(createSectionTitle(T("ICON ON BAR", "ICON TRÊN BAR")));
-        content.addView(buildTwinSettingRow("Hiển thị Icon", nameA, nameB, prefix + id + "_icon_en", prefix + id + "_icon_en_b",
-            new String[]{"Không hiển thị", "Có hiển thị"}, 0));
-        content.addView(createSlider("Độ trong suốt", prefix + id + "_alpha", 255, 50));
-        content.addView(createSlider("Chiều ngang", prefix + id + "_w", 3000, 300));
-        content.addView(createSlider("Chiều dọc", prefix + id + "_h", 3000, 60));
-        content.addView(createSignedSlider("Khoảng cách cặp (-=gần thêm, +=xa ra)", prefix + id + "_pair_spacing", -300, 900, 0));
-        content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 3000, 0));
     } else if (type == 1) {
-        String[] cKeys = {"br", "bl", "tr", "tl"};
-        int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
-        if (currentLoc < 0 || currentLoc >= cKeys.length) currentLoc = 0;
-        for(int i=0; i<cKeys.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[i], false).apply();
-        prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[currentLoc], true).apply();
-        content.addView(createSectionTitle("CẤU HÌNH CORNER (FORMAT C)"));
-        content.addView(buildCornerPairSelector(prefix, id));
+        content.addView(createSectionTitle(packDisplayName(false, id).toUpperCase()));
+        content.addView(buildPackLiveHint());
         content.addView(buildDualSideSwitch(prefix, id, false));
-        previewListenerHolder[0] = (p, k) -> {
-            if (k == null || !k.startsWith(prefix + id + "_")) return;
-            int loc = prefs.getInt(prefix + id + "_loc", 0);
-            if (loc < 0 || loc >= cKeys.length) loc = 0;
-            boolean previewOn = prefs.getBoolean(prefix + id + "_preview_" + cKeys[loc], false);
-            if (!previewOn) { removeLivePreviewOverlay(); return; }
-            updateLivePreviewCorner(loc, prefix + id + "_");
-        };
-        prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
-        previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_x");
-        
-        content.addView(buildTwinButtonRow("Hiển thị", prefix + id + "_vis_mode",
-            new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
-        content.addView(buildTwinButtonRow("Cảm ứng", prefix + id + "_pri_mode",
-            new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
-        content.addView(buildTwinButtonRow(T("Screen Visibility","Hiển thị màn hình"), prefix + id + "_lockmode",
-            new String[]{T("Only base lockscreen","Chỉ màn khoá gốc"), T("Always on lock","Luôn xuyên suốt")}, 1));
-        content.addView(buildTwinButtonRow(T("Icon Jump Direction","Hướng nhảy Icon"), prefix + id + "_jumpdir",
-            new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"),
-                T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"),
-                T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
-                
+        addPairSettingRows(content, prefix + id + "_", T("Left", "Trái"), T("Right", "Phải"), false);
+        content.addView(createSectionTitle(T("SHAPE & POSITION (whole pair)", "HÌNH DÁNG & VỊ TRÍ (cả cặp)")));
         content.addView(createComboDropdown("Hình dáng Góc", prefix + id + "_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0));
         content.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix + id + "_w", 2500, 100));
         content.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix + id + "_h", 2500, 100));
-        content.addView(createSignedSlider("Khoảng cách cặp (-=gần thêm, +=xa ra)", prefix + id + "_pair_spacing", -300, 900, 0));
+        content.addView(createSignedSlider(T("Pair gap (- closer, + wider)", "Khoảng cách cặp (- gần, + xa)"), prefix + id + "_pair_spacing", -300, 900, 0));
         content.addView(createSlider("Di chuyển Dọc (Y)", prefix + id + "_y", 2500, 0));
         content.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix + id + "_moon_w", 2500, 100));
         content.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix + id + "_moon_h", 2500, 100));
@@ -9399,6 +9221,8 @@ private void openDataPackEditor(int type, String id) {
         content.addView(createSlider("Di chuyển Trăng Non Dọc (Y) (1250=Giữa)", prefix + id + "_moon_y", 2500, 1250));
         content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 80));
         content.addView(createSlider("Độ cong TRĂNG NON", prefix + id + "_moon_rad", 1000, 80));
+        previewListenerHolder[0] = makePackLiveListener(prefix + id + "_", type, id);
+prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
     } else if (type == 2) {
         content.addView(createSectionTitle("📦 DATA PACK LENAP (CORE CONFIG)"));
         content.addView(createComboDropdown("POSITION (Vị trí Panel)", prefix + id + "_pos", PANEL_POS_NAMES, 0));
@@ -9532,15 +9356,14 @@ private void openDataPackEditor(int type, String id) {
         }
         d.dismiss();
     });
-    
-    d.setOnDismissListener(dlg -> {
+        d.setOnDismissListener(dlg -> {
         if (previewListenerHolder[0] != null) prefs.unregisterOnSharedPreferenceChangeListener(previewListenerHolder[0]);
+        packLiveHandler.removeCallbacksAndMessages(null);
         removeLivePreviewOverlay();
-        if (type == 2) {
-            prefs.edit().putBoolean(prefix + id + "_preview_handle", false).apply();
-        }
+        if (type == 2) prefs.edit().putBoolean(prefix + id + "_preview_handle", false).apply();
+        else renderRulesList();
     });
-    d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     d.setContentView(root); d.show();
 }
 private void openEmptyPillDialog() {
@@ -11166,6 +10989,14 @@ private String queryDisplayName(Uri uri) {
     } catch (Exception ignored) {}
     return "Song";
 }
+    private SharedPreferences.OnSharedPreferenceChangeListener makePackLiveListener(String packBase, int type, String id) {
+    final Runnable apply = () -> reapplyPackIfEnabled(type, id);
+    return (p, k) -> {
+        if (k == null || !k.startsWith(packBase)) return;
+        packLiveHandler.removeCallbacks(apply);
+        packLiveHandler.postDelayed(apply, 250);
+    };
+}
     private void showPremiumDialog() { 
         String t = T("ADB COMMANDS:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow", 
         "🔧 LỆNH ADB CỐT LÕI (Cấp 1 lần trọn đời):\n\n1. Quyền ghi Cài đặt bảo mật:\nadb shell pm grant com.manhmoc.edgebar android.permission.WRITE_SECURE_SETTINGS\n\n2. Quyền vẽ Lớp phủ (Tàng hình AppOps):\nadb shell appops set com.manhmoc.edgebar SYSTEM_ALERT_WINDOW allow\n\n🚀 TĂNG TỐC BẰNG ADB (chạy 1 lần):\nadb shell settings put global window_animation_scale 0\nadb shell settings put global transition_animation_scale 0\nadb shell settings put global animator_duration_scale 0"); 
@@ -11837,7 +11668,9 @@ private int customIconRes(String name) {
 private ImageView makeMenuIcon(String iconName, int sizePx) {
     ImageView iv = new ImageView(this);
     int resId = customIconRes(iconName);
-    if (resId != 0) { iv.setImageResource(resId); iv.setColorFilter(Color.parseColor(ACCENT_COLOR)); }
+    if (resId == 0) resId = android.R.drawable.ic_menu_manage;
+    iv.setImageResource(resId);
+    iv.setColorFilter(Color.parseColor(ACCENT_COLOR));
     iv.setLayoutParams(new LinearLayout.LayoutParams(sizePx, sizePx));
     return iv;
 }
@@ -12525,42 +12358,6 @@ private LinearLayout sensorBodyContainer, sensorBackRowRef;
             livePreviewLp.width = w; livePreviewLp.height = h;
             livePreviewLp.gravity = gravity;
             try { wm.updateViewLayout(livePreviewOverlay, livePreviewLp); } catch (Exception ignored) {}
-        }
-    }
-    private void syncPairedPackToggles() {
-        String[] prefixes = {"lock_", "home_"};
-        for (String prefix : prefixes) {
-            for (String itemKey : getDynamicIds(prefix + "applied_packs")) {
-                boolean isBar = itemKey.startsWith("bar_");
-                String id = itemKey.replace(isBar ? "bar_" : "corner_", "");
-                String pp = (isBar ? "pack_bar_" : "pack_corner_") + id + "_";
-                String pk = prefix + itemKey + "_";
-                boolean packEnabled = prefs.getBoolean(pk + "en", false);
-                if (!packEnabled) continue;
-                String enKeyA = pp + "a_en";
-                String enKeyB = pp + "b_en";
-                boolean enA = prefs.getBoolean(enKeyA, true);
-                boolean enB = prefs.getBoolean(enKeyB, true);
-                if (!enA && !enB) {
-                    prefs.edit()
-                        .putBoolean(enKeyA, true)
-                        .putBoolean(enKeyB, true)
-                        .apply();
-                    String pairId = isBar
-                        ? TwinPairStore.pairIdForBarLoc(prefs.getInt(pp + "loc", 0))
-                        : TwinPairStore.pairIdForCornerLoc(prefs.getInt(pp + "loc", 0));
-                    String[] members = TwinPairStore.getMembers(pairId, isBar);
-                    if (members != null) {
-                        SharedPreferences.Editor ed = prefs.edit();
-                        for (String m : members) {
-                            String barKey = isBar ? (prefix + m + "_en")
-                                                  : (prefix + "corner_" + m + "_en");
-                            if (!prefs.getBoolean(barKey, false)) ed.putBoolean(barKey, true);
-                        }
-                        ed.apply();
-                    }
-                }
-            }
         }
     }
 }
