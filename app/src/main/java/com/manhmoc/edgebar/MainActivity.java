@@ -2486,7 +2486,8 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
         if (ok) cleaned.add(k); else dirtFound = true;
     }
     if (dirtFound) prefs.edit().putString(listKey, TextUtils.join(",", cleaned)).apply();
-appliedPacks.sort((a, b) -> {
+    final java.util.List<String> appliedPacks = cleaned;   // ← THÊM DÒNG NÀY
+    appliedPacks.sort((a, b) -> {
     int ia = indexInDefaultOrder(a);
     int ib = indexInDefaultOrder(b);
     if (ia < 0 && ib < 0) return a.compareTo(b);   // cả 2 ngoài order -> sort alphabet
@@ -4168,19 +4169,13 @@ if (isDualPack) {
             new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setItems(new String[]{ "⚡ " + T("Deep Customize", "Tuỳ chỉnh sâu") },
                     (dg, which) -> {
-
-                        // Bước 1: ghi prefs NGAY (không đóng dialog)
                         splitDualPack(editId, null);
-
-                        // Bước 2: đồng bộ state local cho 2 nửa — mirror từ bên TRÁI
                         lKind[0] = isHomebSpace ? "COMMON" : "FULL";
                         rKind[0] = lKind[0];
                         selectedActsR.clear(); selectedActsR.addAll(selectedActsL);
                         pkgR[0] = pkgL[0]; scR[0] = scL[0];
                         updateLeftLabel.run();
                         updateRightLabel.run();
-
-                        // Bước 3: animation co singleCard về bên trái + mờ dần
                         float origW = singleCard.getWidth();
                         if (origW <= 0)
                             origW = getResources().getDisplayMetrics().widthPixels - 100;
@@ -4193,19 +4188,15 @@ if (isDualPack) {
                             .withEndAction(() -> {
                                 int idx = vAct.indexOfChild(singleCard);
                                 if (idx < 0) return;
-
                                 if (dualRow.getParent() != null)
                                     ((ViewGroup) dualRow.getParent()).removeView(dualRow);
-
                                 LinearLayout dualSection = new LinearLayout(this);
                                 dualSection.setOrientation(LinearLayout.VERTICAL);
                                 dualSection.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (2 NỬA OR)"));
                                 dualSection.addView(buildDualKindBanner());
                                 dualSection.addView(dualRow);
-
                                 vAct.removeView(singleCard);
                                 vAct.addView(dualSection, idx);
-
                                 dualSection.setAlpha(0f);
                                 dualSection.setScaleX(0.85f);
                                 dualSection.animate()
@@ -4249,31 +4240,26 @@ if (isDualPack) {
     cbJump.setTextColor(Color.WHITE);
     cbJump.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_jump_on", true));
     vTrig.addView(cbJump);
-
     CheckBox cbVib = new CheckBox(this);
     cbVib.setText("Bật Rung (Haptic Feedback)");
     cbVib.setTextColor(Color.WHITE);
     cbVib.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_vib", true));
     vTrig.addView(cbVib);
-
         CheckBox cbSnd = new CheckBox(this);
     cbSnd.setText(T("Touch Sound", "Âm chạm (Touch Sound)"));
     cbSnd.setTextColor(Color.WHITE);
     cbSnd.setChecked(sourceId != null && prefs.getBoolean("prule_" + sourceId + "_snd", false));
     vTrig.addView(cbSnd);
-
     CheckBox cbAnim = new CheckBox(this);
     cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)");
     cbAnim.setTextColor(Color.WHITE);
     cbAnim.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_anim", true));
     vTrig.addView(cbAnim);
-
 CheckBox cbOs = new CheckBox(this);
 cbOs.setText("Ẩn Overlay Này (Tạm thời)");
 cbOs.setTextColor(Color.parseColor("#FFC107"));
 cbOs.setChecked(sourceId != null && prefs.getBoolean("prule_" + sourceId + "_os", false));
 vTrig.addView(cbOs);
-
     content.addView(vTrig); content.addView(vAct);
     View.OnClickListener tabClick = v -> {
         bTrig.setBackground(getRounded(v==bTrig?"#8AB4F8":"#222222", 15f));
@@ -4285,17 +4271,14 @@ vTrig.addView(cbOs);
     };
     bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick);
     bTrig.performClick();
-
     LinearLayout footer = new LinearLayout(this);
     footer.setOrientation(LinearLayout.HORIZONTAL);
     footer.setPadding(0, 20, 0, 0);
-
     Button bCancel = new Button(this);
     bCancel.setText("HỦY");
     bCancel.setBackground(getRounded("#333333", 20f));
     bCancel.setTextColor(Color.WHITE);
     bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
     Button bSave = new Button(this);
     bSave.setText("SAVE RULE");
     bSave.setBackground(getRounded("#4CAF50", 20f));
@@ -4303,23 +4286,18 @@ vTrig.addView(cbOs);
     LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f);
     slp.setMargins(20, 0, 0, 0);
     bSave.setLayoutParams(slp);
-
     footer.addView(bCancel);
     footer.addView(bSave);
     root.addView(footer);
-
     bCancel.setOnClickListener(v -> d.dismiss());
         bSave.setOnClickListener(v -> {
         ArrayList<String> gestures = new ArrayList<>();
         for (int i = 0; i < gestureBoxes.size(); i++)
             if (gestureBoxes.get(i).isChecked()) gestures.add(C_GESTURES[i]);
-
         if (gestures.isEmpty()) {
             Toast.makeText(this, "Hãy chọn ít nhất 1 Cử chỉ!", Toast.LENGTH_SHORT).show();
             return;
         }
-
-        // [MỚI - BƯỚC 3] Validate 2-nửa
         if (lKind[0].isEmpty() && rKind[0].isEmpty()) {
             Toast.makeText(this, "Chọn ít nhất 1 nửa action", Toast.LENGTH_SHORT).show();
             return;
@@ -4332,8 +4310,6 @@ vTrig.addView(cbOs);
             Toast.makeText(this, "Nửa PHẢI chưa chọn action nào", Toast.LENGTH_SHORT).show();
             return;
         }
-
-        // Union cho backward-compat: service cũ ở bước 3 vẫn đọc _acts và chạy tất cả
         java.util.LinkedHashSet<String> union = new java.util.LinkedHashSet<>();
         if (!lKind[0].isEmpty()) union.addAll(selectedActsL);
         if (!rKind[0].isEmpty()) union.addAll(selectedActsR);
@@ -12022,7 +11998,7 @@ private void splitDualPack(String rId, Runnable onRefresh) {
     if (acts.isEmpty()) acts = "NONE";
     String pkg  = prefs.getString(px + "launch_pkg", "");
     String scId = prefs.getString(px + "shortcut_id", "");
-Editor ed = prefs.edit();
+    SharedPreferences.Editor ed = prefs.edit();
     ed.putBoolean(px + "dual", true);
     ed.putString(px + "acts_l", acts)
       .putString(px + "acts_r", acts)

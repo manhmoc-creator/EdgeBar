@@ -241,7 +241,7 @@ private int readOrInt(String sp, String member, boolean isBar, String server, St
         for (int i = 0; i < 4; i++) {
             String ck = "lock_corner_" + CORNERS[i] + "_";
             if (!prefs.getBoolean("lock_corner_" + CORNERS[i] + "_en", false)) continue;
-            int visMode = readOrInt("lock_", CORNERS[i], false, "acc", "vis_mode", 0);v
+            int visMode = readOrInt("lock_", CORNERS[i], false, "acc", "vis_mode", 0);
             int moonA = visMode == 0 ? prefs.getInt("lock_corner_moon_alpha", 100) : 0;
             int strokeA = visMode == 0 ? prefs.getInt("lock_corner_stroke_alpha", 200) : 0;
             CornerView v = new CornerView(this, prefs, i, ck, prefs.getInt("lock_corner_thick", 8), moonA, strokeA);

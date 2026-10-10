@@ -711,13 +711,6 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
         int mainDim = horizontal ? w : h;
         int crossDim = horizontal ? h : w;
         int userIconSize = icons.get(0).getWidth(); // kích thước user đã chọn ở slider
-
-        // [MỚI] Tự động lấp đầy thanh: nếu tổng chiều dài các icon (theo size user
-        // chọn) vượt quá chiều dài Bar, tự co đều lại để vừa khít — không tràn ra
-        // ngoài. Nếu đủ chỗ thì giữ nguyên kích thước user đã chọn (không phóng to
-        // thêm, tránh vỡ nét). Dùng drawBitmap(bitmap, null, destRect, paint) để co
-        // giãn ngay trên GPU khi vẽ — KHÔNG tạo Bitmap mới, Zero cấp phát thêm,
-        // tối ưu pin/RAM cho Pixel 2XL vì đây là hàm onDraw() gọi liên tục.
         int maxFit = Math.max(8, (mainDim - (n - 1) * gap) / n);
         int drawSize = Math.min(userIconSize, maxFit);
         drawSize = Math.min(drawSize, crossDim); // không vượt bề dày thanh
@@ -737,6 +730,7 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
 }
     private class CornerView extends View {
             private Paint pFill, pStroke; private int type; private String prefix;
+            private final Path moonPath = new Path(), strokePath = new Path();
             private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
             private boolean isInv = false;
 
@@ -2291,135 +2285,5 @@ PixelFormat.TRANSLUCENT);
       if (p.getBoolean(baseKey + "_split", false))
           return p.getInt(baseKey + "_" + server, p.getInt(baseKey, def));
       return p.getInt(baseKey, def);
-  }
-}  // ← đây là dấu } cuối cùng đóng class HomescreenService, KHÔNG XÓA
-EOF# 15. Tạo QsTile mới cho MorseLock + Accessible Home 
-# ==============================================================================
-echo -e "${YELLOW}👉 Tạo file XML khai báo Device Admin...${NC}"
-cat << 'EOF' > app/src/main/java/com/manhmoc/edgebar/QsAccHomeTile.java
-package com.manhmoc.edgebar;
-
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.content.Intent;
-import android.os.Build;
-import android.os.Handler;
-import android.provider.Settings;
-import android.service.quicksettings.Tile;
-import android.service.quicksettings.TileService;
-
-public class QsAccHomeTile extends TileService {
-
-    private static final int NOTIF_ID = 77;
-    private static final String NOTIF_CHANNEL = "eb_acc_home_status";
-
-    private boolean isAccEnabled() {
-        try {
-            String s = Settings.Secure.getString(getContentResolver(),
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            return s != null && s.contains(
-                getPackageName() + "/" + EdgeBarService.class.getName());
-        } catch (Exception e) { return false; }
-    }
-
-    @Override
-    public void onStartListening() {
-        // FIX BUG 8: Delay 150ms để đọc state SAU khi service lifecycle hoàn tất
-        // Tránh race condition: onStartListening() chạy trước onDestroy() của service
-        new Handler(getMainLooper()).postDelayed(() -> {
-            Tile t = getQsTile();
-            if (t == null) return;
-            if (!isAccEnabled()) {
-                // [MỤC 8] STATE_INACTIVE thay UNAVAILABLE — tránh hệ thống ẩn tile
-                t.setState(Tile.STATE_INACTIVE);
-                t.setLabel("Homacc (cần Acc)");
-            } else {
-                boolean running = AccessibleHomeService.isRunning;
-                t.setState(running ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
-                t.setLabel(running ? "Homacc ON" : "Homacc OFF");
-                // FIX BUG 8: Đồng bộ notification với state thực tế
-                // nhưng KHÔNG tạo lại notification nếu đang trong quá trình tắt
-                syncNotification(running);
-            }
-            t.updateTile();
-        }, 150);
-    }
-
-    @Override
-public void onClick() {
-    if (!isAccEnabled()) return;
-
-    if (!AccessibleHomeService.isRunning) {
-        Intent i = new Intent(this, AccessibleHomeService.class);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);
-        else startService(i);
-        showNotification();
-        updateTileState(true);
-    } else {
-        cancelNotification();
-        stopService(new Intent(this, AccessibleHomeService.class));
-        updateTileState(false);
-    }
-}
-    private void updateTileState(boolean isOn) {
-        Tile t = getQsTile();
-        if (t == null) return;
-        t.setState(isOn ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
-        t.setLabel(isOn ? "Homacc ON" : "Homacc OFF");
-        t.updateTile();
-    }
-
-    // FIX BUG 8: Tách riêng show/cancel/sync — không bao giờ show trong onStartListening
-    private void showNotification() {
-    NotificationManager nm = getSystemService(NotificationManager.class);
-    if (nm == null) return;
-    ensureChannel(nm);
-    Notification.Builder builder = new Notification.Builder(this, NOTIF_CHANNEL)
-.setContentTitle("Homacc")
-.setSmallIcon(android.R.drawable.ic_menu_search)
-.setOngoing(true)
-.setPriority(Notification.PRIORITY_MAX)
-.setVisibility(Notification.VISIBILITY_PUBLIC);
-NotificationChannel nc = new NotificationChannel(
-    NOTIF_CHANNEL, "Trạng thái Homacc",
-    NotificationManager.IMPORTANCE_HIGH);
-nc.setSound(null, null);
-nc.enableLights(false);
-nc.enableVibration(false);
-nc.setShowBadge(false);
-nc.setBypassDnd(false); // ← ĐỔI false, không conflict với DND policy
-nc.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-nm.notify(NOTIF_ID, builder.build());
-}
-
-    private void cancelNotification() {
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        if (nm != null) nm.cancel(NOTIF_ID);
-    }
-
-    // Chỉ sync từ onStartListening — không tạo mới nếu đang tắt
-    private void syncNotification(boolean shouldShow) {
-        if (shouldShow) showNotification();
-        else cancelNotification();
-    }
-
-    private void ensureChannel(NotificationManager nm) {
-    if (Build.VERSION.SDK_INT >= 26) {
-        if (nm.getNotificationChannel(NOTIF_CHANNEL) == null) {
-
-NotificationChannel nc = new NotificationChannel(
-    NOTIF_CHANNEL, "Trạng thái Homacc",
-    NotificationManager.IMPORTANCE_HIGH);
-nc.setSound(null, null);
-nc.enableLights(false);
-nc.enableVibration(false);
-nc.setShowBadge(false);
-nc.setBypassDnd(true); // THÊM: vượt DND
-nc.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-
-            nm.createNotificationChannel(nc);
-        }
-     }
   }
 }
