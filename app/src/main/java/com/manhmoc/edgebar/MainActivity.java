@@ -4511,10 +4511,10 @@ private String mergeCsv(String a, String b) {
     String pairId = TwinPairStore.pairIdForBarLoc(loc);
     String[] members = pairId == null ? null : TwinPairStore.getMembers(pairId, true);
     if (members == null) {
-        applySingleBar(targetPrefix, BARS[loc], alpha, w, h, 0, y,
-                       vis, pri, lockM, jump, icons);
-        return;
-    }
+    applySingleBar(targetPrefix, BARS[loc], alpha, w, h, 0, y,
+                   vis, pri, lockM, jump, icons, true);
+    return;
+}
         int sign = TwinPairStore.signOfBarPair(pairId);
     boolean spreadY = (sign == 0);   // barPair_bt_c giãn theo Y
     int xA = spreadY ? 0 : sign * (spacing / 2);
