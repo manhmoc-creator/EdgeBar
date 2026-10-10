@@ -9220,11 +9220,10 @@ private void openDataPackEditor(int type, String id) {
     scroll.addView(content);
     root.addView(scroll);   
     String prefix = type == 0 ? "pack_bar_" : (type == 1 ? "pack_corner_" : "pack_panel_");
-        EditText etName = createEcoInput("Tên Data Pack", prefs.getString(prefix + id + "_name", ""));
-if (type == 2) content.addView(etName);
-      final SharedPreferences.OnSharedPreferenceChangeListener[]
-previewListenerHolder = new
-SharedPreferences.OnSharedPreferenceChangeListener[1];
+    EditText etName = createEcoInput("Tên Data Pack", prefs.getString(prefix + id + "_name", ""));
+    if (type == 2) content.addView(etName);
+    
+    final SharedPreferences.OnSharedPreferenceChangeListener[] previewListenerHolder = new SharedPreferences.OnSharedPreferenceChangeListener[1];
     etName.setOnFocusChangeListener((v, hasFocus) -> {
         if (hasFocus) {
             removeLivePreviewOverlay();
@@ -9241,18 +9240,22 @@ SharedPreferences.OnSharedPreferenceChangeListener[1];
             refreshPreview();
         }
     });
-if (type == 2) {
-    prefs.edit().putBoolean(prefix + id + "_preview_handle", true).apply();
-}
-if (type == 0) {
+
+    if (type == 2) {
+        prefs.edit().putBoolean(prefix + id + "_preview_handle", true).apply();
+    }
+    
+    if (type == 0) {
         int currentLocBar = prefs.getInt(prefix + id + "_loc", 0);
         if (currentLocBar < 0 || currentLocBar >= BARS.length) currentLocBar = 0;
         for(int i=0; i<BARS.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[i], false).apply();
-        prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[currentLoc], true).apply();
+        prefs.edit().putBoolean(prefix + id + "_preview_" + BARS[currentLocBar], true).apply();
+        
         content.addView(createSectionTitle("CẤU HÌNH BAR (FORMAT B)"));
         content.addView(buildBarPairSelector(prefix, id));
-content.addView(buildDualSideSwitch(prefix, id, true));
-                    previewListenerHolder[0] = (p, k) -> {
+        content.addView(buildDualSideSwitch(prefix, id, true));
+        
+        previewListenerHolder[0] = (p, k) -> {
             if (k == null || !k.startsWith(prefix + id + "_")) return;
             int loc = prefs.getInt(prefix + id + "_loc", 0);
             if (loc < 0 || loc >= BARS.length) loc = 0;
@@ -9265,12 +9268,12 @@ content.addView(buildDualSideSwitch(prefix, id, true));
                 prefs.getInt(prefix + id + "_x", 0),
                 prefs.getInt(prefix + id + "_y", 0));
         };
-prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
+        prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
         previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_alpha");        
+        
         // Tự nhận diện nhãn (Left/Right hay Bottom/Top)
-        int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
         String nameA = "Left", nameB = "Right";
-        if (type == 0 && currentLoc == 0) { // Nếu là cặp Top/Bottom Center
+        if (currentLocBar == 0) { // Nếu là cặp Top/Bottom Center
             nameA = "Bottom"; nameB = "Top";
         }
 
@@ -9278,7 +9281,11 @@ prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
             sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
             refreshPreview();
         };
+
+        // UI Bật/Tắt 2 nửa
         content.addView(buildTwinToggleRow(nameA, nameB, prefix + id + "_en_a", prefix + id + "_en_b", liveSync));
+
+        // UI 2 nửa (mỗi nửa gọi mở cầu OR 2 server)
         content.addView(buildTwinSettingRow("Hiển thị", nameA, nameB, prefix + id + "_vis_mode", prefix + id + "_vis_mode_b",
             new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
             
@@ -9292,15 +9299,19 @@ prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
             new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"),
                 T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"),
                 T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
+                
+        // UI Icon on Bar cũng tách 2 nửa
         content.addView(createSectionTitle(T("ICON ON BAR", "ICON TRÊN BAR")));
         content.addView(buildTwinSettingRow("Hiển thị Icon", nameA, nameB, prefix + id + "_icon_en", prefix + id + "_icon_en_b",
             new String[]{"Không hiển thị", "Có hiển thị"}, 0));
+            
         content.addView(createSlider("Độ trong suốt", prefix + id + "_alpha", 255, 50));
         content.addView(createSlider("Chiều ngang", prefix + id + "_w", 3000, 300));
         content.addView(createSlider("Chiều dọc", prefix + id + "_h", 3000, 60));
         content.addView(createSignedSlider("Khoảng cách cặp (-=gần thêm, +=xa ra)", prefix + id + "_pair_spacing", -300, 900, 0));
         content.addView(createSlider("Tọa độ Y", prefix + id + "_y", 3000, 0));
-                content.addView(createSectionTitle(T("ICON ON BAR (optional)", "ICON TRÊN BAR (tuỳ chọn)")));
+        
+        content.addView(createSectionTitle(T("ICON ON BAR (optional)", "ICON TRÊN BAR (tuỳ chọn)")));
         String iconsKey = prefix + id + "_icons";
         LinearLayout iconDrawer = new LinearLayout(this);
         iconDrawer.setOrientation(LinearLayout.VERTICAL);
@@ -9328,8 +9339,7 @@ prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
         btnIcons.setBackground(getRounded("#FFC107", 20f));
         btnIcons.setTextColor(Color.BLACK);
         btnIcons.setOnClickListener(v -> {
-            String readKey = prefs.getBoolean(iconsKey + "_split", false)
-                ? iconsKey + "_homacc" : iconsKey;
+            String readKey = prefs.getBoolean(iconsKey + "_split", false) ? iconsKey + "_homacc" : iconsKey;
             showBarIconMultiPicker(readKey, () -> {
                 prefs.edit().putInt(iconsKey + "_count", csvToList(prefs.getString(readKey, "")).size()).apply();
                 refreshIconBtn.run();
@@ -9361,8 +9371,7 @@ prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
             try {
                 Vibrator vib = (Vibrator) getSystemService(VIBRATOR_SERVICE);
                 if (vib != null) {
-                    if (Build.VERSION.SDK_INT >= 26)
-                        vib.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE));
+                    if (Build.VERSION.SDK_INT >= 26) vib.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE));
                     else vib.vibrate(30);
                 }
             } catch (Exception ignored) {}
@@ -9374,26 +9383,27 @@ prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
             return true;
         });
         content.addView(iconDrawer);
-        } else if (type == 1) {
-    String[] cKeys = {"br", "bl", "tr", "tl"};
-    int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
-    if (currentLoc < 0 || currentLoc >= cKeys.length) currentLoc = 0;
-    for(int i=0; i<cKeys.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[i], false).apply();
-    prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[currentLoc], true).apply();
-    content.addView(createSectionTitle("CẤU HÌNH CORNER (FORMAT C)"));
-     content.addView(buildCornerPairSelector(prefix, id));
-content.addView(buildDualSideSwitch(prefix, id, false));
-            previewListenerHolder[0] = (p, k) -> {
-        if (k == null || !k.startsWith(prefix + id + "_")) return;
-        int loc = prefs.getInt(prefix + id + "_loc", 0);
-        if (loc < 0 || loc >= cKeys.length) loc = 0;
-        boolean previewOn = prefs.getBoolean(prefix + id + "_preview_" + cKeys[loc], false);
-        if (!previewOn) { removeLivePreviewOverlay(); return; }
-        updateLivePreviewCorner(loc, prefix + id + "_");
-    };
-    prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
-    previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_x");
-    content.addView(buildTwinButtonRow("Hiển thị", prefix + id + "_vis_mode",
+    } else if (type == 1) {
+        String[] cKeys = {"br", "bl", "tr", "tl"};
+        int currentLoc = prefs.getInt(prefix + id + "_loc", 0);
+        if (currentLoc < 0 || currentLoc >= cKeys.length) currentLoc = 0;
+        for(int i=0; i<cKeys.length; i++) prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[i], false).apply();
+        prefs.edit().putBoolean(prefix + id + "_preview_" + cKeys[currentLoc], true).apply();
+        content.addView(createSectionTitle("CẤU HÌNH CORNER (FORMAT C)"));
+        content.addView(buildCornerPairSelector(prefix, id));
+        content.addView(buildDualSideSwitch(prefix, id, false));
+        previewListenerHolder[0] = (p, k) -> {
+            if (k == null || !k.startsWith(prefix + id + "_")) return;
+            int loc = prefs.getInt(prefix + id + "_loc", 0);
+            if (loc < 0 || loc >= cKeys.length) loc = 0;
+            boolean previewOn = prefs.getBoolean(prefix + id + "_preview_" + cKeys[loc], false);
+            if (!previewOn) { removeLivePreviewOverlay(); return; }
+            updateLivePreviewCorner(loc, prefix + id + "_");
+        };
+        prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
+        previewListenerHolder[0].onSharedPreferenceChanged(prefs, prefix + id + "_x");
+        
+        content.addView(buildTwinButtonRow("Hiển thị", prefix + id + "_vis_mode",
             new String[]{"Hiện hoàn toàn", "Tàng hình", "Ẩn vô hình"}, 0));
         content.addView(buildTwinButtonRow("Cảm ứng", prefix + id + "_pri_mode",
             new String[]{"Ưu tiên (Khóa cứng)", "Nhường OS (Xuyên thấu)"}, 0));
@@ -9403,121 +9413,124 @@ content.addView(buildDualSideSwitch(prefix, id, false));
             new String[]{T("Auto","Tự động"), T("Diagonal Up","Chéo lên"), T("Diagonal Down","Chéo xuống"),
                 T("Straight Up","Thẳng lên"), T("Straight Down","Thẳng xuống"),
                 T("Straight Left","Thẳng trái"), T("Straight Right","Thẳng phải")}, 0));
+                
         content.addView(createComboDropdown("Hình dáng Góc", prefix + id + "_shape", new String[]{"Bo Cong", "Thẳng Ngang", "Thẳng Dọc"}, 0));
         content.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix + id + "_w", 2500, 100));
         content.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix + id + "_h", 2500, 100));
         content.addView(createSignedSlider("Khoảng cách cặp (-=gần thêm, +=xa ra)", prefix + id + "_pair_spacing", -300, 900, 0));
         content.addView(createSlider("Di chuyển Dọc (Y)", prefix + id + "_y", 2500, 0));
         content.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix + id + "_moon_w", 2500, 100));
-content.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix + id + "_moon_h", 2500, 100));
-content.addView(createSlider("Di chuyển Trăng Non Ngang (X) (1250=Giữa)", prefix + id + "_moon_x", 2500, 1250));
-content.addView(createSlider("Di chuyển Trăng Non Dọc (Y) (1250=Giữa)", prefix + id + "_moon_y", 2500, 1250));
-content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 80));
-            content.addView(createSlider("Độ cong TRĂNG NON", prefix + id + "_moon_rad", 1000, 80));
-        } else if (type == 2) {
-            content.addView(createSectionTitle("📦 DATA PACK LENAP (CORE CONFIG)"));
-            content.addView(createComboDropdown("POSITION (Vị trí Panel)", prefix + id + "_pos", PANEL_POS_NAMES, 0));
-            content.addView(createSectionTitle("1. COMMON & COLLECTIONS"));
-            content.addView(createComboDropdown("Color (Màu)", prefix + id + "_color_idx", PANEL_COLOR_NAMES, 0));
-            content.addView(createSlider("Icon Size (Kích thước)", prefix + id + "_icon_size", 180, 110));
-            content.addView(createSlider("Columns (Số cột 1-9)", prefix + id + "_cols", 9, 4));            
-            String appsStr = prefs.getString(prefix + id + "_apps", "");
-            String actsStr = prefs.getString(prefix + id + "_acts", "");
-            String scsStr = prefs.getString(prefix + id + "_shortcuts", "");
-            int totalCount = (appsStr.isEmpty() ? 0 : appsStr.split(",").length) +
-                             (actsStr.isEmpty() ? 0 : actsStr.split(",").length) +
-                             (scsStr.isEmpty() ? 0 : scsStr.split(",").length);
-            Button btnAddItems = new Button(this);
-            btnAddItems.setText("✨ COLLECT (" + totalCount + ")");
-            btnAddItems.setBackground(getRounded("#8AB4F8", 20f));
-            btnAddItems.setTextColor(Color.BLACK);
-            btnAddItems.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-            LinearLayout.LayoutParams lpAdd = new LinearLayout.LayoutParams(-1, 130);
-            lpAdd.setMargins(0, 20, 0, 20);
-            btnAddItems.setLayoutParams(lpAdd);
-            btnAddItems.setOnClickListener(v -> showCombinedPanelPicker(id, () -> {
-                String nApps = prefs.getString(prefix + id + "_apps", "");
-                String nActs = prefs.getString(prefix + id + "_acts", "");
-                String nScs = prefs.getString(prefix + id + "_shortcuts", "");
-                int nTotal = (nApps.isEmpty() ? 0 : nApps.split(",").length) +
-                             (nActs.isEmpty() ? 0 : nActs.split(",").length) +
-                             (nScs.isEmpty() ? 0 : nScs.split(",").length);
-                btnAddItems.setText("✨ COLLECT (" + nTotal + ")");
-            }));
-            content.addView(btnAddItems);
-LinearLayout panelCfgBody = new LinearLayout(this);
-panelCfgBody.setOrientation(LinearLayout.VERTICAL);
-panelCfgBody.setPadding(20, 10, 20, 20);
-panelCfgBody.setVisibility(View.GONE);
-TextView panelCfgHeader = new TextView(this);
-panelCfgHeader.setText("📁 PANEL CONFIG (Chạm để mở ▼)");
-panelCfgHeader.setTextColor(Color.parseColor("#8AB4F8"));
-panelCfgHeader.setPadding(30, 30, 30, 30);
-panelCfgHeader.setTextSize(16);
-panelCfgHeader.setBackground(getRounded("#202124", 25f));
-LinearLayout panelCfgDrawer = new LinearLayout(this);
-panelCfgDrawer.setOrientation(LinearLayout.VERTICAL);
-LinearLayout.LayoutParams pcLp = new LinearLayout.LayoutParams(-1, -2);
-pcLp.setMargins(0, 15, 0, 5);
-panelCfgDrawer.setLayoutParams(pcLp);
-panelCfgDrawer.addView(panelCfgHeader);
-panelCfgDrawer.addView(panelCfgBody);
-content.addView(panelCfgDrawer);
+        content.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix + id + "_moon_h", 2500, 100));
+        content.addView(createSlider("Di chuyển Trăng Non Ngang (X) (1250=Giữa)", prefix + id + "_moon_x", 2500, 1250));
+        content.addView(createSlider("Di chuyển Trăng Non Dọc (Y) (1250=Giữa)", prefix + id + "_moon_y", 2500, 1250));
+        content.addView(createSlider("Độ cong BO VIÊN", prefix + id + "_rad", 1000, 80));
+        content.addView(createSlider("Độ cong TRĂNG NON", prefix + id + "_moon_rad", 1000, 80));
+    } else if (type == 2) {
+        content.addView(createSectionTitle("📦 DATA PACK LENAP (CORE CONFIG)"));
+        content.addView(createComboDropdown("POSITION (Vị trí Panel)", prefix + id + "_pos", PANEL_POS_NAMES, 0));
+        content.addView(createSectionTitle("1. COMMON & COLLECTIONS"));
+        content.addView(createComboDropdown("Color (Màu)", prefix + id + "_color_idx", PANEL_COLOR_NAMES, 0));
+        content.addView(createSlider("Icon Size (Kích thước)", prefix + id + "_icon_size", 180, 110));
+        content.addView(createSlider("Columns (Số cột 1-9)", prefix + id + "_cols", 9, 4));            
+        String appsStr = prefs.getString(prefix + id + "_apps", "");
+        String actsStr = prefs.getString(prefix + id + "_acts", "");
+        String scsStr = prefs.getString(prefix + id + "_shortcuts", "");
+        int totalCount = (appsStr.isEmpty() ? 0 : appsStr.split(",").length) +
+                         (actsStr.isEmpty() ? 0 : actsStr.split(",").length) +
+                         (scsStr.isEmpty() ? 0 : scsStr.split(",").length);
+        Button btnAddItems = new Button(this);
+        btnAddItems.setText("✨ COLLECT (" + totalCount + ")");
+        btnAddItems.setBackground(getRounded("#8AB4F8", 20f));
+        btnAddItems.setTextColor(Color.BLACK);
+        btnAddItems.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams lpAdd = new LinearLayout.LayoutParams(-1, 130);
+        lpAdd.setMargins(0, 20, 0, 20);
+        btnAddItems.setLayoutParams(lpAdd);
+        btnAddItems.setOnClickListener(v -> showCombinedPanelPicker(id, () -> {
+            String nApps = prefs.getString(prefix + id + "_apps", "");
+            String nActs = prefs.getString(prefix + id + "_acts", "");
+            String nScs = prefs.getString(prefix + id + "_shortcuts", "");
+            int nTotal = (nApps.isEmpty() ? 0 : nApps.split(",").length) +
+                         (nActs.isEmpty() ? 0 : nActs.split(",").length) +
+                         (nScs.isEmpty() ? 0 : nScs.split(",").length);
+            btnAddItems.setText("✨ COLLECT (" + nTotal + ")");
+        }));
+        content.addView(btnAddItems);
+        LinearLayout panelCfgBody = new LinearLayout(this);
+        panelCfgBody.setOrientation(LinearLayout.VERTICAL);
+        panelCfgBody.setPadding(20, 10, 20, 20);
+        panelCfgBody.setVisibility(View.GONE);
+        TextView panelCfgHeader = new TextView(this);
+        panelCfgHeader.setText("📁 PANEL CONFIG (Chạm để mở ▼)");
+        panelCfgHeader.setTextColor(Color.parseColor("#8AB4F8"));
+        panelCfgHeader.setPadding(30, 30, 30, 30);
+        panelCfgHeader.setTextSize(16);
+        panelCfgHeader.setBackground(getRounded("#202124", 25f));
+        LinearLayout panelCfgDrawer = new LinearLayout(this);
+        panelCfgDrawer.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams pcLp = new LinearLayout.LayoutParams(-1, -2);
+        pcLp.setMargins(0, 15, 0, 5);
+        panelCfgDrawer.setLayoutParams(pcLp);
+        panelCfgDrawer.addView(panelCfgHeader);
+        panelCfgDrawer.addView(panelCfgBody);
+        content.addView(panelCfgDrawer);
 
-final boolean[] panelCfgInflated = {false};
-panelCfgHeader.setOnClickListener(v -> {
-    boolean willOpen = panelCfgBody.getVisibility() == View.GONE;
-    if (willOpen && !panelCfgInflated[0]) {
-        panelCfgInflated[0] = true;
-        panelCfgBody.addView(createCycleRow("Icon Style", prefix + id +
-"_icon_shape", new String[]{"Circle", "Squircle", "Pebble", "Rough", "Pentacle", "System"}));
-        panelCfgBody.addView(createCycleRow("Show Name (Hiện tên)", prefix + id + "_show_name", new String[]{"Không", "Có"}));
-        panelCfgBody.addView(createCycleRow(T("Touch Sound","Âm chạm"), prefix + id + "_snd", new String[]{"Tắt", "Bật"}));
-        panelCfgBody.addView(createSlider("Opacity (Độ trong suốt)", prefix + id + "_alpha", 255, 200));
-        panelCfgBody.addView(createSlider("Length (Chiều dài)", prefix + id + "_panel_length", 3000, 700));
-        panelCfgBody.addView(createSlider("Width (Bề dày)", prefix + id + "_size", 2500, 700));
-        panelCfgBody.addView(createSlider("Corner Radius (Bo góc)", prefix + id + "_panel_radius", 60, 24));
-        panelCfgBody.addView(createSlider(T("Move Horizontal (X) — 500=Center","Di chuyển Ngang (X) — 500=Giữa"), prefix + id + "_offset_x", 1000, 500));
-        panelCfgBody.addView(createSlider(T("Move Vertical (Y) — 500=Center","Di chuyển Dọc (Y) — 500=Giữa"), prefix + id + "_offset_y", 1000, 500));
-    }
-    panelCfgBody.setVisibility(willOpen ? View.VISIBLE : View.GONE);
-    panelCfgHeader.setText(willOpen ? "📂 PANEL CONFIG (Chạm để đóng ▲)" : "📁 PANEL CONFIG (Chạm để mở ▼)");
-    panelCfgHeader.setBackground(getRounded(willOpen ? "#333333" : "#202124", 25f));
-});
-LinearLayout handleCfgBody = new LinearLayout(this);
-handleCfgBody.setOrientation(LinearLayout.VERTICAL);
-handleCfgBody.setPadding(20, 10, 20, 20);
-handleCfgBody.setVisibility(View.GONE);
-TextView handleCfgHeader = new TextView(this);
-handleCfgHeader.setText("📁 HANDLE CONFIG (Chạm để mở ▼)");
-handleCfgHeader.setTextColor(Color.parseColor("#FFC107"));
-handleCfgHeader.setPadding(30, 30, 30, 30);
-handleCfgHeader.setTextSize(16);
-handleCfgHeader.setBackground(getRounded("#202124", 25f));
-LinearLayout handleCfgDrawer = new LinearLayout(this);
-handleCfgDrawer.setOrientation(LinearLayout.VERTICAL);
-LinearLayout.LayoutParams hcLp2 = new LinearLayout.LayoutParams(-1, -2);
-hcLp2.setMargins(0, 10, 0, 15);
-handleCfgDrawer.setLayoutParams(hcLp2);
-handleCfgDrawer.addView(handleCfgHeader);
-handleCfgDrawer.addView(handleCfgBody);
-content.addView(handleCfgDrawer);
-final boolean[] handleCfgInflated = {false};
-handleCfgHeader.setOnClickListener(v -> {
-    boolean willOpen = handleCfgBody.getVisibility() == View.GONE;
-    if (willOpen && !handleCfgInflated[0]) {
-        handleCfgInflated[0] = true;
-        handleCfgBody.addView(createCycleRow("Visibility Handle", prefix + id + "_vis", new String[]{"Cục Bộ (chỉ Design)", "Toàn Cục (mọi nơi)"}));
-        handleCfgBody.addView(createSlider("Handle Opacity", prefix + id + "_handle_alpha", 255, 255));
-        handleCfgBody.addView(createSlider("Handle Length", prefix + id + "_thick", 400, 200));
-        handleCfgBody.addView(createSlider("Handle Width", prefix + id + "_handle_width", 200, 56));
-        handleCfgBody.addView(createSlider("Handle Radius", prefix + id + "_handle_radius", 100, 28));
-    }
-    handleCfgBody.setVisibility(willOpen ? View.VISIBLE : View.GONE);
-    handleCfgHeader.setText(willOpen ? "📂 HANDLE CONFIG (Chạm để đóng ▲)" : "📁 HANDLE CONFIG (Chạm để mở ▼)");
-    handleCfgHeader.setBackground(getRounded(willOpen ? "#333333" : "#202124", 25f));
-});
+        final boolean[] panelCfgInflated = {false};
+        panelCfgHeader.setOnClickListener(v -> {
+            boolean willOpen = panelCfgBody.getVisibility() == View.GONE;
+            if (willOpen && !panelCfgInflated[0]) {
+                panelCfgInflated[0] = true;
+                panelCfgBody.addView(createCycleRow("Icon Style", prefix + id + "_icon_shape", new String[]{"Circle", "Squircle", "Pebble", "Rough", "Pentacle", "System"}));
+                panelCfgBody.addView(createCycleRow("Show Name (Hiện tên)", prefix + id + "_show_name", new String[]{"Không", "Có"}));
+                panelCfgBody.addView(createCycleRow(T("Touch Sound","Âm chạm"), prefix + id + "_snd", new String[]{"Tắt", "Bật"}));
+                panelCfgBody.addView(createSlider("Opacity (Độ trong suốt)", prefix + id + "_alpha", 255, 200));
+                panelCfgBody.addView(createSlider("Length (Chiều dài)", prefix + id + "_panel_length", 3000, 700));
+                panelCfgBody.addView(createSlider("Width (Bề dày)", prefix + id + "_size", 2500, 700));
+                panelCfgBody.addView(createSlider("Corner Radius (Bo góc)", prefix + id + "_panel_radius", 60, 24));
+                panelCfgBody.addView(createSlider(T("Move Horizontal (X) — 500=Center","Di chuyển Ngang (X) — 500=Giữa"), prefix + id + "_offset_x", 1000, 500));
+                panelCfgBody.addView(createSlider(T("Move Vertical (Y) — 500=Center","Di chuyển Dọc (Y) — 500=Giữa"), prefix + id + "_offset_y", 1000, 500));
+            }
+            panelCfgBody.setVisibility(willOpen ? View.VISIBLE : View.GONE);
+            panelCfgHeader.setText(willOpen ? "📂 PANEL CONFIG (Chạm để đóng ▲)" : "📁 PANEL CONFIG (Chạm để mở ▼)");
+            panelCfgHeader.setBackground(getRounded(willOpen ? "#333333" : "#202124", 25f));
+        });
+        
+        LinearLayout handleCfgBody = new LinearLayout(this);
+        handleCfgBody.setOrientation(LinearLayout.VERTICAL);
+        handleCfgBody.setPadding(20, 10, 20, 20);
+        handleCfgBody.setVisibility(View.GONE);
+        TextView handleCfgHeader = new TextView(this);
+        handleCfgHeader.setText("📁 HANDLE CONFIG (Chạm để mở ▼)");
+        handleCfgHeader.setTextColor(Color.parseColor("#FFC107"));
+        handleCfgHeader.setPadding(30, 30, 30, 30);
+        handleCfgHeader.setTextSize(16);
+        handleCfgHeader.setBackground(getRounded("#202124", 25f));
+        LinearLayout handleCfgDrawer = new LinearLayout(this);
+        handleCfgDrawer.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams hcLp2 = new LinearLayout.LayoutParams(-1, -2);
+        hcLp2.setMargins(0, 10, 0, 15);
+        handleCfgDrawer.setLayoutParams(hcLp2);
+        handleCfgDrawer.addView(handleCfgHeader);
+        handleCfgDrawer.addView(handleCfgBody);
+        content.addView(handleCfgDrawer);
+        
+        final boolean[] handleCfgInflated = {false};
+        handleCfgHeader.setOnClickListener(v -> {
+            boolean willOpen = handleCfgBody.getVisibility() == View.GONE;
+            if (willOpen && !handleCfgInflated[0]) {
+                handleCfgInflated[0] = true;
+                handleCfgBody.addView(createCycleRow("Visibility Handle", prefix + id + "_vis", new String[]{"Cục Bộ (chỉ Design)", "Toàn Cục (mọi nơi)"}));
+                handleCfgBody.addView(createSlider("Handle Opacity", prefix + id + "_handle_alpha", 255, 255));
+                handleCfgBody.addView(createSlider("Handle Length", prefix + id + "_thick", 400, 200));
+                handleCfgBody.addView(createSlider("Handle Width", prefix + id + "_handle_width", 200, 56));
+                handleCfgBody.addView(createSlider("Handle Radius", prefix + id + "_handle_radius", 100, 28));
+            }
+            handleCfgBody.setVisibility(willOpen ? View.VISIBLE : View.GONE);
+            handleCfgHeader.setText(willOpen ? "📂 HANDLE CONFIG (Chạm để đóng ▲)" : "📁 HANDLE CONFIG (Chạm để mở ▼)");
+            handleCfgHeader.setBackground(getRounded(willOpen ? "#333333" : "#202124", 25f));
+        });
     }    
+    
     LinearLayout footer = new LinearLayout(this);
     footer.setOrientation(LinearLayout.HORIZONTAL);
     footer.setPadding(0, 40, 0, 0);
@@ -9530,28 +9543,30 @@ handleCfgHeader.setOnClickListener(v -> {
     slp.setMargins(20, 0, 0, 0); bSave.setLayoutParams(slp);    
     footer.addView(bCancel); footer.addView(bSave);
     root.addView(footer);    
+    
     bCancel.setOnClickListener(v -> d.dismiss());
     bSave.setOnClickListener(v -> {
         String name = etName.getText().toString();
-if (type == 2) prefs.edit().putString(prefix + id + "_name", name.isEmpty() ? "Data Pack" : name).apply();
+        if (type == 2) prefs.edit().putString(prefix + id + "_name", name.isEmpty() ? "Data Pack" : name).apply();
         if (type == 2) {
             renderPanelDesign();
             sendBroadcast(new Intent("com.manhmoc.edgebar.PANEL_CONFIG_CHANGED"));
         } else {
-            reapplyPackIfEnabled(type, id); // [MỚI] — ĐÂY LÀ DÒNG FIX CHÍNH CỦA BUG
+            reapplyPackIfEnabled(type, id);
             renderRulesList();
             renderSliders();
         }
         d.dismiss();
     });
+    
     d.setOnDismissListener(dlg -> {
-    if (previewListenerHolder[0] != null) prefs.unregisterOnSharedPreferenceChangeListener(previewListenerHolder[0]);
-    removeLivePreviewOverlay();
-    if (type == 2) {
-        prefs.edit().putBoolean(prefix + id + "_preview_handle", false).apply();
-    }
-});
-d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        if (previewListenerHolder[0] != null) prefs.unregisterOnSharedPreferenceChangeListener(previewListenerHolder[0]);
+        removeLivePreviewOverlay();
+        if (type == 2) {
+            prefs.edit().putBoolean(prefix + id + "_preview_handle", false).apply();
+        }
+    });
+    d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     d.setContentView(root); d.show();
 }
 private void openEmptyPillDialog() {
