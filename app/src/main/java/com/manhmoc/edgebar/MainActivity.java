@@ -1064,9 +1064,10 @@ private String[] getVolKeyActLabs() {
                         else if (v instanceof Long) ed.putLong(key, (Long)v);
                         else if (v instanceof String) ed.putString(key, (String)v);
                     }
-                    ed.putBoolean("needs_sanitize", true)
+ed.putBoolean("needs_sanitize", true)
+  .putBoolean("legacy_pack_rules_migrated_v1", false)
   .putBoolean("action_pack_migrated_v1", false)
- .remove("lock_applied_packs").remove("home_applied_packs").remove("homacc_applied_packs")
+.remove("lock_applied_packs").remove("home_applied_packs").remove("homacc_applied_packs")
   .commit();
                     Toast.makeText(this, T("Restored Successfully!", "Đã Khôi Phục Cấu Hình!"), Toast.LENGTH_LONG).show();
                     recreate();
@@ -1517,6 +1518,7 @@ for (java.util.Map.Entry<String, ?> e : allSplit.entrySet()) {
 if (needSplitFix) ed.apply();
 TwinPairStore.migrateIfNeeded(prefs);
 TwinPairStore.ensureDefaultPacks(prefs);
+migrateLegacyGesturesToPackRules();
 if (prefs.getBoolean("needs_sanitize", false)) sanitizeAllPrefsAfterRestore();
     rootLayout = new RelativeLayout(this);
     rootLayout.setBackgroundColor(Color.parseColor("#000000"));
@@ -2566,6 +2568,29 @@ private void renderAppliedPacksForSpaceInto(LinearLayout container, String prefi
         flow.add(buildMotherPackCard(prefix, itemKey, tabState), getPackSpanUnits("ui_span_mother_" + prefix + itemKey));
     flow.finish();
 }
+private LinearLayout buildMotherOptCol(String sBase, boolean isBar) {
+    int vis = TwinPairStore.readOrValue(prefs, sBase + "vis_mode", true, "acc", 0);
+    int pri = TwinPairStore.readOrValue(prefs, sBase + "pri_mode", true, "acc", 0);
+    int lk = TwinPairStore.readOrValue(prefs, sBase + "lockmode", true, "acc", 1);
+    StringBuilder sb = new StringBuilder();
+    sb.append(vis == 0 ? "👁️" : (vis == 1 ? "👻" : "🚫")).append("\n");
+    sb.append(pri == 0 ? "🔒" : "🌫️").append("\n");
+    sb.append(lk == 0 ? "☠️" : "♾️");
+    if (isBar) {
+        int ic = TwinPairStore.readOrValue(prefs, sBase + "icon_en", true, "acc", 0);
+        sb.append("\n").append(ic == 1 ? "🎭" : "🕸️");
+    }
+    LinearLayout col = new LinearLayout(this);
+    col.setOrientation(LinearLayout.VERTICAL);
+    col.setGravity(Gravity.CENTER);
+    col.setPadding(0, 0, 15, 0);
+    TextView t = new TextView(this);
+    t.setText(sb.toString());
+    t.setTextSize(15);
+    t.setLineSpacing(0, 1.2f);
+    col.addView(t);
+    return col;
+}
 private View buildMotherPackCard(String prefix, String itemKey, int tabState) {
     final boolean isBar = itemKey.startsWith("bar_");
     final String id = itemKey.substring(isBar ? 4 : 7);
@@ -2598,8 +2623,8 @@ private View buildMotherPackCard(String prefix, String itemKey, int tabState) {
     });
     Button btnTrig = stdCardBtn("TRIGGER", ACCENT_COLOR, Color.BLACK);
     btnTrig.setOnClickListener(v -> openPackRuleSpace(itemKey, tabState));
-
-    LinearLayout card = buildStdPackCard(null, packDisplayName(isBar, id), stats, sides, swEn, btnTrig);
+LinearLayout card = buildStdPackCard(buildMotherOptCol(sBase, isBar),
+    (isBar ? "BAR · " : "CORNER · ") + packDisplayName(isBar, id), stats, sides, swEn, btnTrig);
     TextView tvSides = card.findViewWithTag("line3");
     if (tvSides != null) tvSides.setTextSize(12f);
     card.setOnClickListener(v -> openDataPackEditor(isBar ? 0 : 1, id, prefix));
@@ -2608,6 +2633,102 @@ private View buildMotherPackCard(String prefix, String itemKey, int tabState) {
         return true;
     });
     return wrapPackCard(card, itemKey);
+}
+private void migrateLegacyGesturesToPackRules() {
+    if (prefs.getBoolean("legacy_pack_rules_migrated_v1", false)) return;
+    for (String space : new String[]{"lock_", "home_"}) {
+        for (String itemKey : TwinPairStore.DEFAULT_DISPLAY_ORDER) {
+            boolean isBar = itemKey.startsWith("bar_");
+            String id = itemKey.substring(isBar ? 4 : 7);
+            String[] ids = isBar ? TwinPairStore.DEFAULT_BAR_PACK_IDS : TwinPairStore.DEFAULT_CORNER_PACK_IDS;
+            String[] pairs = isBar ? TwinPairStore.DEFAULT_BAR_PAIR_IDS : TwinPairStore.CORNER_PAIR_IDS;
+            String pairId = null;
+            for (int i = 0; i < ids.length; i++) if (ids[i].equals(id)) pairId = pairs[i];
+            String[] m = pairId == null ? null : TwinPairStore.getMembers(pairId, isBar);
+            if (m == null) continue;
+            migrateLegacyOnePack(space, itemKey, isBar, id, pairId, m);
+        }
+    }
+    prefs.edit().putBoolean("legacy_pack_rules_migrated_v1", true).apply();
+}
+
+private void migrateLegacyOnePack(String space, String itemKey, boolean isBar, String id, String pairId, String[] m) {
+    String[] comp = new String[2];
+    for (int s = 0; s < 2; s++) comp[s] = isBar ? space + m[s] : space + "corner_" + m[s];
+    boolean hasLegacy = prefs.contains(comp[0] + "_en") || prefs.contains(comp[1] + "_en");
+    ensureScopedPack(space, isBar, id);
+    ensureScopedRules(space, itemKey);
+    SharedPreferences.Editor ed = prefs.edit();
+
+    if (hasLegacy) {
+        String pk = space + (isBar ? "pack_bar_" : "pack_corner_");
+        boolean enA = prefs.getBoolean(comp[0] + "_en", false);
+        boolean enB = prefs.getBoolean(comp[1] + "_en", false);
+        ed.putBoolean(pk + pairId + "_" + TwinPairStore.F_A_EN, enA)
+          .putBoolean(pk + pairId + "_" + TwinPairStore.F_B_EN, enB)
+          .putBoolean(space + itemKey + "_en", enA || enB);
+        String sBase = pk + id + "_";
+        if (prefs.contains(comp[0] + "_w")) ed.putInt(sBase + "w", prefs.getInt(comp[0] + "_w", isBar ? 300 : 100));
+        if (prefs.contains(comp[0] + "_h")) ed.putInt(sBase + "h", prefs.getInt(comp[0] + "_h", isBar ? 60 : 100));
+        if (prefs.contains(comp[0] + "_y")) ed.putInt(sBase + "y", prefs.getInt(comp[0] + "_y", 0));
+        if (isBar && prefs.contains(comp[0] + "_alpha")) ed.putInt(sBase + "alpha", prefs.getInt(comp[0] + "_alpha", 50));
+    }
+
+    String listKey = rulesKey(space, itemKey);
+    if (getDynamicIds(listKey).isEmpty()) {
+        java.util.Map<String, java.util.List<String>> groups = new java.util.LinkedHashMap<>();
+        java.util.Map<String, String> srcKeys = new java.util.HashMap<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (int s = 0; s < 2; s++) {
+            for (String g : C_GESTURES) {
+                if (seen.contains(g)) continue;
+                String k = comp[s] + "_" + g;
+                String acts = prefs.getString(k, "NONE");
+                if (acts == null || acts.isEmpty() || acts.equals("NONE")) continue;
+                boolean dual = prefs.getBoolean(k + "_dual", false);
+                String lim = dual ? prefs.getString(k + "_lim", "NONE") : "";
+                String sig = acts + "|" + lim + "|" + prefs.getString(k + "_launch_pkg", "") + "|"
+                    + prefs.getString(k + "_shortcut_id", "") + "|" + prefs.getBoolean(k + "_vib", true) + "|"
+                    + prefs.getBoolean(k + "_snd", false) + "|" + prefs.getBoolean(k + "_anim", true) + "|"
+                    + prefs.getBoolean(k + "_jump_on", true) + "|" + prefs.getBoolean(k + "_os", false);
+                seen.add(g);
+                if (!groups.containsKey(sig)) { groups.put(sig, new ArrayList<>()); srcKeys.put(sig, k); }
+                groups.get(sig).add(g);
+            }
+        }
+        List<String> newIds = new ArrayList<>();
+        for (java.util.Map.Entry<String, java.util.List<String>> e : groups.entrySet()) {
+            String k = srcKeys.get(e.getKey());
+            String rId = java.util.UUID.randomUUID().toString().substring(0, 8);
+            String px = "prule_" + rId + "_";
+            String acts = prefs.getString(k, "NONE");
+            boolean dual = prefs.getBoolean(k + "_dual", false);
+            String lim = dual ? prefs.getString(k + "_lim", "NONE") : "";
+            boolean hasLim = !lim.isEmpty() && !lim.equals("NONE");
+            ed.putString(px + "gestures", TextUtils.join(",", e.getValue()))
+              .putString(px + "acts", hasLim ? mergeCsv(acts, lim) : acts)
+              .putString(px + "launch_pkg", prefs.getString(k + "_launch_pkg", ""))
+              .putString(px + "shortcut_id", prefs.getString(k + "_shortcut_id", ""))
+              .putBoolean(px + "vib", prefs.getBoolean(k + "_vib", true))
+              .putBoolean(px + "snd", prefs.getBoolean(k + "_snd", false))
+              .putBoolean(px + "anim", prefs.getBoolean(k + "_anim", true))
+              .putBoolean(px + "jump_on", prefs.getBoolean(k + "_jump_on", true))
+              .putBoolean(px + "os", prefs.getBoolean(k + "_os", false))
+              .putBoolean(px + "en", true);
+            if (hasLim) {
+                ed.putBoolean(px + "dual", true)
+                  .putString(px + "acts_l", acts).putString(px + "l_kind", "FULL")
+                  .putString(px + "acts_r", lim).putString(px + "r_kind", "COMMON")
+                  .putString(px + "launch_pkg_l", prefs.getString(k + "_launch_pkg", ""))
+                  .putString(px + "launch_pkg_r", prefs.getString(k + "_lim_launch_pkg", ""))
+                  .putString(px + "shortcut_id_l", prefs.getString(k + "_shortcut_id", ""))
+                  .putString(px + "shortcut_id_r", prefs.getString(k + "_lim_shortcut_id", ""));
+            }
+            newIds.add(rId);
+        }
+        if (!newIds.isEmpty()) ed.putString(listKey, TextUtils.join(",", newIds));
+    }
+    ed.apply();
 }
 private String cloneDataPackDeep(String itemKey) {
     boolean isBar = itemKey.startsWith("bar_");
@@ -4384,8 +4505,8 @@ private void applyBarPackToSpace(String id, String targetPrefix) {
     int spacing = prefs.getInt(src + "pair_spacing", 0);
     String icons = prefs.getString(src + "icons", "");
     boolean spreadY = TwinPairStore.signOfBarPair(pairId) == 0;
-    int xs = spreadY ? 0 : -spacing / 2;
-    int ys = spreadY ? y - spacing / 2 : y;
+    int shiftX = prefs.getInt(src + "x", 0);
+    int half = spacing / 2;
     boolean isLock = targetPrefix.equals("lock_");
     SharedPreferences.Editor ed = prefs.edit();
     for (int s = 0; s < 2; s++) {
@@ -4393,6 +4514,8 @@ private void applyBarPackToSpace(String id, String targetPrefix) {
         boolean en = TwinPairStore.isSideEnabled(prefs, targetPrefix + "pack_bar_", pairId, isA, true);
         boolean iconOn = sideVal(src + "icon_en", isA, false, 0) == 1 || sideVal(src + "icon_en", isA, true, 0) == 1;
         String bk = targetPrefix + m[s] + "_";
+        int xs = spreadY ? shiftX : (isA ? shiftX : -shiftX) - half;
+        int ys = spreadY ? (isA ? y : -y) - half : y;
         ed.putBoolean(bk + "en", en).putInt(bk + "alpha", alpha).putInt(bk + "w", w).putInt(bk + "h", h)
           .putInt(bk + "x", xs).putInt(bk + "y", ys).putString(bk + "icons", iconOn ? icons : "");
         writeSideFields(ed, src, bk, isA, isLock);
@@ -4410,7 +4533,8 @@ private void applyCornerPackToSpace(String id, String targetPrefix) {
     String pairId = TwinPairStore.pairIdForCornerLoc(loc);
     String[] m = TwinPairStore.getMembers(pairId, false);
     if (m == null) return;
-    int xs = -prefs.getInt(src + "pair_spacing", 0) / 2;
+    int shiftX = prefs.getInt(src + "x", 0);
+    int half = prefs.getInt(src + "pair_spacing", 0) / 2;
     boolean isLock = targetPrefix.equals("lock_");
     SharedPreferences.Editor ed = prefs.edit();
     for (int s = 0; s < 2; s++) {
@@ -4421,7 +4545,7 @@ private void applyCornerPackToSpace(String id, String targetPrefix) {
           .putInt(ck + "shape", prefs.getInt(src + "shape", 0))
           .putInt(ck + "w", prefs.getInt(src + "w", 100))
           .putInt(ck + "h", prefs.getInt(src + "h", 100))
-          .putInt(ck + "x", xs)
+          .putInt(ck + "x", (isA ? shiftX : -shiftX) - half)
           .putInt(ck + "y", prefs.getInt(src + "y", 0))
           .putInt(ck + "moon_w", prefs.getInt(src + "moon_w", 100))
           .putInt(ck + "moon_h", prefs.getInt(src + "moon_h", 100))
@@ -9224,7 +9348,8 @@ private void openDataPackEditor(int type, String id, String space) {
         content.addView(createSlider(T("Width", "Chiều ngang"), prefix + id + "_w", 3000, 300));
         content.addView(createSlider(T("Height", "Chiều dọc"), prefix + id + "_h", 3000, 60));
         content.addView(createSignedSlider(T("Pair gap (- closer, + wider)", "Khoảng cách cặp (- gần, + xa)"), prefix + id + "_pair_spacing", -300, 900, 0));
-        content.addView(createSlider(T("Position Y", "Tọa độ Y"), prefix + id + "_y", 3000, 0));
+        content.addView(createSignedSlider(T("Position X (whole pair)", "Tọa độ X (cả cặp)"), prefix + id + "_x", -1500, 1500, 0));
+        content.addView(createSignedSlider(T("Position Y (whole pair)", "Tọa độ Y (cả cặp)"), prefix + id + "_y", -3000, 3000, 0));
         previewListenerHolder[0] = makePackLiveListener(prefix + id + "_", type, id);
         prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
     } else if (type == 1) {
@@ -9237,6 +9362,7 @@ private void openDataPackEditor(int type, String id, String space) {
         content.addView(createSlider("Kéo giãn Ngang Vỏ (X)", prefix + id + "_w", 2500, 100));
         content.addView(createSlider("Kéo giãn Dọc Vỏ (Y)", prefix + id + "_h", 2500, 100));
         content.addView(createSignedSlider(T("Pair gap (- closer, + wider)", "Khoảng cách cặp (- gần, + xa)"), prefix + id + "_pair_spacing", -300, 900, 0));
+        content.addView(createSignedSlider(T("Position X (whole pair)", "Tọa độ X (cả cặp)"), prefix + id + "_x", -1500, 1500, 0));
         content.addView(createSlider("Di chuyển Dọc (Y)", prefix + id + "_y", 2500, 0));
         content.addView(createSlider("Kéo giãn Ngang Lõi Trăng Non (X)", prefix + id + "_moon_w", 2500, 100));
         content.addView(createSlider("Kéo giãn Dọc Lõi Trăng Non (Y)", prefix + id + "_moon_h", 2500, 100));
