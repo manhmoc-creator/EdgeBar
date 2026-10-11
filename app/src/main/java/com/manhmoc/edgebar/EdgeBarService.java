@@ -2452,9 +2452,6 @@ private void hideSomeOverlay(String key) {
 
     private void removeYtdlOverlay() {
     if (ytdlOverlay == null) return;
-    // [FIX GBOARD BỊ CHẶN] Bắt buộc giải phóng IME TRƯỚC khi gỡ cửa sổ, nếu không
-    // InputMethodManagerService sẽ "kẹt" nghĩ cửa sổ này vẫn giữ focus bàn phím,
-    // khiến Gboard không hiện được ở bất kỳ app nào khác trên toàn máy.
     try {
         android.view.inputmethod.InputMethodManager imm =
             (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
@@ -2469,9 +2466,6 @@ private void hideSomeOverlay(String key) {
     try { wm.removeView(ytdlOverlay); } catch (Exception ignored) {}
     ytdlOverlay = null;
 }
-    // Battery opt Pixel 2XL: CHỈ đăng ký callback khi user thực sự gán ít nhất
-// 1 rule cho "fingerprint" (ở tab HOMACC hoặc HOME). Nếu không có rule nào,
-// KHÔNG đăng ký — tránh giữ sensor driver ở trạng thái lắng nghe vô ích.
 private boolean hasFingerprintRule() {
     String[] gestures = {"up","down","left","right","up_hold","down_hold","left_hold","right_hold"};
     for (String prefix : new String[]{"home_fingerprint_", "homacc_fingerprint_", "texture_fingerprint_"}) {
@@ -2486,11 +2480,6 @@ private void refreshFingerprintRegistration() {
     boolean needed = hasFingerprintRule();
     if (needed && !fpRegistered) {
         if (fpController == null) fpController = getFingerprintGestureController();
-        // FIX: đăng ký NGAY khi có fpController, KHÔNG gate theo isGestureDetectionAvailable().
-        // Đăng ký callback không đòi hỏi cảm biến phải sẵn sàng ngay lúc đó — gesture sẽ chỉ
-        // không bắn cho tới khi availability = true, và onGestureDetectionAvailabilityChanged()
-        // sẽ tự báo khi đủ điều kiện. Gate cũ khiến callback không bao giờ được đăng ký nếu
-        // lần gọi đầu tiên rơi đúng lúc cảm biến bận (rất hay gặp lúc service vừa connect).
         if (fpController != null) {
             if (fpCallback == null) {
                 fpCallback = new FingerprintGestureController.FingerprintGestureCallback() {
@@ -2532,9 +2521,6 @@ private void refreshFingerprintRegistration() {
         private void createFloatingBars() {
         fV = new FlashView(this);
         fV.setAlpha(0f); fV.setVisibility(View.GONE);
-        // [TỐI ƯU] Giữ cố định MATCH_PARENT ngay từ đầu — không còn co giãn 0x0↔MATCH_PARENT
-        // qua wm.updateViewLayout() mỗi lần chạy Animation (xem playAnim()), giúp hiệu ứng bắt
-        // đầu gần như tức thời, đồng bộ với Rung/Hành động thay vì trễ 1 nhịp IPC hệ thống.
         WindowManager.LayoutParams fp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
@@ -2568,11 +2554,6 @@ private void syncHomaccPreviewState() {
         if (!AccessibleHomeService.isRunning && isHomaccDrawn) removeAccessibleHome();
     }
 }
-/** [TỐI ƯU] Tách riêng để gọi TRỰC TIẾP thay vì sendBroadcast tới chính
- *  EdgeBarService — broadcast dù "gửi cho bản thân" vẫn tốn 1 lượt Binder
- *  round-trip qua ActivityManager, dễ bị trễ đúng lúc hệ thống đang bận
- *  (VD: cuộc gọi đến dồn dập sự kiện). Gọi thẳng hàm = ẩn overlay ngay 0ms,
- *  đồng thời đỡ tốn pin vì bớt hẳn 1 giao dịch IPC. */
 private void pauseAllOverlaysSync() {
     removeAllIconLayers();
     for (int j=0;j<12;j++) if (bars[j]!=null) bars[j].setVisibility(View.GONE);
@@ -2584,13 +2565,8 @@ private void pauseAllOverlaysSync() {
     private void updateVisibility() {
     syncHomaccPreviewState(); // THÊM DÒNG NÀY — đồng bộ preview Homacc, zero cost nếu không đổi
 boolean isPreview = prefs.getBoolean("preview_lock", false);
-// [FIX FLICKER] Vừa USER_PRESENT -> ép coi như đã mở khoá trong ~400ms, bất kể
-// km.isKeyguardLocked() có thể còn báo trạng thái cũ (framework cập nhật trễ),
-// tránh Lock bị vẽ lại đúng lúc Home vừa hiện ra.
 boolean forceUnlocked = SystemClock.elapsedRealtime() < forceUnlockedUntilMs;
 boolean isLocked = !forceUnlocked && (km.isKeyguardLocked() || isPreview);
-
-// true = có PIN/camera bảo mật/calculator... đang che màn khoá gốc
 if (!isPreview && km.isKeyguardLocked() && needBouncerTracking()) {
     long nowB = SystemClock.elapsedRealtime();
     if (nowB - lastBouncerCheckMs >= BOUNCER_CHECK_THROTTLE_MS) {
@@ -2607,7 +2583,7 @@ if (hide && fV != null) fV.setVisibility(View.GONE);
 for (int i=0;i<12;i++) {
             if (bars[i]==null) continue;
             boolean en = prefs.getBoolean("lock_"+BARS[i]+"_en", false);
-boolean passesLockGate = (prefs.getInt("lock_"+BARS[i]+"_lockmode", 1) == 1) || !isSecureOverlayVisible;
+boolean passesLockGate = (prefs.getInt("lock_"+BARS[i]+"_lockmode", 1) != 0) || !isSecureOverlayVisible; 
 boolean shouldShowBar = en && isLocked && !hide && passesLockGate &&
     !prefs.getBoolean("lock_"+BARS[i]+"_manual_hide", false);
 if (!shouldShowBar && !isLocked) {
@@ -2658,7 +2634,7 @@ if (!shouldShowBar && !isLocked) {
             if (corners[i]==null) continue;
             boolean cornEn = prefs.getBoolean("lock_corner_"+CORNERS[i]+"_en", false);
 int cornLockMode = prefs.getInt("lock_corner_"+CORNERS[i]+"_lockmode", 1);
-boolean cornPassesGate = (cornLockMode == 1) || !isSecureOverlayVisible;
+boolean cornPassesGate = (cornLockMode != 0) || !isSecureOverlayVisible; 
 corners[i].setVisibility((cornEn && isLocked && !hide && cornPassesGate &&
 !prefs.getBoolean("lock_corner_"+CORNERS[i]+"_manual_hide", false)) ?
 View.VISIBLE : View.GONE);
@@ -2722,11 +2698,6 @@ private void setViewVisibilityAnimated(View v, boolean show) {
             .withEndAction(() -> { if (v.getAlpha() == 0f) v.setVisibility(View.GONE); }).start();
     }
 }
-/** [FIX TỐC ĐỘ "ONLY BASE LOCKSCREEN"] Ẩn/hiện tức thời (không animate) chỉ cho
- * các Bar/Corner đang ở lockMode==0 ("Chỉ màn khoá gốc") khi bouncer (PIN/camera
- * bảo mật/calculator...) vừa xuất hiện hoặc biến mất. Không đụng tới Bar/Corner
- * lockMode==1 (Luôn xuyên suốt) hay bất kỳ điều kiện nào khác — đây là đường
- * phản ứng riêng, rẻ hơn hẳn updateVisibility() đầy đủ. */
 private void applyLockGateInstant() {
     boolean isPreview = prefs.getBoolean("preview_lock", false);
     boolean isLocked = (km != null && km.isKeyguardLocked()) || isPreview;
@@ -2734,7 +2705,7 @@ private void applyLockGateInstant() {
     for (int i = 0; i < 12; i++) {
         if (bars[i] == null) continue;
         int lockMode = prefs.getInt("lock_" + BARS[i] + "_lockmode", 1);
-        if (lockMode == 1) continue;
+        if (lockMode != 0) continue; 
         boolean en = prefs.getBoolean("lock_" + BARS[i] + "_en", false);
         boolean manualHidden = prefs.getBoolean("lock_" + BARS[i] + "_manual_hide", false);
         boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
@@ -2747,7 +2718,7 @@ private void applyLockGateInstant() {
     for (int i = 0; i < 4; i++) {
         if (corners[i] == null) continue;
         int lockMode = prefs.getInt("lock_corner_" + CORNERS[i] + "_lockmode", 1);
-        if (lockMode == 1) continue;
+        if (lockMode != 0) continue; 
         boolean en = prefs.getBoolean("lock_corner_" + CORNERS[i] + "_en", false);
         boolean manualHidden = prefs.getBoolean("lock_corner_" + CORNERS[i] + "_manual_hide", false);
         boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;

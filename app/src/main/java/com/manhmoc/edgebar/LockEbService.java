@@ -263,14 +263,14 @@ private int readOrInt(String sp, String member, boolean isBar, String server, St
             if (bars[i] == null) continue;
                        int lockMode = TwinPairStore.readOrValue(prefs, "lock_" + BARS[i] + "_lockmode",
                 isLeftMember(BARS[i]), "bl", prefs.getInt("lock_" + BARS[i] + "_lockmode", 1));
-            boolean gate = show && (lockMode == 1 || !secure);
+            boolean gate = show && (lockMode != 0 || !secure);
             bars[i].setVisibility(gate && !hiddenKeys.contains(BARS[i]) ? View.VISIBLE : View.GONE);
         }
         for (int i = 0; i < 4; i++) {
             if (corners[i] == null) continue;
                         int cLock = TwinPairStore.readOrValue(prefs, "lock_corner_" + CORNERS[i] + "_lockmode",
                 isLeftMember(CORNERS[i]), "bl", prefs.getInt("lock_corner_" + CORNERS[i] + "_lockmode", 1));
-            boolean gate = show && (cLock == 1 || !secure);
+            boolean gate = show && (cLock != 0 || !secure);
             corners[i].setVisibility(gate && !hiddenKeys.contains("corner_" + CORNERS[i]) ? View.VISIBLE : View.GONE);
         }
     }
