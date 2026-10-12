@@ -8379,10 +8379,7 @@ for (String id : csvToList(prefs.getString("shortcut_ids", ""))) {
     "SCREEN_RECORD","AUTO_ROTATE_TOGGLE","TOGGLE_RECORD","PAUSE_RECORD",
     "TOGGLE_OVERLAY","TOGGLE_WORK_PROFILE","OPEN_STORAGE_SCAN","SCAN_QR",
     "PLAY_MY_PLAYLIST","YTDL_DOWNLOAD"
-}; // Đã gộp sẵn Utility vào đây -> nút "System" cho App Icon vốn dĩ đã là System+Utility
-
-// [MỚI] Nạp icon tuỳ chỉnh riêng cho từng Slot — cùng định dạng "app:"/"pool:"/"poolc:"
-// dùng chung với showIconPickerDialog(), zero cấp phát khi không có override.
+};
 private android.graphics.drawable.Drawable resolveAppIconOverrideDrawable(String ref) {
     if (ref == null || ref.isEmpty()) return null;
     try {
@@ -8398,6 +8395,28 @@ private android.graphics.drawable.Drawable resolveAppIconOverrideDrawable(String
     } catch (Exception ignored) {}
     return null;
 }
+private LinearLayout noticSwitchRow(String label, String key, boolean def) {
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setGravity(Gravity.CENTER_VERTICAL);
+    row.setBackground(getRounded("#202124", 20f));
+    row.setPadding(30, 26, 30, 26);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+    lp.setMargins(0, 6, 0, 6);
+    row.setLayoutParams(lp);
+    TextView tv = new TextView(this);
+    tv.setText(label);
+    tv.setTextColor(Color.WHITE);
+    tv.setTextSize(14f);
+    tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Switch sw = new Switch(this);
+    sw.setChecked(prefs.getBoolean(key, def));
+    sw.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(key, c).apply());
+    row.addView(tv);
+    row.addView(sw);
+    return row;
+}
+
 private void openNoticSpace() {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
@@ -8414,11 +8433,11 @@ private void openNoticSpace() {
 
     TextView note = new TextView(this);
     note.setText(T(
-        "Bars swallow incoming notifications like a kangaroo pouch: the bar shrinks to the center, then expands into a small pill. Tap / double tap / long press / swipe still work.",
-        "Thanh bar nuốt thông báo như chuột túi: thu về trung tâm rồi nở thành viên thuốc nhỏ. Vẫn dùng được 1 chạm / 2 chạm / giữ / vuốt."));
+        "Needs Notification Access. Set a bar/corner to \"Swallow notifications\" in its Screen Visibility to make it a Notic host.",
+        "Cần quyền Truy cập thông báo. Chọn \"Nuốt thông báo\" ở mục Screen Visibility của bar/corner để biến nó thành Notic."));
     note.setTextColor(Color.parseColor("#9AA0A6"));
     note.setTextSize(12f);
-    note.setPadding(0, 0, 0, 24);
+    note.setPadding(0, 0, 0, 20);
     root.addView(note);
 
     ScrollView scroll = new ScrollView(this);
@@ -8428,28 +8447,29 @@ private void openNoticSpace() {
     scroll.addView(content);
     root.addView(scroll);
 
-    LinearLayout row = new LinearLayout(this);
-    row.setOrientation(LinearLayout.HORIZONTAL);
-    row.setGravity(Gravity.CENTER_VERTICAL);
-    row.setBackground(getRounded("#202124", 20f));
-    row.setPadding(30, 30, 30, 30);
-    TextView tv = new TextView(this);
-    tv.setText(T("Enable Notic", "Bật Notic"));
-    tv.setTextColor(Color.WHITE);
-    tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    Switch sw = new Switch(this);
-    sw.setChecked(prefs.getBoolean("notic_en", false));
-    sw.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("notic_en", c).apply());
-    row.addView(tv);
-    row.addView(sw);
-    content.addView(row);
+    content.addView(noticSwitchRow(T("Enable Notic", "Bật Notic"), "notic_en", false));
 
-    TextView soon = new TextView(this);
-    soon.setText(T("More options coming soon.", "Các tuỳ chọn khác sẽ được bổ sung sau."));
-    soon.setTextColor(Color.parseColor("#777777"));
-    soon.setGravity(Gravity.CENTER);
-    soon.setPadding(0, 60, 0, 60);
-    content.addView(soon);
+    content.addView(createSectionTitle(T("NOTIFICATIONS", "THÔNG BÁO")));
+    Button btnApps = new Button(this);
+    btnApps.setText("📱 " + T("Choose apps to swallow", "Chọn app được nuốt thông báo"));
+    btnApps.setBackground(getRounded("#7C4DFF", 20f));
+    btnApps.setTextColor(Color.WHITE);
+    btnApps.setOnClickListener(v -> showNoticAppPicker());
+    content.addView(btnApps);
+    content.addView(noticSwitchRow(T("Do Not Disturb: don't swallow", "Đang DND: không nuốt thông báo"), "notic_dnd_skip", true));
+    content.addView(noticSwitchRow(T("Ignore everything until screen off", "Bỏ qua mọi thông báo đến khi tắt màn hình"), "notic_paused", false));
+    content.addView(createCycleRow(T("Sound", "Âm thanh"), "notic_sound_mode",
+        new String[]{T("Off", "Tắt"), T("Sound only", "Chỉ âm báo"), T("Sound + screen on", "Âm báo + bật màn hình")}));
+    content.addView(noticSwitchRow(T("Replace system popups", "Thay popup thông báo hệ thống"), "notic_hide_system", false));
+
+    content.addView(createSectionTitle(T("SYSTEM EVENTS", "SỰ KIỆN HỆ THỐNG")));
+    String[][] evs = {
+        {"charging", "Phone is charging"}, {"full", "Phone is fully charged"}, {"low", "Battery low (15%)"},
+        {"nonet", "No Internet"}, {"bt", "Bluetooth connected"}, {"silent", "Silent"},
+        {"vibrate", "Vibrate"}, {"ring", "Ring"}, {"unlock", "Phone unlocked"},
+        {"airplane", "Airplane mode"}, {"headset", "Headphones connected"}, {"dnd", "Do Not Disturb"}
+    };
+    for (String[] ev : evs) content.addView(noticSwitchRow(ev[1], "notic_ev_" + ev[0], true));
 
     Button bClose = new Button(this);
     bClose.setText(T("CLOSE", "ĐÓNG"));
@@ -8457,6 +8477,118 @@ private void openNoticSpace() {
     bClose.setTextColor(Color.WHITE);
     bClose.setOnClickListener(v -> d.dismiss());
     root.addView(bClose);
+
+    d.setContentView(root);
+    d.show();
+}
+
+private void showNoticAppPicker() {
+    final java.util.LinkedHashMap<String, String> apps = new java.util.LinkedHashMap<>();
+    for (String[] a : getAppListCached()) if (!apps.containsKey(a[1])) apps.put(a[1], a[0].replace(" [Island]", ""));
+    final List<String> pkgs = new ArrayList<>(apps.keySet());
+    final java.util.Set<String> swallowed = new java.util.LinkedHashSet<>(pkgs);
+    final List<String> keepExcluded = new ArrayList<>();
+    for (String p : csvToList(prefs.getString("notic_exclude_apps", ""))) {
+        swallowed.remove(p);
+        if (!apps.containsKey(p)) keepExcluded.add(p);
+    }
+
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212"));
+    root.setPadding(30, 80, 30, 30);
+
+    LinearLayout head = new LinearLayout(this);
+    head.setOrientation(LinearLayout.HORIZONTAL);
+    head.setGravity(Gravity.CENTER_VERTICAL);
+    head.setPadding(0, 0, 0, 20);
+    TextView tvT = new TextView(this);
+    tvT.setText(T("Apps Notic swallows", "App được Notic nuốt thông báo"));
+    tvT.setTextColor(Color.parseColor("#8AB4F8"));
+    tvT.setTextSize(17);
+    tvT.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Button btnToggle = new Button(this);
+    btnToggle.setBackground(getRounded("#333333", 20f));
+    btnToggle.setTextColor(Color.parseColor("#FFC107"));
+    head.addView(tvT);
+    head.addView(btnToggle);
+    root.addView(head);
+
+    ListView lv = new ListView(this);
+    lv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    root.addView(lv);
+
+    final BaseAdapter ad = new BaseAdapter() {
+        public int getCount() { return pkgs.size(); }
+        public Object getItem(int p) { return pkgs.get(p); }
+        public long getItemId(int p) { return p; }
+        public View getView(int p, View cv, ViewGroup parent) {
+            final String pkg = pkgs.get(p);
+            LinearLayout row = new LinearLayout(MainActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(20, 22, 20, 22);
+            CheckBox cb = new CheckBox(MainActivity.this);
+            cb.setChecked(swallowed.contains(pkg));
+            cb.setClickable(false);
+            ImageView iv = new ImageView(MainActivity.this);
+            LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(70, 70);
+            ilp.setMargins(0, 0, 20, 0);
+            iv.setLayoutParams(ilp);
+            loadAppIconInto(pkg, iv);
+            TextView tv = new TextView(MainActivity.this);
+            tv.setText(apps.get(pkg));
+            tv.setTextColor(Color.WHITE);
+            tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            row.addView(cb);
+            row.addView(iv);
+            row.addView(tv);
+            return row;
+        }
+    };
+    lv.setAdapter(ad);
+
+    final Runnable refreshBtn = () -> btnToggle.setText(swallowed.size() == pkgs.size() ? "CANCEL" : "ALL");
+    refreshBtn.run();
+    btnToggle.setOnClickListener(v -> {
+        if (swallowed.size() == pkgs.size()) swallowed.clear();
+        else swallowed.addAll(pkgs);
+        ad.notifyDataSetChanged();
+        refreshBtn.run();
+    });
+    lv.setOnItemClickListener((parent, v, pos, id) -> {
+        String pkg = pkgs.get(pos);
+        if (!swallowed.remove(pkg)) swallowed.add(pkg);
+        ad.notifyDataSetChanged();
+        refreshBtn.run();
+    });
+
+    LinearLayout footer = new LinearLayout(this);
+    footer.setOrientation(LinearLayout.HORIZONTAL);
+    footer.setPadding(0, 20, 0, 0);
+    Button bCancel = new Button(this);
+    bCancel.setText(T("CANCEL", "HỦY"));
+    bCancel.setBackground(getRounded("#333333", 20f));
+    bCancel.setTextColor(Color.WHITE);
+    bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Button bSave = new Button(this);
+    bSave.setText(T("SAVE", "LƯU"));
+    bSave.setBackground(getRounded("#4CAF50", 20f));
+    bSave.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f);
+    slp.setMargins(20, 0, 0, 0);
+    bSave.setLayoutParams(slp);
+    footer.addView(bCancel);
+    footer.addView(bSave);
+    root.addView(footer);
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave.setOnClickListener(v -> {
+        List<String> excluded = new ArrayList<>(keepExcluded);
+        for (String p : pkgs) if (!swallowed.contains(p)) excluded.add(p);
+        prefs.edit().putString("notic_exclude_apps", TextUtils.join(",", excluded)).apply();
+        d.dismiss();
+    });
 
     d.setContentView(root);
     d.show();

@@ -49,9 +49,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 import java.util.LinkedHashSet;
 public class EdgeBarService extends AccessibilityService {
-
-    // === CHÈN CODE BIẾN TOÀN CỤC CỦA BẠN VÀO ĐÂY ===
-    // Động cơ Twin-Engine Trợ năng
 private android.view.View[] accHomeBars = new android.view.View[12];
 private android.view.View[] accHomeCorners = new android.view.View[4];
 private android.content.BroadcastReceiver accHomeReceiver;
@@ -65,26 +62,16 @@ private void refreshLockShownFlag() {
     for (int i = 0; i < 4 && !any; i++) if (corners[i] != null && corners[i].getVisibility() == View.VISIBLE) any = true;
     lockLayerShown = any;
 }
-
 private boolean isHomaccDrawn = false; // Guard chặn vẽ lại khi đã có view
-// THÊM MỚI — cache trạng thái preview để tránh gọi drawAccessibleHome()/removeAccessibleHome()
-// lặp lại mỗi lần updateVisibility() chạy (event này bắn khá thường xuyên).
-// So sánh giá trị cache TRƯỚC khi đụng vào WindowManager — đây là nguyên tắc
-// "chỉ IPC khi giá trị thực sự đổi" đã áp dụng xuyên suốt codebase (giống homaccDebounce).
 private boolean lastPreviewHomaccState = false;
 private FingerprintGestureController fpController;
 private FingerprintGestureController.FingerprintGestureCallback fpCallback;
 private boolean fpRegistered = false;
-
-// [MỚI] AppLock — lưu mốc thời gian unlock gần nhất theo RAM, không ghi prefs
     public static void markPackageUnlocked(String pkg) { AppLockHelper.markUnlocked(pkg); }
     private void checkAppLock(String pkg) { AppLockHelper.check(this, prefs, pkg); }
-    // ĐẰNG SAU (Các biến cũ của EdgeBarService)
-// [FIX ĐỆ QUY] Cờ chặn: đang bắn touch ảo TRIGGER_* xuống màn hình
     private volatile boolean isDispatchingSyntheticGesture = false;
     private final Handler syntheticGuardHandler = new Handler(android.os.Looper.getMainLooper());
     private Runnable syntheticGuardResetRunnable;
-    // [MỚI] Lưu toạ độ chạm thực tế để giả lập cử chỉ đích xác
     private float globalTouchStartX = -1f, globalTouchStartY = -1f, globalTouchEndX = -1f, globalTouchEndY = -1f;
     private float ipcTouchOverrideX = -1f, ipcTouchOverrideY = -1f;
     private WindowManager wm;
@@ -92,14 +79,12 @@ private boolean fpRegistered = false;
     private View[] corners = new View[4];
     private FlashView fV;
     private GestureRippleView rippleView;
-    // [MỚI] Chỉ báo ghi âm (chấm đỏ + mm:ss)
     private LinearLayout recIndicatorView;
 private TextView recIndicatorText;
 private View recIndicatorDot;
 private ValueAnimator recBlinkAnim;
 private boolean recIndicatorTestMode = false;
 private boolean recIndicatorTestPaused = false;
-
     private void ensureRippleView() {
     if (rippleView != null) return;
     GestureRippleView newView = new GestureRippleView(this);
@@ -143,6 +128,7 @@ private static final String[] KEYGUARD_BOUNCER_IDS = {
     private PanelEngine panelEngine;
     private RecentsBlurHelper recentsBlur;
     private AssistiveBubbleEngine bubbleEngine;
+    private NoticEngine noticEngine;
     private final java.util.concurrent.ExecutorService iconColorExecutor =
     java.util.concurrent.Executors.newSingleThreadExecutor();
     private final String[] BARS = {"b_c", "r", "l", "r_u", "r_c", "r_d", "t_c", "t_r", "t_l", "l_u", "l_c", "l_d"};
@@ -154,9 +140,6 @@ private static final String[] KEYGUARD_BOUNCER_IDS = {
     };
     private final String[] CORNERS = {"br", "bl", "tr", "tl"};
     private final int[] C_GRAV = {Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT};
-// [FIX LONG-PRESS] Cache chữ ký layout — chỉ gọi updateViewLayout() khi THẬT SỰ đổi.
-// Gọi updateViewLayout() vô điều kiện là nguyên nhân khiến hệ thống tự hủy gesture
-// (ACTION_CANCEL) đang diễn ra trên View đó, làm hỏng bộ đếm long-press.
 private final java.util.Map<View, String> lastLayoutSig = new java.util.HashMap<>();
 private void updateLayoutIfChanged(View v, WindowManager.LayoutParams p) {
     String sig = p.flags + "|" + p.width + "|" + p.height + "|" + p.x + "|" + p.y + "|" + p.gravity;
@@ -166,11 +149,6 @@ private void updateLayoutIfChanged(View v, WindowManager.LayoutParams p) {
 }
 private final java.util.Map<View, String> lastGestureSig = new java.util.HashMap<>();
 private void applyAntiTapjacking(View v, int w, int h) {
-    // [FIX VUỐT CẠNH KHÔNG BACK ĐƯỢC] Không loại trừ cử chỉ hệ thống nữa — việc
-    // gọi setSystemGestureExclusionRects() ở đây vô tình chặn luôn cử chỉ vuốt
-    // cạnh Back của Android tại vị trí Bar/Corner, càng vào sâu càng dính nhiều
-    // Bar/Corner nên càng khó thoát ra. Trả rỗng để không loại trừ gì cả, nhường
-    // đúng nghĩa cử chỉ Back cho hệ điều hành.
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
     try {
         v.setSystemGestureExclusionRects(java.util.Collections.emptyList());
@@ -193,9 +171,6 @@ private final Handler iconColorHandler = new Handler(android.os.Looper.getMainLo
 private long lastIconColorSampleMs = 0;
 private boolean iconColorSamplePending = false;
 private long lastIconColorEventGateMs = 0;
-// [FIX BUG 3] Đảm bảo tại mọi thời điểm chỉ có TỐI ĐA 1 HardwareBuffer full màn hình
-// đang sống trong RAM — chặn trường hợp 2 sự kiện (cuộn + đổi app) rơi gần nhau khiến
-// 2 lệnh takeScreenshot() chồng lên nhau, gây tăng đột biến RAM đủ để bị OOM-kill.
 private volatile boolean isCapturingIconColorScreenshot = false;
 private volatile long iconColorCaptureStartMs = 0L;
 private static final long ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS = 1500; 
@@ -215,8 +190,6 @@ private boolean isAutoColorOff(String prefix, String barKey) {
     String off = prefs.getString(prefix + "bar_auto_icon_color_off", "");
     return ("," + off + ",").contains("," + barKey + ",");
 }
-/** Gọi từ mọi nơi cần yêu cầu lấy mẫu lại màu (đổi app, cuộn nội dung...). Rẻ tới mức
- *  gọi liên tục cũng không sao — tự dồn về tối đa 1 lần thực thi/ICON_COLOR_MIN_INTERVAL_MS. */
 private boolean anyAutoColorLayer() {
     for (java.util.Map.Entry<String, IconLayerView> e : iconLayers.entrySet()) {
         if (e.getValue().getVisibility() != View.VISIBLE) continue; // layer đang ẩn -> không cần chụp
@@ -226,23 +199,19 @@ private boolean anyAutoColorLayer() {
     }
     return false;
 }
-/** Dùng cho sự kiện cuộn: 1 lần chụp, không chụp vét, không retry. */
 private void requestIconColorSampleLight() {
     if (iconLayers.isEmpty() || !anyAutoColorLayer()) return;
     doSampleIconColors(true);
 }
-
 private void requestIconColorSample() {
     if (iconLayers.isEmpty() || !anyAutoColorLayer()) return; // không bar nào có icon -> zero cost
     doSampleIconColors(false);
 }
-
 private void doSampleIconColors(boolean isFollowUp) {
     if (Build.VERSION.SDK_INT < 30) return;
     if (MyPlaylistService.isRunning || VoiceRecorderService.isRunning || ScreenRecorderService.isRunning) return;
     android.os.PowerManager pmSample = (android.os.PowerManager) getSystemService(POWER_SERVICE);
     if (pmSample != null && !pmSample.isInteractive()) return;
-
     if (isCapturingIconColorScreenshot) {
         if (System.currentTimeMillis() - iconColorCaptureStartMs > ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS)
             isCapturingIconColorScreenshot = false;
@@ -250,10 +219,7 @@ private void doSampleIconColors(boolean isFollowUp) {
     }
     final java.util.List<Object[]> lockJobs = buildColorSampleJobs("lock_");
     final java.util.List<Object[]> homaccJobs = buildColorSampleJobs("home_");
-
     if (lockJobs.isEmpty() && homaccJobs.isEmpty()) return;
-
-    // Giãn cách: quá sát lần trước -> gộp thành đúng 1 lần chạy trễ (trailing)
     long nowS = SystemClock.elapsedRealtime();
     long since = nowS - lastIconColorSampleMs;
     if (since < ICON_COLOR_MIN_GAP_MS) {
@@ -266,15 +232,12 @@ private void doSampleIconColors(boolean isFollowUp) {
         return;
     }
     lastIconColorSampleMs = nowS;
-
     isCapturingIconColorScreenshot = true;
     iconColorCaptureStartMs = System.currentTimeMillis();
     try {
                 takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(),
             new AccessibilityService.TakeScreenshotCallback() {
                                 @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
-    // [FIX RACE] Đặt execute() trong try đầu tiên — tránh race condition
-    // giữa isShutdown() check và execute() khi Service bị destroy giữa chừng.
     try {
         iconColorExecutor.execute(() -> {
 
@@ -421,7 +384,7 @@ private static final java.util.Set<String> EB_KEY_PREFIXES =
         "blacklist","avoid_kbd","shortcut_","preview_",
         "lang_","ytdl_","intent_","tile_","tilev2_","macro_",
         // (Preview Handle, Enable, slider...) ngay từ vòng lọc whitelist.
-        "pack_panel_","lenap_","bubble_","sensor_","texture_","volkey_","applock_","recents_",
+        "pack_panel_","lenap_","bubble_","sensor_","texture_","volkey_","applock_","recents_","notic_",
         "i1_","i2_","i3_","i4_","i5_","i6_","i7_","i8_",
         "i9_","i10_","i11_","i12_","i13_","i14_","i15_"
     ));
@@ -442,6 +405,10 @@ private static final long LOCK_DEBOUNCE_MS = 400;
 
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     if (!isOurKey(k)) return;
+        if (k.startsWith("notic_")) {
+        if (noticEngine != null) noticEngine.relayout();
+        return;
+    }
         if (k.startsWith("preview_")) {
         if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
         debounceRunnable = () -> updateVisibility();
@@ -524,6 +491,7 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         if ("com.manhmoc.edgebar.TEST_ANIM".equals(act)) {
             playAnim();
                 } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
+        if (noticEngine != null) noticEngine.onScreenOff();            
     forceUnlockedUntilMs = 0; // tắt màn rồi thì Lock phải được phép hiện lại ngay
     if (recentsBlur != null) recentsBlur.hide(); // [FIX 2B] gỡ lớp phủ Recents + reset phiên khi tắt màn
     for (int j = 0; j < 12; j++) {
@@ -1376,9 +1344,7 @@ checkAndKickBlacklistOnAccEnable(); // [MỚI] tự thoát app Blacklist nếu �
 panelEngine.rebuildAll();
 bubbleEngine = new AssistiveBubbleEngine(this, wm, prefs, /* isAnyMode = */ true);
 bubbleEngine.rebuild();
-// V19.12.3.6.13: Set tường minh flag — một số ROM không parse đúng
-// canRequestFingerprintGestures từ XML, gây fpController không bao giờ
-// nhận gesture dù đăng ký callback "thành công".
+noticEngine = new NoticEngine(this, wm, prefs, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, this::findSwallowHost);
 try {
     AccessibilityServiceInfo info = getServiceInfo();
     if (info != null) {
@@ -2673,14 +2639,30 @@ p.x = prefs.getInt(ck+"x",0); p.y = prefs.getInt(ck+"y",0) + pushY;
         }
 // CODE MỚI — thêm ngay trước dấu } đóng hàm:
 if (panelEngine != null) panelEngine.rebuildAll();
-
-        // [FIX BUG LOGIC] Luôn đồng bộ cả Homacc khi có lệnh cập nhật hiển thị chung, 
-        // phòng trường hợp trạng thái Lock thay đổi khiến Homacc cần được ẩn/hiện.
   updateHomaccLive();
   refreshLockShownFlag();
   refreshEventSubscription();
+  if (noticEngine != null) noticEngine.relayout();
   }
-
+private Object[] findSwallowHost() {
+    boolean locked = km != null && km.isKeyguardLocked() && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs;
+    String px = locked ? "lock_" : "home_";
+    View[] barArr = locked ? bars : accHomeBars;
+    View[] cornerArr = locked ? corners : accHomeCorners;
+    for (int i = 0; i < 12; i++) {
+        View v = barArr[i];
+        if (v == null) continue;
+        String k = px + BARS[i];
+        if (prefs.getBoolean(k + "_en", false) && prefs.getInt(k + "_lockmode", 1) == 2) return new Object[]{v, k};
+    }
+    for (int i = 0; i < 4; i++) {
+        View v = cornerArr[i];
+        if (v == null) continue;
+        String k = px + "corner_" + CORNERS[i];
+        if (prefs.getBoolean(k + "_en", false) && prefs.getInt(k + "_lockmode", 1) == 2) return new Object[]{v, k};
+    }
+    return null;
+}  
 private void setViewVisibilityAnimated(View v, boolean show) {
     if (v == null) return;
     int dur = prefs.getInt("lock_anim_dur", 0);
@@ -2768,6 +2750,7 @@ private static final int MAX_TRIGGER_DEPTH = 3;
     }
 
 private void handleAction(String key, int depth, boolean applyVibAnim) {
+if (noticEngine != null && noticEngine.interceptTap(key)) return;
 if (key != null && key.startsWith("homacc_")
         && prefs.getString(key, "NONE").equals("NONE")) {
     String fallback = "home_" + key.substring("homacc_".length());
@@ -3319,6 +3302,7 @@ try { removeRippleViewIfIdle(); } catch (Exception ignored) {}
     if (fV != null) { try { wm.removeView(fV); } catch (Exception ignored) {} fV = null; }
     if (panelEngine != null) { try { panelEngine.destroy(); } catch (Exception ignored) {} panelEngine = null; }
     if (bubbleEngine != null) { try { bubbleEngine.destroy(); } catch (Exception ignored) {} bubbleEngine = null; }
+    if (noticEngine != null) { try { noticEngine.destroy(); } catch (Exception ignored) {} noticEngine = null; }
     super.onDestroy();
 }
 private void ensureRecIndicator() {

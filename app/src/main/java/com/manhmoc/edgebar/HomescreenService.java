@@ -1104,11 +1104,6 @@ for (int i = 0; i < cornerCount; i++) {
     try { wm.addView(corners[i], p); } catch (Exception e) {}
     corners[i].setOnTouchListener(new SidebarTouchListener("home_corner_" + CORNERS[i], corners[i]));
 }
-
-        // HYBRID HOME V2: Lắng nghe thay đổi Accessibility bằng ContentObserver
-        // Tiết kiệm pin tối đa: KHÔNG polling, KHÔNG query mỗi frame
-        // Chỉ cập nhật type overlay khi user thực sự bật/tắt Accessibility
-        // CODE MỚI — thêm dòng này:
 panelEngine = new PanelEngine(this, wm, prefs, /* isAnyMode = */ false); // HomescreenService = IAO
         panelEngine.rebuildAll();
         bubbleEngine = new AssistiveBubbleEngine(this, wm, prefs, /* isAnyMode = */ false);
@@ -1162,11 +1157,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         panelDebounceHandler.postDelayed(panelDebounceRunnable, 120);
         return;
     }
-
-    // Xem giải thích tại EdgeBarService.java — cờ này đã được set trực tiếp lên
-    // View rồi, khỏi rebuild toàn bộ overlay qua updateVisibility() nữa.
     if (k.endsWith("_manual_hide")) return;
-
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> {
         debounceRunnable = null;

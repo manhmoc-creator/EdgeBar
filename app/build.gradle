@@ -8,7 +8,6 @@ android {
     lint {
         abortOnError false
         checkReleaseBuilds false
-        // Bật các check dễ gây crash thực tế
         fatal 'NewApi', 'InlineApi', 'ResourceType',
               'MissingSuperCall', 'WrongConstant', 'WrongThread',
               'WrongThreadInterprocedural', 'Recycle',
