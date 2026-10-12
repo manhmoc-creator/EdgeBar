@@ -8549,6 +8549,7 @@ private void openNoticSpace() {
     bN.addView(noticSwitchRow(T("Replace system popups", "Thay popup thông báo hệ thống"), "notic_hide_system", false));
     bN.addView(noticSwitchRow(T("Auto expand new notification", "Tự mở rộng thông báo mới"), "notic_auto_expand", false));
     bN.addView(createSlider(T("Expanded hold time (sec)", "Thời gian giữ thông báo mở rộng (giây)"), "notic_hold_sec", 15, 4));
+    bN.addView(createSlider(T("Auto-restore after swipe up (sec)", "Tự hồi lại sau khi vuốt ẩn (giây)"), "notic_hide_duration_sec", 60, 12));
     content.addView(createDrawer("🔔 " + T("NOTIFICATIONS", "THÔNG BÁO"), bN));
 
     // ---- APPEARANCE ----

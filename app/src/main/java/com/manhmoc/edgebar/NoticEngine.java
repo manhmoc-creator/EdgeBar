@@ -165,6 +165,14 @@ private String pillHostKey;     // host pill đang vẽ cho -> nhận ra chuyể
     private long armedAt, lastTorchMs;
     private boolean wifiUp, vpnUp, micOn, recOn;
     private final Runnable settleRun = this::settle;
+    // UX: vuốt-ẩn Notic rồi tự hồi lại sau N giây — N chỉnh qua slider "notic_hide_duration_sec"
+private final Runnable reshowRun = () -> {
+    if (previewForce) return;
+    if (!userHidden) return;                                  // đã tự show hoặc có thông báo mới hiện lại rồi
+    if (items.isEmpty() || !prefs.getBoolean("notic_en", false)) return;
+    userHidden = false;
+    announce();
+};
     // [P1] Chống giật Khoá -> Home: chỉ di chuyển pill khi hình học của bar host đã ĐỨNG YÊN (2 lần đo cách nhau 80ms giống nhau)
     private String pendingGeo = "";
     private int geoTries;
@@ -855,9 +863,9 @@ private boolean bindHost() {
     try { wm.getDefaultDisplay().getRealMetrics(dm); } catch (Exception e) { dm = ctx.getResources().getDisplayMetrics(); }
     scrW = dm.widthPixels;
     scrH = dm.heightPixels;
-    float[] rc = rectFromLayoutParams(v, scrW, scrH);
-    if (rc == null) rc = barRectFromPrefs(hostKey, scrW, scrH);
-    if (rc == null) return false;
+float[] rc = barRectFromPrefs(hostKey, scrW, scrH);
+if (rc == null) rc = rectFromLayoutParams(v, scrW, scrH);
+if (rc == null) return false;
     hl = rc[0]; ht = rc[1]; hr = rc[2]; hb = rc[3];
     float wP = prefs.getInt("notic_w_pct", 100) / 100f, hP = prefs.getInt("notic_h_pct", 100) / 100f;
     float barW = hr - hl, barH = hb - ht;
@@ -1060,8 +1068,11 @@ private void hideNotic() {
     closePopup(false, false);
     userHidden = true;
     shrinkRemove(false, false);
+    // UX: lên lịch tự hồi lại; user có thể chỉnh N trong Notic Space
+    h.removeCallbacks(reshowRun);
+    int sec = Math.max(3, prefs.getInt("notic_hide_duration_sec", 12));
+    h.postDelayed(reshowRun, sec * 1000L);
 }
-
 private void afterChange() {
     if (cur >= items.size()) cur = Math.max(0, items.size() - 1);
     if (items.isEmpty()) {
@@ -1197,12 +1208,19 @@ private void openPopup() {
     root.setBackground(popupBg);
     root.setPadding(dp(8), dp(8), dp(8), dp(8));
     root.setOnTouchListener((v, e) -> {
-    if (e.getAction() == MotionEvent.ACTION_OUTSIDE) {
-        if (previewForce) return false;           // đang kéo slider ngoài bảng thì không được đóng
-        closePopup(false, true);                  // chạm ra ngoài chỉ đóng, KHÔNG xoá thông báo
+    if (previewForce) return false;
+    final int act = e.getActionMasked();
+    if (act == MotionEvent.ACTION_OUTSIDE) {
+        closePopup(false, true);
         return true;
     }
-    return false;
+    // UX: chạm vùng trống bên trong bảng (viền đệm, khe giữa các thẻ) cũng đóng về viên thuốc
+    // Nút/card/chip/EditText là con của root nên đã tiêu thụ sự kiện trước, không bị đóng nhầm
+    if (act == MotionEvent.ACTION_UP) {
+        closePopup(false, true);
+        return true;
+    }
+    return act == MotionEvent.ACTION_DOWN;
 });
     LinearLayout head = new LinearLayout(ctx);
     head.setOrientation(LinearLayout.HORIZONTAL);
@@ -1519,7 +1537,27 @@ private GradientDrawable cardBg(Item it, float r) {
     private class MorphRoot extends LinearLayout {
     final Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG), sp2 = new Paint(Paint.ANTI_ALIAS_FLAG);
     final RectF rr = new RectF();
+    private float irX, irY;
     MorphRoot(Context c) { super(c); setWillNotDraw(false); sp2.setStyle(Paint.Style.STROKE); sp2.setStrokeWidth(1.6f * dens); }
+
+    // UX: vuốt lên trên bảng mở rộng = ẩn nhanh Notic — HARDCODED, không phụ
+    // thuộc rule user gán cho bar. Chặn ở onIntercept (trước cả SwipeCard) để
+    // bắt được swipe bắt đầu từ bất kỳ điểm nào trong bảng, kể cả trên card.
+    @Override public boolean onInterceptTouchEvent(MotionEvent e) {
+        if (previewForce) return super.onInterceptTouchEvent(e);
+        int a = e.getActionMasked();
+        if (a == MotionEvent.ACTION_DOWN) {
+            irX = e.getRawX(); irY = e.getRawY();
+        } else if (a == MotionEvent.ACTION_MOVE) {
+            float dy = e.getRawY() - irY, dx = e.getRawX() - irX;
+            if (dy < -dp(28) && Math.abs(dy) > Math.abs(dx) * 1.5f) {
+                h.post(NoticEngine.this::hideNotic);   // defer ra khỏi dispatch để tránh removeView giữa frame
+                return true;
+            }
+        }
+        return super.onInterceptTouchEvent(e);
+    }
+
     @Override protected void dispatchDraw(Canvas c) {
         if (popMorphing) {
             float a = 1f - Math.max(0f, Math.min(1f, (morphF - 0.35f) / 0.5f));

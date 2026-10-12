@@ -94,6 +94,7 @@ if (incoming) {
     KeyguardManager kg = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
     // Không dùng máy (tắt màn / đang khoá) -> bỏ qua, để hệ thống tự mở app gọi điện toàn màn hình
     if (pwr == null || !pwr.isInteractive() || (kg != null && kg.isKeyguardLocked())) return;
+    if (n.fullScreenIntent != null) return;
 }
         // [P3] Cuộc gọi ĐANG diễn ra (Grab, Zalo...): thông báo bị cập nhật mỗi giây, trước đây mỗi lần bị coi là thông báo mới -> kêu liên tục. Bỏ qua hẳn.
         if (Notification.CATEGORY_CALL.equals(cat) && !incoming) return;
