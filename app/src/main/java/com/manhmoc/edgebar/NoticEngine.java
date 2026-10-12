@@ -47,6 +47,9 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.view.ViewConfiguration;
+import android.view.VelocityTracker;
+import android.view.ViewTreeObserver;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
@@ -103,11 +106,13 @@ public class NoticEngine {
     private static final int BASE_FLAGS = NOT_FOCUSABLE
         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
-    private static final int POPUP_FLAGS = BASE_FLAGS
+        | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+        | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;   // ép vẽ bằng GPU cho cả viên thuốc lẫn bảng mở rộng
+    private static final int POPUP_FLAGS
         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
     private static final int BAR_COLOR = Color.argb(200, 96, 125, 139);
+    private static final int BADGE_GREEN = 0xFF34C759;
 
     private final Context ctx;
     private final WindowManager wm;
@@ -123,7 +128,7 @@ public class NoticEngine {
 
     private View hostView;
     private String hostKey;
-    private float scrW, scrH, pillH, ew, cw, px, cy, hl, ht, hr, hb, barR;
+    private float scrW, scrH, pillH, ew, ewApp, cw, px, cy, hl, ht, hr, hb, barR;
     private String lastGeo = "";
     private PillView pill;
     private WindowManager.LayoutParams pillLp;
@@ -148,7 +153,8 @@ public class NoticEngine {
     private long armedAt, lastTorchMs;
     private boolean wifiUp, vpnUp, micOn, recOn;
     private final Runnable settleRun = this::settle;
-    private static final TimeInterpolator EMPH = new PathInterpolator(0.05f, 0.7f, 0.1f, 1f);
+    // UX: đường cong cũ (0.05,0.7,0.1,1) dồn ~90% chuyển động vào 4-5 khung đầu nên chỉ cần rớt 1 khung là thấy giật
+private static final TimeInterpolator EMPH = new PathInterpolator(0.2f, 0f, 0f, 1f);
 private static final TimeInterpolator EMPH_IN = new PathInterpolator(0.3f, 0f, 0.8f, 0.15f);
 private static final int[] VIZ_COLORS = {0, 0xFF00E5FF, 0xFF8AB4F8, 0xFFFF4081, 0xFFFFC107, 0xFF69F0AE, 0xFFFFFFFF, 0xFFB388FF};
 private static final long DTAP_MS = 280;
@@ -159,14 +165,23 @@ private LinearLayout popupHead;
 private GradientDrawable popupBg;
 private Runnable pendingTap;
 private long lastTapMs;
-
-private float speed() { return prefs.getInt("notic_viz_speed", 100) / 100f; }
-
-private int vizColor(Item it) {
-    int i = prefs.getInt("notic_viz_color", 0);
-    return (i <= 0 || i >= VIZ_COLORS.length) ? appColor(it) : VIZ_COLORS[i];
+// UX/perf: onDraw chạy ~60 lần/giây lúc animate -> TUYỆT ĐỐI không đọc SharedPreferences trong onDraw, đọc 1 lần ở đây
+private boolean cBorder = true, cSpin = true, cViz = true;
+private int cVizColor = 0, cVizSpeed = 100;
+private void cachePrefs() {
+    cBorder = prefs.getBoolean("notic_border_en", true);
+    cSpin = prefs.getBoolean("notic_art_spin", true);
+    cViz = prefs.getBoolean("notic_viz_en", true);
+    cVizColor = prefs.getInt("notic_viz_color", 0);
+    cVizSpeed = prefs.getInt("notic_viz_speed", 100);
 }
 
+private float speed() { return cVizSpeed / 100f; }
+
+private int vizColor(Item it) {
+    int i = cVizColor;
+    return (i <= 0 || i >= VIZ_COLORS.length) ? appColor(it) : VIZ_COLORS[i];
+}
 private int appColor(Item it) {
     if (it.color != 0) return it.color;
     String k = it.pkg != null ? it.pkg : it.key;
@@ -287,6 +302,7 @@ private void refreshMedia(Item it) {
         this.hostFinder = hostFinder;
         this.dens = ctx.getResources().getDisplayMetrics().density;
         instance = this;
+        cachePrefs();
         registerSystemEvents();
     }
 
@@ -639,12 +655,13 @@ private void cancelPendingTap() {
         if (items.isEmpty()) return;
         Item it = items.get(Math.min(cur, items.size() - 1));
         openItem(it);
-        if (!it.media) items.remove(it);
-        closePopup(false, false);
+    if (!it.media) items.remove(it);
+        closePopup(false, true);   // đóng có animation, không "biến mất cái bụp" lúc nhấn giữ
         afterChange();
     }
 
     public void relayout() {
+        cachePrefs();   // service gọi relayout() mỗi khi key notic_* đổi -> nơi duy nhất cần nạp lại cache
         if (!prefs.getBoolean("notic_en", false)) {
             if (!items.isEmpty() || pill != null) { items.clear(); closePopup(false, false); removePill(); }
             return;
@@ -656,11 +673,11 @@ private void cancelPendingTap() {
         if (!s.equals(lastGeo)) {
     boolean first = lastGeo.isEmpty();
     lastGeo = s;
-    if (!pill.animating()) {
-        float tw = expanded ? ew : cw;
-        if (first) { pill.set(px, cy, tw, pillH, pillH / 2f, 1f, expanded ? 1f : 0f); winFit(); }
-        else { winFull(); pill.go(px, cy, tw, pillH, pillH / 2f, 1f, expanded ? 1f : 0f, 320, EMPH, this::winFit); } // trượt sang vị trí bar mới thay vì nhảy
-    }
+    // UX: trước đây bỏ qua nếu pill đang animate -> lúc Khoá->Home pill bay nốt về vị trí bar CŨ rồi đứng đó. Giờ chuyển hướng ngay từ vị trí hiện tại.
+    final boolean want = expanded || pill.towardsExpanded();
+    float tw = want ? expW() : cw;
+    if (first) { pill.set(px, cy, tw, pillH, pillH / 2f, 1f, want ? 1f : 0f); winFit(); }
+    else { winFull(); pill.go(px, cy, tw, pillH, pillH / 2f, 1f, want ? 1f : 0f, 320, EMPH, () -> { if (want) afterExpand(); else winFit(); }); }
 }
 pill.invalidate();   // đổi màu/visualizer trong cài đặt thấy ngay
 applyVisibility();
@@ -682,8 +699,9 @@ applyVisibility();
         hr = hl + v.getWidth();
         hb = ht + v.getHeight();
         pillH = Math.max(30 * dens, Math.min(hb - ht, 44 * dens));
-        ew = Math.min(scrW - 16 * dens, 280 * dens);
-        cw = Math.min(ew, pillH * 2.3f);
+        ew = Math.min(scrW - 16 * dens, 280 * dens);   // chỉ còn dùng cho sự kiện hệ thống (có chữ) + cửa sổ pill
+        ewApp = Math.min(ew, pillH * 3.0f);            // thông báo app: chỉ icon + số, không chữ -> viên thuốc gọn
+        cw = Math.min(ewApp, pillH * 2.3f);
         float m = 8 * dens;
         px = Math.max(ew / 2f + m, Math.min(scrW - ew / 2f - m, (hl + hr) / 2f));
         cy = Math.max(pillH / 2f, Math.min(scrH - pillH / 2f, (ht + hb) / 2f));
@@ -734,21 +752,29 @@ applyVisibility();
     fullWin = true;
     try { wm.updateViewLayout(pill, pillLp); } catch (Exception ignored) {}
 }
-    private void winFit() {
-        if (pill == null) return;
-        int x = (int) Math.floor(pill.ccx - pill.w / 2f) - 1;
-        int y = (int) Math.floor(pill.ccy - pill.h / 2f) - 1;
-        pillLp.x = x;
-        pillLp.y = y;
-        pillLp.width = (int) Math.ceil(pill.w) + 2;
-        pillLp.height = (int) Math.ceil(pill.h) + 2;
-        if (statusVisible) pillLp.flags &= ~NOT_TOUCHABLE; else pillLp.flags |= NOT_TOUCHABLE;
-        pill.ox = x;
-        pill.oy = y;
-        fullWin = false;
-        try { wm.updateViewLayout(pill, pillLp); } catch (Exception ignored) {}
+        // Bề rộng đích của viên thuốc cho item hiện tại: sự kiện hệ thống (sạc, Wi-Fi, im lặng...) giữ chữ nên rộng, thông báo app thì gọn
+    private float expW() {
+        Item it = items.isEmpty() ? null : items.get(Math.min(cur, items.size() - 1));
+        return (it != null && it.transientItem) ? ew : ewApp;
     }
 
+    // UX/perf (GỐC RỄ GIẬT): cửa sổ "sân khấu" luôn đủ chứa CẢ trạng thái thu gọn lẫn mở rộng,
+    // nên bung/thu/vuốt đổi thông báo KHÔNG phải wm.updateViewLayout giữa chừng (mỗi lần relayout cửa sổ = cấp lại buffer = rớt 1-2 khung).
+    // Chỉ relayout khi hình học thật sự đổi; winFull() chỉ dùng cho đoạn bar <-> viên thuốc.
+    private void winFit() {
+        if (pill == null) return;
+        float sw = Math.max(expW(), cw) + 4 * dens, sh = pillH + 4 * dens;
+        int x = (int) Math.floor(px - sw / 2f), y = (int) Math.floor(cy - sh / 2f);
+        int w = (int) Math.ceil(sw), hh = (int) Math.ceil(sh);
+        int flags = statusVisible ? (pillLp.flags & ~NOT_TOUCHABLE) : (pillLp.flags | NOT_TOUCHABLE);
+        pill.ox = x;
+        pill.oy = y;
+        boolean same = !fullWin && pillLp.x == x && pillLp.y == y && pillLp.width == w && pillLp.height == hh && pillLp.flags == flags;
+        fullWin = false;
+        if (same) return;
+        pillLp.x = x; pillLp.y = y; pillLp.width = w; pillLp.height = hh; pillLp.flags = flags;
+        try { wm.updateViewLayout(pill, pillLp); } catch (Exception ignored) {}
+    }
     private void applyVisibility() {
         if (pill == null) return;
         pill.setAlpha(statusVisible ? 1f : 0f);
@@ -778,27 +804,35 @@ applyVisibility();
         restoreHost();
     }
 
-    private void announce() {
+        private void announce() {
         if (items.isEmpty() || !bindHost()) return;
         h.removeCallbacks(settleRun);
         Item it = items.get(Math.min(cur, items.size() - 1));
         final float hcx = (hl + hr) / 2f;
+        final float tw = expW();
         if (pill == null) {
             if (!createPill()) return;
             final PillView pv = pill;
-            pv.setContent(it, items.size(), ew);
+            pv.setContent(it, items.size(), tw);
             winFull();
             pv.set(hcx, cy, hr - hl, hb - ht, barR, 0f, 0f);
             applyVisibility();
-            pv.go(hcx, cy, pillH, pillH, pillH / 2f, 0.6f, 0f, 240, EMPH, () ->
-                pv.go(px, cy, ew, pillH, pillH / 2f, 1f, 1f, 360, EMPH, this::afterExpand));
+            // UX: MỘT chuyển động liền mạch bar -> viên thuốc. Bản cũ nối 2 animation, mỗi lần nối đuôi bị khựng 1 khung + vận tốc về 0 rồi bật lại
+            pv.go(px, cy, tw, pillH, pillH / 2f, 1f, 1f, 340, EMPH, this::afterExpand);
         } else {
-            pill.setContent(it, items.size(), ew);
-            winFull();
-            pill.go(px, cy, ew, pillH, pillH / 2f, 1f, 1f, 300, EMPH, this::afterExpand);
+            boolean sameState = (expanded || pill.towardsExpanded()) && Math.abs(pill.targetW() - tw) < 1f;
+            pill.setContent(it, items.size(), tw);
+            if (sameState) {
+                // UX: đã/đang bung -> chỉ đổi nội dung + gia hạn giờ thu gọn, KHÔNG chạy lại animation.
+                // Đây là chỗ giật nặng nhất khi bật màn/mở khoá: "Screen on" + "Unlock" + thông báo đến dồn trong vài chục ms, mỗi cái cắt ngang animation của cái trước.
+                pill.invalidate();
+                if (!pill.animating()) h.postDelayed(settleRun, 3200);
+            } else {
+                if (fullWin || tw + 4 * dens > pillLp.width) winFull();   // chỉ phình cửa sổ khi pill rộng hơn cửa sổ hiện tại
+                pill.go(px, cy, tw, pillH, pillH / 2f, 1f, 1f, 300, EMPH, this::afterExpand);
+            }
         }
     }
-
     private void afterExpand() {
         expanded = true;
         winFit();
@@ -808,8 +842,7 @@ applyVisibility();
 
     private void settle() {
         if (pill == null || items.isEmpty() || !bindHost()) return;
-        winFull();
-        expanded = false;
+        expanded = false;   // không winFull(): cửa sổ sân khấu đã chứa sẵn trạng thái thu gọn
         pill.go(px, cy, cw, pillH, pillH / 2f, 1f, 0f, 260, EMPH, this::winFit);
     }
 
@@ -836,8 +869,7 @@ applyVisibility();
         final float hcx = (hl + hr) / 2f;
         winFull();
         expanded = false;
-        pv.go(px, cy, pillH, pillH, pillH / 2f, 0.6f, 0f, 200, EMPH_IN, () ->
-            pv.go(hcx, cy, hr - hl, hb - ht, barR, 0f, 0f, 260, EMPH, () -> { if (items.isEmpty()) removePill(); }));
+        pv.go(hcx, cy, hr - hl, hb - ht, barR, 0f, 0f, 280, EMPH, () -> { if (items.isEmpty()) removePill(); });   // 1 chuyển động thay vì 2
     }
 
     private void wakeScreen() {
@@ -926,15 +958,22 @@ private void openPopup() {
     int ph = root.getMeasuredHeight();
     boolean below = cy < scrH / 2f;
     popupLp.y = below ? (int) (cy + pillH / 2f + dp(8)) : (int) Math.max(dp(8), cy - pillH / 2f - dp(8) - ph);
-    try { wm.addView(root, popupLp); } catch (Exception e) { popup = null; popupBody = null; popupHead = null; popupBg = null; return; }
     root.setPivotX(px - popupLp.x);
     root.setPivotY(cy - popupLp.y);
     root.setAlpha(0f);
     root.setScaleX(0.12f);
     root.setScaleY(0.12f);
-    root.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(280).setInterpolator(EMPH).start();
+    try { wm.addView(root, popupLp); } catch (Exception e) { popup = null; popupBody = null; popupHead = null; popupBg = null; return; }
+    // UX/perf: khung đầu tiên phải dựng + đo + vẽ cả cây view (rất nặng trên Pixel 2 XL). Nếu chạy animation ngay thì khung đó "ăn" mất 1/3 thời lượng
+    // -> bảng nhảy cóc. Đợi khung đầu vẽ xong mới start; withLayer() = animate bằng texture GPU, không vẽ lại cây view mỗi khung.
+    root.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+        @Override public boolean onPreDraw() {
+            root.getViewTreeObserver().removeOnPreDrawListener(this);
+            root.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(260).setInterpolator(EMPH).withLayer().start();
+            return true;
+        }
+    });
 }
-
 private void placePopup() {
     if (popup == null || popupLp == null) return;
     popup.measure(View.MeasureSpec.makeMeasureSpec(popupLp.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec((int) scrH, View.MeasureSpec.AT_MOST));
@@ -953,7 +992,7 @@ private void closePopup(boolean markRead, boolean animate) {
         releaseIme(p);
         lastCloseMs = SystemClock.elapsedRealtime();
         if (animate) {
-            p.animate().alpha(0f).scaleX(0.1f).scaleY(0.1f).setDuration(220).setInterpolator(EMPH_IN)
+        p.animate().alpha(0f).scaleX(0.1f).scaleY(0.1f).setDuration(200).setInterpolator(EMPH_IN).withLayer()
                 .withEndAction(() -> { try { wm.removeView(p); } catch (Exception ignored) {} }).start();
         } else {
             try { wm.removeView(p); } catch (Exception ignored) {}
@@ -1001,7 +1040,8 @@ private void renderPopup() {
     }
 
     private View buildRow(final Item it) {
-        LinearLayout card = new LinearLayout(ctx);
+        // UX: vuốt ngang card = xoá (media + cuộc gọi đến KHÔNG vuốt xoá để tránh lỡ tay mất trình phát/cuộc gọi)
+        LinearLayout card = (it.media || it.call) ? new LinearLayout(ctx) : new SwipeCard(ctx, it);
         card.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable cbg = rounded(0xFF1C1C1E, dp(18));
 if (prefs.getBoolean("notic_border_en", true)) cbg.setStroke(dp(1.5f), appColor(it));  // viền = màu app
@@ -1064,7 +1104,7 @@ card.setBackground(cbg);
             x.setText("✕");
             x.setTextColor(Color.parseColor("#8E8E93"));
             x.setPadding(dp(10), dp(8), dp(4), dp(8));
-            x.setOnClickListener(v -> { items.remove(it); afterChange(); });
+            x.setOnClickListener(v -> dismissItem(it));
             top.addView(x);
         }
         top.setOnClickListener(v -> {
@@ -1078,6 +1118,77 @@ card.setBackground(cbg);
 else if (it.media) card.addView(buildMediaControls(it));
 else if (it.reply != null) card.addView(buildReplyBar(it));
         return card;
+    }
+
+    // Xoá 1 thông báo: khỏi Notic + khỏi bảng thông báo hệ thống (sự kiện hệ thống "transient" không có thông báo thật nên bỏ qua bước cancel)
+    private void dismissItem(Item it) {
+        if (!items.remove(it)) return;
+        unbindMedia(it);
+        if (!it.transientItem && it.key != null && EdgeBarNotificationListener.cancel(it.key)) markSelfCancel(it.key);
+        if (popup != null && !popupHistory) closePopup(false, true);   // đang xem 1 thông báo: xoá xong thì đóng, đừng bật thông báo kế tiếp lên ngay chỗ cũ
+        afterChange();
+        placePopup();   // chế độ lịch sử: bảng ngắn lại thì dịch lại vị trí
+    }
+
+    private class SwipeCard extends LinearLayout {
+        final Item it;
+        final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
+        float x0, y0, dx;
+        boolean dragging;
+        VelocityTracker vt;
+        SwipeCard(Context c, Item it) { super(c); this.it = it; }
+
+        private boolean typing() { return popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0; }   // đang gõ reply -> không cướp cử chỉ
+
+        private boolean horizontal(MotionEvent e) {
+            float mx = e.getRawX() - x0, my = e.getRawY() - y0;
+            return Math.abs(mx) > slop && Math.abs(mx) > Math.abs(my) * 1.5f;
+        }
+
+        private void begin(MotionEvent e) {
+            dragging = true;
+            x0 = e.getRawX();   // tính dx từ điểm bắt đầu kéo thật -> card không bị nhảy 1 đoạn slop
+            vt = VelocityTracker.obtain();
+            vt.addMovement(e);
+            if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+        }
+
+        @Override public boolean onInterceptTouchEvent(MotionEvent e) {
+            int a = e.getActionMasked();
+            if (a == MotionEvent.ACTION_DOWN) { x0 = e.getRawX(); y0 = e.getRawY(); dragging = false; }
+            else if (a == MotionEvent.ACTION_MOVE && !dragging && !typing() && horizontal(e)) { begin(e); return true; }
+            return dragging;
+        }
+
+        @Override public boolean onTouchEvent(MotionEvent e) {
+            int a = e.getActionMasked();
+            if (a == MotionEvent.ACTION_DOWN) { x0 = e.getRawX(); y0 = e.getRawY(); dragging = false; return true; }
+            if (a == MotionEvent.ACTION_MOVE) {
+                if (!dragging) { if (!typing() && horizontal(e)) begin(e); return true; }
+                vt.addMovement(e);
+                dx = e.getRawX() - x0;
+                setTranslationX(dx);
+                setAlpha(1f - Math.min(1f, Math.abs(dx) / Math.max(1f, getWidth() * 0.9f)));
+                return true;
+            }
+            if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) {
+                if (!dragging) return super.onTouchEvent(e);
+                dragging = false;
+                vt.addMovement(e);
+                vt.computeCurrentVelocity(1000);
+                float vx = vt.getXVelocity();
+                vt.recycle(); vt = null;
+                boolean fling = Math.abs(vx) > 900f && vx * dx > 0;
+                if (a == MotionEvent.ACTION_UP && (Math.abs(dx) > getWidth() * 0.35f || fling)) {
+                    animate().translationX(dx > 0 ? getWidth() : -getWidth()).alpha(0f).setDuration(140).setInterpolator(EMPH_IN)
+                        .withLayer().withEndAction(() -> dismissItem(it)).start();
+                } else {
+                    animate().translationX(0f).alpha(1f).setDuration(160).setInterpolator(EMPH).withLayer().start();
+                }
+                return true;
+            }
+            return super.onTouchEvent(e);
+        }
     }
 
     private void addBtn(LinearLayout row, Drawable d, final Runnable r) {
@@ -1309,7 +1420,7 @@ for (Item x : items) unbindMedia(x);
         c.drawBitmap(b, null, r, p);
         c.restore();
         removeCallbacks(tick);
-        if (it.playing && screenOn && isAttachedToWindow()) postDelayed(tick, 40);   // ~25fps, tự dừng khi pause/tắt màn/đóng bảng
+        if (it.playing && screenOn && isAttachedToWindow()) postOnAnimationDelayed(tick, 32);   // ~30fps ăn theo vsync (postDelayed 40ms lệch nhịp vsync -> đĩa quay bị rung); tự dừng khi pause/tắt màn/đóng bảng
     }
     @Override protected void onDetachedFromWindow() { removeCallbacks(tick); super.onDetachedFromWindow(); }
 }
@@ -1326,9 +1437,9 @@ private class VizView extends View {
         setLayoutParams(lp);
     }
     @Override protected void onDraw(Canvas c) {
-        drawViz(c, p, 0, getHeight() / 2f, getWidth(), getHeight(), vizColor(it), it.playing, speed());
+    drawViz(c, p, 0, getHeight() / 2f, getWidth(), getHeight(), vizColor(it), it.playing, speed());
         removeCallbacks(tick);
-        if (it.playing && screenOn && isAttachedToWindow()) postDelayed(tick, 40);
+        if (it.playing && screenOn && isAttachedToWindow()) postOnAnimationDelayed(tick, 32);
     }
     @Override protected void onDetachedFromWindow() { removeCallbacks(tick); super.onDetachedFromWindow(); }
 }
@@ -1338,6 +1449,7 @@ private class VizView extends View {
         String line;
         float ox, oy, ccx, ccy, w, r, mix, textAlpha;
         float h;
+        float tgtW, tgtMix;   // đích của animation đang chạy, để announce()/relayout() biết có cần chạy lại hay không
         ValueAnimator anim;
         final Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
         final Paint ip = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -1368,17 +1480,22 @@ sp.setStrokeWidth(1.6f * dens);
         }
 
         boolean animating() { return anim != null; }
+        boolean towardsExpanded() { return anim != null && tgtMix > 0.5f; }
+        float targetW() { return anim != null ? tgtW : w; }
 
         void setContent(Item it, int cnt, float expandedW) {
             item = it;
             count = cnt;
+            line = null;
+            // UX: nội dung thông báo của app KHÔNG hiện trên notic (bảng mở rộng đã có đủ). Chỉ sự kiện hệ thống (sạc, Wi-Fi, im lặng...) giữ 1 dòng chữ
+            // vì chúng tự biến mất sau 3,6s, không kịp mở bảng. Muốn bỏ luôn chữ của sự kiện: xoá khối if bên dưới.
+            if (!it.transientItem) return;
             String s = it.title == null ? "" : it.title;
             if (it.text != null && !it.text.isEmpty()) s = s.isEmpty() ? it.text : s + ": " + it.text;
             s = s.replace('\n', ' ');
             float avail = expandedW - pillH * 2.0f;
             line = TextUtils.ellipsize(s, tp, Math.max(avail, 10f), TextUtils.TruncateAt.END).toString();
         }
-
         void cancelAnim() {
             if (anim != null) { ValueAnimator a = anim; anim = null; a.cancel(); }
         }
@@ -1387,6 +1504,7 @@ sp.setStrokeWidth(1.6f * dens);
             cancelAnim();
             final float[] f0 = {ccx, ccy, w, h, r, mix, textAlpha};
             final float[] f1 = {tcx, tcy, tw, th, tr, tm, ta};
+            tgtW = tw; tgtMix = tm;
             final ValueAnimator va = ValueAnimator.ofFloat(0f, 1f);
             anim = va;
             va.setDuration(dur);
@@ -1419,7 +1537,7 @@ sp.setStrokeWidth(1.6f * dens);
             return hv != null && hv.dispatchTouchEvent(e); // UX: viên thuốc chuyển nguyên cử chỉ cho bar host nên 2 chạm/vuốt vẫn theo rule của bar
         }
         @Override protected void onDetachedFromWindow() { removeCallbacks(tick); super.onDetachedFromWindow(); }
-        @Override protected void onDraw(Canvas c) {
+                @Override protected void onDraw(Canvas c) {
     if (item == null) return;
     float cx = ccx - ox, cyy = ccy - oy;
     float l = cx - w / 2f, t = cyy - h / 2f, rr = cx + w / 2f, b = cyy + h / 2f;
@@ -1427,7 +1545,7 @@ sp.setStrokeWidth(1.6f * dens);
     bg.setColor(blend(BAR_COLOR, Color.BLACK, mix));
     float rad = Math.min(r, Math.min(w, h) / 2f);
     c.drawRoundRect(rect, rad, rad, bg);
-    if (mix > 0.05f && prefs.getBoolean("notic_border_en", true)) {
+    if (mix > 0.05f && cBorder) {
         sp.setColor(appColor(item));
         sp.setAlpha((int) (255 * Math.min(1f, mix)));       // viền hiện dần theo lúc bung
         rect.inset(sp.getStrokeWidth() / 2f, sp.getStrokeWidth() / 2f);
@@ -1435,30 +1553,32 @@ sp.setStrokeWidth(1.6f * dens);
     }
     if (w < pillH * 1.4f || h < pillH * 0.8f) return;
     float isz = h * 0.62f, ix = l + h * 0.2f;
-    boolean spin = item.media && prefs.getBoolean("notic_art_spin", true);
-    boolean viz = item.media && prefs.getBoolean("notic_viz_en", true);
+    boolean spin = item.media && cSpin;
+    boolean viz = item.media && cViz;
     Bitmap lead = spin ? circleArt(item) : item.icon;
     if (lead != null) {
         irect.set(ix, cyy - isz / 2f, ix + isz, cyy + isz / 2f);
         if (spin) { c.save(); c.rotate(spinAngle(item), ix + isz / 2f, cyy); c.drawBitmap(lead, null, irect, ip); c.restore(); }
         else c.drawBitmap(lead, null, irect, ip);
     }
-    float vw = h * 0.5f, vl = rr - h * 0.25f - vw;
-    float bx = viz ? vl - h * 0.35f : rr - h * 0.5f;
-    float textR = viz ? (count > 1 ? bx - h * 0.35f : vl - h * 0.15f) : rr - h * 0.9f;
+    // UX: ô tròn số thông báo (MÀU XANH) luôn neo sát mép PHẢI CÙNG của notic; visualizer nằm bên trái ô tròn, icon app ở mép trái
+    float bx = rr - h * 0.5f;
+    float vw = h * 0.5f;
+    float vl = (count > 1 ? bx - h * 0.46f : rr - h * 0.25f) - vw;
     if (viz) drawViz(c, bp, vl, cyy, vw, h * 0.5f, vizColor(item), item.playing, speed());
     if (count > 1) {
-        bp.setColor(Color.parseColor("#FF3B30"));
+        bp.setColor(BADGE_GREEN);
         c.drawCircle(bx, cyy, h * 0.26f, bp);
         Paint.FontMetrics fm = np.getFontMetrics();
         c.drawText(String.valueOf(Math.min(count, 99)), bx, cyy - (fm.ascent + fm.descent) / 2f, np);
     } else if (!viz) {
-        bp.setColor(Color.parseColor("#34C759"));
+        bp.setColor(BADGE_GREEN);
         c.drawCircle(bx, cyy, h * 0.1f, bp);
     }
-    if (textAlpha > 0.02f && line != null) {
+    if (line != null && textAlpha > 0.02f) {   // chỉ sự kiện hệ thống mới có chữ (xem setContent)
         tp.setAlpha((int) (255 * textAlpha));
         float tx = ix + isz + h * 0.2f;
+        float textR = count > 1 ? bx - h * 0.45f : rr - h * 0.9f;
         Paint.FontMetrics fm = tp.getFontMetrics();
         c.save();
         c.clipRect(tx, t, textR, b);
@@ -1466,7 +1586,7 @@ sp.setStrokeWidth(1.6f * dens);
         c.restore();
     }
     removeCallbacks(tick);
-    if (item.media && item.playing && screenOn && statusVisible && (spin || viz)) postDelayed(tick, 40);
+    if (item.media && item.playing && screenOn && statusVisible && (spin || viz)) postOnAnimationDelayed(tick, 32);
     }
   }
 }

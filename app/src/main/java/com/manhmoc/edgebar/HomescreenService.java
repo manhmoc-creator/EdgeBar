@@ -1157,7 +1157,8 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         panelDebounceHandler.postDelayed(panelDebounceRunnable, 120);
         return;
     }
-    if (k.endsWith("_manual_hide")) return;
+        if (k.endsWith("_manual_hide")) return;
+    if (k.startsWith("home_") && isGeoKey(k)) { scheduleGeoLive(); return; }   // slider -> đường nhanh, bỏ debounce 500ms + updateVisibility()
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> {
         debounceRunnable = null;
@@ -1166,6 +1167,54 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     debounceHandler.postDelayed(debounceRunnable, 500);
 };
 
+private static final String[] GEO_SUFFIX = {"_alpha","_w","_h","_x","_y","_shape","_moon_w","_moon_h","_moon_x","_moon_y",
+    "_rad","_moon_rad","_radius","_thick","_icon_size"};
+private boolean isGeoKey(String k) {
+    for (String s : GEO_SUFFIX) if (k.endsWith(s)) return true;
+    return false;
+}
+private final android.os.Handler geoHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+private boolean geoPending;
+private final Runnable geoRun = this::updateGeoLive;
+private void scheduleGeoLive() { if (!geoPending) { geoPending = true; geoHandler.postDelayed(geoRun, 33); } }
+
+// Chỉ cập nhật các bar/corner Home ĐANG HIỆN: thuộc tính vẽ + LayoutParams. Không dựng lại Panel/Notic.
+private void updateGeoLive() {
+    geoPending = false;
+    boolean ghost = prefs.getBoolean("preview_lock", false) && !prefs.getBoolean("preview_home", false);
+    boolean push = prefs.getBoolean("avoid_kbd", true) && lastKbdHeight > 0;
+    int nb = Math.min(bars.length, BARS.length);
+    for (int i = 0; i < nb; i++) {
+        View v = bars[i];
+        if (!(v instanceof BarView) || v.getVisibility() != View.VISIBLE) continue;
+        String bk = "home_" + BARS[i];
+        int vis = readSplit(prefs, bk + "_vis_mode", "homeb", 0);
+        ((BarView) v).updateProps(ghost ? 0 : prefs.getInt(bk + "_alpha", 50), vis == 1, prefs.getInt("home_bar_hide_dur", 2500), vis == 2, prefs.getInt("home_bar_radius", 24));
+        WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
+        p.width = prefs.getInt(bk + "_w", 300);
+        p.height = prefs.getInt(bk + "_h", 60);
+        p.x = prefs.getInt(bk + "_x", 0);
+        p.y = prefs.getInt(bk + "_y", 0) + ((push && (i == 0 || i == 1 || i == 5 || i == 9 || i == 11)) ? lastKbdHeight : 0);
+        updateLayoutIfChanged(v, p);
+    }
+    int nc = Math.min(corners.length, CORNERS.length);
+    for (int i = 0; i < nc; i++) {
+        View v = corners[i];
+        if (!(v instanceof CornerView) || v.getVisibility() != View.VISIBLE) continue;
+        String ck = "home_corner_" + CORNERS[i] + "_";
+        int vis = prefs.getInt(ck + "vis_mode", 0);
+        ((CornerView) v).updateProps(prefs.getInt("home_corner_thick", 8), ghost ? 0 : prefs.getInt("home_corner_moon_alpha", 100),
+            ghost ? 0 : prefs.getInt("home_corner_stroke_alpha", 200), vis == 1, prefs.getInt("home_corner_hide_dur", 2500), vis == 2);
+        WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
+        int wP = prefs.getInt(ck + "w", 100), hP = prefs.getInt(ck + "h", 100);
+        int mw = prefs.getInt(ck + "moon_w", 100), mh = prefs.getInt(ck + "moon_h", 100);
+        p.width = Math.max(10, Math.max(wP, mw) + Math.abs(prefs.getInt(ck + "moon_x", 1250) - 1250));
+        p.height = Math.max(10, Math.max(hP, mh) + Math.abs(prefs.getInt(ck + "moon_y", 1250) - 1250));
+        p.x = prefs.getInt(ck + "x", 0);
+        p.y = prefs.getInt(ck + "y", 0) + ((push && (i == 0 || i == 1)) ? lastKbdHeight : 0);
+        updateLayoutIfChanged(v, p);
+    }
+}
     private void updateVisibility() {
     if (panelEngine != null) panelEngine.rebuildAll();
     if (prefs.getBoolean("blacklist_lock_active", false)) {

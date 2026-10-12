@@ -395,16 +395,66 @@ private boolean isOurKey(String k) {
     return false;
 }
 
-// V19.12.3.6.7 THE FINAL VERDICT
-// Tăng debounce Homacc từ 300ms → 1000ms
-// Lý do: updateHomaccLive() gọi wm.updateViewLayout() là IPC call đến system_server
-// Mỗi IPC call = wakelock ngắn trên Adreno 540 → pin hao nhanh
-// 1000ms debounce = user kéo slider thoải mái, chỉ apply sau khi dừng tay
 private static final long HOMACC_DEBOUNCE_MS = 1000;
 private static final long LOCK_DEBOUNCE_MS = 400;
 
+// UX/perf: slider kích thước/vị trí/độ mờ/bo góc -> đẩy thẳng LayoutParams của view ĐANG HIỆN, gom ~1-2 khung hình.
+// Trước đây Lock đợi 400ms rồi chạy cả updateVisibility() (dựng lại Panel, Notic...), Home đợi 1000ms -> cảm giác "không realtime".
+private static final String[] GEO_SUFFIX = {"_alpha","_w","_h","_x","_y","_shape","_moon_w","_moon_h","_moon_x","_moon_y",
+    "_rad","_moon_rad","_radius","_thick","_icon_size"};
+private boolean isGeoKey(String k) {
+    if (!(k.startsWith("lock_") || k.startsWith("home_"))) return false;
+    for (String s : GEO_SUFFIX) if (k.endsWith(s)) return true;
+    return false;
+}
+private final Handler geoHandler = new Handler(android.os.Looper.getMainLooper());
+private boolean lockGeoPending, homeGeoPending;
+private final Runnable lockGeoRun = () -> { lockGeoPending = false; updateLockGeoLive(); if (noticEngine != null) noticEngine.relayout(); };
+private final Runnable homeGeoRun = () -> { homeGeoPending = false; updateHomaccLive(); if (noticEngine != null) noticEngine.relayout(); };
+private void scheduleLockGeo() { if (!lockGeoPending) { lockGeoPending = true; geoHandler.postDelayed(lockGeoRun, 33); } }
+private void scheduleHomeGeo() { if (!homeGeoPending) { homeGeoPending = true; geoHandler.postDelayed(homeGeoRun, 33); } }
+
+private void updateLockGeoLive() {
+    boolean push = prefs.getBoolean("avoid_kbd", true) && cachedKbdHeight > 0;
+    for (int i = 0; i < 12; i++) {
+        View v = bars[i];
+        if (!(v instanceof BarView) || v.getVisibility() != View.VISIBLE) continue;
+        String bk = "lock_" + BARS[i];
+        int vis = readSplit(prefs, bk + "_vis_mode", "homacc", 0);
+        ((BarView) v).updateProps(prefs.getInt(bk + "_alpha", 50), vis == 1, prefs.getInt("lock_bar_hide_dur", 2500), vis == 2, prefs.getInt("lock_bar_radius", 24));
+        WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
+        p.width = prefs.getInt(bk + "_w", 300);
+        p.height = prefs.getInt(bk + "_h", 60);
+        p.x = prefs.getInt(bk + "_x", 0);
+        p.y = prefs.getInt(bk + "_y", 0) + ((push && (i == 0 || i == 1 || i == 5 || i == 9 || i == 11)) ? cachedKbdHeight : 0);
+        updateLayoutIfChanged(v, p);
+        syncIconLayer("lock_", i, p, true);
+    }
+    for (int i = 0; i < 4; i++) {
+        View v = corners[i];
+        if (!(v instanceof CornerView) || v.getVisibility() != View.VISIBLE) continue;
+        String ck = "lock_corner_" + CORNERS[i] + "_";
+        int vis = prefs.getInt(ck + "vis_mode", 0);
+        ((CornerView) v).updateProps(prefs.getInt("lock_corner_thick", 8), prefs.getInt("lock_corner_moon_alpha", 100),
+            prefs.getInt("lock_corner_stroke_alpha", 200), vis == 1, prefs.getInt("lock_corner_hide_dur", 2500), vis == 2);
+        WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
+        int wP = prefs.getInt(ck + "w", 100), hP = prefs.getInt(ck + "h", 100);
+        int mw = prefs.getInt(ck + "moon_w", 100), mh = prefs.getInt(ck + "moon_h", 100);
+        p.width = Math.max(10, Math.max(wP, mw) + Math.abs(prefs.getInt(ck + "moon_x", 1250) - 1250));
+        p.height = Math.max(10, Math.max(hP, mh) + Math.abs(prefs.getInt(ck + "moon_y", 1250) - 1250));
+        p.x = prefs.getInt(ck + "x", 0);
+        p.y = prefs.getInt(ck + "y", 0) + ((push && (i == 0 || i == 1)) ? cachedKbdHeight : 0);
+        updateLayoutIfChanged(v, p);
+    }
+}
+
 private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k) -> {
     if (!isOurKey(k)) return;
+    if (isGeoKey(k)) {
+        if (k.startsWith("lock_")) scheduleLockGeo();
+        else if ((AccessibleHomeService.isRunning || prefs.getBoolean("preview_home", false)) && isHomaccDrawn) scheduleHomeGeo();
+        return;
+    }
         if (k.startsWith("notic_")) {
         if (noticEngine != null) noticEngine.relayout();
         return;
