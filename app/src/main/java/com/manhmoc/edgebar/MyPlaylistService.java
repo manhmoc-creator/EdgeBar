@@ -544,7 +544,7 @@ private PendingIntent contentTapPI() {
     // Bộ nút giống media notification chuẩn của hệ thống: Lùi 10s - Trước - Play/Pause - Tiếp - Tới 10s,
     // nút Dừng đổi icon nguồn (power) để không còn giống dấu X gây hiểu nhầm.
         Notification.Builder b = new Notification.Builder(this, CHANNEL_ID)
-        .setContentTitle(paused ? "🎵 " + title : "🎵 " + title)
+        .setContentTitle(paused ? " " + title : " " + title)
         .setContentText(getCurrentPackName())
         .setSmallIcon(android.R.drawable.ic_media_play)
         .setLargeIcon(currentArt)

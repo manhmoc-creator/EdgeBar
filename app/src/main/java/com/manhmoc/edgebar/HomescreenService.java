@@ -150,22 +150,24 @@ private boolean recIndicatorTestPaused = false;
         }
         scheduleNoticRelayout();
     }
-    private Object[] findSwallowHost() {
-        if (km != null && km.isKeyguardLocked()) return null;   // Homeb chỉ chạy khi đã mở khoá
-        for (int i = 0; i < 12; i++) {
-            View v = bars[i];
-            if (v == null || v.getVisibility() != View.VISIBLE) continue;
-            String k = "home_" + BARS[i];
-            if (prefs.getBoolean(k + "_en", false) && readSplit(prefs, k + "_lockmode", "homeb", 1) == 2) return new Object[]{v, k};
-        }
-        for (int i = 0; i < 4; i++) {
-            View v = corners[i];
-            if (v == null || v.getVisibility() != View.VISIBLE) continue;
-            String k = "home_corner_" + CORNERS[i];
-            if (prefs.getBoolean(k + "_en", false) && readSplit(prefs, k + "_lockmode", "homeb", 1) == 2) return new Object[]{v, k};
-        }
-        return null;
+    private static final int[] SWALLOW_BAR_ORDER = {6, 8, 7, 3, 9, 4, 10, 5, 11, 1, 2, 0};
+private static final int[] SWALLOW_CORNER_ORDER = {3, 2, 1, 0};
+private Object[] findSwallowHost() {
+    if (km != null && km.isKeyguardLocked()) return null;
+    for (int i : SWALLOW_BAR_ORDER) {
+        View v = bars[i];
+        if (v == null || v.getVisibility() != View.VISIBLE) continue;
+        String k = "home_" + BARS[i];
+        if (prefs.getBoolean(k + "_en", false) && readSplit(prefs, k + "_lockmode", "homeb", 1) == 2) return new Object[]{v, k};
     }
+    for (int i : SWALLOW_CORNER_ORDER) {
+        View v = corners[i];
+        if (v == null || v.getVisibility() != View.VISIBLE) continue;
+        String k = "home_corner_" + CORNERS[i];
+        if (prefs.getBoolean(k + "_en", false) && readSplit(prefs, k + "_lockmode", "homeb", 1) == 2) return new Object[]{v, k};
+    }
+    return null;
+}
     private volatile boolean isDispatchingSyntheticGesture = false;
     private float globalTouchStartX = -1f, globalTouchStartY = -1f, globalTouchEndX = -1f, globalTouchEndY = -1f;
     private long lastSyncMs = 0;

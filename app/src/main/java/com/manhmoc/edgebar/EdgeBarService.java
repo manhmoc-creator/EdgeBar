@@ -2736,25 +2736,27 @@ private boolean computeShadeOpen() {
     } catch (Exception ignored) {}
     return false;
 }  
+private static final int[] SWALLOW_BAR_ORDER = {6, 8, 7, 3, 9, 4, 10, 5, 11, 1, 2, 0};   // ưu tiên bar phía trên, đáy xếp cuối
+private static final int[] SWALLOW_CORNER_ORDER = {3, 2, 1, 0};
 private Object[] findSwallowHost() {
     boolean locked = km != null && km.isKeyguardLocked() && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs;
     String px = locked ? "lock_" : "home_";
     View[] barArr = locked ? bars : accHomeBars;
     View[] cornerArr = locked ? corners : accHomeCorners;
-    for (int i = 0; i < 12; i++) {
+    for (int i : SWALLOW_BAR_ORDER) {
         View v = barArr[i];
-        if (v == null) continue;
+        if (v == null || v.getVisibility() != View.VISIBLE) continue;   // bar đang ẩn không được chặn bar khác
         String k = px + BARS[i];
         if (prefs.getBoolean(k + "_en", false) && prefs.getInt(k + "_lockmode", 1) == 2) return new Object[]{v, k};
     }
-    for (int i = 0; i < 4; i++) {
+    for (int i : SWALLOW_CORNER_ORDER) {
         View v = cornerArr[i];
-        if (v == null) continue;
+        if (v == null || v.getVisibility() != View.VISIBLE) continue;
         String k = px + "corner_" + CORNERS[i];
         if (prefs.getBoolean(k + "_en", false) && prefs.getInt(k + "_lockmode", 1) == 2) return new Object[]{v, k};
     }
     return null;
-}  
+}
 private void setViewVisibilityAnimated(View v, boolean show) {
     if (v == null) return;
     int dur = prefs.getInt("lock_anim_dur", 0);

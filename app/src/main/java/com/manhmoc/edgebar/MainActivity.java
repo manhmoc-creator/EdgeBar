@@ -6293,7 +6293,7 @@ private void renderMyPlaylistPackList() {
         optCol.setGravity(Gravity.CENTER);
         optCol.setPadding(0, 0, 15, 0);
         TextView tIcon = new TextView(this);
-        tIcon.setText(id.equals(curPlayingId) ? "▶" : "🎵");
+        tIcon.setText(id.equals(curPlayingId) ? "▶");
         tIcon.setTextSize(24);
         optCol.addView(tIcon);
 
@@ -8433,14 +8433,12 @@ private LinearLayout noticDrawerBody() {
     l.setPadding(20, 10, 20, 20);
     return l;
 }
-
-private void runNoticDemo(boolean toast) {
+private void runNoticDemo(boolean toggle) {
     NoticEngine e = NoticEngine.instance;
-    boolean ok = e != null && e.testDemo();
-    if (!ok && toast) Toast.makeText(this, T("Turn Notic on and set a bar/corner to \"Swallow notifications\" first",
+    boolean ok = e != null && (toggle ? e.previewToggle() : e.previewStart());
+    if (!ok && toggle) Toast.makeText(this, T("Turn Notic on and set a bar/corner to \"Swallow notifications\" first",
         "Hãy bật Notic và đặt 1 bar/corner sang \"Nuốt thông báo\" trước"), Toast.LENGTH_LONG).show();
 }
-
 private View noticPalette(String title, String key, String[] specials, String[] hexes) {
     LinearLayout box = new LinearLayout(this);
     box.setOrientation(LinearLayout.VERTICAL);
@@ -8578,8 +8576,7 @@ private void openNoticSpace() {
     bP.addView(createSignedSlider(T("Thickness (%)", "Độ dày (%)"), "notic_h_pct", 50, 200, 100));
     bP.addView(createSignedSlider(T("Roundness (%)", "Độ bo cong (%)"), "notic_rad_pct", 0, 100, 100));
     bP.addView(createSectionTitle(T("EXPANDED PANEL", "BẢNG THÔNG BÁO MỞ RỘNG")));
-    bP.addView(createSignedSlider(T("Position X (px)", "Vị trí X (px)"), "notic_pop_x", -1000, 1000, 0));
-    bP.addView(createSignedSlider(T("Position Y (px)", "Vị trí Y (px)"), "notic_pop_y", -1000, 1000, 0));
+bP.addView(createSignedSlider(T("Max length (%)", "Chiều dài tối đa (%)"), "notic_pop_h_pct", 20, 90, 55));
     bP.addView(createSignedSlider(T("Width (%)", "Chiều rộng (%)"), "notic_pop_w_pct", 60, 130, 100));
     bP.addView(createSignedSlider(T("Corner radius (dp)", "Độ bo cong (dp)"), "notic_pop_rad", 0, 60, 26));
     content.addView(createDrawer("📐 " + T("POSITION", "VỊ TRÍ"), bP));
@@ -8605,7 +8602,7 @@ private void openNoticSpace() {
     bClose.setOnClickListener(x -> d.dismiss());
     root.addView(bClose);
 
-    d.setOnDismissListener(x -> { NoticEngine e = NoticEngine.instance; if (e != null) e.clearDemo(); });
+    d.setOnDismissListener(x -> { NoticEngine e = NoticEngine.instance; if (e != null) { e.clearDemo(); e.setPreview(false); } });
     d.setContentView(root);
     d.show();
     // vào Notic space là notic hiện ngay để user nhìn và chỉnh slider theo thời gian thực

@@ -137,6 +137,8 @@ public static class Item {
     private PillView pill;
     private WindowManager.LayoutParams pillLp;
     private boolean fullWin, expanded, statusVisible = true, insetsVisible = true, shadeOpen, hostChanged, sysRegistered, fadeNext;   // [P1][P4][P7]
+    private boolean previewForce;   // Notic Space: ép hiện dù dialog fullscreen làm status bar bị ẩn
+private String pillHostKey;     // host pill đang vẽ cho -> nhận ra chuyển Lock<->Home để không trượt
     private int cur = 0;
 
     private LinearLayout popup;
@@ -720,6 +722,7 @@ private void cancelPendingTap() {
     }
 
     private void openItem(Item it) {
+        if (isDemo(it)) return;
         try {
             if (it.intent != null) it.intent.send();
             else if (it.pkg != null) {
@@ -748,6 +751,7 @@ public void clearDemo() {
     private void openCurrentApp() {
         if (items.isEmpty()) return;
         Item it = items.get(Math.min(cur, items.size() - 1));
+        if (isDemo(it)) return;
         openItem(it);
         if (!it.media) items.remove(it);
         closePopup(false, true);   // đóng có animation, không "biến mất cái bụp" lúc nhấn giữ
@@ -771,21 +775,22 @@ public void clearDemo() {
             return;
         }
         h.removeCallbacks(noHostRun);     
-        String s = geoKey();
+                String s = geoKey();
         if (pill != null && s.equals(lastGeo)) {
-            hostChanged = false;                      // đổi host nhưng cùng hình học -> pill đứng yên, chỉ hoán đổi bar bị che
+            hostChanged = false;
+            pillHostKey = hostKey;
             h.removeCallbacks(geoRun); pendingGeo = "";
-            pill.invalidate();   // đổi màu/visualizer trong cài đặt thấy ngay
+            pill.invalidate();
             applyVisibility();
             return;
         }
-        if (!s.equals(pendingGeo)) {   // hình học đổi: đợi nó đứng yên rồi mới di chuyển
+        if (!s.equals(pendingGeo)) {
             pendingGeo = s; geoTries = 0;
             h.removeCallbacks(geoRun);
-            h.postDelayed(geoRun, 80);
+            if (previewForce) geoRun.run();          // kéo slider: pill bám tay ngay, không debounce
+            else h.postDelayed(geoRun, 80);
         }
     }
-
     private String geoKey() { return (int) hl + "|" + (int) ht + "|" + (int) hr + "|" + (int) hb + "|" + (int) px + "|" + (int) cy + "|" + (int) ew + "|" + (int) pillH + "|" + badgeLeft + "|" + cRadPct; }
 
     private void geoSettle() {
@@ -793,21 +798,30 @@ public void clearDemo() {
         if (!bindHost()) { pendingGeo = ""; h.removeCallbacks(noHostRun); h.postDelayed(noHostRun, 700); return; }
         h.removeCallbacks(noHostRun);
         String s = geoKey();
-        if (!s.equals(pendingGeo) && geoTries++ < 8) { pendingGeo = s; h.postDelayed(geoRun, 80); return; }   // còn đang trôi -> đo lại (tối đa ~640ms)
+        if (!previewForce && !s.equals(pendingGeo) && geoTries++ < 8) { pendingGeo = s; h.postDelayed(geoRun, 80); return; }   // còn đang trôi -> đo lại (tối đa ~640ms)
         pendingGeo = ""; geoTries = 0;
         applyGeo(s);
     }
 
-    private void applyGeo(String s) {
+        private void applyGeo(String s) {
+        boolean hostSwitch = pillHostKey != null && !pillHostKey.equals(hostKey);
+        pillHostKey = hostKey;
         if (pill == null) { lastGeo = s; hostChanged = false; if (!userHidden) announce(); return; }
-        boolean snap = lastGeo.isEmpty();                  // Lock/Home cấu hình khác nhau thì pill trượt mượt, không nhảy
+        // Đổi host (Lock<->Home) hoặc đang kéo slider: nhảy thẳng + cross-fade, KHÔNG trượt qua vị trí trung gian (nguồn gốc cảm giác giật)
+        boolean snap = lastGeo.isEmpty() || hostSwitch || previewForce;
         hostChanged = false;
         if (s.equals(lastGeo)) { pill.invalidate(); applyVisibility(); return; }
         lastGeo = s;
         final boolean want = expanded || pill.towardsExpanded();
         float tw = want ? expW() : cw;
-        if (snap) { pill.set(px, cy, tw, pillH, pillRad(), 1f, want ? 1f : 0f); winFit(); }
-        else { winFull(); pill.go(px, cy, tw, pillH, pillRad(), 1f, want ? 1f : 0f, 320, EMPH, () -> { if (want) afterExpand(); else winFit(); }); }
+        if (snap) {
+            if (hostSwitch) fadeNext = true;
+            pill.set(px, cy, tw, pillH, pillRad(), 1f, want ? 1f : 0f);
+            winFit();
+        } else {
+            winFull();
+            pill.go(px, cy, tw, pillH, pillRad(), 1f, want ? 1f : 0f, 320, EMPH, () -> { if (want) afterExpand(); else winFit(); });
+        }
         pill.invalidate();
         applyVisibility();
     }
@@ -890,6 +904,7 @@ cy = Math.max(ht + pillH / 2f, Math.min(hb - pillH / 2f, cyw));
         });
         try { wm.addView(pv, pillLp); } catch (Exception e) { return false; }
         pill = pv;
+        pillHostKey = hostKey;
         fullWin = true;
         expanded = false;
         pv.requestApplyInsets();
@@ -897,7 +912,7 @@ cy = Math.max(ht + pillH / 2f, Math.min(hb - pillH / 2f, cyw));
     }
     // [P4] Notic ẩn (bar/corner hiện lại) khi status bar bị ẩn HOẶC khi user đang kéo bảng thông báo / QS; cất bảng đi thì Notic hiện lại
     private void syncVisible() {
-        boolean v = insetsVisible && !shadeOpen;
+        boolean v = previewForce || (insetsVisible && !shadeOpen);
         if (v == statusVisible) return;
         statusVisible = v;
         h.post(() -> {
@@ -911,6 +926,40 @@ cy = Math.max(ht + pillH / 2f, Math.min(hb - pillH / 2f, cyw));
         shadeOpen = open;
         syncVisible();
     }
+    private static boolean isDemo(Item it) { return it.key != null && it.key.startsWith("demo_"); }
+
+public void setPreview(boolean on) {
+    if (previewForce == on) return;
+    previewForce = on;
+    syncVisible();
+}
+
+public boolean previewStart() {
+    if (!prefs.getBoolean("notic_en", false)) return false;
+    setPreview(true);
+    return testDemo();
+}
+
+// Nút ▶: bật demo + mở bảng mở rộng để chỉnh slider panel; bấm lại để đóng
+public boolean previewToggle() {
+    if (popup != null) { closePopup(false, true); return true; }
+    final boolean fresh = pill == null;
+    if (!previewStart()) return false;
+    h.postDelayed(() -> { if (previewForce && popup == null && pill != null) showPopup(false, true); }, fresh ? 650 : 0);
+    return true;
+}
+
+private void clearAll() {
+    List<Item> all = new ArrayList<>(items);
+    items.clear();
+    for (Item x : all) {
+        unbindMedia(x);
+        // media chỉ gỡ khỏi Notic, không cancel notification nhạc của hệ thống
+        if (!x.transientItem && !x.media && !isDemo(x) && x.key != null && EdgeBarNotificationListener.cancel(x.key)) markSelfCancel(x.key);
+    }
+    closePopup(false, true);
+    afterChange();
+}
     private void winFull() {
     if (pill == null) return;
     // Cửa sổ phải phủ CẢ vị trí cũ lẫn mới của pill, nếu không khung đầu bị cắt -> giật khi Lock <-> Home
@@ -926,7 +975,12 @@ cy = Math.max(ht + pillH / 2f, Math.min(hb - pillH / 2f, cyw));
     fullWin = true;
     try { wm.updateViewLayout(pill, pillLp); } catch (Exception ignored) {}
 }
-    private float expW() { return ew; }   // thay hàm cũ
+    // Nhạc cần chỗ cho visualizer; sự kiện hệ thống có chữ; thông báo thường chỉ cần viên thuốc gọn
+private float expW() {
+    if (items.isEmpty()) return ew;
+    Item it = items.get(Math.min(cur, items.size() - 1));
+    return (it.media || it.transientItem) ? ew : cw;
+}
 private float pillRad() { return pillH / 2f * cRadPct / 100f; }
     private void winFit() {
         if (pill == null) return;
@@ -978,6 +1032,7 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
         }
         expanded = false;
         lastGeo = "";
+        pillHostKey = null;
         restoreHost();
     }
     private void announce() {
@@ -1003,7 +1058,6 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
         pill.setContent(it, items.size(), tw);
         if (sameState) {
             pill.invalidate();
-            if (!pill.animating()) h.postDelayed(settleRun, 3200);
         } else {
             if (fullWin || tw + 4 * dens > pillLp.width) winFull();
             pill.go(px, cy, tw, pillH, pillRad(), 1f, 1f, 300, EMPH, this::afterExpand);
@@ -1011,18 +1065,10 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
     }
 }
     private void afterExpand() {
-        expanded = true;
-        winFit();
-        h.removeCallbacks(settleRun);
-        h.postDelayed(settleRun, 3200);
-    }
-
-    private void settle() {
-        if (pill == null || items.isEmpty() || !bindHost()) return;
-        expanded = false;   // không winFull(): cửa sổ sân khấu đã chứa sẵn trạng thái thu gọn
-        pill.go(px, cy, cw, pillH, pillRad(), 1f, 0f, 260, EMPH, this::winFit);
-    }
-
+    expanded = true;
+    winFit();
+}
+    private void settle() { /* pill không còn tự thu nhỏ */ }
     private void afterChange() {
         if (cur >= items.size()) cur = Math.max(0, items.size() - 1);
         if (items.isEmpty()) {
@@ -1094,16 +1140,14 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
     openPopup();
 }
 private int popW() { return (int) Math.min(scrW - dp(24), dp(420) * prefs.getInt("notic_pop_w_pct", 100) / 100f); }
-private int popX(int pw) { return (int) Math.max(dp(8), Math.min(scrW - pw - dp(8), px - pw / 2f + prefs.getInt("notic_pop_x", 0))); }
+private int popX(int pw) { return (int) Math.max(dp(8), Math.min(scrW - pw - dp(8), px - pw / 2f)); }
 private int popY(int ph) {
-    // mép bảng trùng mép viên thuốc -> cảm giác "mọc" ra từ notic
     int y = cy < scrH / 2f ? (int) (cy - pillH / 2f) : (int) (cy + pillH / 2f - ph);
-    return (int) Math.max(dp(4), Math.min(scrH - ph - dp(4), y + prefs.getInt("notic_pop_y", 0)));
+    return (int) Math.max(dp(4), Math.min(scrH - ph - dp(4), y));
 }
-
+private int popMaxH() { return Math.round(scrH * prefs.getInt("notic_pop_h_pct", 55) / 100f); }
 private void openPopup() {
     h.removeCallbacks(settleRun);
-    final int maxH = Math.round(scrH * 0.55f);
     popRad = dp(prefs.getInt("notic_pop_rad", 26));
     LinearLayout root = new LinearLayout(ctx);
     root.setOrientation(LinearLayout.VERTICAL);
@@ -1111,10 +1155,13 @@ private void openPopup() {
     root.setBackground(popupBg);
     root.setPadding(dp(8), dp(8), dp(8), dp(8));
     root.setOnTouchListener((v, e) -> {
-        if (e.getAction() == MotionEvent.ACTION_OUTSIDE) { closePopup(popupHistory, true); return true; }
-        return false;
-    });
-
+    if (e.getAction() == MotionEvent.ACTION_OUTSIDE) {
+        if (previewForce) return false;           // đang kéo slider ngoài bảng thì không được đóng
+        closePopup(false, true);                  // chạm ra ngoài chỉ đóng, KHÔNG xoá thông báo
+        return true;
+    }
+    return false;
+});
     LinearLayout head = new LinearLayout(ctx);
     head.setOrientation(LinearLayout.HORIZONTAL);
     head.setGravity(Gravity.CENTER_VERTICAL);
@@ -1130,7 +1177,7 @@ private void openPopup() {
     clear.setTextColor(Color.parseColor("#8AB4F8"));
     clear.setTextSize(12.5f);
     clear.setPadding(dp(8), dp(6), dp(8), dp(6));
-    clear.setOnClickListener(v -> closePopup(true, true));
+    clear.setOnClickListener(v -> clearAll());
     head.addView(ttl);
     head.addView(clear);
     head.setVisibility(popupHistory ? View.VISIBLE : View.GONE);
@@ -1141,7 +1188,7 @@ private void openPopup() {
     popupBody.setOrientation(LinearLayout.VERTICAL);
     ScrollView sv = new ScrollView(ctx) {
         @Override protected void onMeasure(int wSpec, int hSpec) {
-            super.onMeasure(wSpec, MeasureSpec.makeMeasureSpec(maxH, MeasureSpec.AT_MOST));
+            super.onMeasure(wSpec, MeasureSpec.makeMeasureSpec(popMaxH(), MeasureSpec.AT_MOST));
         }
     };
     sv.addView(popupBody);
@@ -1233,7 +1280,6 @@ private void closePopup(boolean markRead, boolean animate) {
         if (animate && pill != null && lp != null)
             runMorph(p, lp, bgd, false, () -> { try { wm.removeView(p); } catch (Exception ignored) {} });   // thu về đúng viên thuốc rồi gỡ
         else { try { wm.removeView(p); } catch (Exception ignored) {} }
-        if (!markRead && !items.isEmpty() && pill != null) { h.removeCallbacks(settleRun); h.postDelayed(settleRun, 1500); }
     }
     if (markRead) {
         items.removeIf(x -> !x.media);
@@ -1286,7 +1332,7 @@ private void renderPopup() {
 
     private View buildRow(final Item it) {
         // UX: vuốt ngang card = xoá (media + cuộc gọi đến KHÔNG vuốt xoá để tránh lỡ tay mất trình phát/cuộc gọi)
-        LinearLayout card = (it.media || it.call) ? new LinearLayout(ctx) : new SwipeCard(ctx, it);
+        LinearLayout card = it.call ? new LinearLayout(ctx) : new SwipeCard(ctx, it);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(cardBg(it, popupHistory ? dp(18) : popRad));
         card.setPadding(dp(10), dp(10), dp(10), dp(10));
@@ -1381,16 +1427,14 @@ private GradientDrawable cardBg(Item it, float r) {
     if (cBorder) g.setStroke(dp(1.5f), appColor(it));
     return g;
 }
-    // Xoá 1 thông báo: khỏi Notic + khỏi bảng thông báo hệ thống (sự kiện hệ thống "transient" không có thông báo thật nên bỏ qua bước cancel)
     private void dismissItem(Item it) {
-        if (!items.remove(it)) return;
-        unbindMedia(it);
-        if (!it.transientItem && it.key != null && EdgeBarNotificationListener.cancel(it.key)) markSelfCancel(it.key);
-        if (popup != null && !popupHistory) closePopup(false, true);   // đang xem 1 thông báo: xoá xong thì đóng, đừng bật thông báo kế tiếp lên ngay chỗ cũ
-        afterChange();
-        placePopup();   // chế độ lịch sử: bảng ngắn lại thì dịch lại vị trí
-    }
-
+    if (!items.remove(it)) return;
+    unbindMedia(it);
+    if (!it.transientItem && !it.media && !isDemo(it) && it.key != null && EdgeBarNotificationListener.cancel(it.key)) markSelfCancel(it.key);
+    if (popup != null && !popupHistory) closePopup(false, true);
+    afterChange();
+    placePopup();
+}
     private class SwipeCard extends LinearLayout {
         final Item it;
         final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
@@ -1398,12 +1442,23 @@ private GradientDrawable cardBg(Item it, float r) {
         boolean dragging;
         VelocityTracker vt;
         SwipeCard(Context c, Item it) { super(c); this.it = it; }
-
+        // ScrollView cha hay giành cử chỉ khi tay lệch dọc: chặn từ DOWN, chỉ trả quyền khi rõ ràng là vuốt dọc
+@Override public boolean dispatchTouchEvent(MotionEvent e) {
+    int a = e.getActionMasked();
+    if (a == MotionEvent.ACTION_DOWN) {
+        x0 = e.getRawX(); y0 = e.getRawY(); dragging = false;
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+    } else if (a == MotionEvent.ACTION_MOVE && !dragging) {
+        float mx = Math.abs(e.getRawX() - x0), my = Math.abs(e.getRawY() - y0);
+        if (my > slop && my > mx && getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+    }
+    return super.dispatchTouchEvent(e);
+}
         private boolean typing() { return popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0; }   // đang gõ reply -> không cướp cử chỉ
 
         private boolean horizontal(MotionEvent e) {
             float mx = e.getRawX() - x0, my = e.getRawY() - y0;
-            return Math.abs(mx) > slop && Math.abs(mx) > Math.abs(my) * 1.5f;
+            return Math.abs(mx) > slop && Math.abs(mx) > Math.abs(my) * 1.2f;
         }
 
         private void begin(MotionEvent e) {
@@ -1762,12 +1817,12 @@ sp.setStrokeWidth(1.6f * dens);
         void setContent(Item it, int cnt, float expandedW) {
     item = it; count = cnt;
     senderCircle(it);
+    if (!it.transientItem) { line = null; return; }   // thông báo app + nhạc: chỉ icon/visualizer/số, không chữ. Sự kiện hệ thống giữ chữ vì không có nơi nào khác để đọc
     tp.setTextSize(Math.min(13f * dens, pillH * 0.38f));
     String s = it.title == null ? "" : it.title;
-    if (it.transientItem && it.text != null && !it.text.isEmpty()) s = s.isEmpty() ? it.text : s + ": " + it.text;
+    if (it.text != null && !it.text.isEmpty()) s = s.isEmpty() ? it.text : s + ": " + it.text;
     s = s.replace('\n', ' ');
-    float rightPad = (it.media && cViz) ? 1.5f : (it.senderBmp != null ? 1.2f : 0.3f);
-    line = TextUtils.ellipsize(s, tp, Math.max(expandedW - pillH * (1.02f + rightPad), 10f), TextUtils.TruncateAt.END).toString();
+    line = TextUtils.ellipsize(s, tp, Math.max(expandedW - pillH * 1.32f, 10f), TextUtils.TruncateAt.END).toString();
 }
         void cancelAnim() {
             if (anim != null) { ValueAnimator a = anim; anim = null; a.cancel(); }
