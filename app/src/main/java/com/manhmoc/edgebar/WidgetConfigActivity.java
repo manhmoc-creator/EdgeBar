@@ -295,7 +295,7 @@ root.addView(cbSnd);
     /** Picker giàu 6 nhóm category — giống Bubble rule editor. */
     private void openActionPicker(String gestureKey) {
         final String px = "widget_" + widgetId + "_" + gestureKey;
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -495,7 +495,7 @@ root.addView(cbSnd);
         } catch (Exception ignored) {}
         all.sort((a, b) -> a[0].compareToIgnoreCase(b[0]));
 
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));

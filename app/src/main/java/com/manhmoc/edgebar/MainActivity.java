@@ -607,7 +607,7 @@ private View buildActionPickCard(String title, String prefKey, List<String[]> it
     final LinearLayout[] holder = new LinearLayout[1];
 
     Runnable openPicker = () -> {
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -934,6 +934,7 @@ if (prefs.getBoolean("blacklist_lock_active", false)
         if (prefs.getBoolean("preview_lock", false) || prefs.getBoolean("preview_homacc", false) || prefs.getBoolean("preview_home", false)) {
             prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply();
             sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
+            NoticEngine.endPreviewAll();
         }
     }
 
@@ -2176,7 +2177,7 @@ private void addAutoColorOffCheckboxes(LinearLayout container, String fullPrefKe
     }
 }
 private void openOrBridgeEditor(String baseKey, String title) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -2555,7 +2556,7 @@ private void refreshGestureChecksForComponent(ArrayList<CheckBox> boxes,
         boxes.get(i).setChecked(!action.equals("NONE") && !action.isEmpty());
     }
 }
-    private void openRuleBuilderDialog(String editKey, int preComp, int preGes, String copyActs) { Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen); d.setContentView(buildRuleEditor(d, editKey, preComp, preGes, copyActs)); d.show(); }
+    private void openRuleBuilderDialog(String editKey, int preComp, int preGes, String copyActs) { Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar); d.setContentView(buildRuleEditor(d, editKey, preComp, preGes, copyActs)); d.show(); }
 private int indexInDefaultOrder(String itemKey){
     for (int i = 0; i < TwinPairStore.DEFAULT_DISPLAY_ORDER.length; i++)
         if (TwinPairStore.DEFAULT_DISPLAY_ORDER[i].equals(itemKey)) return i;
@@ -2939,7 +2940,7 @@ private void openSensorPackEditor(String space, String editId) {
         Toast.makeText(this, T("Only 1 Data Pack allowed", "Chỉ được 1 Data Pack duy nhất"), Toast.LENGTH_SHORT).show();
         return;
     }
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -3187,7 +3188,7 @@ private void ensureHomeServiceForPreview() {
         sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE")), 300);
 }
     private void openPackRuleSpace(String appliedItemKey, int tabState) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     final boolean isHomebSpace = (tabState == 1);
         final String ruleSpace = tabState == 1 ? "home_" : "lock_";
     curRuleSpace = ruleSpace;
@@ -3341,7 +3342,7 @@ private void ensureHomeServiceForPreview() {
     }
 
 private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String currentItemKey, Runnable onDone) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -3653,7 +3654,7 @@ private void openHalfActionPicker(boolean isLeft, String kind,
         String[] pkgHolder, String[] shortcutHolder, Runnable onSave) {
 
     boolean isLimited = isCommonKind(kind);
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -3782,7 +3783,7 @@ private void openPackRuleEditor(String appliedItemKey, String editId, String cop
 private void openPackRuleEditor(String appliedItemKey, String editId, String copyId, Runnable onRefresh, boolean isHomebSpace, String focusSide) {
 
     reloadActionLabels();
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -4626,7 +4627,7 @@ private void reapplyPackIfEnabledByItemKey(String itemKey, String spacePrefix) {
     reapplyPackIfEnabled(isBar ? 0 : 1, id, spacePrefix);
 }
     private void openRuleBuilderDialogNoComp(String copyActs) {
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         d.setContentView(buildRuleEditor(d, null, -1, -1, copyActs));
         d.show();
     }
@@ -5075,7 +5076,7 @@ private Button singleActionCategoryBtn(String title, String color, List<String[]
     b.setBackground(getRounded(color, 20f)); b.setTextColor(Color.WHITE);
     b.setText(title);
     b.setOnClickListener(v -> {
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
         ListView lv = new ListView(this);
@@ -5125,7 +5126,7 @@ private void showActionCategoryPicker(String title, List<String[]> items,
     final java.util.LinkedHashSet<String> working = new java.util.LinkedHashSet<>();
     for (String s : selectedSet) if (categoryKeys.contains(s)) working.add(s);
 
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30, 80, 30, 30);
 
@@ -6387,7 +6388,7 @@ private LinearLayout buildMyPlaylistPackSelectionToolbar(List<String> ids) {
 
 // ==================== TRÌNH CHỈNH SỬA 1 PLAYLIST (đổi tên + danh sách bài) ====================
 private void openMyPlaylistPackEditor(String packId) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     RelativeLayout root = new RelativeLayout(this);
     root.setBackgroundColor(Color.parseColor("#000000"));
 
@@ -6848,7 +6849,7 @@ private static final int[] QS_ICON_POOL = {
         android.R.drawable.sym_action_call, android.R.drawable.sym_action_chat
     };
 private void showQsIconPickerDialog(java.util.function.IntConsumer onPicked) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     ScrollView scroll = new ScrollView(this);
     scroll.setBackgroundColor(Color.parseColor("#121212"));
     LinearLayout page = new LinearLayout(this);
@@ -7448,7 +7449,7 @@ private LinearLayout buildVideoSelectionToolbar() {
 }
 // ==================== [KẾT THÚC PHẦN MỚI] ====================
     private void openIntentEditorV2(String id) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,120,40,40);
     ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
     LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); scroll.addView(content); root.addView(scroll);
@@ -7483,7 +7484,7 @@ private LinearLayout buildVideoSelectionToolbar() {
 }
 
 private void openMacroEditorV2(String id) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,120,40,40);
     ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
     LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); scroll.addView(content); root.addView(scroll);
@@ -7505,7 +7506,7 @@ private void openMacroEditorV2(String id) {
     d.setContentView(root); d.show();
 }
 private void openTileEditorV2(String id) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,120,40,40);
     ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
     LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); scroll.addView(content); root.addView(scroll);
@@ -8169,7 +8170,7 @@ dCommon.addView(createSlider(T("Bubble Opacity (%)", "Độ đậm bong bóng (%
         List<String> selectedOrder = new ArrayList<>();
         for (String s : csvToList(prefs.getString(prefKey, ""))) if (!s.isEmpty()) selectedOrder.add(s);
         
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -8433,8 +8434,7 @@ private LinearLayout noticDrawerBody() {
     return l;
 }
 private void runNoticDemo(boolean toggle) {
-    NoticEngine e = NoticEngine.instance;
-    boolean ok = e != null && (toggle ? e.previewToggle() : e.previewStart());
+    boolean ok = NoticEngine.previewAll(toggle);
     if (!ok && toggle) Toast.makeText(this, T("Turn Notic on and set a bar/corner to \"Swallow notifications\" first",
         "Hãy bật Notic và đặt 1 bar/corner sang \"Nuốt thông báo\" trước"), Toast.LENGTH_LONG).show();
 }
@@ -8487,7 +8487,7 @@ private View noticPalette(String title, String key, String[] specials, String[] 
 }
 
 private void openNoticSpace() {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -8601,11 +8601,10 @@ bP.addView(createSignedSlider(T("Max length (%)", "Chiều dài tối đa (%)"),
     bClose.setOnClickListener(x -> d.dismiss());
     root.addView(bClose);
 
-    d.setOnDismissListener(x -> { NoticEngine e = NoticEngine.instance; if (e != null) { e.clearDemo(); e.setPreview(false); } });
-    d.setContentView(root);
-    d.show();
-    // vào Notic space là notic hiện ngay để user nhìn và chỉnh slider theo thời gian thực
-    new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> runNoticDemo(false), 400);
+    d.setOnDismissListener(x -> NoticEngine.endPreviewAll());
+d.setContentView(root);
+d.show();
+new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> { if (d.isShowing()) runNoticDemo(false); }, 400);
 }
 private void showNoticAppPicker() {
     final java.util.LinkedHashMap<String, String> apps = new java.util.LinkedHashMap<>();
@@ -8618,7 +8617,7 @@ private void showNoticAppPicker() {
         if (!apps.containsKey(p)) keepExcluded.add(p);
     }
 
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -8724,7 +8723,7 @@ private void openAppIconShortcutSpace() {
         .putBoolean("preview_homacc", false)
         .putBoolean("preview_home", false).apply();
     sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -8912,7 +8911,7 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
     }
 
     View.OnClickListener openPicker = v -> {
-        Dialog pd = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        Dialog pd = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout r = new LinearLayout(this); r.setOrientation(LinearLayout.VERTICAL);
         r.setBackgroundColor(Color.parseColor("#121212")); r.setPadding(30, 80, 30, 30);
 
@@ -9004,7 +9003,7 @@ pin.addView(bOpenUi);
 
     private void openBubbleGestureSpace() {
         reloadActionLabels();
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -9070,7 +9069,7 @@ renderRules[0].run();
 }
 private void openBubbleRuleEditor(String editId, Runnable onRefresh) {
         reloadActionLabels();
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -9766,7 +9765,7 @@ private void openDataPackEditor(int type, String id) {
     openDataPackEditor(type, id, "");
 }
 private void openDataPackEditor(int type, String id, String space) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -9970,7 +9969,7 @@ d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESI
     d.setContentView(root); d.show();
 }
 private void openEmptyPillDialog() {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -10002,7 +10001,7 @@ private void openEmptyPillDialog() {
 }
 private void openBubbleGestureEditor() {
         reloadActionLabels();
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -10173,7 +10172,7 @@ private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShort
             : (isPanelAppPicker
                 ? prefKey.substring("pack_panel_".length(), prefKey.length() - "_apps".length())
                 : "");
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -10421,7 +10420,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
     List<String> selApps = new ArrayList<>(csvToList(prefs.getString(prefPrefix + "apps", "")));
     List<String> selActs = new ArrayList<>(csvToList(prefs.getString(prefPrefix + "acts", "")));
     List<String> selScs = new ArrayList<>(csvToList(prefs.getString(prefPrefix + "shortcuts", "")));
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -10738,7 +10737,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
     String cur = prefs.getString(prefKey, "");
     final java.util.List<String> selectedOrder = new java.util.ArrayList<>();
     for (String s : cur.split(",")) { String t = s.trim(); if (!t.isEmpty() && !selectedOrder.contains(t)) selectedOrder.add(t); }
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -10917,7 +10916,7 @@ private FrameLayout buildIconGridCell(String ref, java.util.function.Supplier<Im
         showIconPickerDialog("pack_panel_" + panelId + "_icon_override_" + actionKey, onSaved);
     }
     private void showIconPickerDialog(String prefKey, Runnable onSaved) {
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -11379,7 +11378,7 @@ private void showSingleAppPickerDialog(EditText target) {
 }
 private void showSingleAppPickerDialogCallback(java.util.function.Consumer<String> onPicked) {
     List<String[]> combined = getAppListCached();
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
     TextView title = new TextView(this); title.setText(T("Choose one app", "Chọn 1 ứng dụng"));
@@ -11437,7 +11436,7 @@ private boolean myPlPackSelectMode = false;
 private final java.util.Set<String> myPlPackSelectedItems = new java.util.LinkedHashSet<>();
 private void showShortcutPickerDialog(java.util.function.BiConsumer<String,String> onPicked) {
     List<android.content.pm.ResolveInfo> providers = ShortcutScanner.getProviders(this);
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
     TextView title = new TextView(this); title.setText(T("Choose a Shortcut Provider","Chọn một ứng dụng"));
@@ -11517,7 +11516,7 @@ private void deleteShortcutGlobally(String id) {
     ed.apply();
 }
     private void showYTDLDialog() {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -11956,7 +11955,7 @@ private LinearLayout buildOrSideDrawer(String title, String key, String[] items,
     return c;
 }
 private void openSplitIconDialog(String iconsKey, Runnable onSaved){
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -12067,7 +12066,7 @@ private LinearLayout buildIconOrQuadRow(String sideLabel, String iconsKey, boole
     return wrap;
 }
 private void openOrQuadDialog(String title, String key, String[] items, int def, boolean isLeft, Runnable refreshBadge){
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));

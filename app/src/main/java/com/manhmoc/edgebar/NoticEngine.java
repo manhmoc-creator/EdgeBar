@@ -85,6 +85,12 @@ import java.util.function.Supplier;
 
 public class NoticEngine {
     public static volatile NoticEngine instance;
+    private static final List<NoticEngine> ALL = new ArrayList<>();
+static synchronized boolean previewAll(boolean toggle) {
+    for (NoticEngine e : new ArrayList<>(ALL)) if (toggle ? e.previewToggle() : e.previewStart()) return true;
+    return false;
+}
+static synchronized void endPreviewAll() { for (NoticEngine e : new ArrayList<>(ALL)) e.endPreview(); }
     private static final Set<String> selfCancel = new HashSet<>();
     public static synchronized void markSelfCancel(String k) { selfCancel.add(k); }
     public static synchronized boolean consumeSelfCancel(String k) { return selfCancel.remove(k); }
@@ -164,7 +170,7 @@ private String pillHostKey;     // host pill đang vẽ cho -> nhận ra chuyể
     private int geoTries;
     private long lastSoundMs, fadeUntil;
     private final Runnable geoRun = this::geoSettle;
-    private final Runnable noHostRun = () -> { if (!bindHost()) { closePopup(false, false); removePill(); } else relayout(); };
+    private final Runnable noHostRun = () -> { if (!bindHost()) { closePopup(false, false); shrinkRemove(false, false); } else relayout(); };
 private static final TimeInterpolator EMPH = new PathInterpolator(0.2f, 0f, 0f, 1f);
 private static final TimeInterpolator EMPH_IN = new PathInterpolator(0.3f, 0f, 0.8f, 0.15f);
 private static final int[] VIZ_COLORS = {0, 0xFF00E5FF, 0xFF8AB4F8, 0xFFFF4081, 0xFFFFC107, 0xFF69F0AE, 0xFFFFFFFF, 0xFFB388FF, 0};
@@ -180,6 +186,8 @@ private Runnable pendingTap;
 private long lastTapMs;
 private int cPill = Color.BLACK, cRadPct = 100;
 private boolean badgeLeft, userHidden, popMorphing;
+private boolean closing, reopen, swiping;
+private float morphF;
 private float oL, oT, oR, oB, oRad, popRad;
 private ValueAnimator morphAnim;
 private final Runnable autoCloseRun = this::autoClose;
@@ -348,6 +356,7 @@ private void refreshMedia(Item it) {
         this.hostFinder = hostFinder;
         this.dens = ctx.getResources().getDisplayMetrics().density;
         instance = this;
+        synchronized (ALL) { ALL.add(this); }
         cachePrefs();
         if (prefs.getBoolean("notic_en", false)) registerSystemEvents();   // [P5] Notic tắt = không đăng ký receiver/camera/mic/network callback
     }
@@ -689,7 +698,7 @@ public void onScreenOff() {
 
 // 1 chạm = bảng của thông báo hiện tại; 2 chạm = lịch sử toàn bộ
 public boolean interceptGesture(String key) {
-    if (pill == null || items.isEmpty() || !statusVisible || key == null || hostKey == null) return false;
+    if (pill == null || pill.hidden || closing || items.isEmpty() || !statusVisible || key == null || hostKey == null) return false;
     if (key.equals(hostKey + "_dtap")) { cancelPendingTap(); showPopup(true, false); return true; }
     if (key.equals(hostKey + "_tap")) {
         long now = SystemClock.elapsedRealtime();
@@ -766,6 +775,7 @@ public void clearDemo() {
             if (!items.isEmpty() || pill != null) { items.clear(); closePopup(false, false); removePill(); }
             return;
         }
+        if (closing) return;
         if (!sysRegistered) registerSystemEvents();   // [P5] bật Notic -> mới đăng ký receiver
         if (popup != null && bindHost()) { renderPopup(); placePopup(); }
         if (items.isEmpty()) return;
@@ -802,29 +812,6 @@ public void clearDemo() {
         pendingGeo = ""; geoTries = 0;
         applyGeo(s);
     }
-
-        private void applyGeo(String s) {
-        boolean hostSwitch = pillHostKey != null && !pillHostKey.equals(hostKey);
-        pillHostKey = hostKey;
-        if (pill == null) { lastGeo = s; hostChanged = false; if (!userHidden) announce(); return; }
-        // Đổi host (Lock<->Home) hoặc đang kéo slider: nhảy thẳng + cross-fade, KHÔNG trượt qua vị trí trung gian (nguồn gốc cảm giác giật)
-        boolean snap = lastGeo.isEmpty() || hostSwitch || previewForce;
-        hostChanged = false;
-        if (s.equals(lastGeo)) { pill.invalidate(); applyVisibility(); return; }
-        lastGeo = s;
-        final boolean want = expanded || pill.towardsExpanded();
-        float tw = want ? expW() : cw;
-        if (snap) {
-            if (hostSwitch) fadeNext = true;
-            pill.set(px, cy, tw, pillH, pillRad(), 1f, want ? 1f : 0f);
-            winFit();
-        } else {
-            winFull();
-            pill.go(px, cy, tw, pillH, pillRad(), 1f, want ? 1f : 0f, 320, EMPH, () -> { if (want) afterExpand(); else winFit(); });
-        }
-        pill.invalidate();
-        applyVisibility();
-    }
     private static final String[] N_BARS = {"b_c","r","l","r_u","r_c","r_d","t_c","t_r","t_l","l_u","l_c","l_d"};
 private static final int[] N_GRAV = {
     Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT,
@@ -832,7 +819,6 @@ private static final int[] N_GRAV = {
     Gravity.TOP|Gravity.CENTER_HORIZONTAL, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT,
     Gravity.TOP|Gravity.LEFT, Gravity.CENTER_VERTICAL|Gravity.LEFT, Gravity.BOTTOM|Gravity.LEFT
 };
-
 /** Toạ độ màn hình của bar tính thuần từ prefs (không đo view -> không phụ thuộc thời điểm layout). null nếu là corner. */
 private float[] barRectFromPrefs(String key, float W, float H) {
     if (key == null || key.length() < 6) return null;
@@ -848,43 +834,48 @@ private float[] barRectFromPrefs(String key, float W, float H) {
     float top  = vg == Gravity.TOP  ? y : vg == Gravity.BOTTOM ? H - hh - y : (H - hh) / 2f + y;
     return new float[]{left, top, left + w, top + hh};
 }    
-    private boolean bindHost() {
-        Object[] hs = hostFinder.get();
-        if (hs == null) return false;
-        View v = (View) hs[0];
-        if (hostView != v) { restoreHost(); hostView = v; hostChanged = true; }
-        hostKey = (String) hs[1];
-         if (v.getVisibility() != View.VISIBLE || !v.isAttachedToWindow()) return false;
-        DisplayMetrics dm = new DisplayMetrics();
-        try { wm.getDefaultDisplay().getRealMetrics(dm); } catch (Exception e) { dm = ctx.getResources().getDisplayMetrics(); }
-        scrW = dm.widthPixels;
-        scrH = dm.heightPixels;
-        float[] rc = barRectFromPrefs(hostKey, scrW, scrH);
-        if (rc != null) { hl = rc[0]; ht = rc[1]; hr = rc[2]; hb = rc[3]; }
-        else {                                        // corner: giữ cách đo cũ
-            if (v.getWidth() <= 0 || v.getHeight() <= 0) return false;
-            int[] loc = new int[2];
-            v.getLocationOnScreen(loc);
-            hl = loc[0]; ht = loc[1]; hr = hl + v.getWidth(); hb = ht + v.getHeight();
-        }
-        float wP = prefs.getInt("notic_w_pct", 100) / 100f, hP = prefs.getInt("notic_h_pct", 100) / 100f;
-float barW = hr - hl, barH = hb - ht;
-pillH = Math.min(barH, Math.max(8 * dens, Math.min(barH, 44 * dens) * hP));   // không bao giờ cao hơn bar
-badgeLeft = prefs.getBoolean("notic_badge_left", false);
-float maxW = Math.max(pillH, Math.min(barW, scrW - 16 * dens) - badgeExtra());   // chừa chỗ ô số trong bar
-ew = Math.min(maxW, pillH * 4.0f * wP);   // 1 chiều dài chung cho cả thông báo app lẫn sự kiện hệ thống
-ewApp = ew;
-cw = Math.min(ew, pillH * 2.3f);
-float lo = hl + ew / 2f + (badgeLeft ? badgeExtra() : 0f);
-float hi = hr - ew / 2f - (badgeLeft ? 0f : badgeExtra());
-float cxw = (hl + hr) / 2f + prefs.getInt("notic_off_x", 0);
-px = lo > hi ? (hl + hr) / 2f : Math.max(lo, Math.min(hi, cxw));
-float cyw = (ht + hb) / 2f + prefs.getInt("notic_off_y", 0);
-cy = Math.max(ht + pillH / 2f, Math.min(hb - pillH / 2f, cyw));
-        barR = hostKey.contains("corner") ? 40f : prefs.getInt((hostKey.startsWith("lock_") ? "lock_" : "home_") + "bar_radius", 24);
-        return true;
-    }
+    private float[] rectFromLayoutParams(View v, float W, float H) {
+    if (!(v.getLayoutParams() instanceof WindowManager.LayoutParams)) return null;
+    WindowManager.LayoutParams p = (WindowManager.LayoutParams) v.getLayoutParams();
+    if (p.width <= 1 || p.height <= 1) return null;
+    int hg = p.gravity & Gravity.HORIZONTAL_GRAVITY_MASK, vg = p.gravity & Gravity.VERTICAL_GRAVITY_MASK;
+    float left = hg == Gravity.LEFT ? p.x : hg == Gravity.RIGHT ? W - p.width - p.x : (W - p.width) / 2f + p.x;
+    float top = vg == Gravity.TOP ? p.y : vg == Gravity.BOTTOM ? H - p.height - p.y : (H - p.height) / 2f + p.y;
+    return new float[]{left, top, left + p.width, top + p.height};
+}
 
+private boolean bindHost() {
+    Object[] hs = hostFinder.get();
+    if (hs == null) return false;
+    View v = (View) hs[0];
+    if (hostView != v) { restoreHost(); hostView = v; hostChanged = true; }
+    hostKey = (String) hs[1];
+    if (v.getVisibility() != View.VISIBLE || !v.isAttachedToWindow()) return false;
+    DisplayMetrics dm = new DisplayMetrics();
+    try { wm.getDefaultDisplay().getRealMetrics(dm); } catch (Exception e) { dm = ctx.getResources().getDisplayMetrics(); }
+    scrW = dm.widthPixels;
+    scrH = dm.heightPixels;
+    float[] rc = rectFromLayoutParams(v, scrW, scrH);
+    if (rc == null) rc = barRectFromPrefs(hostKey, scrW, scrH);
+    if (rc == null) return false;
+    hl = rc[0]; ht = rc[1]; hr = rc[2]; hb = rc[3];
+    float wP = prefs.getInt("notic_w_pct", 100) / 100f, hP = prefs.getInt("notic_h_pct", 100) / 100f;
+    float barW = hr - hl, barH = hb - ht;
+    pillH = Math.min(barH, Math.max(8 * dens, Math.min(barH, 44 * dens) * hP));
+    badgeLeft = prefs.getBoolean("notic_badge_left", false);
+    float maxW = Math.max(pillH, Math.min(barW, scrW - 16 * dens) - badgeExtra());
+    ew = Math.min(maxW, pillH * 4.0f * wP);   // một độ dài duy nhất cho MỌI loại thông báo
+    ewApp = ew;
+    cw = ew;
+    float lo = hl + ew / 2f + (badgeLeft ? badgeExtra() : 0f);
+    float hi = hr - ew / 2f - (badgeLeft ? 0f : badgeExtra());
+    float cxw = (hl + hr) / 2f + prefs.getInt("notic_off_x", 0);
+    px = lo > hi ? (hl + hr) / 2f : Math.max(lo, Math.min(hi, cxw));
+    float cyw = (ht + hb) / 2f + prefs.getInt("notic_off_y", 0);
+    cy = Math.max(ht + pillH / 2f, Math.min(hb - pillH / 2f, cyw));
+    barR = hostKey.contains("corner") ? 40f : prefs.getInt((hostKey.startsWith("lock_") ? "lock_" : "home_") + "bar_radius", 24);
+    return true;
+}
     private void restoreHost() {
         if (hostView != null) {
             hostView.animate().cancel();
@@ -904,23 +895,13 @@ cy = Math.max(ht + pillH / 2f, Math.min(hb - pillH / 2f, cyw));
         });
         try { wm.addView(pv, pillLp); } catch (Exception e) { return false; }
         pill = pv;
+        statusVisible = true; insetsVisible = true;
         pillHostKey = hostKey;
         fullWin = true;
         expanded = false;
         pv.requestApplyInsets();
         return true;
     }
-    // [P4] Notic ẩn (bar/corner hiện lại) khi status bar bị ẩn HOẶC khi user đang kéo bảng thông báo / QS; cất bảng đi thì Notic hiện lại
-    private void syncVisible() {
-        boolean v = previewForce || (insetsVisible && !shadeOpen);
-        if (v == statusVisible) return;
-        statusVisible = v;
-        h.post(() -> {
-            applyVisibility();
-            if (!statusVisible) closePopup(false, false);
-        });
-    }
-
     public void setShadeOpen(boolean open) {
         if (shadeOpen == open) return;
         shadeOpen = open;
@@ -935,12 +916,17 @@ public void setPreview(boolean on) {
 }
 
 public boolean previewStart() {
-    if (!prefs.getBoolean("notic_en", false)) return false;
+    if (!prefs.getBoolean("notic_en", false) || !hasHost()) return false;
     setPreview(true);
     return testDemo();
 }
 
-// Nút ▶: bật demo + mở bảng mở rộng để chỉnh slider panel; bấm lại để đóng
+public void endPreview() {
+    previewForce = false;
+    closePopup(false, true);
+    clearDemo();
+    syncVisible();
+}
 public boolean previewToggle() {
     if (popup != null) { closePopup(false, true); return true; }
     final boolean fresh = pill == null;
@@ -975,16 +961,11 @@ private void clearAll() {
     fullWin = true;
     try { wm.updateViewLayout(pill, pillLp); } catch (Exception ignored) {}
 }
-    // Nhạc cần chỗ cho visualizer; sự kiện hệ thống có chữ; thông báo thường chỉ cần viên thuốc gọn
-private float expW() {
-    if (items.isEmpty()) return ew;
-    Item it = items.get(Math.min(cur, items.size() - 1));
-    return (it.media || it.transientItem) ? ew : cw;
-}
+    private float expW() { return ew; }
 private float pillRad() { return pillH / 2f * cRadPct / 100f; }
     private void winFit() {
         if (pill == null) return;
-        float sw = Math.max(expW(), cw) + 4 * dens, sh = pillH + 4 * dens;
+        float sw = ew + 4 * dens, sh = pillH + 4 * dens;
         int x = (int) Math.floor(px - sw / 2f) - (badgeLeft ? (int) Math.ceil(badgeExtra()) : 0);
 int y = (int) Math.floor(cy - sh / 2f);
 int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
@@ -997,31 +978,8 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
         pillLp.x = x; pillLp.y = y; pillLp.width = w; pillLp.height = hh; pillLp.flags = flags;
         try { wm.updateViewLayout(pill, pillLp); } catch (Exception ignored) {}
     }
-    private void applyVisibility() {
-        if (pill == null) return;
-        if (fadeNext && statusVisible) {   // [P7] pill mới tạo / vừa đổi host: mờ dần vào, bar mờ dần ra
-            fadeNext = false;
-            fadeUntil = SystemClock.uptimeMillis() + 180;
-            pill.animate().cancel();
-            pill.setAlpha(0f);
-            pill.animate().alpha(1f).setDuration(160).start();
-            if (hostView != null) { hostView.animate().cancel(); hostView.animate().alpha(0f).setDuration(160).start(); }
-        } else if (!(statusVisible && SystemClock.uptimeMillis() < fadeUntil)) {   // đang fade thì relayout() không được cắt ngang
-            pill.animate().cancel();
-            pill.setAlpha(statusVisible ? 1f : 0f);
-            if (hostView != null) { hostView.animate().cancel(); hostView.setAlpha(statusVisible ? 0f : 1f); }
-        }
-        pill.invalidate();   // statusbar hiện lại thì vòng vẽ visualizer chạy tiếp
-        if (!fullWin) {
-            boolean want = !statusVisible;
-            if (((pillLp.flags & NOT_TOUCHABLE) != 0) != want) {
-                if (want) pillLp.flags |= NOT_TOUCHABLE; else pillLp.flags &= ~NOT_TOUCHABLE;
-                try { wm.updateViewLayout(pill, pillLp); } catch (Exception ignored) {}
-            }
-        }
-    }
-
     private void removePill() {
+        closing = false; reopen = false;
         h.removeCallbacks(settleRun);
         h.removeCallbacks(geoRun);
         pendingGeo = "";        
@@ -1036,71 +994,153 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
         restoreHost();
     }
     private void announce() {
-    if (items.isEmpty() || !bindHost()) return;
+    if (items.isEmpty()) return;
+    if (closing) { reopen = true; return; }
+    if (!bindHost()) return;
+    if (shadeOpen && !previewForce) return;
     userHidden = false;
     h.removeCallbacks(settleRun);
     Item it = items.get(Math.min(cur, items.size() - 1));
-    final float tw = expW();
+    final float tw = ew;
+    final boolean fresh = pill == null || pill.hidden;
     if (pill == null) {
         if (!createPill()) return;
-        lastGeo = geoKey();
         hostChanged = false;
-        final PillView pv = pill;
+    }
+    final PillView pv = pill;
+    if (fresh) {
+        pv.hidden = false;
+        expanded = false;
         pv.setContent(it, items.size(), tw);
-        pv.set(px, cy, 2f, 2f, 1f, 1f, 0f);          // bắt đầu từ 1 chấm ở tâm
+        lastGeo = geoKey();
+        pv.set(px, cy, 2f, 2f, 1f, 1f, 0f);
         fadeNext = true;
         winFit();
         applyVisibility();
-        pv.go(px, cy, pillH, pillH, pillH / 2f, 1f, 0f, 200, new OvershootInterpolator(1.6f),   // nở thành hình tròn (có nảy)
-            () -> { if (pill == pv) pv.go(px, cy, tw, pillH, pillRad(), 1f, 1f, 300, EMPH, this::afterExpand); });   // rồi giãn thành viên thuốc
+        pv.go(px, cy, pillH, pillH, pillH / 2f, 1f, 0f, 240, new OvershootInterpolator(1.3f),
+            () -> { if (pill == pv) pv.go(px, cy, tw, pillH, pillRad(), 1f, 1f, 340, EMPH, this::afterExpand); });
     } else {
-        boolean sameState = (expanded || pill.towardsExpanded()) && Math.abs(pill.targetW() - tw) < 1f;
-        pill.setContent(it, items.size(), tw);
-        if (sameState) {
-            pill.invalidate();
-        } else {
+        boolean sameState = (expanded || pv.towardsExpanded()) && Math.abs(pv.targetW() - tw) < 1f;
+        pv.setContent(it, items.size(), tw);
+        if (sameState) pv.invalidate();
+        else {
             if (fullWin || tw + 4 * dens > pillLp.width) winFull();
-            pill.go(px, cy, tw, pillH, pillRad(), 1f, 1f, 300, EMPH, this::afterExpand);
+            pv.go(px, cy, tw, pillH, pillRad(), 1f, 1f, 300, EMPH, this::afterExpand);
         }
     }
+}
+
+// Co lại: viên thuốc → tròn → chấm ở tâm. keepWindow=true: giữ cửa sổ rỗng để còn nghe insets.
+private void shrinkRemove(final boolean thenReopen, final boolean keepWindow) {
+    if (pill == null) { if (thenReopen) announce(); return; }
+    if (pill.hidden) { if (!keepWindow) removePill(); return; }
+    if (closing) { reopen |= thenReopen; return; }
+    closing = true; reopen = thenReopen;
+    h.removeCallbacks(settleRun);
+    expanded = false;
+    final PillView pv = pill;
+    if (hostView != null) hostView.animate().alpha(1f).setStartDelay(150).setDuration(320).start();
+    pv.go(px, cy, pillH, pillH, pillH / 2f, 1f, 0f, 220, EMPH_IN, () -> {
+        if (pill != pv) return;
+        pv.go(px, cy, 2f, 2f, 1f, 1f, 0f, 170, EMPH_IN, () -> {
+            if (pill != pv) return;
+            boolean again = reopen;
+            closing = false; reopen = false;
+            if (keepWindow) { pv.hidden = true; pv.invalidate(); } else removePill();
+            if (again && !items.isEmpty() && !userHidden) announce();
+        });
+    });
+}
+
+private void collapse() { shrinkRemove(false, false); }
+
+private void hideNotic() {
+    cancelPendingTap();
+    h.removeCallbacks(settleRun); h.removeCallbacks(autoCloseRun);
+    closePopup(false, false);
+    userHidden = true;
+    shrinkRemove(false, false);
+}
+
+private void afterChange() {
+    if (cur >= items.size()) cur = Math.max(0, items.size() - 1);
+    if (items.isEmpty()) {
+        h.removeCallbacks(settleRun);
+        if (popup != null) closePopup(false, true);   // end callback sẽ gọi collapse()
+        else collapse();
+        return;
+    }
+    if (pill != null && !pill.hidden) {
+        pill.setContent(items.get(cur), items.size(), ew);
+        pill.invalidate();
+    }
+    if (popup != null) renderPopup();
+}
+
+private void afterPopupGone() {
+    if (pill != null) pill.setVisibility(View.VISIBLE);
+    if (items.isEmpty()) collapse();
+}
+
+private void syncVisible() {
+    boolean v = previewForce || (insetsVisible && !shadeOpen);
+    if (v == statusVisible) return;
+    statusVisible = v;
+    h.post(() -> {
+        if (!statusVisible) { closePopup(false, false); shrinkRemove(false, true); }
+        else if (!items.isEmpty() && !userHidden) announce();
+    });
+}
+
+private void applyVisibility() {
+    if (pill == null || pill.hidden) return;
+    if (fadeNext) {
+        fadeNext = false;
+        fadeUntil = SystemClock.uptimeMillis() + 220;
+        if (hostView != null) { hostView.animate().cancel(); hostView.animate().setStartDelay(0).alpha(0f).setDuration(200).start(); }
+    } else if (!closing && hostView != null && SystemClock.uptimeMillis() >= fadeUntil) {
+        hostView.animate().cancel();
+        hostView.setAlpha(0f);
+    }
+    pill.setAlpha(1f);
+    pill.invalidate();
+    if (!fullWin) {
+        boolean want = !statusVisible;
+        if (((pillLp.flags & NOT_TOUCHABLE) != 0) != want) {
+            if (want) pillLp.flags |= NOT_TOUCHABLE; else pillLp.flags &= ~NOT_TOUCHABLE;
+            try { wm.updateViewLayout(pill, pillLp); } catch (Exception ignored) {}
+        }
+    }
+}
+
+private void applyGeo(String s) {
+    if (closing) return;
+    boolean hostSwitch = pillHostKey != null && !pillHostKey.equals(hostKey);
+    pillHostKey = hostKey;
+    hostChanged = false;
+    if (pill == null) { lastGeo = s; if (!userHidden && !items.isEmpty()) announce(); return; }
+    if (pill.hidden) { lastGeo = s; return; }
+    if (s.equals(lastGeo)) { pill.invalidate(); applyVisibility(); return; }
+    boolean first = lastGeo.isEmpty();
+    lastGeo = s;
+    if (hostSwitch && !previewForce) { shrinkRemove(true, false); return; }   // Lock↔Home khác vị trí: co lại rồi nở ra ở chỗ mới
+    final boolean want = expanded || pill.towardsExpanded() || pill.animating();
+    float tw = want ? ew : pillH;
+    if (first || previewForce) {
+        pill.set(px, cy, tw, pillH, pillRad(), 1f, want ? 1f : 0f);
+        winFit();
+    } else {
+        winFull();
+        pill.go(px, cy, tw, pillH, pillRad(), 1f, want ? 1f : 0f, 320, EMPH, () -> { if (want) afterExpand(); else winFit(); });
+    }
+    pill.invalidate();
+    applyVisibility();
 }
     private void afterExpand() {
     expanded = true;
     winFit();
 }
     private void settle() { /* pill không còn tự thu nhỏ */ }
-    private void afterChange() {
-        if (cur >= items.size()) cur = Math.max(0, items.size() - 1);
-        if (items.isEmpty()) {
-            h.removeCallbacks(settleRun);
-            closePopup(false, true);
-            collapse();
-            return;
-        }
-        if (pill != null) {
-            pill.setContent(items.get(cur), items.size(), ew);
-            pill.invalidate();
-        }
-        if (popup != null) renderPopup();
-    }
-    private void hideNotic() {
-    cancelPendingTap();
-    h.removeCallbacks(settleRun); h.removeCallbacks(autoCloseRun);
-    closePopup(false, false);
-    userHidden = true;   // thông báo mới / sự kiện hệ thống kế tiếp sẽ announce() và tự hồi sinh
-    collapse();
-}
-    private void collapse() {
-        if (pill == null) return;
-        h.removeCallbacks(settleRun);
-        if (!bindHost()) { removePill(); return; }
-        final PillView pv = pill;
-        final float hcx = (hl + hr) / 2f;
-        winFull();
-        expanded = false;
-        pv.go(hcx, cy, hr - hl, hb - ht, barR, 0f, 0f, 280, EMPH, () -> { if (items.isEmpty() || userHidden) removePill(); });
-    }
-
     private void wakeScreen() {
         try {
             PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
@@ -1126,7 +1166,8 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
     }
 
     private void showPopup(boolean history, boolean force) {
-    if (items.isEmpty() || pill == null || !statusVisible || !bindHost()) return;
+    if (items.isEmpty() || pill == null || pill.hidden || !statusVisible || !bindHost()) return;
+if (closing || pill.animating()) { if (force) { final boolean hh = history; h.postDelayed(() -> showPopup(hh, true), 250); } return; }
     if (popup != null) {
         if (force) { renderPopup(); placePopup(); return; }
         if (!history || popupHistory) { closePopup(false, true); return; }  // chạm lại = đóng
@@ -1147,9 +1188,10 @@ private int popY(int ph) {
 }
 private int popMaxH() { return Math.round(scrH * prefs.getInt("notic_pop_h_pct", 55) / 100f); }
 private void openPopup() {
+    swiping = false;
     h.removeCallbacks(settleRun);
     popRad = dp(prefs.getInt("notic_pop_rad", 26));
-    LinearLayout root = new LinearLayout(ctx);
+    MorphRoot root = new MorphRoot(ctx);
     root.setOrientation(LinearLayout.VERTICAL);
     popupBg = rounded(0xF22C2C2E, popRad);
     root.setBackground(popupBg);
@@ -1212,18 +1254,21 @@ private void openPopup() {
     setMorph(root, popupLp, popupBg, 0f);
     try { wm.addView(root, popupLp); } catch (Exception e) { popup = null; popupBody = null; popupHead = null; popupBg = null; return; }
     final LinearLayout fr = root; final WindowManager.LayoutParams flp = popupLp; final GradientDrawable fbg = popupBg;
-    // đợi khung đầu vẽ xong rồi mới chạy morph, tránh khung đầu (nặng) ăn mất 1/3 thời lượng animation
-    root.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
-        @Override public boolean onPreDraw() {
-            fr.getViewTreeObserver().removeOnPreDrawListener(this);
-            runMorph(fr, flp, fbg, true, () -> { popMorphing = false; fr.invalidateOutline(); });
-            return true;
-        }
-    });
+root.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+    @Override public boolean onPreDraw() {
+        fr.getViewTreeObserver().removeOnPreDrawListener(this);
+        runMorph(fr, flp, fbg, true, () -> { popMorphing = false; fr.invalidateOutline(); fr.invalidate(); });
+        final PillView pv = pill;
+        if (pv != null) fr.post(() -> pv.setVisibility(View.INVISIBLE));   // bảng đã vẽ đè đúng hình viên thuốc → ẩn viên thuốc, không còn hai thứ cùng tồn tại
+        return true;
+    }
+});
 }
 
 // f=0: đúng hình viên thuốc | f=1: toàn bảng
 private void setMorph(View p, WindowManager.LayoutParams lp, GradientDrawable bgd, float f) {
+    morphF = f;
+p.invalidate();
     float pw0 = pill != null ? pill.w : ew;
     float l0 = px - pw0 / 2f - lp.x, t0 = cy - pillH / 2f - lp.y, r0 = l0 + pw0, b0 = t0 + pillH;
     float W = lp.width, H = p.getHeight() > 0 ? p.getHeight() : p.getMeasuredHeight();
@@ -1238,10 +1283,10 @@ private void setMorph(View p, WindowManager.LayoutParams lp, GradientDrawable bg
 }
 private void runMorph(final View p, final WindowManager.LayoutParams lp, final GradientDrawable bgd, boolean open, final Runnable end) {
     if (!open && morphAnim != null) morphAnim.cancel();
-    final ValueAnimator va = ValueAnimator.ofFloat(open ? 0f : 1f, open ? 1f : 0f);
+    final ValueAnimator va = ValueAnimator.ofFloat(open ? 0f : morphF, open ? 1f : 0f);
     morphAnim = va;
     p.setLayerType(View.LAYER_TYPE_HARDWARE, null);    
-    va.setDuration(open ? 320 : 240);
+    va.setDuration(open ? 380 : 300);
     va.setInterpolator(open ? EMPH : EMPH_IN);
     va.addUpdateListener(a -> setMorph(p, lp, bgd, (float) a.getAnimatedValue()));
     va.addListener(new AnimatorListenerAdapter() {
@@ -1267,9 +1312,9 @@ private void placePopup() {
     try { wm.updateViewLayout(popup, popupLp); } catch (Exception ignored) {}
     popup.invalidateOutline();
 }
-
 private void closePopup(boolean markRead, boolean animate) {
     h.removeCallbacks(autoCloseRun);
+    swiping = false;
     final LinearLayout p = popup;
     if (p != null) {
         final WindowManager.LayoutParams lp = popupLp;
@@ -1278,8 +1323,11 @@ private void closePopup(boolean markRead, boolean animate) {
         popup = null; popupBody = null; popupHead = null; popupBg = null;
         lastCloseMs = SystemClock.elapsedRealtime();
         if (animate && pill != null && lp != null)
-            runMorph(p, lp, bgd, false, () -> { try { wm.removeView(p); } catch (Exception ignored) {} });   // thu về đúng viên thuốc rồi gỡ
-        else { try { wm.removeView(p); } catch (Exception ignored) {} }
+            runMorph(p, lp, bgd, false, () -> {
+                afterPopupGone();
+                h.postDelayed(() -> { try { wm.removeView(p); } catch (Exception ignored) {} }, 48);   // viên thuốc hiện trước rồi mới gỡ bảng, tránh nháy
+            });
+        else { try { wm.removeView(p); } catch (Exception ignored) {} afterPopupGone(); }
     }
     if (markRead) {
         items.removeIf(x -> !x.media);
@@ -1287,6 +1335,7 @@ private void closePopup(boolean markRead, boolean animate) {
     }
 }
 private void renderPopup() {
+    if (swiping) return;
     if (popupBody == null || items.isEmpty()) return;
     if (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0) return; // đang gõ reply thì không dựng lại, tránh mất chữ
     popupBody.removeAllViews();
@@ -1410,9 +1459,41 @@ private void renderPopup() {
         card.addView(top);
         if (it.call) card.addView(buildCallControls(it));
 else if (it.media) card.addView(buildMediaControls(it));
-else if (it.reply != null) card.addView(buildReplyBar(it));
-        return card;
+else { if (it.reply != null) card.addView(buildReplyBar(it)); card.addView(buildItemActions(it)); }
+return card;
     }
+    private Notification.Action findReadAction(Item it) {
+    if (it.actions == null) return null;
+    for (Notification.Action a : it.actions) {
+        if (a == null || a.actionIntent == null) continue;
+        if (Build.VERSION.SDK_INT >= 28 && a.getSemanticAction() == Notification.Action.SEMANTIC_ACTION_MARK_AS_READ) return a;
+        String t = a.title == null ? "" : a.title.toString().toLowerCase(Locale.ROOT);
+        if (t.contains("mark as read") || t.contains("đánh dấu đã đọc")) return a;
+    }
+    return null;
+}
+
+private TextView actChip(String label, View.OnClickListener l) {
+    TextView t = new TextView(ctx);
+    t.setText(label);
+    t.setTextColor(Color.parseColor("#8AB4F8"));
+    t.setTextSize(12f);
+    t.setTypeface(Typeface.DEFAULT_BOLD);
+    t.setPadding(dp(12), dp(6), dp(12), dp(6));
+    t.setOnClickListener(l);
+    return t;
+}
+
+private View buildItemActions(final Item it) {
+    LinearLayout row = new LinearLayout(ctx);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setGravity(Gravity.END);
+    row.setPadding(0, dp(4), 0, 0);
+    final Notification.Action read = findReadAction(it);
+    if (read != null) row.addView(actChip("Mark as read", v -> { try { read.actionIntent.send(); } catch (Exception ignored) {} dismissItem(it); }));
+    row.addView(actChip("Dismiss", v -> dismissItem(it)));
+    return row;
+}
     // 0 Auto | 1 màu icon app, không viền | 2 "chỉ màu": nền pha nhẹ màu app, không viền | 3..10 màu nền cố định + viền màu app
 private GradientDrawable cardBg(Item it, float r) {
     int m = prefs.getInt("notic_card_color", 0);
@@ -1434,6 +1515,28 @@ private GradientDrawable cardBg(Item it, float r) {
     if (popup != null && !popupHistory) closePopup(false, true);
     afterChange();
     placePopup();
+}
+    private class MorphRoot extends LinearLayout {
+    final Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG), sp2 = new Paint(Paint.ANTI_ALIAS_FLAG);
+    final RectF rr = new RectF();
+    MorphRoot(Context c) { super(c); setWillNotDraw(false); sp2.setStyle(Paint.Style.STROKE); sp2.setStrokeWidth(1.6f * dens); }
+    @Override protected void dispatchDraw(Canvas c) {
+        if (popMorphing) {
+            float a = 1f - Math.max(0f, Math.min(1f, (morphF - 0.35f) / 0.5f));
+            if (a > 0f) {
+                rr.set(oL, oT, oR, oB);
+                fp.setColor(cPill); fp.setAlpha((int) (255 * a));
+                c.drawRoundRect(rr, oRad, oRad, fp);
+                if (cBorder && !items.isEmpty()) {
+                    sp2.setColor(appColor(items.get(Math.min(cur, items.size() - 1)))); sp2.setAlpha((int) (255 * a));
+                    float in = sp2.getStrokeWidth() / 2f;
+                    rr.inset(in, in);
+                    c.drawRoundRect(rr, Math.max(0f, oRad - in), Math.max(0f, oRad - in), sp2);
+                }
+            }
+        }
+        super.dispatchDraw(c);
+    }
 }
     private class SwipeCard extends LinearLayout {
         final Item it;
@@ -1462,6 +1565,7 @@ private GradientDrawable cardBg(Item it, float r) {
         }
 
         private void begin(MotionEvent e) {
+            swiping = true;
             dragging = true;
             x0 = e.getRawX();   // tính dx từ điểm bắt đầu kéo thật -> card không bị nhảy 1 đoạn slop
             vt = VelocityTracker.obtain();
@@ -1488,6 +1592,7 @@ private GradientDrawable cardBg(Item it, float r) {
                 return true;
             }
             if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) {
+                swiping = false;
                 if (!dragging) return super.onTouchEvent(e);
                 dragging = false;
                 vt.addMovement(e);
@@ -1727,6 +1832,7 @@ for (Item x : items) unbindMedia(x);
         closePopup(false, false);
         removePill();
         items.clear();
+        synchronized (ALL) { ALL.remove(this); }
         if (instance == this) instance = null;
     }
 
@@ -1811,6 +1917,8 @@ sp.setStrokeWidth(1.6f * dens);
             ccx = cx; ccy = cyy; w = ww; h = hh; r = rr; mix = m; textAlpha = ta;
             invalidate();
         }
+        boolean hidden, upFired;
+float dX0, dY0;
         boolean animating() { return anim != null; }
         boolean towardsExpanded() { return anim != null && tgtMix > 0.5f; }
         float targetW() { return anim != null ? tgtW : w; }
@@ -1861,12 +1969,27 @@ sp.setStrokeWidth(1.6f * dens);
         }
 
         @Override public boolean onTouchEvent(MotionEvent e) {
-            View hv = hostView;
-            return hv != null && hv.dispatchTouchEvent(e); // UX: viên thuốc chuyển nguyên cử chỉ cho bar host nên 2 chạm/vuốt vẫn theo rule của bar
+    View hv = hostView;
+    if (hv == null || hidden) return false;
+    int a = e.getActionMasked();
+    if (a == MotionEvent.ACTION_DOWN) { dX0 = e.getRawX(); dY0 = e.getRawY(); upFired = false; }
+    else if (a == MotionEvent.ACTION_MOVE) {
+        if (upFired) return true;
+        float dy = e.getRawY() - dY0, dx = e.getRawX() - dX0;
+        // bar sát mép trên không có chỗ vuốt dài, nên tự bắt vuốt lên ngắn ngay tại viên thuốc
+        if (dy < -dp(14) && Math.abs(dy) > Math.abs(dx) * 1.5f) {
+            upFired = true;
+            MotionEvent c = MotionEvent.obtain(e); c.setAction(MotionEvent.ACTION_CANCEL);
+            hv.dispatchTouchEvent(c); c.recycle();
+            hideNotic();
+            return true;
         }
+    } else if ((a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) && upFired) { upFired = false; return true; }
+    return hv.dispatchTouchEvent(e);
+}
         @Override protected void onDetachedFromWindow() { removeCallbacks(tick); super.onDetachedFromWindow(); }
                 @Override protected void onDraw(Canvas c) {
-    if (item == null) return;
+    if (item == null || hidden) return;
     float cx = ccx - ox, cyy = ccy - oy;
     float l = cx - w / 2f, t = cyy - h / 2f, rr = cx + w / 2f, b = cyy + h / 2f;
     rect.set(l, t, rr, b);

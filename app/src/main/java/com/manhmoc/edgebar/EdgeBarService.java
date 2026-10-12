@@ -2740,12 +2740,16 @@ private static final int[] SWALLOW_BAR_ORDER = {6, 8, 7, 3, 9, 4, 10, 5, 11, 1, 
 private static final int[] SWALLOW_CORNER_ORDER = {3, 2, 1, 0};
 private Object[] findSwallowHost() {
     boolean locked = km != null && km.isKeyguardLocked() && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs;
+    Object[] r = swallowHostIn(locked);
+    return r != null ? r : swallowHostIn(!locked);   // Lock vừa ẩn mà Home chưa hiện (hoặc ngược lại) vẫn có host, Notic không bị gỡ rồi dựng lại
+}
+private Object[] swallowHostIn(boolean locked) {
     String px = locked ? "lock_" : "home_";
     View[] barArr = locked ? bars : accHomeBars;
     View[] cornerArr = locked ? corners : accHomeCorners;
     for (int i : SWALLOW_BAR_ORDER) {
         View v = barArr[i];
-        if (v == null || v.getVisibility() != View.VISIBLE) continue;   // bar đang ẩn không được chặn bar khác
+        if (v == null || v.getVisibility() != View.VISIBLE) continue;
         String k = px + BARS[i];
         if (prefs.getBoolean(k + "_en", false) && prefs.getInt(k + "_lockmode", 1) == 2) return new Object[]{v, k};
     }
