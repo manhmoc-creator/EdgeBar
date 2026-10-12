@@ -166,13 +166,15 @@ private String pillHostKey;     // host pill đang vẽ cho -> nhận ra chuyể
     private boolean wifiUp, vpnUp, micOn, recOn;
     private final Runnable settleRun = this::settle;
     private boolean userHidden;
-private final Runnable reshowRun = () -> {
-    if (previewForce) return;
-    if (!userHidden) return;                                  // đã tự show hoặc có thông báo mới hiện lại rồi
-    if (items.isEmpty() || !prefs.getBoolean("notic_en", false)) return;
-    userHidden = false;
-    announce();
-};
+    private final Runnable reshowRun = this::reshowNotic;
+
+    private void reshowNotic() {
+        if (previewForce) return;
+        if (!userHidden) return;
+        if (items.isEmpty() || !prefs.getBoolean("notic_en", false)) return;
+        userHidden = false;
+        announce();
+    }
     // [P1] Chống giật Khoá -> Home: chỉ di chuyển pill khi hình học của bar host đã ĐỨNG YÊN (2 lần đo cách nhau 80ms giống nhau)
     private String pendingGeo = "";
     private int geoTries;
