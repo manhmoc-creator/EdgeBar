@@ -6293,10 +6293,9 @@ private void renderMyPlaylistPackList() {
         optCol.setGravity(Gravity.CENTER);
         optCol.setPadding(0, 0, 15, 0);
         TextView tIcon = new TextView(this);
-        tIcon.setText(id.equals(curPlayingId) ? "▶");
-        tIcon.setTextSize(24);
-        optCol.addView(tIcon);
-
+tIcon.setText(id.equals(curPlayingId) ? "\u25B6" : "");
+tIcon.setTextSize(24);
+optCol.addView(tIcon);
         Button btnOpen = stdCardBtn(T("SONGS", "BÀI HÁT"), ACCENT_COLOR, Color.BLACK);
         btnOpen.setOnClickListener(v -> openMyPlaylistPackEditor(id));
 
