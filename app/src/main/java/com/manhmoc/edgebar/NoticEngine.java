@@ -88,8 +88,7 @@ public class NoticEngine {
     private static final Set<String> selfCancel = new HashSet<>();
     public static synchronized void markSelfCancel(String k) { selfCancel.add(k); }
     public static synchronized boolean consumeSelfCancel(String k) { return selfCancel.remove(k); }
-
-    public static class Item {
+public static class Item {
     String key, pkg, title, text, sig, appName;
     Bitmap icon, art, artCircle, senderBmp;   // [P7] senderBmp = ảnh người gửi/người gọi, cắt tròn
     Icon largeIcon;
@@ -101,6 +100,9 @@ public class NoticEngine {
     MediaController mc;
     MediaController.Callback mcCb;
     int color;                          // 0 = chưa tính
+    /* UX: artColor = màu chủ đạo trích từ ảnh bìa bài nhạc, cache lại để không sample mỗi frame.
+       Dùng cho tuỳ chọn "màu visualizer = màu bài nhạc" (cVizColor == 8). */
+    int artColor;
     float spin; long spinT;
 }
     private static final int NOT_TOUCHABLE = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
