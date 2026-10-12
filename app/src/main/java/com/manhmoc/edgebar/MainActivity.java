@@ -8427,6 +8427,68 @@ private LinearLayout noticSwitchRow(String label, String key, boolean def) {
     return row;
 }
 
+private LinearLayout noticDrawerBody() {
+    LinearLayout l = new LinearLayout(this);
+    l.setOrientation(LinearLayout.VERTICAL);
+    l.setPadding(20, 10, 20, 20);
+    return l;
+}
+
+private void runNoticDemo(boolean toast) {
+    NoticEngine e = NoticEngine.instance;
+    boolean ok = e != null && e.testDemo();
+    if (!ok && toast) Toast.makeText(this, T("Turn Notic on and set a bar/corner to \"Swallow notifications\" first",
+        "Hãy bật Notic và đặt 1 bar/corner sang \"Nuốt thông báo\" trước"), Toast.LENGTH_LONG).show();
+}
+
+private View noticPalette(String title, String key, String[] specials, String[] hexes) {
+    LinearLayout box = new LinearLayout(this);
+    box.setOrientation(LinearLayout.VERTICAL);
+    box.setPadding(0, 10, 0, 10);
+    TextView tv = new TextView(this);
+    tv.setText(title); tv.setTextColor(Color.parseColor("#E91E63")); tv.setTextSize(14f);
+    box.addView(tv);
+    final List<View> cells = new ArrayList<>();
+    final int total = specials.length + hexes.length;
+    final Runnable[] paint = new Runnable[1];
+    LinearLayout rowS = new LinearLayout(this), rowC = new LinearLayout(this);
+    for (int i = 0; i < total; i++) {
+        final int idx = i;
+        View v;
+        LinearLayout.LayoutParams lp;
+        if (i < specials.length) {
+            TextView c = new TextView(this);
+            c.setText(specials[i]); c.setTextSize(12.5f); c.setGravity(Gravity.CENTER); c.setPadding(28, 18, 28, 18);
+            v = c; lp = new LinearLayout.LayoutParams(-2, -2);
+        } else { v = new View(this); lp = new LinearLayout.LayoutParams(70, 70); }
+        lp.setMargins(6, 8, 6, 8);
+        v.setLayoutParams(lp);
+        v.setOnClickListener(x -> { prefs.edit().putInt(key, idx).apply(); paint[0].run(); });
+        cells.add(v);
+        (i < specials.length ? rowS : rowC).addView(v);
+    }
+    paint[0] = () -> {
+        int sel = prefs.getInt(key, 0);
+        for (int i = 0; i < total; i++) {
+            View v = cells.get(i);
+            boolean on = i == sel;
+            if (i < specials.length) {
+                ((TextView) v).setTextColor(on ? Color.BLACK : Color.WHITE);
+                v.setBackground(getRounded(on ? "#8AB4F8" : "#2C2C2C", 40f));
+            } else {
+                GradientDrawable g = new GradientDrawable();
+                g.setShape(GradientDrawable.OVAL);
+                g.setColor(Color.parseColor(hexes[i - specials.length]));
+                g.setStroke(on ? 6 : 2, on ? Color.WHITE : Color.parseColor("#555555"));
+                v.setBackground(g);
+            }
+        }
+    };
+    paint[0].run();
+    box.addView(rowS); box.addView(rowC);
+    return box;
+}
+
 private void openNoticSpace() {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
@@ -8434,21 +8496,36 @@ private void openNoticSpace() {
     root.setBackgroundColor(Color.parseColor("#121212"));
     root.setPadding(30, 80, 30, 30);
 
+    LinearLayout head = new LinearLayout(this);
+    head.setOrientation(LinearLayout.HORIZONTAL);
+    head.setGravity(Gravity.CENTER_VERTICAL);
     TextView title = new TextView(this);
     title.setText("🔔 NOTIC");
     title.setTextColor(Color.parseColor("#8AB4F8"));
     title.setTextSize(18);
-    title.setPadding(0, 0, 0, 10);
-    root.addView(title);
+    title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    ImageButton btnTest = new ImageButton(this);
+    btnTest.setImageResource(android.R.drawable.ic_media_play);   // tam giác = thử notic
+    btnTest.setColorFilter(Color.parseColor(ACCENT_COLOR));
+    btnTest.setBackground(getRounded("#333333", 100f));
+    btnTest.setLayoutParams(new LinearLayout.LayoutParams(110, 110));
+    btnTest.setOnClickListener(x -> runNoticDemo(true));
+    head.addView(title); head.addView(btnTest);
+    root.addView(head);
 
     TextView note = new TextView(this);
     note.setText(T(
-        "Needs Notification Access. Set a bar/corner to \"Swallow notifications\" in its Screen Visibility to make it a Notic host.",
-        "Cần quyền Truy cập thông báo. Chọn \"Nuốt thông báo\" ở mục Screen Visibility của bar/corner để biến nó thành Notic."));
+        "Setup: needs Notification Access. Open Lock/Home > a bar/corner Data Pack > Screen Visibility > \"Swallow notifications\". "
+        + "Notic is drawn ONLY inside that bar/corner (it can never leave it), so make the bar thick/long enough. "
+        + "While Notic shows: tap = expand, 2 taps = all, long = open app, swipe left/right = switch, swipe up = hide. "
+        + "With no notification, the bar uses its own rules; every other gesture is shared in both modes.",
+        "Cách dùng: cần quyền Truy cập thông báo. Vào Lock/Home > Data Pack của bar/corner > Screen Visibility > \"Nuốt thông báo\". "
+        + "Notic chỉ được vẽ BÊN TRONG đúng bar/corner đó (không thể ra ngoài), nên hãy để bar đủ dày/dài. "
+        + "Khi Notic đang hiện: 1 chạm = mở rộng, 2 chạm = toàn bộ, giữ = vào app, vuốt trái/phải = chuyển, vuốt lên = ẩn. "
+        + "Khi không có thông báo, bar chạy theo rule riêng; các cử chỉ còn lại dùng chung cho cả 2 chế độ."));
     note.setTextColor(Color.parseColor("#9AA0A6"));
     note.setTextSize(12f);
-    note.setPadding(0, 0, 0, 20);
-    root.addView(note);
+    note.setPadding(0, 10, 0, 20);
 
     ScrollView scroll = new ScrollView(this);
     scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -8457,50 +8534,83 @@ private void openNoticSpace() {
     scroll.addView(content);
     root.addView(scroll);
 
+    content.addView(note);
     content.addView(noticSwitchRow(T("Enable Notic", "Bật Notic"), "notic_en", false));
 
-    content.addView(createSectionTitle(T("NOTIFICATIONS", "THÔNG BÁO")));
+    // ---- NOTIFICATIONS ----
+    LinearLayout bN = noticDrawerBody();
     Button btnApps = new Button(this);
     btnApps.setText("📱 " + T("Choose apps to swallow", "Chọn app được nuốt thông báo"));
     btnApps.setBackground(getRounded("#7C4DFF", 20f));
     btnApps.setTextColor(Color.WHITE);
-    btnApps.setOnClickListener(v -> showNoticAppPicker());
-    content.addView(btnApps);
-    content.addView(noticSwitchRow(T("Do Not Disturb: don't swallow", "Đang DND: không nuốt thông báo"), "notic_dnd_skip", true));
-    content.addView(noticSwitchRow(T("Ignore everything until screen off", "Bỏ qua mọi thông báo đến khi tắt màn hình"), "notic_paused", false));
-    content.addView(createCycleRow(T("Sound", "Âm thanh"), "notic_sound_mode",
+    btnApps.setOnClickListener(x -> showNoticAppPicker());
+    bN.addView(btnApps);
+    bN.addView(noticSwitchRow(T("Do Not Disturb: don't swallow", "Đang DND: không nuốt thông báo"), "notic_dnd_skip", true));
+    bN.addView(noticSwitchRow(T("Ignore everything until screen off", "Bỏ qua mọi thông báo đến khi tắt màn hình"), "notic_paused", false));
+    bN.addView(createCycleRow(T("Sound", "Âm thanh"), "notic_sound_mode",
         new String[]{T("Off", "Tắt"), T("Sound only", "Chỉ âm báo"), T("Sound + screen on", "Âm báo + bật màn hình")}));
-    content.addView(noticSwitchRow(T("Replace system popups", "Thay popup thông báo hệ thống"), "notic_hide_system", false));
-    content.addView(createSectionTitle(T("APPEARANCE", "GIAO DIỆN")));
-content.addView(noticSwitchRow(T("Border = app color", "Viền thông báo theo màu app"), "notic_border_en", true));
-content.addView(noticSwitchRow(T("Spinning album art", "Ảnh bài hát xoay tròn (thay icon app)"), "notic_art_spin", true));
-content.addView(noticSwitchRow(T("Music visualizer", "Visualizer âm nhạc (giả lập, không ghi âm)"), "notic_viz_en", true));
-content.addView(createCycleRow(T("Visualizer color", "Màu visualizer"), "notic_viz_color",
-    new String[]{T("App color", "Theo màu app"), "Cyan", "Blue", "Pink", "Amber", "Green", "White", "Violet"}));
-content.addView(createSlider(T("Visualizer speed (%)", "Tốc độ visualizer (%)"), "notic_viz_speed", 300, 100));
-    content.addView(createSectionTitle(T("SYSTEM EVENTS", "SỰ KIỆN HỆ THỐNG")));
+    bN.addView(noticSwitchRow(T("Replace system popups", "Thay popup thông báo hệ thống"), "notic_hide_system", false));
+    bN.addView(noticSwitchRow(T("Auto expand new notification", "Tự mở rộng thông báo mới"), "notic_auto_expand", false));
+    bN.addView(createSlider(T("Expanded hold time (sec)", "Thời gian giữ thông báo mở rộng (giây)"), "notic_hold_sec", 15, 4));
+    content.addView(createDrawer("🔔 " + T("NOTIFICATIONS", "THÔNG BÁO"), bN));
+
+    // ---- APPEARANCE ----
+    LinearLayout bA = noticDrawerBody();
+    bA.addView(noticPalette(T("Notic color", "Màu Notic"), "notic_pill_color",
+        new String[]{T("Black", "Đen")}, NoticEngine.PILL_HEX));
+    bA.addView(noticPalette(T("Notification card color", "Màu thẻ thông báo"), "notic_card_color",
+        new String[]{"Auto", T("App icon", "Màu icon app"), T("Color only", "Chỉ màu")}, NoticEngine.CARD_HEX));
+    bA.addView(noticSwitchRow(T("Border = app color", "Viền thông báo theo màu app"), "notic_border_en", true));
+    bA.addView(noticSwitchRow(T("Count badge on the left", "Số thông báo ở bên trái"), "notic_badge_left", false));
+    bA.addView(noticSwitchRow(T("Spinning album art", "Ảnh bài hát xoay tròn (thay icon app)"), "notic_art_spin", true));
+    bA.addView(noticSwitchRow(T("Music visualizer", "Visualizer âm nhạc (giả lập, không ghi âm)"), "notic_viz_en", true));
+    bA.addView(createCycleRow(T("Visualizer color", "Màu visualizer"), "notic_viz_color",
+        new String[]{T("App color", "Theo màu app"), "Cyan", "Blue", "Pink", "Amber", "Green", "White", "Violet", T("Track color", "Màu bài nhạc")}));
+    bA.addView(createSlider(T("Visualizer speed (%)", "Tốc độ visualizer (%)"), "notic_viz_speed", 300, 100));
+    content.addView(createDrawer("🎨 " + T("APPEARANCE", "GIAO DIỆN"), bA));
+
+    // ---- POSITION ----
+    LinearLayout bP = noticDrawerBody();
+    bP.addView(createSectionTitle(T("NOTIC (always stays inside its bar/corner)", "NOTIC (luôn nằm trong bar/corner của nó)")));
+    bP.addView(createSignedSlider(T("Position X (px)", "Vị trí X (px)"), "notic_off_x", -1000, 1000, 0));
+    bP.addView(createSignedSlider(T("Position Y (px)", "Vị trí Y (px)"), "notic_off_y", -1000, 1000, 0));
+    bP.addView(createSignedSlider(T("Length (%)", "Chiều dài (%)"), "notic_w_pct", 50, 200, 100));
+    bP.addView(createSignedSlider(T("Thickness (%)", "Độ dày (%)"), "notic_h_pct", 50, 200, 100));
+    bP.addView(createSignedSlider(T("Roundness (%)", "Độ bo cong (%)"), "notic_rad_pct", 0, 100, 100));
+    bP.addView(createSectionTitle(T("EXPANDED PANEL", "BẢNG THÔNG BÁO MỞ RỘNG")));
+    bP.addView(createSignedSlider(T("Position X (px)", "Vị trí X (px)"), "notic_pop_x", -1000, 1000, 0));
+    bP.addView(createSignedSlider(T("Position Y (px)", "Vị trí Y (px)"), "notic_pop_y", -1000, 1000, 0));
+    bP.addView(createSignedSlider(T("Width (%)", "Chiều rộng (%)"), "notic_pop_w_pct", 60, 130, 100));
+    bP.addView(createSignedSlider(T("Corner radius (dp)", "Độ bo cong (dp)"), "notic_pop_rad", 0, 60, 26));
+    content.addView(createDrawer("📐 " + T("POSITION", "VỊ TRÍ"), bP));
+
+    // ---- EVENTS ----
+    LinearLayout bE = noticDrawerBody();
     String[][] evs = {
-    {"charging", "Phone is charging"}, {"full", "Phone is fully charged"}, {"low", "Battery low (15%)"},
-    {"nonet", "No Internet"}, {"wifi", "Wi-Fi connected / disconnected"}, {"vpn", "VPN on / off"},
-    {"hotspot", "Hotspot on / off"}, {"bt", "Bluetooth connected"}, {"silent", "Silent"},
-    {"vibrate", "Vibrate"}, {"ring", "Ring"}, {"unlock", "Phone unlocked"},
-    {"screenon", "Screen on"}, {"airplane", "Airplane mode"}, {"headset", "Headphones connected"},
-    {"dnd", "Do Not Disturb"}, {"storage", "Storage almost full"}, {"screenshot", "Screenshot captured"},
-    {"rec", "Recording started / stopped"}, {"mic", "Microphone in use"}, {"camera", "Camera in use"}
-};
-    for (String[] ev : evs) content.addView(noticSwitchRow(ev[1], "notic_ev_" + ev[0], !(ev[0].equals("unlock") || ev[0].equals("screenon"))));   // [P1] khớp mặc định trong NoticEngine.event()
+        {"charging", "Phone is charging"}, {"full", "Phone is fully charged"}, {"low", "Battery low (15%)"},
+        {"nonet", "No Internet"}, {"wifi", "Wi-Fi connected / disconnected"}, {"vpn", "VPN on / off"},
+        {"hotspot", "Hotspot on / off"}, {"bt", "Bluetooth connected"}, {"silent", "Silent"},
+        {"vibrate", "Vibrate"}, {"ring", "Ring"}, {"unlock", "Phone unlocked"},
+        {"screenon", "Screen on"}, {"airplane", "Airplane mode"}, {"headset", "Headphones connected"},
+        {"dnd", "Do Not Disturb"}, {"storage", "Storage almost full"}, {"screenshot", "Screenshot captured"},
+        {"rec", "Recording started / stopped"}, {"mic", "Microphone in use"}, {"camera", "Camera in use"}
+    };
+    for (String[] ev : evs) bE.addView(noticSwitchRow(ev[1], "notic_ev_" + ev[0], !(ev[0].equals("unlock") || ev[0].equals("screenon"))));
+    content.addView(createDrawer("⚡ " + T("EVENTS", "SỰ KIỆN HỆ THỐNG"), bE));
 
     Button bClose = new Button(this);
     bClose.setText(T("CLOSE", "ĐÓNG"));
     bClose.setBackground(getRounded("#333333", 20f));
     bClose.setTextColor(Color.WHITE);
-    bClose.setOnClickListener(v -> d.dismiss());
+    bClose.setOnClickListener(x -> d.dismiss());
     root.addView(bClose);
 
+    d.setOnDismissListener(x -> { NoticEngine e = NoticEngine.instance; if (e != null) e.clearDemo(); });
     d.setContentView(root);
     d.show();
+    // vào Notic space là notic hiện ngay để user nhìn và chỉnh slider theo thời gian thực
+    new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> runNoticDemo(false), 400);
 }
-
 private void showNoticAppPicker() {
     final java.util.LinkedHashMap<String, String> apps = new java.util.LinkedHashMap<>();
     for (String[] a : getAppListCached()) if (!apps.containsKey(a[1])) apps.put(a[1], a[0].replace(" [Island]", ""));
