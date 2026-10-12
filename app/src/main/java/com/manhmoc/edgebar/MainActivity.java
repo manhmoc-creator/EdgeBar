@@ -77,7 +77,7 @@ private String[] C_GESTURE_NAMES = {
     private final Handler sliderPrefHandler = new Handler(android.os.Looper.getMainLooper());
     private final java.util.Map<String, Long> sliderLastWriteMs = new java.util.HashMap<>();
     private final java.util.Map<String, Runnable> sliderPendingRunnable = new java.util.HashMap<>();
-    private static final long SLIDER_WRITE_THROTTLE_MS = 60;
+    private static final long SLIDER_WRITE_THROTTLE_MS = 33;   // ~2 khung hình @60Hz của Pixel 2 XL; apply() chỉ ghi đĩa khi giá trị thật sự đổi nên không tốn thêm pin
 private LinearLayout pageDesign, pageConditions, pageEcosystem, listRules, designSliderContainer, navMain;
 private LinearLayout condBackRow;
 private LinearLayout designTopBackRow, designSpaceMenu, designBackRow;
@@ -1562,7 +1562,6 @@ upLp.setMargins(4, 4, 4, 4);
 btnUpdateTop.setLayoutParams(upLp);
 btnUpdateTop.setMinimumHeight(0);
 btnUpdateTop.setOnClickListener(v -> {
-    revokeDeviceAdminIfActive();
     Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i);
 });
 rightCol.addView(btnUninstallTop);
@@ -4495,9 +4494,10 @@ private int gi(String src, String f, String sf, boolean and, int def) {
     int common = prefs.getInt(src + f, def);
     return and ? prefs.getInt(src + f + sf, common) : common;
 }
-
-private void applyBarPackToSpace(String id, String targetPrefix) {
-    ensureScopedPack(targetPrefix, true, id);
+private void applyBarPackToSpace(String id, String targetPrefix) { applyBarPackToSpace(id, targetPrefix, false); }
+// geoOnly=true: đường NHANH cho slider kéo tay — chỉ ghi alpha/w/h/x/y; bỏ ensureScopedPack (quét toàn bộ prefs), icon, side-fields và rules
+private void applyBarPackToSpace(String id, String targetPrefix, boolean geoOnly) {
+    if (!geoOnly) ensureScopedPack(targetPrefix, true, id);
     String src = targetPrefix + "pack_bar_" + id + "_";
     int loc = prefs.getInt(src + "loc", 0);
     if (loc < 0 || loc >= BARS.length) loc = 0;
@@ -4528,21 +4528,23 @@ private void applyBarPackToSpace(String id, String targetPrefix) {
             xs = spreadY ? shiftX : (isA ? shiftX : -shiftX) - half;
             ys = spreadY ? (isA ? y : -y) - half : y;
         }
-        ed.putBoolean(bk + "en", en)
-          .putInt(bk + "alpha", gi(src, "alpha", sf, and, 50))
+        ed.putInt(bk + "alpha", gi(src, "alpha", sf, and, 50))
           .putInt(bk + "w", gi(src, "w", sf, and, 300))
           .putInt(bk + "h", gi(src, "h", sf, and, 60))
-          .putInt(bk + "x", xs).putInt(bk + "y", ys)
-          .putString(bk + "icons", iconOn ? icons : "");
-        writeSideFields(ed, src, bk, isA, isLock);
+          .putInt(bk + "x", xs).putInt(bk + "y", ys);
+        if (!geoOnly) {
+            ed.putBoolean(bk + "en", en).putString(bk + "icons", iconOn ? icons : "");
+            writeSideFields(ed, src, bk, isA, isLock);
+        }
     }
     ed.apply();
+    if (geoOnly) return;
     applyPackRulesToSpace("bar_" + id, targetPrefix, m[0]);
     applyPackRulesToSpace("bar_" + id, targetPrefix, m[1]);
 }
-
-private void applyCornerPackToSpace(String id, String targetPrefix) {
-    ensureScopedPack(targetPrefix, false, id);
+private void applyCornerPackToSpace(String id, String targetPrefix) { applyCornerPackToSpace(id, targetPrefix, false); }
+private void applyCornerPackToSpace(String id, String targetPrefix, boolean geoOnly) {
+    if (!geoOnly) ensureScopedPack(targetPrefix, false, id);
     String src = targetPrefix + "pack_corner_" + id + "_";
     int loc = prefs.getInt(src + "loc", 0);
     if (loc < 0 || loc >= CORNERS.length) loc = 0;
@@ -4560,8 +4562,8 @@ private void applyCornerPackToSpace(String id, String targetPrefix) {
         boolean en = TwinPairStore.isSideEnabled(prefs, targetPrefix + "pack_corner_", pairId, isA, false);
         String ck = targetPrefix + "corner_" + m[s] + "_";
         int xs = and ? prefs.getInt(src + "x" + sf, 0) : (isA ? shiftX : -shiftX) - half;
-        ed.putBoolean(ck + "en", en)
-          .putInt(ck + "shape", gi(src, "shape", sf, and, 0))
+        if (!geoOnly) ed.putBoolean(ck + "en", en);
+        ed.putInt(ck + "shape", gi(src, "shape", sf, and, 0))
           .putInt(ck + "w", gi(src, "w", sf, and, 100))
           .putInt(ck + "h", gi(src, "h", sf, and, 100))
           .putInt(ck + "x", xs)
@@ -4572,9 +4574,10 @@ private void applyCornerPackToSpace(String id, String targetPrefix) {
           .putInt(ck + "moon_y", gi(src, "moon_y", sf, and, 1250))
           .putInt(ck + "rad", gi(src, "rad", sf, and, 80))
           .putInt(ck + "moon_rad", gi(src, "moon_rad", sf, and, 80));
-        writeSideFields(ed, src, ck, isA, isLock);
+        if (!geoOnly) writeSideFields(ed, src, ck, isA, isLock);
     }
     ed.apply();
+    if (geoOnly) return;
     applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + m[0]);
     applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + m[1]);
 }
@@ -4608,6 +4611,14 @@ private void reapplyPackIfEnabled(int type, String id, String spacePrefix) {
     boolean enabled = prefs.getBoolean(spacePrefix + itemKey + "_en", false);
     if (!applied || !enabled) return;
     if (type == 0) applyBarPackToSpace(id, spacePrefix); else applyCornerPackToSpace(id, spacePrefix);
+}
+// Đường nhanh cho slider: cùng điều kiện với reapplyPackIfEnabled() nhưng chỉ đẩy hình học
+private void reapplyPackGeoIfEnabled(int type, String id, String spacePrefix) {
+    if (type == 2) return;
+    String itemKey = (type == 0 ? "bar_" : "corner_") + id;
+    if (!prefs.getBoolean(spacePrefix + itemKey + "_en", false)) return;
+    if (!getDynamicIds(spacePrefix + "applied_packs").contains(itemKey)) return;
+    if (type == 0) applyBarPackToSpace(id, spacePrefix, true); else applyCornerPackToSpace(id, spacePrefix, true);
 }
 private void reapplyPackIfEnabledByItemKey(String itemKey, String spacePrefix) {
     boolean isBar = itemKey.startsWith("bar_");
@@ -5340,7 +5351,6 @@ private void buildSystemSpace() {
         })));
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("🔄", T("Update","Cập nhật"),
         "GitHub Actions", () -> {
-            revokeDeviceAdminIfActive();
             startActivity(new Intent(Intent.ACTION_VIEW,
                 Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")));
         })));
@@ -9514,8 +9524,30 @@ private void addPairSettingRows(LinearLayout content, String packBase, String na
         new String[]{T("Auto", "Tự động"), T("Diagonal Up", "Chéo lên"), T("Diagonal Down", "Chéo xuống"),
             T("Straight Up", "Thẳng lên"), T("Straight Down", "Thẳng xuống"),
             T("Straight Left", "Thẳng trái"), T("Straight Right", "Thẳng phải")}, 0, nameA, nameB));
-    if (withIcon) content.addView(buildPairSettingCard(T("Icon on bar", "Icon trên Bar"), packBase + "icon_en",
-        new String[]{T("Hidden", "Không hiển thị"), T("Shown", "Có hiển thị")}, 0, nameA, nameB));
+    if (withIcon) {
+        content.addView(buildPairSettingCard(T("Icon on bar", "Icon trên Bar"), packBase + "icon_en",
+            new String[]{T("Hidden", "Không hiển thị"), T("Shown", "Có hiển thị")}, 0, nameA, nameB));
+        content.addView(buildBarIconPickerButton(packBase));   // KHÔI PHỤC bộ chọn icon: không có icon thì "Shown" và "Tự động đổi màu icon" chẳng có gì để áp
+    }
+}
+// Nút mở bộ chọn icon (app / hệ thống / tuỳ chỉnh) giống bộ chọn icon của Panel. Ghi vào đúng key mà applyBarPackToSpace() đọc: packBase + "icons"
+private View buildBarIconPickerButton(final String packBase) {
+    final String iconsKey = packBase + "icons";
+    final Button b = new Button(this);
+    b.setTextColor(Color.BLACK);
+    b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    b.setBackground(getRounded("#8AB4F8", 20f));
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 130);
+    lp.setMargins(0, 8, 0, 8);
+    b.setLayoutParams(lp);
+    final Runnable label = () -> {
+        String s = prefs.getString(iconsKey, "");
+        int n = s.isEmpty() ? 0 : s.split(",").length;
+        b.setText("✨ " + T("PICK ICONS ON BAR", "CHỌN ICON TRÊN BAR") + " (" + n + ")");
+    };
+    label.run();
+    b.setOnClickListener(v -> showBarIconMultiPicker(iconsKey, label));
+    return b;
 }
 private TextView buildPackLiveHint() {
     TextView tv = new TextView(this);
@@ -11454,12 +11486,26 @@ private String queryDisplayName(Uri uri) {
     } catch (Exception ignored) {}
     return "Song";
 }
+    private static final String[] PACK_GEO_FIELDS = {"alpha","w","h","x","y","pair_spacing","shape",
+        "moon_w","moon_h","moon_x","moon_y","rad","moon_rad"};
+    private boolean isPackGeoField(String f) {
+        if (f.endsWith("_L") || f.endsWith("_R")) f = f.substring(0, f.length() - 2);   // chế độ AND chia đôi cặp dùng hậu tố _L/_R
+        for (String g : PACK_GEO_FIELDS) if (g.equals(f)) return true;
+        return false;
+    }
     private SharedPreferences.OnSharedPreferenceChangeListener makePackLiveListener(String packBase, int type, String id) {
     final String space = packBase.substring(0, packBase.indexOf("pack_"));
     final Runnable apply = () -> reapplyPackIfEnabled(type, id, space);
+    final boolean[] geoPending = {false};
+    final Runnable geo = () -> { geoPending[0] = false; reapplyPackGeoIfEnabled(type, id, space); };
     return (p, k) -> {
         if (k == null || !k.startsWith(packBase)) return;
-        packLiveHandler.removeCallbacks(apply);
+        if (isPackGeoField(k.substring(packBase.length()))) {
+            // UX: kéo slider kích thước/vị trí -> bar/corner thật chạy theo trong ~1 khung hình (gom nhiều tick thành 1 lần ghi), không chờ debounce 250ms
+            if (!geoPending[0]) { geoPending[0] = true; packLiveHandler.postDelayed(geo, 16); }
+            return;
+        }
+        packLiveHandler.removeCallbacks(apply);   // icon / công tắc / chế độ: đổi hiếm, giữ debounce + áp dụng đầy đủ
         packLiveHandler.postDelayed(apply, 250);
     };
 }

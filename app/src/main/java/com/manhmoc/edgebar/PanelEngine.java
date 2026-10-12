@@ -153,16 +153,13 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
     "visibility_24px", "volume_up_24px", "warning_24px",
     "work_24px"
 };
-    // [FIX] Chuyển normalizeIconBitmap từ MainActivity.java sang đây thành public static
-// để mọi class khác (Tile1..30, AssistiveBubbleEngine, PanelEngine nội bộ)
-// đều gọi được: PanelEngine.normalizeIconBitmap(...)
-public static Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int targetSize, float contentScale) {
+    static Bitmap normalizeIconBitmap(Drawable d, int targetSize, float contentScale) {
     if (d == null) return null;
     try {
         int srcSize = targetSize * 2;
         Bitmap raw = Bitmap.createBitmap(srcSize, srcSize, Bitmap.Config.ARGB_8888);
         Canvas rawCanvas = new Canvas(raw);
-        android.graphics.drawable.Drawable dm = d.mutate();
+        Drawable dm = d.mutate();
         dm.setBounds(0, 0, srcSize, srcSize);
         dm.draw(rawCanvas);
 
@@ -173,10 +170,8 @@ public static Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, i
             int rowBase = y * srcSize;
             for (int x = 0; x < srcSize; x++) {
                 if (((pixels[rowBase + x] >>> 24) & 0xFF) > 10) {
-                    if (x < left) left = x;
-                    if (x > right) right = x;
-                    if (y < top) top = y;
-                    if (y > bottom) bottom = y;
+                    if (x < left) left = x; if (x > right) right = x;
+                    if (y < top) top = y; if (y > bottom) bottom = y;
                 }
             }
         }
@@ -188,19 +183,32 @@ public static Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, i
         Bitmap out = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888);
         Canvas outCanvas = new Canvas(out);
         int drawSize = Math.round(targetSize * contentScale);
-        float scale = Math.min((float) drawSize / cropped.getWidth(),
-                               (float) drawSize / cropped.getHeight());
+        float scale = Math.min((float) drawSize / cropped.getWidth(), (float) drawSize / cropped.getHeight());
         int dw = Math.round(cropped.getWidth() * scale);
         int dh = Math.round(cropped.getHeight() * scale);
-        android.graphics.Rect dst = new android.graphics.Rect(
-            (targetSize - dw) / 2, (targetSize - dh) / 2,
-            (targetSize - dw) / 2 + dw, (targetSize - dh) / 2 + dh);
+        android.graphics.Rect dst = new android.graphics.Rect((targetSize - dw) / 2, (targetSize - dh) / 2,
+                (targetSize - dw) / 2 + dw, (targetSize - dh) / 2 + dh);
+
+        // [FIX RĂNG CƯA] Thêm DITHER (khử banding) + FILTER_BITMAP (bilinear downsample)
         Paint p = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+        p.setDither(true);        // ← THÊM: khử dải màu liti
+        p.setFilterBitmap(true);  // ← THÊM: ép bilinear filter khi scale
         outCanvas.drawBitmap(cropped, null, dst, p);
         cropped.recycle();
         return out;
     } catch (Exception e) { return null; }
 }
+        /**
+     * [MỚI] Vẽ lại glyph của bất kỳ Drawable nào theo dải "Midnight Neon"
+     * (Deep Blue → Purple → Neon Blue) giống hệt icon App Shortcut khi
+     * long-press ngoài Home — thay cho kiểu "tint trắng trên nền xám" đơn điệu.
+     *
+     * Trả về Bitmap CÓ NỀN TRONG SUỐT: chỉ glyph mang màu gradient, alpha
+     * giữ nguyên theo icon gốc → có thể ghép lên backdrop tùy ý.
+     *
+     * Zero-RAM: chỉ 2 Bitmap tạm (normalized + glyph) sống trong scope, recycle
+     * ngay khi thoát. Không Thread, không Handler, không prefs.
+     */
     public static Bitmap buildNeonGradientIcon(Drawable icon, int size, float contentScale) {
     if (icon == null) return null;
     try {
@@ -212,9 +220,6 @@ public static Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, i
         normalized.recycle();
 
         Canvas gc = new Canvas(glyph);
-        // [FIX RĂNG CƯA] Thêm FILTER_BITMAP + DITHER — đây là paint phủ gradient SRC_IN,
-        // các pixel alpha-trung-gian ở viền glyph nhận màu gradient mượt mà không bị
-        // "dải liti" ở chỗ chuyển màu Deep Blue → Purple → Neon Blue.
         Paint gp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         gp.setFilterBitmap(true); // ← THÊM
         gp.setDither(true);       // ← THÊM

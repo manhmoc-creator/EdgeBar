@@ -14,6 +14,17 @@ import android.service.notification.StatusBarNotification;
 public class EdgeBarNotificationListener extends NotificationListenerService {
     private final Handler main = new Handler(Looper.getMainLooper());
 
+    private static volatile EdgeBarNotificationListener inst;
+    @Override public void onListenerConnected() { inst = this; }
+    @Override public void onListenerDisconnected() { if (inst == this) inst = null; }
+
+    /** Xoá thông báo thật khỏi bảng thông báo hệ thống (Notic gọi khi người dùng vuốt xoá). true = đã gửi lệnh xoá. */
+    static boolean cancel(String key) {
+        EdgeBarNotificationListener l = inst;
+        if (l == null || key == null) return false;
+        try { l.cancelNotification(key); return true; } catch (Exception e) { return false; }
+    }
+
     @Override public void onNotificationPosted(StatusBarNotification sbn) {
         if (sbn == null) return;
         SharedPreferences prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
