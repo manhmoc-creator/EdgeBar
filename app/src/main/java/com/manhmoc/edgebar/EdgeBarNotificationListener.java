@@ -1,5 +1,6 @@
 package com.manhmoc.edgebar;
-
+import android.app.KeyguardManager;
+import android.os.PowerManager;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.content.SharedPreferences;
@@ -69,7 +70,14 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
         boolean media = Notification.CATEGORY_TRANSPORT.equals(cat) || (tpl != null && tpl.contains("MediaStyle"));
         boolean msg = Notification.CATEGORY_MESSAGE.equals(cat) || (tpl != null && tpl.contains("MessagingStyle"));
         boolean timer = Notification.CATEGORY_REMINDER.equals(cat) || pkg.contains("deskclock") || pkg.contains(".clock");
-
+        boolean incoming = Notification.CATEGORY_CALL.equals(cat)
+    && (n.fullScreenIntent != null || (tpl != null && tpl.contains("CallStyle")));
+if (incoming) {
+    PowerManager pwr = (PowerManager) getSystemService(POWER_SERVICE);
+    KeyguardManager kg = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+    // Không dùng máy (tắt màn / đang khoá) -> bỏ qua, để hệ thống tự mở app gọi điện toàn màn hình
+    if (pwr == null || !pwr.isInteractive() || (kg != null && kg.isKeyguardLocked())) return;
+}
         Ranking rk = new Ranking();
         boolean haveRank = getCurrentRanking().getRanking(sbn.getKey(), rk);
         if (haveRank && rk.getImportance() <= NotificationManager.IMPORTANCE_MIN && !media) return;
@@ -105,7 +113,8 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
         it.actions = n.actions;
         it.reply = reply;
         it.media = media;
-
+        it.call = incoming;
+if (media && ex != null) it.token = ex.getParcelable(Notification.EXTRA_MEDIA_SESSION);
         int mode = prefs.getInt("notic_sound_mode", 0);
         boolean sysSound = haveRank && rk.getImportance() >= NotificationManager.IMPORTANCE_DEFAULT;
         final boolean wake = mode == 2 && !media;

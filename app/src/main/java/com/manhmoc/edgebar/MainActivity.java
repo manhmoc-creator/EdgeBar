@@ -134,7 +134,7 @@ private Runnable currentLevelBackAction = null;
     private java.util.Set<String> frontierSelectedItems = new java.util.LinkedHashSet<>();
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "🕸️ 19.12.3.6.43";
+    private final String CURRENT_VERSION = "🕸️ 19.12.3.6.44";
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
     private Button btnWriteSettings; // MỚI
@@ -8461,7 +8461,13 @@ private void openNoticSpace() {
     content.addView(createCycleRow(T("Sound", "Âm thanh"), "notic_sound_mode",
         new String[]{T("Off", "Tắt"), T("Sound only", "Chỉ âm báo"), T("Sound + screen on", "Âm báo + bật màn hình")}));
     content.addView(noticSwitchRow(T("Replace system popups", "Thay popup thông báo hệ thống"), "notic_hide_system", false));
-
+    content.addView(createSectionTitle(T("APPEARANCE", "GIAO DIỆN")));
+content.addView(noticSwitchRow(T("Border = app color", "Viền thông báo theo màu app"), "notic_border_en", true));
+content.addView(noticSwitchRow(T("Spinning album art", "Ảnh bài hát xoay tròn (thay icon app)"), "notic_art_spin", true));
+content.addView(noticSwitchRow(T("Music visualizer", "Visualizer âm nhạc (giả lập, không ghi âm)"), "notic_viz_en", true));
+content.addView(createCycleRow(T("Visualizer color", "Màu visualizer"), "notic_viz_color",
+    new String[]{T("App color", "Theo màu app"), "Cyan", "Blue", "Pink", "Amber", "Green", "White", "Violet"}));
+content.addView(createSlider(T("Visualizer speed (%)", "Tốc độ visualizer (%)"), "notic_viz_speed", 300, 100));
     content.addView(createSectionTitle(T("SYSTEM EVENTS", "SỰ KIỆN HỆ THỐNG")));
     String[][] evs = {
     {"charging", "Phone is charging"}, {"full", "Phone is fully charged"}, {"low", "Battery low (15%)"},
