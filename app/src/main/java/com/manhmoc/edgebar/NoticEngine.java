@@ -95,7 +95,7 @@ public static class Item {
     PendingIntent intent;
     Notification.Action[] actions;
     Notification.Action reply;
-    boolean media, transientItem, call, ongoing, playing = true;   // [P3] ongoing = thông báo đang chạy (timer/cuộc gọi...), cập nhật liên tục
+    boolean media, transientItem, call, ongoing, person, playing = true;
     Object token;                       // MediaSession.Token do Listener truyền sang
     MediaController mc;
     MediaController.Callback mcCb;
@@ -268,20 +268,32 @@ private Bitmap circleArt(Item it) {
     it.artCircle = out;                       // vẽ 1 lần, về sau chỉ rotate bitmap
     return out;
 }
-// [P7] Ảnh người gửi tin nhắn / người gọi (large icon), cắt tròn, cache 1 lần
 private Bitmap senderCircle(Item it) {
     if (it.senderBmp != null) return it.senderBmp;
-    if (it.media || it.transientItem || it.largeIcon == null) return null;
-    Bitmap src = loadLarge(it);
-    if (src == null) return null;
+    if (it.media || it.transientItem) return null;
+    Bitmap src = it.largeIcon != null ? loadLarge(it) : null;
+    if (src == null && !it.person) return null;      // thông báo thường: giữ icon app bên trái như cũ
     int sz = 96;
     Bitmap out = Bitmap.createBitmap(sz, sz, Bitmap.Config.ARGB_8888);
     Canvas cv = new Canvas(out);
     Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-    cv.drawCircle(sz / 2f, sz / 2f, sz / 2f, p);
-    p.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
-    cv.drawBitmap(src, null, new RectF(0, 0, sz, sz), p);
-    it.senderBmp = out;
+    if (src != null) {
+        cv.drawCircle(sz / 2f, sz / 2f, sz / 2f, p);
+        p.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
+        cv.drawBitmap(src, null, new RectF(0, 0, sz, sz), p);
+    } else {                                          // không có avatar -> hình tròn + chữ cái đầu
+        String t = it.title == null ? "" : it.title.trim();
+        String ch = t.isEmpty() ? "?" : new String(Character.toChars(t.codePointAt(0))).toUpperCase(Locale.getDefault());
+        p.setColor(blend(0xFF3A3A3C, appColor(it), 0.55f));
+        cv.drawCircle(sz / 2f, sz / 2f, sz / 2f, p);
+        p.setColor(Color.WHITE);
+        p.setTextSize(sz * 0.5f);
+        p.setTextAlign(Paint.Align.CENTER);
+        p.setTypeface(Typeface.DEFAULT_BOLD);
+        Paint.FontMetrics fm = p.getFontMetrics();
+        cv.drawText(ch, sz / 2f, sz / 2f - (fm.ascent + fm.descent) / 2f, p);
+    }
+    it.senderBmp = out;                               // vẽ 1 lần, cache trong Item
     return out;
 }
 private Bitmap square96(Bitmap b) {
@@ -754,18 +766,14 @@ public void clearDemo() {
         if (popup != null && bindHost()) { renderPopup(); placePopup(); }
         if (items.isEmpty()) return;
         if (!bindHost()) {
-            if (pill != null) { pill.animate().cancel(); pill.setAlpha(0f); fadeNext = true; fadeUntil = 0; }   // [P7]
             h.removeCallbacks(noHostRun);
             h.postDelayed(noHostRun, 700);
             return;
         }
-        h.removeCallbacks(noHostRun);
-        if (hostChanged && pill != null) {   // [P7] đổi sang bar KHÁC: không để người dùng thấy pill/bar nhảy vị trí
-            pill.animate().cancel(); pill.setAlpha(0f); fadeNext = true; fadeUntil = 0;
-            if (hostView != null && statusVisible) { hostView.animate().cancel(); hostView.setAlpha(0f); }
-        }        
+        h.removeCallbacks(noHostRun);     
         String s = geoKey();
-        if (pill != null && !hostChanged && s.equals(lastGeo)) {
+        if (pill != null && s.equals(lastGeo)) {
+            hostChanged = false;                      // đổi host nhưng cùng hình học -> pill đứng yên, chỉ hoán đổi bar bị che
             h.removeCallbacks(geoRun); pendingGeo = "";
             pill.invalidate();   // đổi màu/visualizer trong cài đặt thấy ngay
             applyVisibility();
@@ -792,7 +800,7 @@ public void clearDemo() {
 
     private void applyGeo(String s) {
         if (pill == null) { lastGeo = s; hostChanged = false; if (!userHidden) announce(); return; }
-        boolean snap = hostChanged || lastGeo.isEmpty();   // đổi sang bar KHÁC (Khoá -> Home) thì đặt thẳng vào chỗ mới, không bay ngang qua màn hình
+        boolean snap = lastGeo.isEmpty();                  // Lock/Home cấu hình khác nhau thì pill trượt mượt, không nhảy
         hostChanged = false;
         if (s.equals(lastGeo)) { pill.invalidate(); applyVisibility(); return; }
         lastGeo = s;
@@ -803,22 +811,48 @@ public void clearDemo() {
         pill.invalidate();
         applyVisibility();
     }
+    private static final String[] N_BARS = {"b_c","r","l","r_u","r_c","r_d","t_c","t_r","t_l","l_u","l_c","l_d"};
+private static final int[] N_GRAV = {
+    Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM|Gravity.RIGHT, Gravity.BOTTOM|Gravity.LEFT,
+    Gravity.TOP|Gravity.RIGHT, Gravity.CENTER_VERTICAL|Gravity.RIGHT, Gravity.BOTTOM|Gravity.RIGHT,
+    Gravity.TOP|Gravity.CENTER_HORIZONTAL, Gravity.TOP|Gravity.RIGHT, Gravity.TOP|Gravity.LEFT,
+    Gravity.TOP|Gravity.LEFT, Gravity.CENTER_VERTICAL|Gravity.LEFT, Gravity.BOTTOM|Gravity.LEFT
+};
+
+/** Toạ độ màn hình của bar tính thuần từ prefs (không đo view -> không phụ thuộc thời điểm layout). null nếu là corner. */
+private float[] barRectFromPrefs(String key, float W, float H) {
+    if (key == null || key.length() < 6) return null;
+    String member = key.substring(5);                 // "lock_r_u" -> "r_u"
+    int idx = -1;
+    for (int i = 0; i < N_BARS.length; i++) if (N_BARS[i].equals(member)) { idx = i; break; }
+    if (idx < 0) return null;                         // corner_* -> dùng cách đo cũ
+    int w = prefs.getInt(key + "_w", 300), hh = prefs.getInt(key + "_h", 60);
+    int x = prefs.getInt(key + "_x", 0), y = prefs.getInt(key + "_y", 0);
+    int g = N_GRAV[idx];
+    int hg = g & Gravity.HORIZONTAL_GRAVITY_MASK, vg = g & Gravity.VERTICAL_GRAVITY_MASK;
+    float left = hg == Gravity.LEFT ? x : hg == Gravity.RIGHT ? W - w - x : (W - w) / 2f + x;
+    float top  = vg == Gravity.TOP  ? y : vg == Gravity.BOTTOM ? H - hh - y : (H - hh) / 2f + y;
+    return new float[]{left, top, left + w, top + hh};
+}    
     private boolean bindHost() {
         Object[] hs = hostFinder.get();
         if (hs == null) return false;
         View v = (View) hs[0];
         if (hostView != v) { restoreHost(); hostView = v; hostChanged = true; }
         hostKey = (String) hs[1];
-        if (v.getVisibility() != View.VISIBLE || !v.isAttachedToWindow() || v.getWidth() <= 0 || v.getHeight() <= 0) return false;
-        int[] loc = new int[2];
-        v.getLocationOnScreen(loc);
-        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+         if (v.getVisibility() != View.VISIBLE || !v.isAttachedToWindow()) return false;
+        DisplayMetrics dm = new DisplayMetrics();
+        try { wm.getDefaultDisplay().getRealMetrics(dm); } catch (Exception e) { dm = ctx.getResources().getDisplayMetrics(); }
         scrW = dm.widthPixels;
         scrH = dm.heightPixels;
-        hl = loc[0];
-        ht = loc[1];
-        hr = hl + v.getWidth();
-        hb = ht + v.getHeight();
+        float[] rc = barRectFromPrefs(hostKey, scrW, scrH);
+        if (rc != null) { hl = rc[0]; ht = rc[1]; hr = rc[2]; hb = rc[3]; }
+        else {                                        // corner: giữ cách đo cũ
+            if (v.getWidth() <= 0 || v.getHeight() <= 0) return false;
+            int[] loc = new int[2];
+            v.getLocationOnScreen(loc);
+            hl = loc[0]; ht = loc[1]; hr = hl + v.getWidth(); hb = ht + v.getHeight();
+        }
         float wP = prefs.getInt("notic_w_pct", 100) / 100f, hP = prefs.getInt("notic_h_pct", 100) / 100f;
 float barW = hr - hl, barH = hb - ht;
 pillH = Math.min(barH, Math.max(8 * dens, Math.min(barH, 44 * dens) * hP));   // không bao giờ cao hơn bar
@@ -1073,7 +1107,7 @@ private void openPopup() {
     popRad = dp(prefs.getInt("notic_pop_rad", 26));
     LinearLayout root = new LinearLayout(ctx);
     root.setOrientation(LinearLayout.VERTICAL);
-    popupBg = rounded(Color.argb(244, 0, 0, 0), popRad);
+    popupBg = rounded(0xF22C2C2E, popRad);
     root.setBackground(popupBg);
     root.setPadding(dp(8), dp(8), dp(8), dp(8));
     root.setOnTouchListener((v, e) -> {
@@ -1155,11 +1189,11 @@ private void setMorph(View p, WindowManager.LayoutParams lp, GradientDrawable bg
     if (p instanceof LinearLayout) for (int i = 0; i < ((LinearLayout) p).getChildCount(); i++) ((LinearLayout) p).getChildAt(i).setAlpha(ca);
     if (bgd != null) bgd.setAlpha((int) (255 * Math.min(1f, f * 3f)));
 }
-
 private void runMorph(final View p, final WindowManager.LayoutParams lp, final GradientDrawable bgd, boolean open, final Runnable end) {
     if (!open && morphAnim != null) morphAnim.cancel();
     final ValueAnimator va = ValueAnimator.ofFloat(open ? 0f : 1f, open ? 1f : 0f);
     morphAnim = va;
+    p.setLayerType(View.LAYER_TYPE_HARDWARE, null);    
     va.setDuration(open ? 320 : 240);
     va.setInterpolator(open ? EMPH : EMPH_IN);
     va.addUpdateListener(a -> setMorph(p, lp, bgd, (float) a.getAnimatedValue()));
@@ -1167,13 +1201,13 @@ private void runMorph(final View p, final WindowManager.LayoutParams lp, final G
         boolean cancelled;
         @Override public void onAnimationCancel(Animator a) { cancelled = true; }
         @Override public void onAnimationEnd(Animator a) {
+            p.setLayerType(View.LAYER_TYPE_NONE, null);   // nhả bộ đệm GPU ngay khi xong để tiết kiệm RAM            
             if (morphAnim == va) morphAnim = null;
             if (!cancelled && end != null) end.run();
         }
     });
     va.start();
 }
-
 private void placePopup() {
     if (popup == null || popupLp == null) return;
     int pw = popW();
@@ -1213,7 +1247,7 @@ private void renderPopup() {
     Item curIt = items.get(Math.min(cur, items.size() - 1));
     if (popupBg != null) {
         if (popupHistory) {   // [P6] chế độ lịch sử: khung đen chung, mỗi thẻ có viền màu app riêng
-            popupBg.setColor(Color.argb(244, 44, 44, 46));   // [P7] khung xám đậm hơn thẻ một chút
+            popupBg.setColor(0xF22C2C2E);
             popupBg.setStroke(dp(1.5f), cBorder ? 0x40FFFFFF : Color.TRANSPARENT);
             popup.setPadding(dp(8), dp(8), dp(8), dp(8));
         } else {              // [P6] xem 1 thông báo: bỏ khung ngoài (padding 8dp + margin 4dp là "khoảng cách" bạn thấy), viền màu nằm ngay trên thẻ
@@ -1269,12 +1303,17 @@ private void renderPopup() {
 } else {
     ImageView iv = new ImageView(ctx);
     iv.setLayoutParams(new LinearLayout.LayoutParams(dp(42), dp(42)));
-    iv.setBackground(rounded(0xFF2C2C2E, dp(10)));
-    iv.setClipToOutline(true);
-    iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-    Bitmap pic = loadLarge(it);
-    if (pic != null) iv.setImageBitmap(pic);
-    else if (it.icon != null) iv.setImageBitmap(it.icon);
+    Bitmap sb = senderCircle(it);
+    if (sb != null) {
+        iv.setImageBitmap(sb);                       // tròn, không nền vuông
+    } else {
+        iv.setBackground(rounded(0xFF2C2C2E, dp(10)));
+        iv.setClipToOutline(true);
+        iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        Bitmap pic = loadLarge(it);
+        if (pic != null) iv.setImageBitmap(pic);
+        else if (it.icon != null) iv.setImageBitmap(it.icon);
+    }
     top.addView(iv);
 }
         LinearLayout col = new LinearLayout(ctx);
@@ -1308,6 +1347,13 @@ private void renderPopup() {
             col.addView(t2);
         }
         top.addView(col);
+        if (!it.media && it.senderBmp != null && it.icon != null) {   // icon app ở cùng bên phải
+            ImageView ai = new ImageView(ctx);
+            ai.setImageBitmap(it.icon);
+            LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(dp(24), dp(24));
+            alp.setMargins(dp(4), 0, 0, 0);
+            top.addView(ai, alp);
+        }        
         if (it.media && prefs.getBoolean("notic_viz_en", true)) top.addView(new VizView(ctx, it)); // visualizer nằm sát phải cùng
         top.setOnClickListener(v -> {
             openItem(it);
@@ -1326,6 +1372,11 @@ private GradientDrawable cardBg(Item it, float r) {
     int m = prefs.getInt("notic_card_color", 0);
     if (m == 1) return rounded(blend(appColor(it), Color.BLACK, 0.35f), r);
     if (m == 2) return rounded(blend(CARD_GRAY, appColor(it), 0.30f), r);
+    if (it.media && m == 0) {                       // thẻ nhạc: nền theo màu thông báo, các thẻ khác vẫn xám
+        GradientDrawable g = rounded(blend(appColor(it), Color.BLACK, 0.45f), r);
+        if (cBorder) g.setStroke(dp(1.5f), appColor(it));
+        return g;
+    }
     GradientDrawable g = rounded(m >= 3 && m - 3 < CARD_HEX.length ? Color.parseColor(CARD_HEX[m - 3]) : CARD_GRAY, r);
     if (cBorder) g.setStroke(dp(1.5f), appColor(it));
     return g;
@@ -1569,12 +1620,20 @@ private void smsQuick(Item it, String body) {
         });
         et.setOnEditorActionListener((v, id, ev) -> { sendReply(it, et); return true; });
         ImageView send = new ImageView(ctx);
-        Drawable sd = ctx.getDrawable(android.R.drawable.ic_menu_send);   // icon Send có sẵn của hệ thống
-        if (sd != null) { sd = sd.mutate(); sd.setTint(0xFF0A84FF); send.setImageDrawable(sd); }
-        send.setPadding(dp(10), dp(8), dp(6), dp(8));
+        Drawable sd = ctx.getDrawable(android.R.drawable.ic_menu_send);
+        if (sd != null) { sd = sd.mutate(); sd.setTint(Color.WHITE); send.setImageDrawable(sd); }
+        send.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        send.setPadding(dp(9), dp(9), dp(9), dp(9));
+        GradientDrawable sbg = new GradientDrawable();
+        sbg.setShape(GradientDrawable.OVAL);
+        sbg.setColor(0xFF2C2C2E);                    // xám đậm
+        sbg.setStroke(dp(1.5f), BADGE_BLUE);         // viền xanh lam
+        send.setBackground(sbg);
         send.setOnClickListener(v -> sendReply(it, et));
         row.addView(et);
-        row.addView(send, new LinearLayout.LayoutParams(dp(44), dp(40)));
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(dp(40), dp(40));
+        slp.setMargins(dp(8), 0, 0, 0);
+        row.addView(send, slp);
         return row;
     }
 

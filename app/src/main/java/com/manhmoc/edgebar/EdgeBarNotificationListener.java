@@ -10,7 +10,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
-
+import android.os.Build;
+import java.util.List;
 public class EdgeBarNotificationListener extends NotificationListenerService {
     private final Handler main = new Handler(Looper.getMainLooper());
 
@@ -72,7 +73,7 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
         NoticEngine eng = NoticEngine.instance;
         if (eng == null || !prefs.getBoolean("notic_en", false) || prefs.getBoolean("notic_paused", false)) return;
         String pkg = sbn.getPackageName();
-        if (pkg == null || pkg.equals(getPackageName())) return;
+        if (pkg == null) return;
         if (("," + prefs.getString("notic_exclude_apps", "") + ",").contains("," + pkg + ",")) return;
         Notification n = sbn.getNotification();
         if ((n.flags & Notification.FLAG_GROUP_SUMMARY) != 0) return;
@@ -128,16 +129,24 @@ if (incoming) {
         it.sig = title + "|" + text;
         it.intent = n.contentIntent;
         it.largeIcon = n.getLargeIcon();
-                if (it.largeIcon == null && ex != null) {   // [P7] tin nhắn kiểu MessagingStyle: lấy avatar người gửi
+        if (it.largeIcon == null && ex != null && Build.VERSION.SDK_INT >= 28) {   // lấy avatar của NGƯỜI NHẮN CUỐI CÙNG
             try {
-                android.app.Person ps = ex.getParcelable(Notification.EXTRA_MESSAGING_PERSON);
-                if (ps != null && ps.getIcon() != null) it.largeIcon = ps.getIcon();
+                android.os.Parcelable[] arr = ex.getParcelableArray(Notification.EXTRA_MESSAGES);
+                if (arr != null && arr.length > 0) {
+                    List<Notification.MessagingStyle.Message> ms =
+                        Notification.MessagingStyle.Message.getMessagesFromBundleArray(arr);
+                    if (ms != null && !ms.isEmpty()) {
+                        android.app.Person ps = ms.get(ms.size() - 1).getSenderPerson();
+                        if (ps != null && ps.getIcon() != null) it.largeIcon = ps.getIcon();
+                    }
+                }
             } catch (Exception ignored) {}
         }
         it.actions = n.actions;
         it.reply = reply;
         it.media = media;
         it.call = incoming;
+        it.person = msg || Notification.CATEGORY_CALL.equals(cat);       
         it.ongoing = !clearable;   // [P3]       
 if (media && ex != null) it.token = ex.getParcelable(Notification.EXTRA_MEDIA_SESSION);
         int mode = prefs.getInt("notic_sound_mode", 0);
