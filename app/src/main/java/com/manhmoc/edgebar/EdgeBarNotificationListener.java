@@ -5,10 +5,13 @@ import android.app.NotificationManager;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 
 public class EdgeBarNotificationListener extends NotificationListenerService {
+    private final Handler main = new Handler(Looper.getMainLooper());
 
     @Override public void onNotificationPosted(StatusBarNotification sbn) {
         if (sbn == null) return;
@@ -19,9 +22,12 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
 
     @Override public void onNotificationRemoved(StatusBarNotification sbn) {
         if (sbn == null) return;
-        if (NoticEngine.consumeSelfCancel(sbn.getKey())) return;
-        NoticEngine e = NoticEngine.instance;
-        if (e != null) e.onRemoved(sbn.getKey());
+        final String key = sbn.getKey();
+        if (NoticEngine.consumeSelfCancel(key)) return;
+        main.post(() -> {
+            NoticEngine e = NoticEngine.instance;
+            if (e != null) e.onRemoved(key);
+        });
     }
 
     private void handleBlacklist(SharedPreferences prefs, StatusBarNotification sbn) {
@@ -35,10 +41,9 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
         boolean callLike = n.fullScreenIntent != null
             || (Notification.CATEGORY_CALL.equals(n.category) && !ongoing);
         if (!callLike) return;
-        if (prefs.getBoolean("blacklist_lock_active", false)) {
-            if (prefs.getBoolean("blacklist_lock_preempt", false))
-                prefs.edit().putLong("bl_call_ts", System.currentTimeMillis()).apply();
-        }
+        if (prefs.getBoolean("blacklist_lock_active", false)
+                && prefs.getBoolean("blacklist_lock_preempt", false))
+            prefs.edit().putLong("bl_call_ts", System.currentTimeMillis()).apply();
     }
 
     private String appLabel(String pkg) {
@@ -57,11 +62,6 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
         Notification n = sbn.getNotification();
         if ((n.flags & Notification.FLAG_GROUP_SUMMARY) != 0) return;
 
-        Ranking rk = new Ranking();
-        boolean haveRank = getCurrentRanking().getRanking(sbn.getKey(), rk);
-        if (haveRank && rk.getImportance() <= NotificationManager.IMPORTANCE_MIN) return;
-        if (prefs.getBoolean("notic_dnd_skip", true) && (eng.dndBlocks() || (haveRank && !rk.matchesInterruptionFilter()))) return;
-
         Bundle ex = n.extras;
         String cat = n.category;
         String tpl = ex != null ? ex.getString(Notification.EXTRA_TEMPLATE) : null;
@@ -69,35 +69,58 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
         boolean media = Notification.CATEGORY_TRANSPORT.equals(cat) || (tpl != null && tpl.contains("MediaStyle"));
         boolean msg = Notification.CATEGORY_MESSAGE.equals(cat) || (tpl != null && tpl.contains("MessagingStyle"));
         boolean timer = Notification.CATEGORY_REMINDER.equals(cat) || pkg.contains("deskclock") || pkg.contains(".clock");
+
+        Ranking rk = new Ranking();
+        boolean haveRank = getCurrentRanking().getRanking(sbn.getKey(), rk);
+        if (haveRank && rk.getImportance() <= NotificationManager.IMPORTANCE_MIN && !media) return;
+        if (prefs.getBoolean("notic_dnd_skip", true) && (eng.dndBlocks() || (haveRank && !rk.matchesInterruptionFilter()))) return;
+
         boolean exempt = call || media || msg || timer;
         boolean clearable = (n.flags & (Notification.FLAG_ONGOING_EVENT | Notification.FLAG_NO_CLEAR)) == 0;
         if (!clearable && !exempt) return;
-        if (!eng.hasHost()) return;
 
         CharSequence ti = ex != null ? ex.getCharSequence(Notification.EXTRA_TITLE) : null;
         CharSequence tx = ex != null ? ex.getCharSequence(Notification.EXTRA_TEXT) : null;
         if (tx == null && ex != null) tx = ex.getCharSequence(Notification.EXTRA_BIG_TEXT);
-        String title = ti != null && ti.length() > 0 ? ti.toString() : appLabel(pkg);
+        String label = appLabel(pkg);
+        String title = ti != null && ti.length() > 0 ? ti.toString() : label;
         String text = tx != null ? tx.toString() : "";
 
-        NoticEngine.Item it = new NoticEngine.Item();
+        Notification.Action reply = null;
+        if (n.actions != null) {
+            for (Notification.Action a : n.actions) {
+                if (a != null && a.actionIntent != null && a.getRemoteInputs() != null && a.getRemoteInputs().length > 0) { reply = a; break; }
+            }
+        }
+
+        final NoticEngine.Item it = new NoticEngine.Item();
         it.key = sbn.getKey();
         it.pkg = pkg;
+        it.appName = label;
         it.title = title;
         it.text = text;
         it.sig = title + "|" + text;
-        it.icon = eng.appIcon(pkg);
         it.intent = n.contentIntent;
+        it.largeIcon = n.getLargeIcon();
+        it.actions = n.actions;
+        it.reply = reply;
+        it.media = media;
 
         int mode = prefs.getInt("notic_sound_mode", 0);
         boolean sysSound = haveRank && rk.getImportance() >= NotificationManager.IMPORTANCE_DEFAULT;
-        boolean wake = mode == 2 && !media;
-        boolean sound = mode >= 1 && !sysSound && !media;
-        eng.post(it, wake, sound);
+        final boolean wake = mode == 2 && !media;
+        final boolean sound = mode >= 1 && !sysSound && !media;
+        final boolean hide = prefs.getBoolean("notic_hide_system", false) && clearable && !call && !media;
+        final String key = sbn.getKey();
 
-        if (prefs.getBoolean("notic_hide_system", false) && clearable && !call && !media) {
-            NoticEngine.markSelfCancel(sbn.getKey());
-            cancelNotification(sbn.getKey());
-        }
+        main.post(() -> {
+            NoticEngine e = NoticEngine.instance;
+            if (e == null) return;
+            boolean ok = e.post(it, wake, sound);
+            if (ok && hide) {
+                NoticEngine.markSelfCancel(key);
+                cancelNotification(key);
+            }
+        });
     }
 }

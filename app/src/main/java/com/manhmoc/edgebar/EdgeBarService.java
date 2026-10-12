@@ -1814,7 +1814,12 @@ private void triggerBlacklistAutoHomeb() {
                     
                     performGlobalAction(GLOBAL_ACTION_POWER_DIALOG); 
                     break;
-                case "SCREENSHOT": performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT); break;
+                case "SCREENSHOT":
+    performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT);
+    new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+        if (noticEngine != null) noticEngine.fireEvent("screenshot", "📸", "Screenshot captured", "", 0xFF1976D2);
+    }, 900);
+    break;
                 case "SCREEN_RECORD": {
     if (ScreenRecorderService.isRunning) {
         Intent stopIntent = new Intent(this, ScreenRecorderService.class);
@@ -2750,7 +2755,7 @@ private static final int MAX_TRIGGER_DEPTH = 3;
     }
 
 private void handleAction(String key, int depth, boolean applyVibAnim) {
-if (noticEngine != null && noticEngine.interceptTap(key)) return;
+if (noticEngine != null && noticEngine.interceptGesture(key)) return;
 if (key != null && key.startsWith("homacc_")
         && prefs.getString(key, "NONE").equals("NONE")) {
     String fallback = "home_" + key.substring("homacc_".length());

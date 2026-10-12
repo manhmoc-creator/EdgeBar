@@ -2626,7 +2626,7 @@ private View buildMotherPackCard(String prefix, String itemKey, int tabState) {
     Button btnTrig = stdCardBtn("TRIGGER", ACCENT_COLOR, Color.BLACK);
     btnTrig.setOnClickListener(v -> openPackRuleSpace(itemKey, tabState));
 LinearLayout card = buildStdPackCard(buildMotherOptCol(sBase, isBar),
-    (isBar ? "BAR · " : "CORNER · ") + packDisplayName(isBar, id), stats, sides, swEn, btnTrig);
+    (isBar ? "B · " : "C · ") + packDisplayName(isBar, id), stats, sides, swEn, btnTrig);
     TextView tvSides = card.findViewWithTag("line3");
     if (tvSides != null) tvSides.setTextSize(12f);
     card.setOnClickListener(v -> openDataPackEditor(isBar ? 0 : 1, id, prefix));
@@ -8464,11 +8464,14 @@ private void openNoticSpace() {
 
     content.addView(createSectionTitle(T("SYSTEM EVENTS", "SỰ KIỆN HỆ THỐNG")));
     String[][] evs = {
-        {"charging", "Phone is charging"}, {"full", "Phone is fully charged"}, {"low", "Battery low (15%)"},
-        {"nonet", "No Internet"}, {"bt", "Bluetooth connected"}, {"silent", "Silent"},
-        {"vibrate", "Vibrate"}, {"ring", "Ring"}, {"unlock", "Phone unlocked"},
-        {"airplane", "Airplane mode"}, {"headset", "Headphones connected"}, {"dnd", "Do Not Disturb"}
-    };
+    {"charging", "Phone is charging"}, {"full", "Phone is fully charged"}, {"low", "Battery low (15%)"},
+    {"nonet", "No Internet"}, {"wifi", "Wi-Fi connected / disconnected"}, {"vpn", "VPN on / off"},
+    {"hotspot", "Hotspot on / off"}, {"bt", "Bluetooth connected"}, {"silent", "Silent"},
+    {"vibrate", "Vibrate"}, {"ring", "Ring"}, {"unlock", "Phone unlocked"},
+    {"screenon", "Screen on"}, {"airplane", "Airplane mode"}, {"headset", "Headphones connected"},
+    {"dnd", "Do Not Disturb"}, {"storage", "Storage almost full"}, {"screenshot", "Screenshot captured"},
+    {"rec", "Recording started / stopped"}, {"mic", "Microphone in use"}, {"camera", "Camera in use"}
+};
     for (String[] ev : evs) content.addView(noticSwitchRow(ev[1], "notic_ev_" + ev[0], true));
 
     Button bClose = new Button(this);
@@ -9522,7 +9525,7 @@ private Object[][] geoSpecs(boolean isBar) {
         {T("Opacity", "Độ trong suốt"), "alpha", 0, 0, 255, 50, false},
         {T("Width", "Chiều ngang"), "w", 0, 0, 3000, 300, false},
         {T("Height", "Chiều dọc"), "h", 0, 0, 3000, 60, false},
-        {T("Pair gap (- closer, + wider)", "Khoảng cách cặp (- gần, + xa)"), "pair_spacing", 1, -300, 900, 0, true},
+        {T("Pair gap (- closer, + wider)", "Khoảng cách cặp (- gần, + xa)"), "pair_spacing", 1, -900, 900, 0, true},
         {T("Position X", "Tọa độ X"), "x", 1, -1500, 1500, 0, false},
         {T("Position Y", "Tọa độ Y"), "y", 1, -3000, 3000, 0, false}
     };
@@ -9530,7 +9533,7 @@ private Object[][] geoSpecs(boolean isBar) {
         {"Hình dáng Góc", "shape", 2, 0, 2, 0, false},
         {"Kéo giãn Ngang Vỏ (X)", "w", 0, 0, 2500, 100, false},
         {"Kéo giãn Dọc Vỏ (Y)", "h", 0, 0, 2500, 100, false},
-        {T("Pair gap (- closer, + wider)", "Khoảng cách cặp (- gần, + xa)"), "pair_spacing", 1, -300, 900, 0, true},
+        {T("Pair gap (- closer, + wider)", "Khoảng cách cặp (- gần, + xa)"), "pair_spacing", 1, -900, 900, 0, true},
         {T("Position X", "Tọa độ X"), "x", 1, -1500, 1500, 0, false},
         {"Di chuyển Dọc (Y)", "y", 0, 0, 2500, 0, false},
         {"Kéo giãn Ngang Lõi Trăng Non (X)", "moon_w", 0, 0, 2500, 100, false},
