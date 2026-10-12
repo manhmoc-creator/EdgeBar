@@ -2717,7 +2717,10 @@ private void runShadeCheck() {
 // Bảng thông báo/QS = cửa sổ SYSTEM của systemui đang được focus/active và cao >= 30% màn hình. Màn khoá bỏ qua (keyguard cũng là cửa sổ systemui toàn màn hình).
 private boolean computeShadeOpen() {
     try {
-        if (km != null && km.isKeyguardLocked()) return false;
+        /* UX: dùng isBouncerVisible thay km.isKeyguardLocked() — cho phép detect QS
+           khi đang ở Lock screen gốc (chưa vào bouncer PIN), nhưng vẫn không nhầm
+           bouncer thành QS vì cả 2 đều là systemui full-screen. */
+        if (isBouncerVisible) return false;
         java.util.List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
         if (ws == null) return false;
         int sh = getResources().getDisplayMetrics().heightPixels;
