@@ -165,7 +165,7 @@ private String pillHostKey;     // host pill đang vẽ cho -> nhận ra chuyể
     private long armedAt, lastTorchMs;
     private boolean wifiUp, vpnUp, micOn, recOn;
     private final Runnable settleRun = this::settle;
-    // UX: vuốt-ẩn Notic rồi tự hồi lại sau N giây — N chỉnh qua slider "notic_hide_duration_sec"
+    private boolean userHidden;
 private final Runnable reshowRun = () -> {
     if (previewForce) return;
     if (!userHidden) return;                                  // đã tự show hoặc có thông báo mới hiện lại rồi
@@ -193,7 +193,7 @@ private GradientDrawable popupBg;
 private Runnable pendingTap;
 private long lastTapMs;
 private int cPill = Color.BLACK, cRadPct = 100;
-private boolean badgeLeft, userHidden, popMorphing;
+private boolean badgeLeft, popMorphing;
 private boolean closing, reopen, swiping;
 private float morphF;
 private float oL, oT, oR, oB, oRad, popRad;
