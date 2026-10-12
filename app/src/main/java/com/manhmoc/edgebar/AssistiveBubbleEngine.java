@@ -163,7 +163,6 @@ private float circleRotationDeg = 0f;
 private Bitmap centerIconBmp = null;
 
 private boolean isCircleModeActive() { return prefs.getBoolean("bubble_circle_en", false); }
-    private float sx, sy, lastX, lastY;
     private VelocityTracker velocityTracker;
     private DisplayMetrics getRealMetrics() {
     DisplayMetrics dm = new DisplayMetrics();
