@@ -8488,7 +8488,7 @@ content.addView(createSlider(T("Visualizer speed (%)", "Tốc độ visualizer (
     {"dnd", "Do Not Disturb"}, {"storage", "Storage almost full"}, {"screenshot", "Screenshot captured"},
     {"rec", "Recording started / stopped"}, {"mic", "Microphone in use"}, {"camera", "Camera in use"}
 };
-    for (String[] ev : evs) content.addView(noticSwitchRow(ev[1], "notic_ev_" + ev[0], true));
+    for (String[] ev : evs) content.addView(noticSwitchRow(ev[1], "notic_ev_" + ev[0], !(ev[0].equals("unlock") || ev[0].equals("screenon"))));   // [P1] khớp mặc định trong NoticEngine.event()
 
     Button bClose = new Button(this);
     bClose.setText(T("CLOSE", "ĐÓNG"));

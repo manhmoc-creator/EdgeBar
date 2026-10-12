@@ -537,7 +537,8 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         if ("com.manhmoc.edgebar.TEST_ANIM".equals(act)) {
             playAnim();
                 } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
-        if (noticEngine != null) noticEngine.onScreenOff();            
+        if (noticEngine != null) noticEngine.onScreenOff();
+        shadeOpenNow = false; debounceHandler.removeCallbacks(shadeCheckRun);   // [P4]
     forceUnlockedUntilMs = 0; // tắt màn rồi thì Lock phải được phép hiện lại ngay
     if (recentsBlur != null) recentsBlur.hide(); // [FIX 2B] gỡ lớp phủ Recents + reset phiên khi tắt màn
     for (int j = 0; j < 12; j++) {
@@ -1409,7 +1410,7 @@ public void onInterrupt() {
 @Override public void onAccessibilityEvent(AccessibilityEvent event) {
 int eventType = event.getEventType();
 if (recentsBlur != null) recentsBlur.onEvent(event);
-// [FIX NHÁY LOCK Ở HOME] Máy đã mở khoá mà Lock vẫn còn hiện -> hạ NGAY, không chờ USER_PRESENT
+if (eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED || eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) scheduleShadeCheck();   // [P4]
 if ((eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         || eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
         && lockLayerShown && km != null && !km.isKeyguardLocked()
@@ -2695,6 +2696,46 @@ if (panelEngine != null) panelEngine.rebuildAll();
   refreshEventSubscription();
   if (noticEngine != null) noticEngine.relayout();
   }
+// ===== [P4] NOTIC: phát hiện user đang kéo bảng thông báo / QS =====
+private boolean shadeOpenNow = false;
+private final Runnable shadeCheckRun = this::runShadeCheck;
+private void scheduleShadeCheck() {
+    if (noticEngine == null || !prefs.getBoolean("notic_en", false)) return;
+    debounceHandler.removeCallbacks(shadeCheckRun);
+    debounceHandler.postDelayed(shadeCheckRun, 90);   // gộp nhiều event liên tiếp thành 1 lần kiểm tra
+}
+private void runShadeCheck() {
+    if (noticEngine == null) return;
+    boolean open = computeShadeOpen();
+    if (open != shadeOpenNow) {
+        shadeOpenNow = open;
+        android.util.Log.d("EB_SHADE", "shadeOpen=" + open);
+        noticEngine.setShadeOpen(open);
+    }
+    if (open) debounceHandler.postDelayed(shadeCheckRun, 400);   // dự phòng: chỉ poll trong lúc bảng đang mở, đóng là dừng
+}
+// Bảng thông báo/QS = cửa sổ SYSTEM của systemui đang được focus/active và cao >= 30% màn hình. Màn khoá bỏ qua (keyguard cũng là cửa sổ systemui toàn màn hình).
+private boolean computeShadeOpen() {
+    try {
+        if (km != null && km.isKeyguardLocked()) return false;
+        java.util.List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
+        if (ws == null) return false;
+        int sh = getResources().getDisplayMetrics().heightPixels;
+        android.graphics.Rect r = new android.graphics.Rect();
+        for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
+            if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM) continue;
+            if (!w.isFocused() && !w.isActive()) continue;
+            w.getBoundsInScreen(r);
+            if (r.height() < sh * 0.3f) continue;
+            android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
+            if (root == null) continue;
+            CharSequence pk = root.getPackageName();
+            root.recycle();
+            if (pk != null && pk.toString().contains("systemui")) return true;
+        }
+    } catch (Exception ignored) {}
+    return false;
+}  
 private Object[] findSwallowHost() {
     boolean locked = km != null && km.isKeyguardLocked() && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs;
     String px = locked ? "lock_" : "home_";

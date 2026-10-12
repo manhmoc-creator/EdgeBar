@@ -57,14 +57,17 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
                 && prefs.getBoolean("blacklist_lock_preempt", false))
             prefs.edit().putLong("bl_call_ts", System.currentTimeMillis()).apply();
     }
-
+    private final java.util.HashMap<String, String> labelCache = new java.util.HashMap<>();   // [P5] không gọi PackageManager cho mỗi thông báo
     private String appLabel(String pkg) {
+        String c = labelCache.get(pkg);
+        if (c != null) return c;
         try {
             PackageManager pm = getPackageManager();
-            return pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
+            String l = pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
+            labelCache.put(pkg, l);
+            return l;
         } catch (Exception e) { return pkg; }
     }
-
     private void handleNotic(SharedPreferences prefs, StatusBarNotification sbn) {
         NoticEngine eng = NoticEngine.instance;
         if (eng == null || !prefs.getBoolean("notic_en", false) || prefs.getBoolean("notic_paused", false)) return;
@@ -89,6 +92,8 @@ if (incoming) {
     // Không dùng máy (tắt màn / đang khoá) -> bỏ qua, để hệ thống tự mở app gọi điện toàn màn hình
     if (pwr == null || !pwr.isInteractive() || (kg != null && kg.isKeyguardLocked())) return;
 }
+        // [P3] Cuộc gọi ĐANG diễn ra (Grab, Zalo...): thông báo bị cập nhật mỗi giây, trước đây mỗi lần bị coi là thông báo mới -> kêu liên tục. Bỏ qua hẳn.
+        if (Notification.CATEGORY_CALL.equals(cat) && !incoming) return;
         Ranking rk = new Ranking();
         boolean haveRank = getCurrentRanking().getRanking(sbn.getKey(), rk);
         if (haveRank && rk.getImportance() <= NotificationManager.IMPORTANCE_MIN && !media) return;
@@ -125,11 +130,12 @@ if (incoming) {
         it.reply = reply;
         it.media = media;
         it.call = incoming;
+        it.ongoing = !clearable;   // [P3]       
 if (media && ex != null) it.token = ex.getParcelable(Notification.EXTRA_MEDIA_SESSION);
         int mode = prefs.getInt("notic_sound_mode", 0);
         boolean sysSound = haveRank && rk.getImportance() >= NotificationManager.IMPORTANCE_DEFAULT;
-        final boolean wake = mode == 2 && !media;
-        final boolean sound = mode >= 1 && !sysSound && !media;
+        final boolean wake = mode == 2 && !media && clearable;                 // [P3] ongoing không bao giờ bật màn / kêu
+        final boolean sound = mode >= 1 && !sysSound && !media && clearable;
         final boolean hide = prefs.getBoolean("notic_hide_system", false) && clearable && !call && !media;
         final String key = sbn.getKey();
 
