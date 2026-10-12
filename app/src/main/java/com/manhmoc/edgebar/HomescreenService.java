@@ -131,6 +131,41 @@ private boolean recIndicatorTestPaused = false;
     private PanelEngine panelEngine;
     private AssistiveBubbleEngine bubbleEngine;
     private int lastKbdHeight = 0;
+        // ===== [P8] NOTIC trên Homeb: không cần Trợ năng, chỉ cần quyền hiển thị trên ứng dụng khác + Notification Listener (cấp qua adb) =====
+    private NoticEngine noticEngine;
+    private final Runnable noticRelayoutRun = () -> { if (noticEngine != null) noticEngine.relayout(); };
+    private void scheduleNoticRelayout() {
+        if (noticEngine == null) return;
+        debounceHandler.removeCallbacks(noticRelayoutRun);
+        debounceHandler.postDelayed(noticRelayoutRun, 60);   // gộp nhiều lần đổi bar thành 1 lần đo
+    }
+    // Chỉ 1 engine được sống: Trợ năng BẬT -> EdgeBarService lo (Homeacc); Trợ năng TẮT -> Homeb lo
+    private void syncNoticEngine() {
+        if (isAccEnabled()) {
+            if (noticEngine != null) { try { noticEngine.destroy(); } catch (Exception ignored) {} noticEngine = null; }
+            return;
+        }
+        if (noticEngine == null && prefs.getBoolean("notic_en", false) && Settings.canDrawOverlays(this)) {
+            noticEngine = new NoticEngine(this, wm, prefs, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, this::findSwallowHost);
+        }
+        scheduleNoticRelayout();
+    }
+    private Object[] findSwallowHost() {
+        if (km != null && km.isKeyguardLocked()) return null;   // Homeb chỉ chạy khi đã mở khoá
+        for (int i = 0; i < 12; i++) {
+            View v = bars[i];
+            if (v == null || v.getVisibility() != View.VISIBLE) continue;
+            String k = "home_" + BARS[i];
+            if (prefs.getBoolean(k + "_en", false) && readSplit(prefs, k + "_lockmode", "homeb", 1) == 2) return new Object[]{v, k};
+        }
+        for (int i = 0; i < 4; i++) {
+            View v = corners[i];
+            if (v == null || v.getVisibility() != View.VISIBLE) continue;
+            String k = "home_corner_" + CORNERS[i];
+            if (prefs.getBoolean(k + "_en", false) && readSplit(prefs, k + "_lockmode", "homeb", 1) == 2) return new Object[]{v, k};
+        }
+        return null;
+    }
     private volatile boolean isDispatchingSyntheticGesture = false;
     private float globalTouchStartX = -1f, globalTouchStartY = -1f, globalTouchEndX = -1f, globalTouchEndY = -1f;
     private long lastSyncMs = 0;
@@ -827,6 +862,7 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
             String action = i.getAction();
 // CODE MỚI:
 if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+    if (noticEngine != null) noticEngine.onScreenOff();   // [P8]   
     removeYtdlOverlay(); 
     removeRippleViewIfIdle();
     stopAppLockPolling();
@@ -1125,7 +1161,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     if (k.equals("applock_list")) { startAppLockPolling(); return; }
     boolean isOurKey = false;
     String[] ourPrefixes =
-    {"lock_","home_","homacc_","anim_","vib_","hold_",
+    {"lock_","home_","homacc_","anim_","vib_","hold_","notic_",
      "pack_panel_","lenap_","bubble_",
      "blacklist","locklist","avoid_kbd","shortcut_","preview_","lang_","ytdl_",
      "intent_","tile_","tilev2_","macro_","i1_","i2_","i3_","i4_","i5_","i6_","i7_",
@@ -1133,6 +1169,11 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     for (String prefix : ourPrefixes)
         if (k.startsWith(prefix) || k.equals(prefix)) { isOurKey = true; break; }
     if (!isOurKey) return;
+        if (k.startsWith("notic_")) {   // [P8]
+        if (k.equals("notic_en")) syncNoticEngine();
+        else if (noticEngine != null) noticEngine.relayout();
+        return;
+    }
     if (k.startsWith("bubble_")) {
         if (bubbleEngine != null) bubbleEngine.onPrefChanged(k);
         return;
@@ -1181,6 +1222,7 @@ private void scheduleGeoLive() { if (!geoPending) { geoPending = true; geoHandle
 // Chỉ cập nhật các bar/corner Home ĐANG HIỆN: thuộc tính vẽ + LayoutParams. Không dựng lại Panel/Notic.
 private void updateGeoLive() {
     geoPending = false;
+    scheduleNoticRelayout();   // [P8]    
     boolean ghost = prefs.getBoolean("preview_lock", false) && !prefs.getBoolean("preview_home", false);
     boolean push = prefs.getBoolean("avoid_kbd", true) && lastKbdHeight > 0;
     int nb = Math.min(bars.length, BARS.length);
@@ -1217,6 +1259,7 @@ private void updateGeoLive() {
 }
     private void updateVisibility() {
     if (panelEngine != null) panelEngine.rebuildAll();
+    syncNoticEngine();   // [P8]    
     if (prefs.getBoolean("blacklist_lock_active", false)) {
         boolean reallyActive = BlacklistLockWatchdogService.isRunning
             || System.currentTimeMillis() - prefs.getLong("blacklist_lock_start_ms", 0) < 5000;
@@ -1428,6 +1471,7 @@ private void applyLockGateInstant() {
     }
 
         private void handleAction(String key, int depth, boolean applyVibAnim) {
+if (noticEngine != null && noticEngine.interceptGesture(key)) return;   // [P8]           
 boolean isDual = prefs.getBoolean(key + "_dual", false);
 String readKey = isDual ? (key + "_lim") : key;
         String action = prefs.getString(readKey, "NONE");
@@ -2262,6 +2306,7 @@ PixelFormat.TRANSLUCENT);
     super.onDestroy();
     isRunning = false;
     if (bubbleEngine != null) bubbleEngine.destroy();
+    if (noticEngine != null) { try { noticEngine.destroy(); } catch (Exception ignored) {} noticEngine = null; }   // [P8]    
     appLockPollHandler.removeCallbacksAndMessages(null); // [MỚI] dừng poll, tránh leak Handler
     try { unregisterReceiver(syncReceiver); } catch (Exception e) {}
     prefs.unregisterOnSharedPreferenceChangeListener(prefListener);

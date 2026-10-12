@@ -45,7 +45,7 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
     private void handleBlacklist(SharedPreferences prefs, StatusBarNotification sbn) {
         if (!prefs.getBoolean("blacklist_lock_revoke_acc_en", false)) return;
         String pkg = sbn.getPackageName();
-        if (pkg == null || pkg.equals(getPackageName())) return;
+        if (pkg == null) return;   // [P7] trước đây: || pkg.equals(getPackageName()) => thông báo Play My Playlist không bao giờ được nuốt
         String bl = prefs.getString("blacklist", "");
         if (bl.isEmpty() || !("," + bl + ",").contains("," + pkg + ",")) return;
         Notification n = sbn.getNotification();
@@ -81,7 +81,9 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
         String cat = n.category;
         String tpl = ex != null ? ex.getString(Notification.EXTRA_TEMPLATE) : null;
         boolean call = Notification.CATEGORY_CALL.equals(cat) || Notification.CATEGORY_ALARM.equals(cat);
-        boolean media = Notification.CATEGORY_TRANSPORT.equals(cat) || (tpl != null && tpl.contains("MediaStyle"));
+        boolean media = Notification.CATEGORY_TRANSPORT.equals(cat) || (tpl != null && tpl.contains("MediaStyle"))
+            || (ex != null && ex.containsKey(Notification.EXTRA_MEDIA_SESSION));   // [P7] mọi trình phát có MediaSession, không chỉ Google
+        if (pkg.equals(getPackageName()) && !media) return;                        // thông báo khác của chính app vẫn bỏ qua
         boolean msg = Notification.CATEGORY_MESSAGE.equals(cat) || (tpl != null && tpl.contains("MessagingStyle"));
         boolean timer = Notification.CATEGORY_REMINDER.equals(cat) || pkg.contains("deskclock") || pkg.contains(".clock");
         boolean incoming = Notification.CATEGORY_CALL.equals(cat)
@@ -126,6 +128,12 @@ if (incoming) {
         it.sig = title + "|" + text;
         it.intent = n.contentIntent;
         it.largeIcon = n.getLargeIcon();
+                if (it.largeIcon == null && ex != null) {   // [P7] tin nhắn kiểu MessagingStyle: lấy avatar người gửi
+            try {
+                android.app.Person ps = ex.getParcelable(Notification.EXTRA_MESSAGING_PERSON);
+                if (ps != null && ps.getIcon() != null) it.largeIcon = ps.getIcon();
+            } catch (Exception ignored) {}
+        }
         it.actions = n.actions;
         it.reply = reply;
         it.media = media;

@@ -89,7 +89,7 @@ public class NoticEngine {
 
     public static class Item {
     String key, pkg, title, text, sig, appName;
-    Bitmap icon, art, artCircle;
+    Bitmap icon, art, artCircle, senderBmp;   // [P7] senderBmp = ảnh người gửi/người gọi, cắt tròn
     Icon largeIcon;
     PendingIntent intent;
     Notification.Action[] actions;
@@ -112,7 +112,8 @@ public class NoticEngine {
         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
     private static final int BAR_COLOR = Color.argb(200, 96, 125, 139);
-    private static final int BADGE_BLUE = 0xFF0A84FF;   // [P2] ô tròn số thông báo: xanh lam
+    private static final int BADGE_BLUE = 0xFF0A84FF;   // [P2] viền ô tròn số thông báo: xanh lam
+    private static final int CARD_GRAY = 0xFF3A3A3C;   // [P7] nền thẻ thông báo trong bảng mở rộng: xám
     private final Context ctx;
     private final WindowManager wm;
     private final SharedPreferences prefs;
@@ -131,7 +132,7 @@ public class NoticEngine {
     private String lastGeo = "";
     private PillView pill;
     private WindowManager.LayoutParams pillLp;
-    private boolean fullWin, expanded, statusVisible = true, insetsVisible = true, shadeOpen, hostChanged, sysRegistered;   // [P1][P4]
+    private boolean fullWin, expanded, statusVisible = true, insetsVisible = true, shadeOpen, hostChanged, sysRegistered, fadeNext;   // [P1][P4][P7]
     private int cur = 0;
 
     private LinearLayout popup;
@@ -155,7 +156,7 @@ public class NoticEngine {
     // [P1] Chống giật Khoá -> Home: chỉ di chuyển pill khi hình học của bar host đã ĐỨNG YÊN (2 lần đo cách nhau 80ms giống nhau)
     private String pendingGeo = "";
     private int geoTries;
-    private long lastSoundMs;
+    private long lastSoundMs, fadeUntil;
     private final Runnable geoRun = this::geoSettle;
     private final Runnable noHostRun = () -> { if (!bindHost()) { closePopup(false, false); removePill(); } else relayout(); };
 private static final TimeInterpolator EMPH = new PathInterpolator(0.2f, 0f, 0f, 1f);
@@ -255,7 +256,22 @@ private Bitmap circleArt(Item it) {
     it.artCircle = out;                       // vẽ 1 lần, về sau chỉ rotate bitmap
     return out;
 }
-
+// [P7] Ảnh người gửi tin nhắn / người gọi (large icon), cắt tròn, cache 1 lần
+private Bitmap senderCircle(Item it) {
+    if (it.senderBmp != null) return it.senderBmp;
+    if (it.media || it.transientItem || it.largeIcon == null) return null;
+    Bitmap src = loadLarge(it);
+    if (src == null) return null;
+    int sz = 96;
+    Bitmap out = Bitmap.createBitmap(sz, sz, Bitmap.Config.ARGB_8888);
+    Canvas cv = new Canvas(out);
+    Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    cv.drawCircle(sz / 2f, sz / 2f, sz / 2f, p);
+    p.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
+    cv.drawBitmap(src, null, new RectF(0, 0, sz, sz), p);
+    it.senderBmp = out;
+    return out;
+}
 private Bitmap square96(Bitmap b) {
     Bitmap o = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888);
     int m = Math.min(b.getWidth(), b.getHeight());
@@ -699,13 +715,16 @@ private void cancelPendingTap() {
         if (!sysRegistered) registerSystemEvents();   // [P5] bật Notic -> mới đăng ký receiver
         if (items.isEmpty()) return;
         if (!bindHost()) {
-            // [P1] Host biến mất tạm thời (Khoá -> Home đang đổi bar): chỉ ẩn pill, chờ 700ms; còn không có host mới gỡ hẳn (trước đây gỡ ngay rồi dựng lại từ đầu = giật)
-            if (pill != null) pill.setAlpha(0f);
+            if (pill != null) { pill.animate().cancel(); pill.setAlpha(0f); fadeNext = true; fadeUntil = 0; }   // [P7]
             h.removeCallbacks(noHostRun);
             h.postDelayed(noHostRun, 700);
             return;
         }
         h.removeCallbacks(noHostRun);
+        if (hostChanged && pill != null) {   // [P7] đổi sang bar KHÁC: không để người dùng thấy pill/bar nhảy vị trí
+            pill.animate().cancel(); pill.setAlpha(0f); fadeNext = true; fadeUntil = 0;
+            if (hostView != null && statusVisible) { hostView.animate().cancel(); hostView.setAlpha(0f); }
+        }        
         String s = geoKey();
         if (pill != null && !hostChanged && s.equals(lastGeo)) {
             h.removeCallbacks(geoRun); pendingGeo = "";
@@ -848,12 +867,19 @@ private void cancelPendingTap() {
     }
     private void applyVisibility() {
         if (pill == null) return;
-        pill.setAlpha(statusVisible ? 1f : 0f);
-        pill.invalidate();   // statusbar hiện lại thì vòng vẽ visualizer chạy tiếp
-        if (hostView != null) {
-            hostView.animate().cancel();
-            hostView.setAlpha(statusVisible ? 0f : 1f);
+        if (fadeNext && statusVisible) {   // [P7] pill mới tạo / vừa đổi host: mờ dần vào, bar mờ dần ra
+            fadeNext = false;
+            fadeUntil = SystemClock.uptimeMillis() + 180;
+            pill.animate().cancel();
+            pill.setAlpha(0f);
+            pill.animate().alpha(1f).setDuration(160).start();
+            if (hostView != null) { hostView.animate().cancel(); hostView.animate().alpha(0f).setDuration(160).start(); }
+        } else if (!(statusVisible && SystemClock.uptimeMillis() < fadeUntil)) {   // đang fade thì relayout() không được cắt ngang
+            pill.animate().cancel();
+            pill.setAlpha(statusVisible ? 1f : 0f);
+            if (hostView != null) { hostView.animate().cancel(); hostView.setAlpha(statusVisible ? 0f : 1f); }
         }
+        pill.invalidate();   // statusbar hiện lại thì vòng vẽ visualizer chạy tiếp
         if (!fullWin) {
             boolean want = !statusVisible;
             if (((pillLp.flags & NOT_TOUCHABLE) != 0) != want) {
@@ -888,11 +914,12 @@ private void cancelPendingTap() {
             hostChanged = false;           
             final PillView pv = pill;
             pv.setContent(it, items.size(), tw);
-            winFull();
-            pv.set(hcx, cy, hr - hl, hb - ht, barR, 0f, 0f);
+            // [P7] Tạo THẲNG viên thuốc tại đúng chỗ (không dựng hình bar rồi co/giãn): hết quãng bar bị tạo lại ở Home nhảy qua phải/trái
+            pv.set(px, cy, tw, pillH, pillH / 2f, 1f, 1f);
+            fadeNext = true;
+            winFit();
             applyVisibility();
-            // UX: MỘT chuyển động liền mạch bar -> viên thuốc. Bản cũ nối 2 animation, mỗi lần nối đuôi bị khựng 1 khung + vận tốc về 0 rồi bật lại
-            pv.go(px, cy, tw, pillH, pillH / 2f, 1f, 1f, 340, EMPH, this::afterExpand);
+            afterExpand();
         } else {
             boolean sameState = (expanded || pill.towardsExpanded()) && Math.abs(pill.targetW() - tw) < 1f;
             pill.setContent(it, items.size(), tw);
@@ -1093,7 +1120,7 @@ private void renderPopup() {
     Item curIt = items.get(Math.min(cur, items.size() - 1));
     if (popupBg != null) {
         if (popupHistory) {   // [P6] chế độ lịch sử: khung đen chung, mỗi thẻ có viền màu app riêng
-            popupBg.setColor(Color.argb(244, 0, 0, 0));
+            popupBg.setColor(Color.argb(244, 44, 44, 46));   // [P7] khung xám đậm hơn thẻ một chút
             popupBg.setStroke(dp(1.5f), cBorder ? 0x40FFFFFF : Color.TRANSPARENT);
             popup.setPadding(dp(8), dp(8), dp(8), dp(8));
         } else {              // [P6] xem 1 thông báo: bỏ khung ngoài (padding 8dp + margin 4dp là "khoảng cách" bạn thấy), viền màu nằm ngay trên thẻ
@@ -1134,7 +1161,7 @@ private void renderPopup() {
         // UX: vuốt ngang card = xoá (media + cuộc gọi đến KHÔNG vuốt xoá để tránh lỡ tay mất trình phát/cuộc gọi)
         LinearLayout card = (it.media || it.call) ? new LinearLayout(ctx) : new SwipeCard(ctx, it);
         card.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable cbg = rounded(0xFF1C1C1E, dp(18));
+        GradientDrawable cbg = rounded(CARD_GRAY, dp(18));   // [P7] xám; thẻ âm nhạc dùng chung đường này nên cùng màu thẻ thông báo
 if (prefs.getBoolean("notic_border_en", true)) cbg.setStroke(dp(1.5f), appColor(it));  // viền = màu app
 card.setBackground(cbg);
         card.setPadding(dp(10), dp(10), dp(10), dp(10));
@@ -1350,7 +1377,7 @@ private View buildCallControls(final Item it) {
     final LinearLayout quick = new LinearLayout(ctx);
     quick.setOrientation(LinearLayout.VERTICAL);
     quick.setVisibility(View.GONE);
-    final String[] presets = {"Tôi đang bận, lát gọi lại nhé.", "Đang họp, tôi nhắn tin sau.", "Bạn nhắn tin giúp tôi nhé."};
+    final String[] presets = quickPresets();
     for (final String p : presets) {
         TextView chip = new TextView(ctx);
         chip.setText(p);
@@ -1365,16 +1392,31 @@ private View buildCallControls(final Item it) {
         quick.addView(chip);
     }
     row.addView(pillBtn("✕  Từ chối", 0xFFFF3B30, 1f, v -> { sendCall(it, false); closePopup(false, true); }));
-    row.addView(pillBtn("💬", 0xFF3A3A3C, 0.45f, v -> {
+    row.addView(pillBtn("📞  Trả lời", 0xFF34C759, 1f, v -> { sendCall(it, true); closePopup(false, true); }));
+    TextView qm = new TextView(ctx);   // [P7] hàng riêng phía trên 2 nút
+    qm.setText("Send Quick Message");
+    qm.setTextColor(Color.parseColor("#8AB4F8"));
+    qm.setTextSize(13f);
+    qm.setTypeface(Typeface.DEFAULT_BOLD);
+    qm.setGravity(Gravity.CENTER);
+    qm.setPadding(dp(8), dp(8), dp(8), dp(10));
+    qm.setOnClickListener(v -> {
         quick.setVisibility(quick.getVisibility() == View.GONE ? View.VISIBLE : View.GONE);
         placePopup();
-    }));
-    row.addView(pillBtn("📞  Trả lời", 0xFF34C759, 1f, v -> { sendCall(it, true); closePopup(false, true); }));
-    box.addView(row);
+    });
+    box.addView(qm);
     box.addView(quick);
+    box.addView(row);
     return box;
 }
-
+// [P7] Câu trả lời nhanh: mặc định = 4 câu gốc của app Điện thoại Pixel. Muốn đổi: ghi pref "notic_quick_msgs" = "câu 1|câu 2|câu 3"
+private String[] quickPresets() {
+    String custom = prefs.getString("notic_quick_msgs", "");
+    if (!custom.trim().isEmpty()) return custom.split("\\|");
+    if ("vi".equals(Locale.getDefault().getLanguage()))
+        return new String[]{"Hiện tại tôi không nói chuyện được. Có chuyện gì vậy?", "Tôi sẽ gọi lại ngay.", "Tôi sẽ gọi lại sau.", "Hiện tại tôi không nói chuyện được. Bạn gọi lại sau nhé?"};
+    return new String[]{"Can't talk now. What's up?", "I'll call you right back.", "I'll call you later.", "Can't talk now. Call me later?"};
+}
 private Notification.Action findCallAction(Item it, boolean answer) {
     if (it.actions == null) return null;
     String[] ans = {"answer", "accept", "trả lời", "nghe", "nhận"};
@@ -1434,15 +1476,13 @@ private void smsQuick(Item it, String body) {
             return false;
         });
         et.setOnEditorActionListener((v, id, ev) -> { sendReply(it, et); return true; });
-        TextView send = new TextView(ctx);
-        send.setText("⚡");
-        send.setTextColor(Color.parseColor("#0A84FF"));
-        send.setTypeface(Typeface.DEFAULT_BOLD);
-        send.setTextSize(13.5f);
-        send.setPadding(dp(12), dp(8), dp(6), dp(8));
+        ImageView send = new ImageView(ctx);
+        Drawable sd = ctx.getDrawable(android.R.drawable.ic_menu_send);   // icon Send có sẵn của hệ thống
+        if (sd != null) { sd = sd.mutate(); sd.setTint(0xFF0A84FF); send.setImageDrawable(sd); }
+        send.setPadding(dp(10), dp(8), dp(6), dp(8));
         send.setOnClickListener(v -> sendReply(it, et));
         row.addView(et);
-        row.addView(send);
+        row.addView(send, new LinearLayout.LayoutParams(dp(44), dp(40)));
         return row;
     }
 
@@ -1572,8 +1612,7 @@ sp.setStrokeWidth(1.6f * dens);
             item = it;
             count = cnt;
             line = null;
-            // UX: nội dung thông báo của app KHÔNG hiện trên notic (bảng mở rộng đã có đủ). Chỉ sự kiện hệ thống (sạc, Wi-Fi, im lặng...) giữ 1 dòng chữ
-            // vì chúng tự biến mất sau 3,6s, không kịp mở bảng. Muốn bỏ luôn chữ của sự kiện: xoá khối if bên dưới.
+            senderCircle(it);   // [P7] nạp sẵn ảnh người gửi, không làm trong onDraw
             if (!it.transientItem) return;
             String s = it.title == null ? "" : it.title;
             if (it.text != null && !it.text.isEmpty()) s = s.isEmpty() ? it.text : s + ": " + it.text;
@@ -1640,11 +1679,17 @@ sp.setStrokeWidth(1.6f * dens);
     float isz = h * 0.62f, ix = l + h * 0.2f;
     boolean spin = item.media && cSpin;
     boolean viz = item.media && cViz;
-    Bitmap lead = spin ? circleArt(item) : item.icon;
+    Bitmap sender = (!item.media && !item.transientItem) ? item.senderBmp : null;   // [P7]
+    Bitmap lead = spin ? circleArt(item) : (sender != null ? sender : item.icon);
     if (lead != null) {
         irect.set(ix, cyy - isz / 2f, ix + isz, cyy + isz / 2f);
         if (spin) { c.save(); c.rotate(spinAngle(item), ix + isz / 2f, cyy); c.drawBitmap(lead, null, irect, ip); c.restore(); }
         else c.drawBitmap(lead, null, irect, ip);
+    }
+        if (sender != null && item.icon != null && w >= pillH * 1.8f) {   // [P7] mép phải cùng = icon app gửi thông báo
+        float rx = rr - h * 0.2f - isz;
+        irect.set(rx, cyy - isz / 2f, rx + isz, cyy + isz / 2f);
+        c.drawBitmap(item.icon, null, irect, ip);
     }
     // [P2] Ô tròn số thông báo: TÁCH HẲN khỏi viên thuốc, nằm bên PHẢI, cách 6dp, đường kính = bề dày viên thuốc, màu XANH LAM
     float vw = h * 0.5f;
@@ -1653,9 +1698,12 @@ sp.setStrokeWidth(1.6f * dens);
     if (count > 1) {
         float ba = Math.max(0f, Math.min(1f, (w - pillH * 1.4f) / (pillH * 0.6f)));   // hiện dần theo lúc pill bung ra
         float br = h / 2f, bcx = rr + 6 * dens + br;
-        bp.setColor(BADGE_BLUE);
+        bp.setColor(Color.BLACK);                          // nền đen giống viên thuốc
         bp.setAlpha((int) (255 * ba));
         c.drawCircle(bcx, cyy, br, bp);
+        sp.setColor(BADGE_BLUE);                           // viền xanh lam (giống viền màu app của notic)
+        sp.setAlpha((int) (255 * ba));
+        c.drawCircle(bcx, cyy, br - sp.getStrokeWidth() / 2f, sp);
         np.setTextSize(Math.min(13f * dens, h * 0.46f));
         np.setAlpha((int) (255 * ba));
         Paint.FontMetrics fm = np.getFontMetrics();
