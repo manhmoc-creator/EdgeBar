@@ -1259,7 +1259,18 @@ private void smsQuick(Item it, String body) {
             if (popup != null) releaseIme(popup);
         } catch (Exception e) { et.setHint("Failed"); }
     }
-
+    public void onRemoved(String key) {
+        if (key == null || items.isEmpty()) return;
+        boolean changed = false;
+        for (Item x : new ArrayList<>(items)) {
+            if (key.equals(x.key)) {
+                items.remove(x);
+                unbindMedia(x);   // gỡ MediaController callback nếu là item media
+                changed = true;
+            }
+        }
+        if (changed) afterChange();   // cập nhật lại pill + popup + đếm số
+    }
     public void destroy() {
         h.removeCallbacksAndMessages(null);
         cancelPendingTap();
