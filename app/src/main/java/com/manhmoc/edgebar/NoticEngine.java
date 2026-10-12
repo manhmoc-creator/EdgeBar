@@ -1016,7 +1016,7 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
         final float hcx = (hl + hr) / 2f;
         winFull();
         expanded = false;
-        pv.go(hcx, cy, hr - hl, hb - ht, barR, 0f, 0f, 280, EMPH, () -> { if (items.isEmpty() || userHidden) removePill(); }
+        pv.go(hcx, cy, hr - hl, hb - ht, barR, 0f, 0f, 280, EMPH, () -> { if (items.isEmpty() || userHidden) removePill(); });
     }
 
     private void wakeScreen() {
