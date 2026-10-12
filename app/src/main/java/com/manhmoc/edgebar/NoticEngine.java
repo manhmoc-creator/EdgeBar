@@ -865,8 +865,13 @@ private boolean bindHost() {
     try { wm.getDefaultDisplay().getRealMetrics(dm); } catch (Exception e) { dm = ctx.getResources().getDisplayMetrics(); }
     scrW = dm.widthPixels;
     scrH = dm.heightPixels;
-float[] rc = barRectFromPrefs(hostKey, scrW, scrH);
-if (rc == null) rc = rectFromLayoutParams(v, scrW, scrH);
+    /* UX: LUÔN ưu tiên LayoutParams — đây là vị trí THẬT của View, đã bao gồm cả pushY
+       khi bàn phím mở (HomescreenService/EdgeBarService cộng lastKbdHeight vào p.y).
+       Prefs chỉ chứa _y gốc nên ở Home sẽ lệch xuống đúng bằng khoảng push bàn phím.
+       Fallback prefs chỉ dùng khi View chưa kịp layout (width/height = 1) — sau đó
+       updateVisibility() gọi noticEngine.relayout() sẽ tự chạy lại với LayoutParams đã valid. */
+    float[] rc = rectFromLayoutParams(v, scrW, scrH);
+if (rc == null) rc = barRectFromPrefs(hostKey, scrW, scrH);
 if (rc == null) return false;
     hl = rc[0]; ht = rc[1]; hr = rc[2]; hb = rc[3];
     float wP = prefs.getInt("notic_w_pct", 100) / 100f, hP = prefs.getInt("notic_h_pct", 100) / 100f;
