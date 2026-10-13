@@ -189,7 +189,7 @@ private String pillHostKey;     // host pill đang vẽ cho -> nhận ra chuyể
     private int noHostRetry;
     private final Runnable noHostRun = () -> {
         if (bindHost()) { noHostRetry = 0; relayout(); return; }
-        if (++noHostRetry < 5 && !items.isEmpty()) { h.postDelayed(noHostRun, 700); return; }
+        if (++noHostRetry < 5 && !items.isEmpty()) { h.postDelayed(this.noHostRun, 700); return; }
         noHostRetry = 0;
         closePopup(false, false);
         shrinkRemove(false, false);
@@ -835,7 +835,7 @@ public void clearDemo() {
 
     private void geoSettle() {
         if (items.isEmpty() || !prefs.getBoolean("notic_en", false)) { pendingGeo = ""; return; }
-        if (!bindHost()) { pendingGeo = ""; h.removeCallbacks(noHostRun); h.postDelayed(noHostRun, 700); return; }
+        if (!bindHost()) { pendingGeo = ""; h.removeCallbacks(noHostRun); h.postDelayed(this.noHostRun, 700); return; }
         h.removeCallbacks(noHostRun);
         String s = geoKey();
         if (!previewForce && !s.equals(pendingGeo) && geoTries++ < 8) { pendingGeo = s; h.postDelayed(geoRun, 80); return; }   // còn đang trôi -> đo lại (tối đa ~640ms)
