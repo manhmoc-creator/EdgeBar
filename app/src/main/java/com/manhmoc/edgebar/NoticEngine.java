@@ -171,7 +171,19 @@ private String pillHostKey;     // host pill đang vẽ cho -> nhận ra chuyể
     private final Runnable settleRun = this::settle;
     private boolean userHidden;
     private final Runnable reshowRun = this::reshowNotic;
-
+private final Runnable recoverRun = () -> {
+    if (items.isEmpty() || userHidden || !prefs.getBoolean("notic_en", false)) return;
+    if (pill != null && pill.hidden && statusVisible) announce(); else relayout();
+};
+private void scheduleRecover() {
+    h.removeCallbacks(recoverRun);
+    h.postDelayed(recoverRun, 350);
+    h.postDelayed(recoverRun, 1500);
+}
+private boolean hasCall() {
+    for (Item x : items) if (x.call) return true;
+    return false;
+}
     private void reshowNotic() {
         if (previewForce) return;
         if (!userHidden) return;
@@ -477,9 +489,11 @@ private void refreshMedia(Item it) {
                 } else if (Intent.ACTION_BATTERY_LOW.equals(a)) {
                     event("low", "⚠", "Battery low (" + batteryLevel() + "%)", "", 0xFFC62828);
                 } else if (Intent.ACTION_USER_PRESENT.equals(a)) {
+                    scheduleRecover();
                     event("unlock", "🔓", "Phone unlocked", "", 0xFF455A64);
                 } else if (Intent.ACTION_SCREEN_ON.equals(a)) {
     screenOn = true;
+    scheduleRecover();
     if (pill != null) pill.invalidate();   // khởi động lại vòng vẽ đĩa/visualizer
     event("screenon", "💡", "Screen on", new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date()), 0xFF37474F);
                 } else if (Intent.ACTION_DEVICE_STORAGE_LOW.equals(a)) {
@@ -659,20 +673,20 @@ private void refreshMedia(Item it) {
         it.transientItem = true;
         post(it, false, false);
     }
-    public boolean post(final Item it, boolean wake, boolean sound) {
+public boolean post(final Item it, boolean wake, boolean sound) {
+    final boolean hosted = hasHost();
+    if (!hosted && it.transientItem) return false;   // sự kiện hệ thống mà không có chỗ hiện thì bỏ
     Item old = null;
     for (Item x : items) if (x.key.equals(it.key)) { old = x; break; }
     boolean ongoingUpd = old != null && it.ongoing && !it.media && !it.call;
     boolean same = old != null && old.sig.equals(it.sig);
-    // "mới" = key mới HOẶC nội dung mới: Zalo cùng 1 người nhắn cách 5 phút vẫn dùng chung key nhưng phải bật màn + kêu lại
     boolean fresh = !ongoingUpd && !same;
     if (fresh) { if (wake) wakeScreen(); if (sound) playSound(); }
-    if (!hasHost()) return false;
     if (it.icon == null && it.pkg != null) it.icon = appIcon(it.pkg);
     if (ongoingUpd) {
         old.title = it.title; old.text = it.text; old.sig = it.sig;
         old.intent = it.intent; old.actions = it.actions;
-        return true;
+        return hosted;
     }
     if (same) {
         if (it.media) {
@@ -681,29 +695,26 @@ private void refreshMedia(Item it) {
             if (old.mc == null && it.token != null) bindMedia(old, it.token);
             if (old.mc == null) refreshMedia(old);
         }
-        return true;
+        return hosted;
     }
     if (old != null) { unbindMedia(old); items.remove(old); }
     if (it.media && it.token != null) bindMedia(it, it.token);
     items.add(0, it);
     cur = 0;
     while (items.size() > 20) unbindMedia(items.remove(items.size() - 1));
+    // UX: luôn giữ item trong hàng đợi kể cả khi chưa có host; host xuất hiện thì relayout()/recoverRun tự dựng lại pill
+    syncVisible();
     announce();
     if (popup != null) renderPopup();
     if (it.call) {
-        /* UX: cuộc gọi đến → tạm ẩn mọi notic khác (không hiện pill) trong lúc bảng
-           cuộc gọi mở, tránh che nút Trả lời/Từ chối. Tự bật lại sau khi user chọn. */
-        setSecureOverlay(true);
-        h.post(() -> showPopup(false, true));
-    }
-    else if (!it.transientItem && !it.media && screenOn && prefs.getBoolean("notic_auto_expand", false)) {
-        // đợi animation chấm→tròn→thuốc xong (~500ms) rồi mới mở bảng
+        h.postDelayed(() -> removeItem(it), 60000);   // chốt an toàn nếu hệ thống không gửi onRemoved
+    } else if (!it.transientItem && !it.media && screenOn && statusVisible
+            && prefs.getBoolean("notic_auto_expand", false)) {
         h.postDelayed(() -> { showPopup(false, true); scheduleAutoClose(); }, 520);
     }
     if (it.transientItem) h.postDelayed(() -> removeItem(it), 3600);
-    return true;
+    return hosted;
 }
-
 private void scheduleAutoClose() {
     h.removeCallbacks(autoCloseRun);
     h.postDelayed(autoCloseRun, Math.max(1, prefs.getInt("notic_hold_sec", 4)) * 1000L);
@@ -929,18 +940,12 @@ if (hr <= hl || hb <= ht) {
         final PillView pv = new PillView(ctx);
         pillLp = new WindowManager.LayoutParams((int) scrW, (int) (hb - ht), wmType, BASE_FLAGS | NOT_TOUCHABLE, PixelFormat.TRANSLUCENT);
         pillLp.gravity = Gravity.TOP | Gravity.LEFT;
-        pv.setOnApplyWindowInsetsListener((v, ins) -> {
-            boolean vis = Build.VERSION.SDK_INT < 30 || ins.isVisible(WindowInsets.Type.statusBars());
-            if (vis != insetsVisible) { insetsVisible = vis; syncVisible(); }   // [P4] gộp với trạng thái "đang kéo bảng thông báo"
-            return ins;
-        });
         try { wm.addView(pv, pillLp); } catch (Exception e) { return false; }
         pill = pv;
         statusVisible = true; insetsVisible = true;
         pillHostKey = hostKey;
         fullWin = true;
         expanded = false;
-        pv.requestApplyInsets();
         return true;
     }
     public void setShadeOpen(boolean open) {
@@ -1046,8 +1051,11 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
     private void announce() {
     if (items.isEmpty()) return;
     if (closing) { reopen = true; return; }
-    if (!bindHost()) return;
-    if (shadeOpen && !previewForce) return;
+if (!statusVisible && !previewForce) return;
+if (!bindHost()) {   // UX: chưa có host (đang đổi Lock<->Home) thì tự thử lại, không bỏ cuộc
+    h.removeCallbacks(noHostRun); noHostRetry = 0; h.postDelayed(noHostRun, 300);
+    return;
+}
     userHidden = false;
     h.removeCallbacks(settleRun);
     Item it = items.get(Math.min(cur, items.size() - 1));
@@ -1119,6 +1127,7 @@ private void hideNotic() {
     h.postDelayed(reshowRun, sec * 1000L);
 }
 private void afterChange() {
+    syncVisible();
     if (cur >= items.size()) cur = Math.max(0, items.size() - 1);
     if (items.isEmpty()) {
         h.removeCallbacks(settleRun);
@@ -1137,15 +1146,16 @@ private void afterPopupGone() {
     if (pill != null) pill.setVisibility(View.VISIBLE);
     if (items.isEmpty()) collapse();
 }
-    private void syncVisible() {
-        boolean v = previewForce || (insetsVisible && !shadeOpen && !secureOverlay);
-        if (v == statusVisible) return;
-        statusVisible = v;
-        h.post(() -> {
-            if (!statusVisible) { closePopup(false, false); shrinkRemove(false, true); }
-            else if (!items.isEmpty() && !userHidden) announce();
-        });
-    }
+private void syncVisible() {
+    // UX: chỉ 3 nguồn ẩn tạm: bảng thông báo/QS, PIN/camera (service báo), cuộc gọi đến. Tất cả tự hết là tự hiện lại.
+    boolean v = previewForce || (!shadeOpen && !secureOverlay && !hasCall());
+    if (v == statusVisible) return;
+    statusVisible = v;
+    h.post(() -> {
+        if (!statusVisible) { closePopup(false, false); shrinkRemove(false, true); }
+        else if (!items.isEmpty() && !userHidden) announce();
+    });
+}
 private void applyVisibility() {
     if (pill == null || pill.hidden) return;
     if (fadeNext) {
@@ -1417,9 +1427,6 @@ private void placePopup() {
     private void closePopup(boolean markRead, boolean animate) {
         h.removeCallbacks(autoCloseRun);
         swiping = false;
-        /* UX: bảng cuộc gọi vừa đóng → tắt secureOverlay (nếu đang bật do call),
-           để pill notic hiện lại bình thường. */
-        if (secureOverlay && (items.isEmpty() || !items.get(0).call)) secureOverlay = false;
         final LinearLayout p = popup;
     if (p != null) {
         final WindowManager.LayoutParams lp = popupLp;

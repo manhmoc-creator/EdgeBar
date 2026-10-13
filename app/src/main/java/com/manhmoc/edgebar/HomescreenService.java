@@ -141,7 +141,7 @@ private boolean recIndicatorTestPaused = false;
     }
     // Chỉ 1 engine được sống: Trợ năng BẬT -> EdgeBarService lo (Homeacc); Trợ năng TẮT -> Homeb lo
     private void syncNoticEngine() {
-        if (isAccEnabled()) {
+        if (accSettingOn()) {
             if (noticEngine != null) { try { noticEngine.destroy(); } catch (Exception ignored) {} noticEngine = null; }
             return;
         }
@@ -150,6 +150,10 @@ private boolean recIndicatorTestPaused = false;
         }
         scheduleNoticRelayout();
     }
+    private boolean accSettingOn() {
+    String s = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+    return s != null && s.contains(getPackageName() + "/" + EdgeBarService.class.getName());
+}
     private static final int[] SWALLOW_BAR_ORDER = {6, 8, 7, 3, 9, 4, 10, 5, 11, 1, 2, 0};
 private static final int[] SWALLOW_CORNER_ORDER = {3, 2, 1, 0};
 private Object[] findSwallowHost() {
@@ -1383,11 +1387,6 @@ private void setViewVisibilityAnimated(View v, boolean show) {
             .withEndAction(() -> { if (v.getAlpha() == 0f) v.setVisibility(View.GONE); }).start();
     }
 }
-/** [FIX TỐC ĐỘ "ONLY BASE LOCKSCREEN"] Ẩn/hiện tức thời (không animate) chỉ cho
- * các Bar/Corner đang ở lockMode==0 ("Chỉ màn khoá gốc") khi bouncer (PIN/camera
- * bảo mật/calculator...) vừa xuất hiện hoặc biến mất. Không đụng tới Bar/Corner
- * lockMode==1 (Luôn xuyên suốt) hay bất kỳ điều kiện nào khác — đây là đường
- * phản ứng riêng, rẻ hơn hẳn updateVisibility() đầy đủ. */
 private void applyLockGateInstant() {
     boolean isPreview = prefs.getBoolean("preview_lock", false);
     boolean isLocked = (km != null && km.isKeyguardLocked()) || isPreview;

@@ -518,11 +518,6 @@ if (k != null && k.startsWith("shortcut_") && k.endsWith("_icon_override")) {
     homaccDebounceHandler.postDelayed(homaccDebounceRunnable, HOMACC_DEBOUNCE_MS);
     return;
 }
-    // TẦNG 3.5: "_manual_hide" đã được set TRỰC TIẾP lên View ngay tại nơi ghi
-    // (checkAndYieldOS/hideSomeOverlay/showAllOverlay) — không cần rebuild lại
-    // toàn bộ 16 Bar/Corner + Panel qua updateVisibility() nữa. Bỏ debounce cho
-    // riêng key này để tránh giật hình khi "Nhường OS" trùng lúc TRIGGER_* đang
-    // chạy animation mở khoá.
     if (k != null && k.endsWith("_manual_hide")) return;
 
     // TẦNG 4: lock bars → debounce 400ms như cũ
@@ -567,6 +562,7 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
 
 } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
         forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 800;
+        isBouncerVisible = false;
     isDispatchingSyntheticGesture = false;
     setTransientUntouchable(false);
     SharedPreferences.Editor ed = prefs.edit();
@@ -1112,9 +1108,9 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
     private void removeAllIconLayers() {
         for (String k : new java.util.ArrayList<>(iconLayers.keySet())) removeIconLayer(k);
     }
-    // [PIN] Chỉ theo dõi bouncer khi có bar/corner Lock đặt chế độ "Chỉ màn khoá gốc" (lockmode==0)
-    private boolean needBouncerTracking() {
-        for (int i = 0; i < 12; i++)
+private boolean needBouncerTracking() {
+    if (prefs.getBoolean("notic_en", false)) return true;   // UX: Notic cần biết PIN/camera/cuộc gọi dù bar không ở chế độ "chỉ màn khoá gốc"
+    for (int i = 0; i < 12; i++)
             if (prefs.getBoolean("lock_" + BARS[i] + "_en", false)
                     && prefs.getInt("lock_" + BARS[i] + "_lockmode", 1) == 0) return true;
         for (int i = 0; i < 4; i++)
@@ -2594,6 +2590,7 @@ if (!isPreview && km.isKeyguardLocked() && needBouncerTracking()) {
 }
 
 boolean isSecureOverlayVisible = (isBouncerVisible || qrScannerOverlayActive) && !isPreview;
+        pushNoticSecure();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hide = isBl; // isKbd không ẩn nữa — đẩy lên thay vì ẩn
 boolean pushForKbd = avoidKbd && cachedKbdHeight > 0;
@@ -2714,66 +2711,53 @@ private void runShadeCheck() {
     }
     if (open) debounceHandler.postDelayed(shadeCheckRun, 400);   // dự phòng: chỉ poll trong lúc bảng đang mở, đóng là dừng
 }
-    private boolean computeShadeOpen() {
-        try {
-            if (isBouncerVisible) return false;
-            java.util.List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
-            if (ws == null) return false;
-            int sh = getResources().getDisplayMetrics().heightPixels;
-            android.graphics.Rect r = new android.graphics.Rect();
-            boolean keyguardLocked = km != null && km.isKeyguardLocked();
-            for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
-                if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM) continue;
-                if (!w.isFocused() && !w.isActive()) continue;
-                w.getBoundsInScreen(r);
-                if (r.height() < sh * 0.3f) continue;
-                android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
-                if (root == null) continue;
-                CharSequence pk = root.getPackageName();
-                boolean isSystemui = pk != null && pk.toString().contains("systemui");
-                if (!isSystemui) { root.recycle(); continue; }
-                if (keyguardLocked) {
-                    boolean isRealShade = isRealShadeNotKeyguard(root);
-                    root.recycle();
-                    if (!isRealShade) continue;
-                    return true;
-                }
-                root.recycle();
-                return true;
-            }
-        } catch (Exception ignored) {}
-        return false;
-    }
-
-    /* UX: heuristic nhận diện QS trên Pixel 2XL stock Android. Chỉ 4 ID dưới đây
-       xuất hiện khi QS/notification shade thực sự mở, KHÔNG xuất hiện ở keyguard
-       gốc. Zero-alloc thêm: mỗi lần gọi chỉ duyệt mảng 4 phần tử + recycle node. */
-    private boolean isRealShadeNotKeyguard(android.view.accessibility.AccessibilityNodeInfo root) {
-        String[] qsIds = {
-            "com.android.systemui:id/quick_settings_panel",
-            "com.android.systemui:id/qs_frame",
-            "com.android.systemui:id/notification_stack_scroller",
-            "com.android.systemui:id/notification_panel"
-        };
-        for (String id : qsIds) {
-            java.util.List<android.view.accessibility.AccessibilityNodeInfo> nodes = null;
-            try { nodes = root.findAccessibilityNodeInfosByViewId(id); } catch (Exception ignored) {}
-            if (nodes != null && !nodes.isEmpty()) {
-                for (android.view.accessibility.AccessibilityNodeInfo n : nodes) n.recycle();
-                return true;
-            }
+private boolean computeShadeOpen() {
+    try {
+        if (isBouncerVisible) return false;
+        java.util.List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
+        if (ws == null) return false;
+        int sh = getResources().getDisplayMetrics().heightPixels;
+        android.graphics.Rect r = new android.graphics.Rect();
+        boolean keyguardLocked = km != null && km.isKeyguardLocked();
+        for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
+            if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM) continue;
+            if (!w.isFocused() && !w.isActive()) continue;
+            w.getBoundsInScreen(r);
+            if (r.height() < sh * 0.3f) continue;
+            android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
+            if (root == null) continue;
+            CharSequence pk = root.getPackageName();
+            boolean isSystemui = pk != null && pk.toString().contains("systemui");
+            // UX: màn khoá gốc cũng là window systemui full màn hình, chỉ coi là "bảng mở" khi QS thật sự đang hiện
+            boolean open = isSystemui && (!keyguardLocked || isQsOpenOnKeyguard(root));
+            root.recycle();
+            if (open) return true;
         }
-        return false;
+    } catch (Exception ignored) {}
+    return false;
+}
+
+private boolean isQsOpenOnKeyguard(android.view.accessibility.AccessibilityNodeInfo root) {
+    int minH = (int) (getResources().getDisplayMetrics().heightPixels * 0.12f);
+    android.graphics.Rect r = new android.graphics.Rect();
+    String[] ids = {"com.android.systemui:id/quick_settings_panel", "com.android.systemui:id/qs_frame"};
+    for (String id : ids) {
+        java.util.List<android.view.accessibility.AccessibilityNodeInfo> nodes = null;
+        try { nodes = root.findAccessibilityNodeInfosByViewId(id); } catch (Exception ignored) {}
+        if (nodes == null) continue;
+        boolean hit = false;
+        for (android.view.accessibility.AccessibilityNodeInfo n : nodes) {
+            if (!hit && n.isVisibleToUser()) { n.getBoundsInScreen(r); if (r.height() >= minH) hit = true; }
+            n.recycle();
+        }
+        if (hit) return true;
     }
+    return false;
+}
 private static final int[] SWALLOW_BAR_ORDER = {6, 8, 7, 3, 9, 4, 10, 5, 11, 1, 2, 0};   // ưu tiên bar phía trên, đáy xếp cuối
 private static final int[] SWALLOW_CORNER_ORDER = {3, 2, 1, 0};
 private Object[] findSwallowHost() {
     boolean locked = km != null && km.isKeyguardLocked() && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs;
-    /* UX: PIN/Pattern/camera/calculator bouncer đang che màn khoá gốc → KHÔNG cho
-       Notic hiện (tránh lộ thông báo riêng tư trên bouncer bảo mật). */
-    boolean bouncerUp = locked && (isBouncerVisible || qrScannerOverlayActive)
-        && !prefs.getBoolean("preview_lock", false);
-    if (bouncerUp) return null;
     Object[] r = swallowHostIn(locked);
     return r != null ? r : swallowHostIn(!locked);
 }
@@ -2816,8 +2800,7 @@ private void applyLockGateInstant() {
     boolean isPreview = prefs.getBoolean("preview_lock", false);
     boolean isLocked = (km != null && km.isKeyguardLocked()) || isPreview;
     boolean isSecureOverlayVisible = (isBouncerVisible || qrScannerOverlayActive) && !isPreview;
-    /* UX: notic tạm ẩn khi PIN/camera/call bouncer đang che, hiện lại khi gone. */
-    if (noticEngine != null) noticEngine.setSecureOverlay(isSecureOverlayVisible);
+    pushNoticSecure();
     for (int i = 0; i < 12; i++) {
         if (bars[i] == null) continue;
         int lockMode = prefs.getInt("lock_" + BARS[i] + "_lockmode", 1);
@@ -2842,7 +2825,14 @@ private void applyLockGateInstant() {
         corners[i].setAlpha(1f);
         corners[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
     }
+    if (noticEngine != null) noticEngine.relayout();
     refreshLockShownFlag(); 
+}
+private void pushNoticSecure() {
+    if (noticEngine == null) return;
+    boolean preview = prefs.getBoolean("preview_lock", false);
+    noticEngine.setSecureOverlay(!preview
+        && ((km != null && km.isKeyguardLocked() && isBouncerVisible) || qrScannerOverlayActive));
 }
 private void instantSwitchLockToHomacc() {
     lockLayerShown = false; 
@@ -2861,6 +2851,7 @@ private void instantSwitchLockToHomacc() {
     if (AccessibleHomeService.isRunning) {
         if (isHomaccDrawn) updateHomaccLive(); else drawAccessibleHome();
     }
+    if (noticEngine != null) noticEngine.relayout();
 }
 private static final int MAX_TRIGGER_DEPTH = 3;
 
@@ -3302,9 +3293,6 @@ private void removeAccessibleHome() {
 }
 
 private void updateHomaccLive() {
-    // [FIX BỔ SUNG] Nếu phát hiện views bị OOM-kill (mất WM token), force rebuild
-    // NGAY thay vì tiếp tục cấu hình trên views mồ côi — tránh tình trạng user
-    // thấy bar/corner "biến mất" nhưng không có tín hiệu hồi phục nào.
     if (homaccViewsMissing()) {
         healHomaccIfNeeded();
         if (!isHomaccDrawn || homaccViewsMissing()) return; // vẫn chưa hồi -> thoát sạch
@@ -3385,8 +3373,7 @@ private void updateHomaccLive() {
         if (priMode == 0) applyAntiTapjacking(v, p.width, p.height);
     }
     refreshEventSubscription();
-
-
+    if (noticEngine != null) noticEngine.relayout();
 }
 @Override
 public boolean onUnbind(Intent intent) {
