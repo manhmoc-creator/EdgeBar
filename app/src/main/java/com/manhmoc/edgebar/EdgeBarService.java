@@ -1420,19 +1420,13 @@ if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
     CharSequence _ep = event.getPackageName();
     if (_ep != null) {
         String _eps = _ep.toString();
-        if ((_eps.contains("launcher") || _eps.contains("quickstep")) && !_eps.contains("systemui")) {
+        if ((_eps.contains("launcher") || _eps.contains("quickstep")) && !_eps.contains("systemui")
+                && isLauncherTopWindow()) {   // UX: chỉ coi là mở khoá khi launcher thật sự đang ở trên cùng
             forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 1500;
             instantSwitchLockToHomacc();   // ẩn Lock tức thì + hiện Homacc ngay
         }
     }
 }
-
-
-// [MỚI - FIX 1/3 BOUNCER] typeWindowContentChanged bắt được đúng lúc bouncer
-// PIN xuất hiện/biến mất (cùng window, chỉ đổi nội dung). Xử lý NGAY tại đây,
-// trước mọi early-return khác, throttle riêng 60ms — nhanh hơn nhiều so với
-// EVENT_THROTTLE_MS (200ms) dùng chung cho phần đổi app, giúp bar phản ứng
-// tức thời thay vì trễ/giật.
 if ((eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         || eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         || eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
@@ -1550,45 +1544,48 @@ if (!stateChanged) return;
 private void checkBouncerVisible(String currentPkg) {
     try {
         boolean cover = false;
-
-        // 1) Đang đổ chuông / đang gọi (rẻ nhất, kiểm tra trước)
         AudioManager amCover = (AudioManager) getSystemService(AUDIO_SERVICE);
-        if (amCover != null && amCover.getMode() != AudioManager.MODE_NORMAL) cover = true;
-
-        // 2) Cửa sổ khác màn khoá gốc: camera, calculator, màn cuộc gọi (APPLICATION)
-        //    và Trợ lý (cửa sổ SYSTEM đang active/focused của app khác)
+        if (amCover != null) {
+            int md = amCover.getMode();
+            if (md == AudioManager.MODE_RINGTONE || md == AudioManager.MODE_IN_CALL
+                || md == AudioManager.MODE_IN_COMMUNICATION) cover = true;
+        }
         if (!cover) {
             java.util.List<android.view.accessibility.AccessibilityWindowInfo> windows = getWindows();
             if (windows != null) {
                 String self = getPackageName();
                 for (android.view.accessibility.AccessibilityWindowInfo w : windows) {
                     int type = w.getType();
-                    boolean app = type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION;
-                    boolean sys = type == android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM
-                        && (w.isActive() || w.isFocused());
-                    if (!app && !sys) continue;
+                    if (type != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION
+                        && type != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM) continue;
+                    // UX: chỉ cửa sổ đang active/focused mới thật sự che màn khoá (launcher nền thì không)
+                    if (!w.isActive() && !w.isFocused()) continue;
                     android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
                     if (root == null) continue;
                     String pkg = root.getPackageName() != null ? root.getPackageName().toString() : "";
                     root.recycle();
                     if (pkg.isEmpty() || pkg.equals(self) || pkg.equals("android")
-                        || pkg.contains("systemui") || pkg.contains("inputmethod")) continue;
+                        || pkg.contains("systemui") || pkg.contains("inputmethod")
+                        || pkg.contains("launcher") || pkg.contains("quickstep")) continue;
                     cover = true;
                     break;
                 }
             }
         }
-
-        // 3) Bouncer PIN (nằm trong chính cửa sổ systemui)
         if (!cover) {
             android.view.accessibility.AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root != null) {
+                int minH = (int) (getResources().getDisplayMetrics().heightPixels * 0.25f);
+                android.graphics.Rect r = new android.graphics.Rect();
                 for (String id : KEYGUARD_BOUNCER_IDS) {
                     java.util.List<android.view.accessibility.AccessibilityNodeInfo> nodes =
                         root.findAccessibilityNodeInfosByViewId(id);
                     if (nodes != null) {
-                        if (!nodes.isEmpty()) cover = true;
-                        for (android.view.accessibility.AccessibilityNodeInfo n : nodes) n.recycle();
+                        for (android.view.accessibility.AccessibilityNodeInfo n : nodes) {
+                            // UX: container PIN luôn tồn tại trong cây view, phải đang hiện và đủ cao mới tính
+                            if (!cover && n.isVisibleToUser()) { n.getBoundsInScreen(r); if (r.height() >= minH) cover = true; }
+                            n.recycle();
+                        }
                     }
                     if (cover) break;
                 }
@@ -1600,10 +1597,23 @@ private void checkBouncerVisible(String currentPkg) {
         isBouncerVisible = false;
     }
 }
-    // V19.12.3.6.8 THE ETERNAL EGO
-// getForegroundPackageFromWindows(): lấy package foreground từ getWindows() API
-// Pixel 2XL opt: recycle NodeInfo ngay sau khi đọc, tránh leak native memory
-// flagRetrieveInteractiveWindows trong config.xml mới cho phép method này hoạt động
+private boolean isLauncherTopWindow() {
+    try {
+        java.util.List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
+        if (ws == null) return false;
+        for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
+            if (!w.isActive() && !w.isFocused()) continue;
+            android.view.accessibility.AccessibilityNodeInfo r = w.getRoot();
+            if (r == null) continue;
+            CharSequence pk = r.getPackageName();
+            r.recycle();
+            if (pk == null) continue;
+            String s = pk.toString();
+            return (s.contains("launcher") || s.contains("quickstep")) && !s.contains("systemui");
+        }
+    } catch (Exception ignored) {}
+    return false;
+}
 private String getForegroundPackageFromWindows() {
     try {
         java.util.List<android.view.accessibility.AccessibilityWindowInfo> windows = getWindows();
