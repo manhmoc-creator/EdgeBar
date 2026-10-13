@@ -178,14 +178,30 @@ private void scheduleRecover() {
     h.postDelayed(recoverRun, 350);
     h.postDelayed(recoverRun, 1500);
 }
+private boolean callCheckQueued;
+
+private final Runnable callCheckRun = () -> {
+    callCheckQueued = false;
+    checkCall();
+};
+
 private void checkCall() {
     h.removeCallbacks(callCheckRun);
+    callCheckQueued = false;
     if (audio == null) audio = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
     int m = audio == null ? AudioManager.MODE_NORMAL : audio.getMode();
-    boolean c = m == AudioManager.MODE_IN_CALL || m == AudioManager.MODE_IN_COMMUNICATION; // không tính đang đổ chuông
+    boolean c = m == AudioManager.MODE_IN_CALL || m == AudioManager.MODE_IN_COMMUNICATION;
     if (c != inCall) { inCall = c; syncVisible(); }
-    // UX: chỉ dò lại 3s/lần khi đang gọi + màn sáng; hết gọi thì micCb báo, không polling lúc rảnh.
-    if (inCall && screenOn) h.postDelayed(callCheckRun, 3000);
+    if (inCall && screenOn) {
+        callCheckQueued = true;
+        h.postDelayed(callCheckRun, 3000);
+    }
+}
+
+private void scheduleCallCheck(long delayMs) {
+    if (callCheckQueued) return;   // đã có 1 lượt chờ trong queue -> bỏ qua
+    callCheckQueued = true;
+    h.postDelayed(callCheckRun, delayMs);
 }
     private void reshowNotic() {
         if (previewForce) return;
