@@ -7,4 +7,4 @@
     android:canRetrieveWindowContent="true"
     android:canRequestFingerprintGestures="true"
     android:canTakeScreenshot="true"
-    android:notificationTimeout="300" />
+    android:notificationTimeout="100" />

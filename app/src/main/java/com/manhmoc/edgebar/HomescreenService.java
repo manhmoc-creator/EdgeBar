@@ -158,6 +158,7 @@ private boolean recIndicatorTestPaused = false;
 private static final int[] SWALLOW_CORNER_ORDER = {3, 2, 1, 0};
 private Object[] findSwallowHost() {
     if (km != null && km.isKeyguardLocked()) return null;
+    if (prefs.getBoolean("preview_lock", false) && !prefs.getBoolean("preview_home", false)) return null;
     for (int i : SWALLOW_BAR_ORDER) {
         View v = bars[i];
         if (v == null || v.getVisibility() != View.VISIBLE) continue;
@@ -1399,7 +1400,6 @@ private void applyLockGateInstant() {
         boolean manualHidden = prefs.getBoolean("lock_" + BARS[i] + "_manual_hide", false);
         boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
         bars[i].animate().cancel();
-        bars[i].setAlpha(1f);
         bars[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
     }
     for (int i = 0; i < 4; i++) {
@@ -1410,7 +1410,6 @@ private void applyLockGateInstant() {
         boolean manualHidden = prefs.getBoolean("lock_corner_" + CORNERS[i] + "_manual_hide", false);
         boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
         corners[i].animate().cancel();
-        corners[i].setAlpha(1f);
         corners[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
     }
 }
@@ -1949,6 +1948,7 @@ private float holdAnchorX = 0f, holdAnchorY = 0f; // [FIX] mốc đo swipe SAU k
 private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
         @Override public boolean onTouch(View v, MotionEvent e) {
             if (isDispatchingSyntheticGesture) return false;
+            if (e.getActionMasked() == MotionEvent.ACTION_DOWN && noticEngine != null) noticEngine.onOverlayTouch(v);
             if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
             

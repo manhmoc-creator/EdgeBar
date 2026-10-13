@@ -128,6 +128,7 @@ private TextView tvFrontierSubTitle; // [MỚI] hoisted ra field để mở th�
 private final java.util.ArrayDeque<Runnable> navBackStack = new java.util.ArrayDeque<>();
 private Runnable currentLevelBackAction = null;
     private boolean frontierSelectMode = false;
+    private boolean deepEditOpen = false;
     private boolean gestureSelectMode = false;
     private java.util.Set<String> gestureSelectedItems = new java.util.LinkedHashSet<>();
     private final java.util.Set<String> openGestureDrawers = new java.util.LinkedHashSet<>();
@@ -845,7 +846,7 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     }
     @Override protected void onResume() {
         super.onResume();
-      // [MỚI] Tự dọn cờ Blacklist-Lock nếu bị kẹt (MIUI hay giết tiến trình Watchdog giữa chừng)
+        NoticEngine.setSuppressed(deepEditOpen);
 if (prefs.getBoolean("blacklist_lock_active", false)
         && !BlacklistLockWatchdogService.isRunning
         && System.currentTimeMillis() - prefs.getLong("blacklist_lock_start_ms", 0) > 8000) {
@@ -931,6 +932,7 @@ if (prefs.getBoolean("blacklist_lock_active", false)
     }
     @Override protected void onPause() {
         super.onPause();
+        NoticEngine.setSuppressed(false);
         if (prefs.getBoolean("preview_lock", false) || prefs.getBoolean("preview_homacc", false) || prefs.getBoolean("preview_home", false)) {
             prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply();
             sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
@@ -10118,9 +10120,10 @@ prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
         packLiveHandler.removeCallbacksAndMessages(null);
         removeLivePreviewOverlay();
         if (type == 2) prefs.edit().putBoolean(prefix + id + "_preview_handle", false).apply();
-        else renderRulesList();
+        else { deepEditOpen = false; NoticEngine.setSuppressed(false); renderRulesList(); }
     });
 d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    if (type != 2) { deepEditOpen = true; NoticEngine.setSuppressed(true); }
     d.setContentView(root); d.show();
 }
 private void openEmptyPillDialog() {

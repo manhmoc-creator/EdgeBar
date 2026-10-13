@@ -91,6 +91,11 @@ static synchronized boolean previewAll(boolean toggle) {
     return false;
 }
 static synchronized void endPreviewAll() { for (NoticEngine e : new ArrayList<>(ALL)) e.endPreview(); }
+static volatile boolean suppressed;
+static void setSuppressed(boolean on) {
+    suppressed = on;
+    synchronized (ALL) { for (NoticEngine e : new ArrayList<>(ALL)) e.h.post(e::syncVisible); }
+}
     private static final Set<String> selfCancel = new HashSet<>();
     public static synchronized void markSelfCancel(String k) { selfCancel.add(k); }
     public static synchronized boolean consumeSelfCancel(String k) { return selfCancel.remove(k); }
@@ -405,7 +410,7 @@ private void unbindMedia(Item it) {
 
 private void refreshMedia(Item it) {
     if (pill != null && !items.isEmpty() && items.get(Math.min(cur, items.size() - 1)) == it) pill.invalidate();
-    if (popup != null) renderPopup();
+    if (popup != null) renderPopup(true);
 }
     public NoticEngine(Context ctx, WindowManager wm, SharedPreferences prefs, int wmType, Supplier<Object[]> hostFinder) {
         this.ctx = ctx;
@@ -430,7 +435,10 @@ private void refreshMedia(Item it) {
         Object[] hs = hostFinder.get();
         return hs != null && ((View) hs[0]).getVisibility() == View.VISIBLE;
     }
-
+    boolean isHostCovered(View v) { return v != null && v == hostView && pill != null && !pill.hidden && !closing; }
+public void onOverlayTouch(View touched) {
+    if (popup != null && touched != hostView) closePopup(false, true);
+}
     public boolean dndBlocks() {
         if (!prefs.getBoolean("notic_dnd_skip", true)) return false;
         NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -782,7 +790,7 @@ public void onScreenOff() {
     screenOn = false;
     shadeOpen = false;
     userHidden = false;
-statusVisible = previewForce || (!secureOverlay && !inCall);
+statusVisible = !suppressed && (previewForce || (!secureOverlay && !inCall));
     cancelPendingTap();
     h.removeCallbacks(settleRun); h.removeCallbacks(autoCloseRun); h.removeCallbacks(geoRun);
     h.removeCallbacks(noHostRun); h.removeCallbacks(recoverRun); h.removeCallbacks(reshowRun);
@@ -1108,7 +1116,7 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
     private void announce() {
     if (items.isEmpty() || !screenOn) return;
     if (closing) { reopen = true; return; }
-if (!statusVisible && !previewForce) return;
+if (!statusVisible) return;
 if (!bindHost()) {   // UX: chưa có host (đang đổi Lock<->Home) thì tự thử lại, không bỏ cuộc
     h.removeCallbacks(noHostRun); h.postDelayed(noHostRun, 300);
     return;
@@ -1206,7 +1214,7 @@ private void afterPopupGone() {
     if (items.isEmpty()) collapse();
 }
 private void syncVisible() {
-boolean v = previewForce || (!shadeOpen && !secureOverlay && !inCall);
+boolean v = !suppressed && (previewForce || (!shadeOpen && !secureOverlay && !inCall));
     if (v == statusVisible) return;
     statusVisible = v;
     h.post(() -> {
@@ -1397,10 +1405,10 @@ private void openPopup() {
     sv.addView(popupBody);
     sv.setVerticalFadingEdgeEnabled(true); sv.setFadingEdgeLength(dp(18)); sv.setVerticalScrollBarEnabled(false); // UX: mép mờ thay vì cắt vuông
     root.addView(sv, new LinearLayout.LayoutParams(-1, -2));
-
     int pw = popW();
     popup = root;
-    renderPopup();
+    popupSigLast = "";
+    renderPopup(true);
     popupLp = new WindowManager.LayoutParams(pw, WindowManager.LayoutParams.WRAP_CONTENT, wmType, POPUP_FLAGS, PixelFormat.TRANSLUCENT);
     popupLp.gravity = Gravity.TOP | Gravity.LEFT;
     popupLp.x = popX(pw);
@@ -1476,7 +1484,7 @@ private void placePopup() {
 }
     private void closePopup(boolean markRead, boolean animate) {
         h.removeCallbacks(autoCloseRun);
-        swiping = false;
+        swiping = false; popupTouching = false; renderPending = false;
         final LinearLayout p = popup;
     if (p != null) {
         final WindowManager.LayoutParams lp = popupLp;
@@ -1496,10 +1504,24 @@ private void placePopup() {
         afterChange();
     }
 }
-private void renderPopup() {
-    if (swiping) return;
+private String popupSigLast = "";
+private boolean popupTouching, renderPending;
+private String popupSig() {
+    StringBuilder sb = new StringBuilder();
+    sb.append(popupHistory).append(cur).append(prefs.getInt("notic_card_color", 0)).append(cBorder).append(cSpin).append(cViz).append(cVizColor);
+    for (Item x : items) sb.append('|').append(x.key).append(x.sig).append(x.playing);
+    return sb.toString();
+}
+private void renderPopup() { renderPopup(false); }
+private void renderPopup(boolean force) {
     if (popupBody == null || items.isEmpty()) return;
-    if (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0) return; // đang gõ reply thì không dựng lại
+    // UX: không dựng lại row khi ngón tay đang chạm/vuốt, nếu không view nhận DOWN bị huỷ và cử chỉ mất
+    if (swiping || popupTouching) { renderPending = true; return; }
+    if (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0) return;
+    String sig = popupSig();
+    if (!force && popupBody.getChildCount() > 0 && sig.equals(popupSigLast)) return;
+    popupSigLast = sig;
+    renderPending = false;
     popupBody.removeAllViews();
     Item curIt = items.get(Math.min(cur, items.size() - 1));
     if (popupHead != null) popupHead.setVisibility(popupHistory ? View.VISIBLE : View.GONE);
@@ -1790,8 +1812,17 @@ private GradientDrawable cardBg(Item it, float r) {
     }
     private float swX0, swY0, swDx; private boolean swDrag, swDown; private VelocityTracker swVt;
 private final int swSlop = ViewConfiguration.get(ctx).getScaledTouchSlop();
-
 @Override public boolean dispatchTouchEvent(MotionEvent e) {
+    int act = e.getActionMasked();
+    if (act == MotionEvent.ACTION_DOWN) popupTouching = true;
+    boolean res = dispatchTouchInner(e);
+    if (act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL) {
+        popupTouching = false;
+        if (renderPending && !swiping) h.post(NoticEngine.this::renderPopup);
+    }
+    return res;
+}
+private boolean dispatchTouchInner(MotionEvent e) {
     View card = (popupHistory || popupBody == null || popupBody.getChildCount() == 0 || items.isEmpty()
         || (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0)) ? null : popupBody.getChildAt(0);
     if (card == null || items.get(Math.min(cur, items.size() - 1)).call) return super.dispatchTouchEvent(e);

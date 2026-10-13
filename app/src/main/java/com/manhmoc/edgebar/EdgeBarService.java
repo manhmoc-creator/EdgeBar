@@ -117,10 +117,12 @@ private void removeRippleViewIfIdle() {
 private volatile boolean isBouncerVisible = false;
 private volatile long lastBouncerCheckMs = 0L;
 private volatile boolean qrScannerOverlayActive = false; // [MỚI] QR Scanner đang mở -> coi như có overlay bảo mật che lockscreen gốc
-private static final long BOUNCER_CHECK_THROTTLE_MS = 60;
+private static final long BOUNCER_CHECK_THROTTLE_MS = 120;
 
 private static final String[] KEYGUARD_BOUNCER_IDS = {
     "com.android.systemui:id/keyguard_pin_view",
+    "com.android.systemui:id/keyguard_pattern_view",
+    "com.android.systemui:id/keyguard_password_view",
     "com.android.systemui:id/keyguard_security_container"
 };
     private SharedPreferences prefs;
@@ -533,7 +535,10 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
             playAnim();
                 } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
         if (noticEngine != null) noticEngine.onScreenOff();
-        shadeOpenNow = false; debounceHandler.removeCallbacks(shadeCheckRun);   // [P4]
+        shadeOpenNow = false; shadeCheckPending = false; bouncerCheckPending = false; evTrailingPending = false;
+        debounceHandler.removeCallbacks(shadeCheckRun);
+        debounceHandler.removeCallbacks(bouncerCheckRun);
+        debounceHandler.removeCallbacks(evTrailingRun);
     forceUnlockedUntilMs = 0; // tắt màn rồi thì Lock phải được phép hiện lại ngay
     if (recentsBlur != null) recentsBlur.hide(); // [FIX 2B] gỡ lớp phủ Recents + reset phiên khi tắt màn
     for (int j = 0; j < 12; j++) {
@@ -1432,17 +1437,10 @@ if ((eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         || eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
         && km != null && needBouncerTracking() && km.isKeyguardLocked()) {
     String evPkg = event.getPackageName() != null ? event.getPackageName().toString() : "";
-
-    long nowBouncer = android.os.SystemClock.elapsedRealtime();
-    if (nowBouncer - lastBouncerCheckMs >= BOUNCER_CHECK_THROTTLE_MS) {
-        lastBouncerCheckMs = nowBouncer;
-        boolean prevBouncer = isBouncerVisible;
-        checkBouncerVisible(evPkg);
-        if (isBouncerVisible != prevBouncer) applyLockGateInstant();
-    }
+    // UX: CONTENT_CHANGED của app khác (camera, nhạc...) bắn liên tục, chỉ keyguard (systemui) mới đáng kiểm tra
+    boolean cheapSkip = eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && !evPkg.contains("systemui");
+    if (!cheapSkip) scheduleBouncerCheck();
 }
-    // [MỚI] Cuộn nội dung (không đổi app) vẫn phải cập nhật màu icon — đây chính là
-    // tình huống "lướt feed sáng/tối liên tục" mà bản cũ không có sự kiện nào bắt được.
     if (eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
         long nowEv = android.os.SystemClock.elapsedRealtime();
         if (nowEv - lastIconColorEventGateMs >= ICON_COLOR_EVENT_GATE_MS) {
@@ -1488,8 +1486,10 @@ if (km != null && km.isKeyguardLocked()
         if (hit != null) triggerBlacklistLockRevokeAcc(hit);
     }
 }
-
-    if (nowMs - lastEventMs < EVENT_THROTTLE_MS) return;
+    if (nowMs - lastEventMs < EVENT_THROTTLE_MS) {
+        if (!evTrailingPending) { evTrailingPending = true; debounceHandler.postDelayed(evTrailingRun, EVENT_THROTTLE_MS); }
+        return;
+    }
     lastEventMs = nowMs;
     boolean accShouldRun = AccessibleHomeService.isRunning;
 if (accShouldRun != lastAccHomeRunningState) {
@@ -1540,6 +1540,31 @@ if (!stateChanged) return;
     syncIntent.putExtra("foreground_pkg", pName);
     syncIntent.putExtra("kbd_height", cachedKbdHeight); // [MỚI]
     sendBroadcast(syncIntent);
+}
+private boolean bouncerCheckPending, evTrailingPending, shadeCheckPending;
+private final Runnable bouncerCheckRun = () -> {
+    bouncerCheckPending = false;
+    if (km == null || !km.isKeyguardLocked()) return;
+    lastBouncerCheckMs = SystemClock.elapsedRealtime();
+    boolean prev = isBouncerVisible;
+    checkBouncerVisible("");
+    if (isBouncerVisible != prev) applyLockGateInstant();
+};
+private void scheduleBouncerCheck() {
+    if (bouncerCheckPending) return;
+    bouncerCheckPending = true;
+    long wait = Math.max(0, BOUNCER_CHECK_THROTTLE_MS - (SystemClock.elapsedRealtime() - lastBouncerCheckMs));
+    debounceHandler.postDelayed(bouncerCheckRun, wait);
+}
+private final Runnable evTrailingRun = () -> {
+    evTrailingPending = false;
+    if (km == null || prefs == null) return;
+    cachedKbdHeight = computeKbdHeightPx();
+    isKbd = cachedKbdHeight > 0;
+    updateVisibility();
+};
+private void resetAlpha(View v) {
+    if (v != null && !(noticEngine != null && noticEngine.isHostCovered(v))) v.setAlpha(1f);
 }
 private void checkBouncerVisible(String currentPkg) {
     try {
@@ -2707,19 +2732,19 @@ if (panelEngine != null) panelEngine.rebuildAll();
 private boolean shadeOpenNow = false;
 private final Runnable shadeCheckRun = this::runShadeCheck;
 private void scheduleShadeCheck() {
-    if (noticEngine == null || !prefs.getBoolean("notic_en", false)) return;
-    debounceHandler.removeCallbacks(shadeCheckRun);
-    debounceHandler.postDelayed(shadeCheckRun, 90);   // gộp nhiều event liên tiếp thành 1 lần kiểm tra
+    if (noticEngine == null || shadeCheckPending || !prefs.getBoolean("notic_en", false)) return;
+    shadeCheckPending = true;
+    debounceHandler.postDelayed(shadeCheckRun, 90);
 }
 private void runShadeCheck() {
+    shadeCheckPending = false;
     if (noticEngine == null) return;
     boolean open = computeShadeOpen();
     if (open != shadeOpenNow) {
         shadeOpenNow = open;
-        android.util.Log.d("EB_SHADE", "shadeOpen=" + open);
         noticEngine.setShadeOpen(open);
     }
-    if (open) debounceHandler.postDelayed(shadeCheckRun, 400);   // dự phòng: chỉ poll trong lúc bảng đang mở, đóng là dừng
+    if (open) { shadeCheckPending = true; debounceHandler.postDelayed(shadeCheckRun, 400); }
 }
 private boolean computeShadeOpen() {
     try {
@@ -2731,7 +2756,7 @@ private boolean computeShadeOpen() {
         boolean keyguardLocked = km != null && km.isKeyguardLocked();
         for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
             if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM) continue;
-            if (!w.isFocused() && !w.isActive()) continue;
+            if (keyguardLocked && !w.isFocused() && !w.isActive()) continue;
             w.getBoundsInScreen(r);
             if (r.height() < sh * 0.3f) continue;
             android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
@@ -2767,8 +2792,10 @@ private boolean isQsOpenOnKeyguard(android.view.accessibility.AccessibilityNodeI
 private static final int[] SWALLOW_BAR_ORDER = {6, 8, 7, 3, 9, 4, 10, 5, 11, 1, 2, 0};   // ưu tiên bar phía trên, đáy xếp cuối
 private static final int[] SWALLOW_CORNER_ORDER = {3, 2, 1, 0};
 private Object[] findSwallowHost() {
-    boolean locked = km != null && km.isKeyguardLocked() && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs;
+    boolean pvLock = prefs.getBoolean("preview_lock", false), pvHome = prefs.getBoolean("preview_home", false);
+    boolean locked = pvLock || (!pvHome && km != null && km.isKeyguardLocked() && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs);
     Object[] r = swallowHostIn(locked);
+    if (pvLock || pvHome) return r;
     return r != null ? r : swallowHostIn(!locked);
 }
 private Object[] swallowHostIn(boolean locked) {
@@ -2793,6 +2820,7 @@ private void setViewVisibilityAnimated(View v, boolean show) {
     if (v == null) return;
     int dur = prefs.getInt("lock_anim_dur", 0);
     v.animate().cancel();
+    if (show && noticEngine != null && noticEngine.isHostCovered(v)) { v.setVisibility(View.VISIBLE); return; }
     if (dur <= 0) {
         v.setAlpha(1f);
         v.setVisibility(show ? View.VISIBLE : View.GONE);
@@ -2819,7 +2847,7 @@ private void applyLockGateInstant() {
         boolean manualHidden = prefs.getBoolean("lock_" + BARS[i] + "_manual_hide", false);
         boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
         bars[i].animate().cancel();
-        bars[i].setAlpha(1f);
+        resetAlpha(bars[i]);
         bars[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
         setIconLayerShown("lock_" + BARS[i], shouldShow);   // icon đi cùng bar, cùng khung hình
     }
@@ -2832,7 +2860,7 @@ private void applyLockGateInstant() {
         boolean manualHidden = prefs.getBoolean("lock_corner_" + CORNERS[i] + "_manual_hide", false);
         boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
         corners[i].animate().cancel();
-        corners[i].setAlpha(1f);
+        resetAlpha(corners[i]);
         corners[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
     }
     if (noticEngine != null) noticEngine.relayout();
@@ -3041,6 +3069,7 @@ private float holdAnchorX = 0f, holdAnchorY = 0f;
 private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                 @Override public boolean onTouch(View v, MotionEvent e) {
             if (isDispatchingSyntheticGesture) return false;
+            if (e.getActionMasked() == MotionEvent.ACTION_DOWN && noticEngine != null) noticEngine.onOverlayTouch(v);
             if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
             
