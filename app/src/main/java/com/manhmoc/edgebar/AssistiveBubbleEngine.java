@@ -651,16 +651,16 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
         selectedMainIdx = null; selectedSubIdx = null; currentSubmenu = null;
 
         FrameLayout overlay = new FrameLayout(ctx) {
-            @Override
-            public boolean dispatchKeyEvent(KeyEvent event) {
-                if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
-                    if (currentSubmenu != null) { currentSubmenu = null; refreshPanelCard(); } 
-                    else closeMenu(); 
-                    return true;
-                }
-                return super.dispatchKeyEvent(event);
-            }
-        };
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK
+                && event.getAction() == android.view.KeyEvent.ACTION_UP) {
+            if (popup != null) releaseIme(popup);
+            closePopup(false, true);
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+        }
+    };
         int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         
         menuLp = new WindowManager.LayoutParams(
