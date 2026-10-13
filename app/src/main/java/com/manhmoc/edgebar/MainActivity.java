@@ -1557,13 +1557,29 @@ btnUninstallTop.setMinimumHeight(0);
 btnUninstallTop.setOnClickListener(v -> confirmThenUninstallApp());
 Button btnUpdateTop = createSystemBtn("Update", "#333333", "#8AB4F8");
 btnUpdateTop.setTextSize(14f);
-btnUpdateTop.setPadding(24, 12, 24, 12); // Tăng đệm dọc
+btnUpdateTop.setPadding(24, 12, 24, 12);
 LinearLayout.LayoutParams upLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
 upLp.setMargins(4, 4, 4, 4);
 btnUpdateTop.setLayoutParams(upLp);
 btnUpdateTop.setMinimumHeight(0);
 btnUpdateTop.setOnClickListener(v -> {
-    Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i);
+    Intent i = new Intent(Intent.ACTION_VIEW);
+    i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions"));
+    startActivity(i);
+    // [MỚI] Đánh dấu đã xem build mới nhất -> ẩn badge
+    UpdateChecker.markSeen(prefs);
+    btnUpdateTop.setText("Update");
+    btnUpdateTop.setBackground(getRounded("#333333", 20f));
+    btnUpdateTop.setTextColor(Color.parseColor("#8AB4F8"));
+});
+// [MỚI] Kiểm tra bản cập nhật — nếu có build mới hơn, đổi nút thành badge cam
+final Button fBtnUpdate = btnUpdateTop;
+UpdateChecker.check(this, prefs, (latestBuild, hasUpdate) -> {
+    if (hasUpdate && latestBuild > 0) {
+        fBtnUpdate.setText("⬆️ Update #" + latestBuild);
+        fBtnUpdate.setBackground(getRounded("#FF9800", 20f));
+        fBtnUpdate.setTextColor(Color.WHITE);
+    }
 });
 rightCol.addView(btnUninstallTop);
 rightCol.addView(btnUpdateTop);
