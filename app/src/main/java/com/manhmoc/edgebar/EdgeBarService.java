@@ -117,7 +117,7 @@ private void removeRippleViewIfIdle() {
 private volatile boolean isBouncerVisible = false;
 private volatile long lastBouncerCheckMs = 0L;
 private volatile boolean qrScannerOverlayActive = false; // [MỚI] QR Scanner đang mở -> coi như có overlay bảo mật che lockscreen gốc
-private static final long BOUNCER_CHECK_THROTTLE_MS = 120;
+private static final long BOUNCER_CHECK_THROTTLE_MS = 300;
 
 private static final String[] KEYGUARD_BOUNCER_IDS = {
     "com.android.systemui:id/keyguard_pin_view",
@@ -1542,19 +1542,25 @@ if (!stateChanged) return;
     sendBroadcast(syncIntent);
 }
 private boolean bouncerCheckPending, evTrailingPending, shadeCheckPending;
+private int bouncerRecheck = 0, bouncerClearStreak = 0;
 private final Runnable bouncerCheckRun = () -> {
     bouncerCheckPending = false;
-    if (km == null || !km.isKeyguardLocked()) return;
+    if (km == null || !km.isKeyguardLocked()) { bouncerRecheck = 0; return; }
     lastBouncerCheckMs = SystemClock.elapsedRealtime();
     boolean prev = isBouncerVisible;
     checkBouncerVisible("");
     if (isBouncerVisible != prev) applyLockGateInstant();
+    // UX: animation PIN/camera kết thúc SAU event cuối -> kiểm tra bù 3 lần rồi dừng
+    if (bouncerRecheck < 3) { bouncerRecheck++; scheduleBouncerCheckIn(250); } else bouncerRecheck = 0;
 };
-private void scheduleBouncerCheck() {
+private void scheduleBouncerCheckIn(long delayMs) {
     if (bouncerCheckPending) return;
     bouncerCheckPending = true;
-    long wait = Math.max(0, BOUNCER_CHECK_THROTTLE_MS - (SystemClock.elapsedRealtime() - lastBouncerCheckMs));
-    debounceHandler.postDelayed(bouncerCheckRun, wait);
+    debounceHandler.postDelayed(bouncerCheckRun, delayMs);
+}
+private void scheduleBouncerCheck() {
+    bouncerRecheck = 0;
+    scheduleBouncerCheckIn(Math.max(0, BOUNCER_CHECK_THROTTLE_MS - (SystemClock.elapsedRealtime() - lastBouncerCheckMs)));
 }
 private final Runnable evTrailingRun = () -> {
     evTrailingPending = false;
@@ -1617,7 +1623,10 @@ private void checkBouncerVisible(String currentPkg) {
                 root.recycle();
             }
         }
-        isBouncerVisible = cover;
+        // UX: bật thì tức thì; tắt phải 2 lần đọc liên tiếp (container PIN còn "visible" trong lúc animation thoát)
+        if (cover) { bouncerClearStreak = 0; isBouncerVisible = true; }
+        else if (isBouncerVisible && ++bouncerClearStreak < 2) { /* giữ true, chờ xác nhận */ }
+        else { bouncerClearStreak = 0; isBouncerVisible = false; }
     } catch (Exception e) {
         isBouncerVisible = false;
     }
@@ -2740,11 +2749,9 @@ private void runShadeCheck() {
     shadeCheckPending = false;
     if (noticEngine == null) return;
     boolean open = computeShadeOpen();
-    if (open != shadeOpenNow) {
-        shadeOpenNow = open;
-        noticEngine.setShadeOpen(open);
-    }
-    if (open) { shadeCheckPending = true; debounceHandler.postDelayed(shadeCheckRun, 400); }
+    boolean changed = open != shadeOpenNow;
+    if (changed) { shadeOpenNow = open; noticEngine.setShadeOpen(open); }
+    if (open || changed) { shadeCheckPending = true; debounceHandler.postDelayed(shadeCheckRun, 400); }
 }
 private boolean computeShadeOpen() {
     try {
@@ -2752,13 +2759,14 @@ private boolean computeShadeOpen() {
         java.util.List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
         if (ws == null) return false;
         int sh = getResources().getDisplayMetrics().heightPixels;
+        int sw = getResources().getDisplayMetrics().widthPixels;
         android.graphics.Rect r = new android.graphics.Rect();
         boolean keyguardLocked = km != null && km.isKeyguardLocked();
         for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
             if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM) continue;
             if (keyguardLocked && !w.isFocused() && !w.isActive()) continue;
             w.getBoundsInScreen(r);
-            if (r.height() < sh * 0.3f) continue;
+            if (r.height() < sh * 0.3f || r.width() < sw * 0.85f) continue;   // UX: volume/power menu hẹp, shade/QS thật thì full-width
             android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
             if (root == null) continue;
             CharSequence pk = root.getPackageName();

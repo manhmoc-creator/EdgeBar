@@ -129,6 +129,13 @@ private final java.util.ArrayDeque<Runnable> navBackStack = new java.util.ArrayD
 private Runnable currentLevelBackAction = null;
     private boolean frontierSelectMode = false;
     private boolean deepEditOpen = false;
+    private int barDrawerCnt = 0;
+private final java.util.function.Consumer<Boolean> noticBarDrawerToggle = open -> {
+    barDrawerCnt = Math.max(0, barDrawerCnt + (open ? 1 : -1));
+    syncNoticSuppress();
+};
+private void syncNoticSuppress() { NoticEngine.setSuppressed(deepEditOpen || barDrawerCnt > 0); }
+private void resetNoticBarDrawers() { barDrawerCnt = 0; syncNoticSuppress(); }
     private boolean gestureSelectMode = false;
     private java.util.Set<String> gestureSelectedItems = new java.util.LinkedHashSet<>();
     private final java.util.Set<String> openGestureDrawers = new java.util.LinkedHashSet<>();
@@ -846,7 +853,7 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     }
     @Override protected void onResume() {
         super.onResume();
-        NoticEngine.setSuppressed(deepEditOpen);
+        syncNoticSuppress();
 if (prefs.getBoolean("blacklist_lock_active", false)
         && !BlacklistLockWatchdogService.isRunning
         && System.currentTimeMillis() - prefs.getLong("blacklist_lock_start_ms", 0) > 8000) {
@@ -1864,7 +1871,8 @@ private void openSystemSpace() {
     updateFabVisibility();
 }
 private void showMainMenu() {
-navBackStack.clear(); // ← THÊM DÒNG NÀY 
+    resetNoticBarDrawers();
+    navBackStack.clear(); // ← THÊM DÒNG NÀY 
     currentMainTab = -1;
     pageDesign.setVisibility(View.GONE);
     pageConditions.setVisibility(View.GONE);
@@ -2261,7 +2269,7 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
         hideCornerWrap.addView(createDrawer("📁 " + T("Corners to hide","Góc viền cần ẩn") + " (▼)", gdHide));
         gd.addView(hideCornerWrap);
         return gd;
-    }));
+    }, noticBarDrawerToggle));
 
     container.addView(createLazyDrawer("TÙY CHỈNH CHUNG THANH CẠNH", () -> {
         LinearLayout bd = new LinearLayout(this);
@@ -2294,7 +2302,7 @@ addAutoColorOffCheckboxes(autoColorBody, prefix + "bar_auto_icon_color_off", aut
         autoColorWrap.addView(createDrawer("🎨 " + T("Auto Icon Color","Tự động đổi màu Icon") + " (▼)", autoColorBody));
         bd.addView(autoColorWrap);
         return bd;
-    }));
+    }, noticBarDrawerToggle));
 }
 private LinearLayout buildGestureIconDrawer() {
     LinearLayout body = new LinearLayout(this);
@@ -3189,6 +3197,7 @@ private void openSpaceDirect(int spaceIdx) {
 }
 private void redrawFrontierBody(LinearLayout body) {
         body.removeAllViews();
+        resetNoticBarDrawers();
 String prefix = frontierSubTab == 0 ? "lock_" : frontierSubTab == 1 ? "home_" : "homacc_";
 int packTabState = frontierSubTab == 0 ? 0 : frontierSubTab == 1 ? 1 : 4;
         renderBarsCornersEditor(body, prefix, BARS, BAR_NAMES, frontierSubTab == 2);
@@ -10120,7 +10129,7 @@ prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
         packLiveHandler.removeCallbacksAndMessages(null);
         removeLivePreviewOverlay();
         if (type == 2) prefs.edit().putBoolean(prefix + id + "_preview_handle", false).apply();
-        else { deepEditOpen = false; NoticEngine.setSuppressed(false); renderRulesList(); }
+        else { deepEditOpen = false; syncNoticSuppress(); renderRulesList(); }
     });
 d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     if (type != 2) { deepEditOpen = true; NoticEngine.setSuppressed(true); }
@@ -12006,6 +12015,10 @@ private void doRevokeAdminAndUninstall() {
     startActivity(uninstallIntent);
 }
 private LinearLayout createLazyDrawer(String title, java.util.function.Supplier<View> factory) {
+    return createLazyDrawer(title, factory, null);
+}
+private LinearLayout createLazyDrawer(String title, java.util.function.Supplier<View> factory,
+        java.util.function.Consumer<Boolean> onToggle) {
     LinearLayout container = new LinearLayout(this);
     container.setOrientation(LinearLayout.VERTICAL);
     container.setBackground(getRounded("#222222", 20f));
@@ -12026,6 +12039,7 @@ private LinearLayout createLazyDrawer(String title, java.util.function.Supplier<
         if (open && !built[0]) { built[0] = true; body.addView(factory.get()); }
         body.setVisibility(open ? View.VISIBLE : View.GONE);
         header.setBackground(getRounded(open ? "#333333" : "#222222", 20f));
+        if (onToggle != null) onToggle.accept(open);
     });
     container.addView(header);
     container.addView(body);

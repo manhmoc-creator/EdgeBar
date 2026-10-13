@@ -551,7 +551,6 @@ private PendingIntent contentTapPI() {
         .setVisibility(Notification.VISIBILITY_PUBLIC)
         .setOngoing(isRunning && !paused) // đang phát: khoá vuốt xoá; đang dừng: cho vuốt xoá để huỷ hẳn
         .setContentIntent(contentTapPI())
-
         .setDeleteIntent(actionPI(ACTION_STOP))   // vuốt xoá noti = dừng hẳn, không cần nút riêng nữa
 .addAction(android.R.drawable.ic_media_previous, "Playlist trước", actionPI(ACTION_PREV_PLAYLIST))
 .addAction(android.R.drawable.ic_media_rew, "Trước", actionPI(ACTION_PREV))
@@ -559,7 +558,6 @@ private PendingIntent contentTapPI() {
     paused ? "Phát" : "Tạm Dừng", actionPI(ACTION_TOGGLE))
 .addAction(android.R.drawable.ic_media_ff, "Tiếp", actionPI(ACTION_NEXT))
 .addAction(android.R.drawable.ic_media_next, "Playlist sau", actionPI(ACTION_NEXT_PLAYLIST));
-
     if (session != null) b.setStyle(new Notification.MediaStyle()
         .setMediaSession(session.getSessionToken())
         .setShowActionsInCompactView(1, 2, 3)); // Trước - Play/Pause - Tiếp trong khung thu gọn

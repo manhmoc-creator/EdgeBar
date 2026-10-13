@@ -201,7 +201,7 @@ private void checkCall() {                                    // ← BẮT BUỘ
     if (c != inCall) { inCall = c; syncVisible(); }
     if (inCall && screenOn) {
         callCheckQueued = true;
-        h.postDelayed(callCheckRun, 3000);
+        h.postDelayed(callCheckRun, 1500);
     }
 }
     private void reshowNotic() {
@@ -728,6 +728,7 @@ private Bitmap eventIcon(String id) {
     }
 public boolean post(final Item it, boolean wake, boolean sound) {
     final boolean hosted = hasHost();
+    if (it.transientItem || it.call) { userHidden = false; h.removeCallbacks(reshowRun); }   // UX: vuốt-ẩn không được nuốt event rung/im lặng
     if (!hosted && it.transientItem) return false;   // sự kiện hệ thống mà không có chỗ hiện thì bỏ
     Item old = null;
     for (Item x : items) if (x.key.equals(it.key)) { old = x; break; }
@@ -776,7 +777,9 @@ private void scheduleAutoClose() {
 }
 private void autoClose() {
     if (popup == null) return;
-    if (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0) { h.postDelayed(autoCloseRun, 2000); return; }   // đang gõ reply thì hoãn, không thu giữa chừng
+    if (popupTouching || swiping || (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0)) {
+        h.postDelayed(autoCloseRun, 1500); return;   // đang vuốt/gõ -> hoãn
+    }
     closePopup(false, true);
 }
 private void removeItem(Item it) {
@@ -789,6 +792,7 @@ public void onScreenOff() {
 statusVisible = !suppressed && (previewForce || (!secureOverlay && !inCall));
     cancelPendingTap();
     h.removeCallbacks(settleRun); h.removeCallbacks(autoCloseRun); h.removeCallbacks(geoRun);
+    h.removeCallbacks(showRun);
     h.removeCallbacks(noHostRun); h.removeCallbacks(recoverRun); h.removeCallbacks(reshowRun);
     h.removeCallbacks(callCheckRun);
     pendingGeo = ""; noHostRetry = 0;
@@ -1095,6 +1099,7 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
         try { wm.updateViewLayout(pill, pillLp); } catch (Exception ignored) {}
     }
     private void removePill() {
+        h.removeCallbacks(closingGuardRun);
         closing = false; reopen = false;
         h.removeCallbacks(settleRun);
         h.removeCallbacks(geoRun);
@@ -1152,13 +1157,20 @@ replayNext = false;
         }
     }
 }
-
+private final Runnable closingGuardRun = () -> {
+    if (!closing) return;
+    boolean again = reopen;
+    removePill();   // reset closing/reopen, gỡ cửa sổ, trả alpha bar
+    if (again && !items.isEmpty() && !userHidden && statusVisible) announce();
+};
 // Co lại: viên thuốc → tròn → chấm ở tâm. keepWindow=true: giữ cửa sổ rỗng để còn nghe insets.
 private void shrinkRemove(final boolean thenReopen, final boolean keepWindow) {
     if (pill == null) { if (thenReopen) announce(); return; }
     if (pill.hidden) { if (!keepWindow) removePill(); return; }
     if (closing) { reopen |= thenReopen; return; }
     closing = true; reopen = thenReopen;
+    h.removeCallbacks(closingGuardRun);
+    h.postDelayed(closingGuardRun, 1500);   // UX: animation bị cancel thì end không chạy -> guard tự gỡ
     h.removeCallbacks(settleRun);
     expanded = false;
     final PillView pv = pill;
@@ -1168,6 +1180,7 @@ private void shrinkRemove(final boolean thenReopen, final boolean keepWindow) {
         pv.animate().alpha(0f).setDuration(170).start();
         pv.go(px, cy, 2f, 2f, 1f, 1f, 0f, 170, EMPH_IN, () -> {
             if (pill != pv) return;
+            h.removeCallbacks(closingGuardRun);
             boolean again = reopen;
             closing = false; reopen = false;
             if (keepWindow) { pv.hidden = true; pv.invalidate(); } else removePill();
@@ -1209,12 +1222,23 @@ private void afterPopupGone() {
     if (pill != null) pill.setVisibility(View.VISIBLE);
     if (items.isEmpty()) collapse();
 }
+private final Runnable showRun = () -> { if (wantVisible()) applyVisible(true); };
+private boolean wantVisible() {
+    return !suppressed && (previewForce || (!shadeOpen && !secureOverlay && !inCall));
+}
 private void syncVisible() {
-boolean v = !suppressed && (previewForce || (!shadeOpen && !secureOverlay && !inCall));
+    h.removeCallbacks(showRun);
+    if (!wantVisible()) { applyVisible(false); return; }   // ẩn: tức thì
+    if (statusVisible) return;
+    // UX: hiện lại phải ổn định 200ms mới làm, chống nháy khi PIN/shade/call dao động
+    if (previewForce) applyVisible(true); else h.postDelayed(showRun, 200);
+}
+private void applyVisible(boolean v) {
     if (v == statusVisible) return;
     statusVisible = v;
     h.post(() -> {
-        if (!statusVisible) { closePopup(false, false); shrinkRemove(false, true); }
+        if (statusVisible != v) return;   // đã đổi ý trong lúc chờ
+        if (!v) { closePopup(false, false); shrinkRemove(false, true); }
         else if (!items.isEmpty() && !userHidden) announce();
     });
 }
@@ -1810,11 +1834,12 @@ private GradientDrawable cardBg(Item it, float r) {
 private final int swSlop = ViewConfiguration.get(ctx).getScaledTouchSlop();
 @Override public boolean dispatchTouchEvent(MotionEvent e) {
     int act = e.getActionMasked();
-    if (act == MotionEvent.ACTION_DOWN) popupTouching = true;
+    if (act == MotionEvent.ACTION_DOWN) { popupTouching = true; h.removeCallbacks(autoCloseRun); }
     boolean res = dispatchTouchInner(e);
     if (act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL) {
         popupTouching = false;
         if (renderPending && !swiping) h.post(NoticEngine.this::renderPopup);
+        if (popup != null) scheduleAutoClose();   // tính lại từ lúc nhả tay
     }
     return res;
 }
@@ -1968,12 +1993,14 @@ private View buildMediaControls(final Item it) {
         final MediaController.TransportControls tc = it.mc.getTransportControls();
         PlaybackState ps = it.mc.getPlaybackState();
         long acts = ps != null ? ps.getActions() : 0L;
-        addBtn(row, android.R.drawable.ic_media_previous, tc::skipToPrevious);
-        if ((acts & PlaybackState.ACTION_REWIND) != 0) addBtn(row, android.R.drawable.ic_media_rew, tc::rewind);
-        addBtn(row, it.playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
-            () -> { if (it.playing) tc.pause(); else tc.play(); });
-        if ((acts & PlaybackState.ACTION_FAST_FORWARD) != 0) addBtn(row, android.R.drawable.ic_media_ff, tc::fastForward);
-        addBtn(row, android.R.drawable.ic_media_next, tc::skipToNext);
+        /* UX: khớp đúng icon ↔ chức năng với notification gốc của MyPlaylistService —
+   |◀ ▶| = playlist · ◀◀ ▶▶ = bài nhạc · zero-alloc: vẫn 5 addBtn, không thêm object */
+addBtn(row, android.R.drawable.ic_media_previous, tc::rewind);
+if ((acts & PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0) addBtn(row, android.R.drawable.ic_media_rew, tc::skipToPrevious);
+addBtn(row, it.playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
+    () -> { if (it.playing) tc.pause(); else tc.play(); });
+if ((acts & PlaybackState.ACTION_SKIP_TO_NEXT) != 0) addBtn(row, android.R.drawable.ic_media_ff, tc::skipToNext);
+addBtn(row, android.R.drawable.ic_media_next, tc::fastForward);
         if (ps != null) for (final PlaybackState.CustomAction ca : ps.getCustomActions()) {
             Drawable d = null;
             try { d = ctx.createPackageContext(it.pkg, 0).getDrawable(ca.getIcon()); } catch (Exception ignored) {}
