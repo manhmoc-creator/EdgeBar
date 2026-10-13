@@ -102,6 +102,10 @@ public static class Item {
     Notification.Action[] actions;
     Notification.Action reply;
     boolean media, transientItem, call, ongoing, person, playing = true, msg;
+    /* UX: action snooze do CHÍNH app gửi kèm — không tự bịa vì snooze cần
+       AlarmManager phía app đó mới reschedule được. Hầu hết notif hệ thống
+       và nhiều app bên thứ ba đều có sẵn action này. */
+    Notification.Action snooze;
     Object token;                       // MediaSession.Token do Listener truyền sang
     MediaController mc;
     MediaController.Callback mcCb;
@@ -1038,8 +1042,11 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
         fadeNext = true;
         winFit();
         applyVisibility();
-        pv.go(px, cy, pillH, pillH, pillH / 2f, 1f, 0f, 240, new OvershootInterpolator(1.3f),
-            () -> { if (pill == pv) pv.go(px, cy, tw, pillH, pillRad(), 1f, 1f, 340, EMPH, this::afterExpand); });
+        /* UX: Overshoot 1.3 gây "bật" mạnh ở đỉnh → cảm giác khựng. Đổi sang EMPH
+           và giãn duration 240→340 / 340→480 ms để chuyển động mềm, không giật
+           trên Adreno 540 của Pixel 2XL. */
+        pv.go(px, cy, pillH, pillH, pillH / 2f, 1f, 0f, 340, EMPH,
+            () -> { if (pill == pv) pv.go(px, cy, tw, pillH, pillRad(), 1f, 1f, 480, EMPH, this::afterExpand); });
     } else {
         boolean sameState = (expanded || pv.towardsExpanded()) && Math.abs(pv.targetW() - tw) < 1f;
         pv.setContent(it, items.size(), tw);
@@ -1259,11 +1266,15 @@ private void openPopup() {
     if (previewForce) return false;
     final int act = e.getActionMasked();
     if (act == MotionEvent.ACTION_OUTSIDE) {
+        /* UX: tap ra ngoài popup trong lúc đang reply → nhả IME + đặt lại
+           NOT_FOCUSABLE trước khi đóng, nếu không window vẫn focusable và lần
+           mở sau sẽ không nhận được ACTION_OUTSIDE nữa. */
+        if (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0) {
+            releaseIme(popup);
+        }
         closePopup(false, true);
         return true;
     }
-    // UX: chạm vùng trống bên trong bảng (viền đệm, khe giữa các thẻ) cũng đóng về viên thuốc
-    // Nút/card/chip/EditText là con của root nên đã tiêu thụ sự kiện trước, không bị đóng nhầm
     if (act == MotionEvent.ACTION_UP) {
         closePopup(false, true);
         return true;
@@ -1557,6 +1568,7 @@ private View buildItemActions(final Item it) {
     row.setPadding(0, dp(4), 0, 0);
     final Notification.Action read = findReadAction(it);
     if (read != null) row.addView(actChip("Mark as read", v -> { try { read.actionIntent.send(); } catch (Exception ignored) {} dismissItem(it); }));
+    if (it.snooze != null) row.addView(actChip("Snooze", v -> { try { it.snooze.actionIntent.send(); } catch (Exception ignored) {} dismissItem(it); }));
     row.addView(actChip("Dismiss", v -> dismissItem(it)));
     return row;
 }
@@ -1631,12 +1643,15 @@ private GradientDrawable cardBg(Item it, float r) {
         boolean dragging;
         VelocityTracker vt;
         SwipeCard(Context c, Item it) { super(c); this.it = it; }
-        // ScrollView cha hay giành cử chỉ khi tay lệch dọc: chặn từ DOWN, chỉ trả quyền khi rõ ràng là vuốt dọc
-@Override public boolean dispatchTouchEvent(MotionEvent e) {
+        @Override public boolean dispatchTouchEvent(MotionEvent e) {
     int a = e.getActionMasked();
     if (a == MotionEvent.ACTION_DOWN) {
         x0 = e.getRawX(); y0 = e.getRawY(); dragging = false;
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+        super.dispatchTouchEvent(e);
+        /* UX: bắt buộc consume DOWN tại SwipeCard — nếu để nổi lên MorphRoot
+           thì MOVE sau đó đi thẳng MorphRoot, card không bao giờ swipe được. */
+        return true;
     } else if (a == MotionEvent.ACTION_MOVE && !dragging) {
         float mx = Math.abs(e.getRawX() - x0), my = Math.abs(e.getRawY() - y0);
         if (my > slop && my > mx && getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
@@ -1679,7 +1694,13 @@ private GradientDrawable cardBg(Item it, float r) {
             }
             if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) {
                 swiping = false;
-                if (!dragging) return super.onTouchEvent(e);
+                if (!dragging) {
+                    /* UX: tap vùng trống trong card (không phải top/actions) = đóng
+                       popup về pill — vì DOWN đã bị SwipeCard consume nên UP không
+                       nổi lên MorphRoot được, phải tự gọi closePopup tại đây. */
+                    if (a == MotionEvent.ACTION_UP) NoticEngine.this.closePopup(false, true);
+                    return true;
+                }
                 dragging = false;
                 vt.addMovement(e);
                 vt.computeCurrentVelocity(1000);
@@ -1850,7 +1871,13 @@ private void smsQuick(Item it, String body) {
         et.setTextSize(13f);
         et.setSingleLine(true);
         et.setImeOptions(EditorInfo.IME_ACTION_SEND);
-        et.setBackground(rounded(0xFF2C2C2E, dp(18)));
+        /* UX: ô Reply viền xanh lam BADGE_BLUE — đồng bộ với viền card tin nhắn
+           và vòng tròn nút send, tạo "bộ 3 xanh" nhận diện MessagingStyle. */
+        GradientDrawable etBg = new GradientDrawable();
+        etBg.setColor(0xFF2C2C2E);
+        etBg.setCornerRadius(dp(18));
+        etBg.setStroke(dp(1.5f), BADGE_BLUE);
+        et.setBackground(etBg);
         et.setPadding(dp(14), dp(8), dp(14), dp(8));
         et.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         et.setOnTouchListener((v, e) -> {

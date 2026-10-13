@@ -69,6 +69,18 @@ public class EdgeBarNotificationListener extends NotificationListenerService {
             return l;
         } catch (Exception e) { return pkg; }
     }
+        /* UX: dò action snooze trong notification — title khác nhau tuỳ ROM/app
+       ("Snooze", "Snooze 1 hour", "Remind me", "Tạm hoãn", "Nhắc lại"). Không
+       có semantic constant chính thức nên phải dò title. */
+    private Notification.Action findSnoozeAction(Notification n) {
+        if (n.actions == null) return null;
+        for (Notification.Action a : n.actions) {
+            if (a == null || a.actionIntent == null) continue;
+            String t = a.title == null ? "" : a.title.toString().toLowerCase(java.util.Locale.ROOT);
+            if (t.contains("snooze") || t.contains("tạm hoãn") || t.contains("remind") || t.contains("nhắc")) return a;
+        }
+        return null;
+    }
     private void handleNotic(SharedPreferences prefs, StatusBarNotification sbn) {
         NoticEngine eng = NoticEngine.instance;
         if (eng == null || !prefs.getBoolean("notic_en", false) || prefs.getBoolean("notic_paused", false)) return;
@@ -144,6 +156,7 @@ if (incoming) {
             } catch (Exception ignored) {}
         }
         it.actions = n.actions;
+        it.snooze = findSnoozeAction(n);
         it.reply = reply;
         it.media = media;
         it.call = incoming;
