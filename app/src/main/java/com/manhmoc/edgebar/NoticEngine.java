@@ -245,18 +245,28 @@ private float morphF;
 private float oL, oT, oR, oB, oRad, popRad;
 private ValueAnimator morphAnim;
 private final Runnable autoCloseRun = this::autoClose;
-private boolean cBorder = true, cSpin = true, cViz = true;
-private int cVizColor = 0, cVizSpeed = 100;
-private void cachePrefs() {
+    private boolean cBorder = true, cSpin = true, cViz = true;
+    private int cVizColor = 0, cVizSpeed = 100;
+    private boolean cBadge = true;
+    private float cAnimScale = 1f;
+    private void cachePrefs() {
     cBorder = prefs.getBoolean("notic_border_en", true);
     cSpin = prefs.getBoolean("notic_art_spin", true);
     cViz = prefs.getBoolean("notic_viz_en", true);
     cVizColor = prefs.getInt("notic_viz_color", 0);
     cVizSpeed = prefs.getInt("notic_viz_speed", 100);
     cRadPct = prefs.getInt("notic_rad_pct", 100);
+    cBadge = prefs.getBoolean("notic_badge_en", true);
+    cAnimScale = Math.max(20, Math.min(300, prefs.getInt("notic_anim_speed", 100))) / 100f;
     int pi = prefs.getInt("notic_pill_color", 0);
     cPill = (pi <= 0 || pi > PILL_HEX.length) ? Color.BLACK : Color.parseColor(PILL_HEX[pi - 1]);
 }
+
+/* UX: mọi duration Notic đi qua đây — 1 slider duy nhất scale toàn hệ thống
+   (mở/thu gọn/morph/slide host), không phải sửa 8 chỗ riêng. Clamp 40ms bảo vệ
+   cảm giác mượt kể cả khi user kéo về 20%. Cache sẵn vào cAnimScale nên không
+   đọc prefs mỗi frame -> 0 IPC trong lúc animate, tốt cho pin Pixel 2XL. */
+private long aDur(long base) { return Math.max(40L, Math.round(base * cAnimScale)); }
 private float speed() { return cVizSpeed / 100f; }
 private int vizColor(Item it) {
     int i = cVizColor;
@@ -1145,15 +1155,15 @@ replayNext = false;
         /* UX: Overshoot 1.3 gây "bật" mạnh ở đỉnh → cảm giác khựng. Đổi sang EMPH
            và giãn duration 240→340 / 340→480 ms để chuyển động mềm, không giật
            trên Adreno 540 của Pixel 2XL. */
-        pv.go(px, cy, pillH, pillH, pillH / 2f, 1f, 0f, 340, EMPH,
-            () -> { if (pill == pv) pv.go(px, cy, tw, pillH, pillRad(), 1f, 1f, 480, EMPH, this::afterExpand); });
+        pv.go(px, cy, pillH, pillH, pillH / 2f, 1f, 0f, aDur(340), EMPH,
+            () -> { if (pill == pv) pv.go(px, cy, tw, pillH, pillRad(), 1f, 1f, aDur(480), EMPH, this::afterExpand); });
     } else {
         boolean sameState = (expanded || pv.towardsExpanded()) && Math.abs(pv.targetW() - tw) < 1f;
         pv.setContent(it, items.size(), tw);
         if (sameState) pv.invalidate();
         else {
             if (fullWin || tw + 4 * dens > pillLp.width) winFull();
-            pv.go(px, cy, tw, pillH, pillRad(), 1f, 1f, 300, EMPH, this::afterExpand);
+            pv.go(px, cy, tw, pillH, pillRad(), 1f, 1f, aDur(300), EMPH, this::afterExpand);
         }
     }
 }
@@ -1175,10 +1185,10 @@ private void shrinkRemove(final boolean thenReopen, final boolean keepWindow) {
     expanded = false;
     final PillView pv = pill;
     if (hostView != null) hostView.animate().alpha(1f).setStartDelay(150).setDuration(320).start();
-    pv.go(px, cy, pillH, pillH, pillH / 2f, 1f, 0f, 220, EMPH_IN, () -> {
+    pv.go(px, cy, pillH, pillH, pillH / 2f, 1f, 0f, aDur(220), EMPH_IN, () -> {
         if (pill != pv) return;
-        pv.animate().alpha(0f).setDuration(170).start();
-        pv.go(px, cy, 2f, 2f, 1f, 1f, 0f, 170, EMPH_IN, () -> {
+        pv.animate().alpha(0f).setDuration(aDur(170)).start();
+        pv.go(px, cy, 2f, 2f, 1f, 1f, 0f, aDur(170), EMPH_IN, () -> {
             if (pill != pv) return;
             h.removeCallbacks(closingGuardRun);
             boolean again = reopen;
@@ -1312,7 +1322,7 @@ private void slidePopupToNewHost() {
     }
 
     final ValueAnimator va = ValueAnimator.ofFloat(0f, 1f);
-    va.setDuration(280);
+    va.setDuration(aDur(280));
     va.setInterpolator(EMPH);
     va.addUpdateListener(a -> {
         float f = (float) a.getAnimatedValue();
@@ -1476,7 +1486,7 @@ private void runMorph(final View p, final WindowManager.LayoutParams lp, final G
     final ValueAnimator va = ValueAnimator.ofFloat(open ? 0f : morphF, open ? 1f : 0f);
     morphAnim = va;
     p.setLayerType(View.LAYER_TYPE_HARDWARE, null);    
-    va.setDuration(open ? 380 : 300);
+    va.setDuration(aDur(open ? 380 : 300));
     va.setInterpolator(open ? EMPH : EMPH_IN);
     va.addUpdateListener(a -> setMorph(p, lp, bgd, (float) a.getAnimatedValue()));
     va.addListener(new AnimatorListenerAdapter() {
@@ -2392,7 +2402,7 @@ float dX0, dY0;
     }
     float vw = h * 0.95f, vl = rr - h * 0.25f - vw; // thanh dày ~+35%
 if (viz) { drawViz(c, bp, vl, cyy, vw, h * 0.5f, vizColor(item), item.playing, speed(), 0.05f); textR = Math.min(textR, vl - h * 0.15f); }
-    if (count > 1) {
+    if (count > 1 && cBadge) {
         float ba = Math.max(0f, Math.min(1f, (w - pillH * 1.4f) / (pillH * 0.6f)));
         float br = h / 2f, bcx = badgeLeft ? l - 6 * dens - br : rr + 6 * dens + br;
         bp.setColor(Color.BLACK); bp.setAlpha((int) (255 * ba));

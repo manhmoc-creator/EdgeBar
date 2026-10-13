@@ -8639,7 +8639,9 @@ private void openNoticSpace() {
     bA.addView(noticPalette(T("Notification card color", "Màu thẻ thông báo"), "notic_card_color",
         new String[]{"Auto", T("App icon", "Màu icon app"), T("Color only", "Chỉ màu")}, NoticEngine.CARD_HEX));
     bA.addView(noticSwitchRow(T("Border = app color", "Viền thông báo theo màu app"), "notic_border_en", true));
+    bA.addView(noticSwitchRow(T("Show count badge", "Hiện số thông báo"), "notic_badge_en", true));
     bA.addView(noticSwitchRow(T("Count badge on the left", "Số thông báo ở bên trái"), "notic_badge_left", false));
+    bA.addView(createSlider(T("Animation speed (%)", "Tốc độ hiệu ứng (%)"), "notic_anim_speed", 300, 100));
     bA.addView(noticSwitchRow(T("Spinning album art", "Ảnh bài hát xoay tròn (thay icon app)"), "notic_art_spin", true));
     bA.addView(noticSwitchRow(T("Music visualizer", "Visualizer âm nhạc (giả lập, không ghi âm)"), "notic_viz_en", true));
     bA.addView(createCycleRow(T("Visualizer color", "Màu visualizer"), "notic_viz_color",

@@ -31,6 +31,7 @@ import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -2748,10 +2749,12 @@ private void scheduleShadeCheck() {
 private void runShadeCheck() {
     shadeCheckPending = false;
     if (noticEngine == null) return;
+    PowerManager pwr = (PowerManager) getSystemService(POWER_SERVICE);
+    if (pwr != null && !pwr.isInteractive()) return;   // màn tắt: không dò
     boolean open = computeShadeOpen();
-    boolean changed = open != shadeOpenNow;
-    if (changed) { shadeOpenNow = open; noticEngine.setShadeOpen(open); }
-    if (open || changed) { shadeCheckPending = true; debounceHandler.postDelayed(shadeCheckRun, 400); }
+    if (open != shadeOpenNow) { shadeOpenNow = open; noticEngine.setShadeOpen(open); }
+    // UX: chỉ dò lặp khi bảng đang mở (để biết lúc nào đóng); đóng rồi thì dừng hẳn
+    if (open) { shadeCheckPending = true; debounceHandler.postDelayed(shadeCheckRun, 400); }
 }
 private boolean computeShadeOpen() {
     try {
@@ -2779,23 +2782,24 @@ private boolean computeShadeOpen() {
     } catch (Exception ignored) {}
     return false;
 }
-
 private boolean isQsOpenOnKeyguard(android.view.accessibility.AccessibilityNodeInfo root) {
-    int minH = (int) (getResources().getDisplayMetrics().heightPixels * 0.12f);
+    // UX: chỉ tin quick_settings_panel (INVISIBLE khi thu gọn). Tuyệt đối không thêm qs_frame:
+    // view đó luôn "visible" trên màn khoá -> Notic bị ẩn vĩnh viễn + vòng dò 400ms tốn pin.
+    int sh = getResources().getDisplayMetrics().heightPixels;
     android.graphics.Rect r = new android.graphics.Rect();
-    String[] ids = {"com.android.systemui:id/quick_settings_panel", "com.android.systemui:id/qs_frame"};
-    for (String id : ids) {
-        java.util.List<android.view.accessibility.AccessibilityNodeInfo> nodes = null;
-        try { nodes = root.findAccessibilityNodeInfosByViewId(id); } catch (Exception ignored) {}
-        if (nodes == null) continue;
-        boolean hit = false;
-        for (android.view.accessibility.AccessibilityNodeInfo n : nodes) {
-            if (!hit && n.isVisibleToUser()) { n.getBoundsInScreen(r); if (r.height() >= minH) hit = true; }
-            n.recycle();
+    java.util.List<android.view.accessibility.AccessibilityNodeInfo> nodes = null;
+    try { nodes = root.findAccessibilityNodeInfosByViewId("com.android.systemui:id/quick_settings_panel"); }
+    catch (Exception ignored) {}
+    if (nodes == null) return false;
+    boolean hit = false;
+    for (android.view.accessibility.AccessibilityNodeInfo n : nodes) {
+        if (!hit && n.isVisibleToUser()) {
+            n.getBoundsInScreen(r);
+            hit = r.height() >= sh * 0.12f && r.bottom > sh * 0.2f && r.top < sh * 0.5f;
         }
-        if (hit) return true;
+        n.recycle();
     }
-    return false;
+    return hit;
 }
 private static final int[] SWALLOW_BAR_ORDER = {6, 8, 7, 3, 9, 4, 10, 5, 11, 1, 2, 0};   // ưu tiên bar phía trên, đáy xếp cuối
 private static final int[] SWALLOW_CORNER_ORDER = {3, 2, 1, 0};
