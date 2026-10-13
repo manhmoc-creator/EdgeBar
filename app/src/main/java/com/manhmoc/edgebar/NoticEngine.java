@@ -178,33 +178,16 @@ private String pillHostKey;     // host pill đang vẽ cho -> nhận ra chuyể
 private long lastReplayMs;
 private final Runnable callCheckRun = this::checkCall;
 private final Runnable recoverRun;
+private boolean callCheckQueued;          // ← giữ lại biến này
+
 private void scheduleRecover() {
     h.removeCallbacks(recoverRun);
     h.postDelayed(recoverRun, 350);
     h.postDelayed(recoverRun, 1500);
 }
-private boolean callCheckQueued;
-
-private final Runnable callCheckRun = () -> {
-    callCheckQueued = false;
-    checkCall();
-};
-
-private void checkCall() {
-    h.removeCallbacks(callCheckRun);
-    callCheckQueued = false;
-    if (audio == null) audio = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
-    int m = audio == null ? AudioManager.MODE_NORMAL : audio.getMode();
-    boolean c = m == AudioManager.MODE_IN_CALL || m == AudioManager.MODE_IN_COMMUNICATION;
-    if (c != inCall) { inCall = c; syncVisible(); }
-    if (inCall && screenOn) {
-        callCheckQueued = true;
-        h.postDelayed(callCheckRun, 3000);
-    }
-}
 
 private void scheduleCallCheck(long delayMs) {
-    if (callCheckQueued) return;   // đã có 1 lượt chờ trong queue -> bỏ qua
+    if (callCheckQueued) return;
     callCheckQueued = true;
     h.postDelayed(callCheckRun, delayMs);
 }
