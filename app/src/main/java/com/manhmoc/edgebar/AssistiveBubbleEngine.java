@@ -1606,12 +1606,6 @@ private void openCircleSearchOverlay() {
     final int outerD = Math.min(viewSize, Math.round((ringR + bgW / 2f) * 2f));
 
     FrameLayout overlay = new FrameLayout(ctx) {
-        @Override public boolean dispatchKeyEvent(KeyEvent event) {
-            if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
-                closeCircleSearchOverlay(); return true;
-            }
-            return super.dispatchKeyEvent(event);
-        }
     };
     circleSearchLp = new WindowManager.LayoutParams(outerD, outerD, wmType,
         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
@@ -2078,7 +2072,7 @@ return true;
             runItem(ref);
             closeCircleMenu();
        }
-       }
+       }    
      }
   }
 }

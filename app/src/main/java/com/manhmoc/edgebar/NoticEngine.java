@@ -1607,8 +1607,9 @@ private GradientDrawable cardBg(Item it, float r) {
     final RectF rr = new RectF();
     private float irX, irY;
     MorphRoot(Context c) { super(c); setWillNotDraw(false); sp2.setStyle(Paint.Style.STROKE); sp2.setStrokeWidth(1.6f * dens); }
-    @Override public boolean dispatchKeyEvent(KeyEvent event) {
-        if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK
+                && event.getAction() == android.view.KeyEvent.ACTION_UP) {
             if (popup != null) releaseIme(popup);
             closePopup(false, true);
             return true;
