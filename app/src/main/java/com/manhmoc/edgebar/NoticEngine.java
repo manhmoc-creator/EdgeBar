@@ -776,7 +776,7 @@ public boolean post(final Item it, boolean wake, boolean sound) {
         h.postDelayed(() -> removeItem(it), 60000);   // chốt an toàn nếu hệ thống không gửi onRemoved
     } else if (!it.transientItem && !it.media && screenOn && statusVisible
             && prefs.getBoolean("notic_auto_expand", false)) {
-        h.postDelayed(() -> { showPopup(false, true); scheduleAutoClose(); }, 520);
+        h.postDelayed(() -> { showPopup(false, true); scheduleAutoClose(); }, Math.max(200, aDur(520)));
     }
     if (it.transientItem) h.postDelayed(() -> removeItem(it), 3600);
     return hosted;
@@ -1180,11 +1180,11 @@ private void shrinkRemove(final boolean thenReopen, final boolean keepWindow) {
     if (closing) { reopen |= thenReopen; return; }
     closing = true; reopen = thenReopen;
     h.removeCallbacks(closingGuardRun);
-    h.postDelayed(closingGuardRun, 1500);   // UX: animation bị cancel thì end không chạy -> guard tự gỡ
+    h.postDelayed(closingGuardRun, aDur(1500));   // UX: guard phải scale theo slider, nếu cứng 1500ms thì slider >150% sẽ bị gỡ giữa animation, mất luôn hiệu ứng đóng
     h.removeCallbacks(settleRun);
     expanded = false;
     final PillView pv = pill;
-    if (hostView != null) hostView.animate().alpha(1f).setStartDelay(150).setDuration(320).start();
+    if (hostView != null) hostView.animate().alpha(1f).setStartDelay(aDur(150)).setDuration(aDur(320)).start();
     pv.go(px, cy, pillH, pillH, pillH / 2f, 1f, 0f, aDur(220), EMPH_IN, () -> {
         if (pill != pv) return;
         pv.animate().alpha(0f).setDuration(aDur(170)).start();
@@ -1241,7 +1241,7 @@ private void syncVisible() {
     if (!wantVisible()) { applyVisible(false); return; }   // ẩn: tức thì
     if (statusVisible) return;
     // UX: hiện lại phải ổn định 200ms mới làm, chống nháy khi PIN/shade/call dao động
-    if (previewForce) applyVisible(true); else h.postDelayed(showRun, 200);
+    if (previewForce) applyVisible(true); else h.postDelayed(showRun, aDur(200));
 }
 private void applyVisible(boolean v) {
     if (v == statusVisible) return;
@@ -1256,8 +1256,8 @@ private void applyVisibility() {
     if (pill == null || pill.hidden) return;
     if (fadeNext) {
         fadeNext = false;
-        fadeUntil = SystemClock.uptimeMillis() + 220;
-        if (hostView != null) { hostView.animate().cancel(); hostView.animate().setStartDelay(0).alpha(0f).setDuration(200).start(); }
+        fadeUntil = SystemClock.uptimeMillis() + aDur(220);
+        if (hostView != null) { hostView.animate().cancel(); hostView.animate().setStartDelay(0).alpha(0f).setDuration(aDur(200)).start(); }
     } else if (!closing && hostView != null && SystemClock.uptimeMillis() >= fadeUntil) {
         hostView.animate().cancel();
         hostView.setAlpha(0f);
