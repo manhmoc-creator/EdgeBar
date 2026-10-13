@@ -146,7 +146,7 @@ public static class Item {
     private String lastGeo = "";
     private PillView pill;
     private WindowManager.LayoutParams pillLp;
-    private boolean fullWin, expanded, statusVisible = true, insetsVisible = true, shadeOpen, hostChanged, sysRegistered, fadeNext;   // [P1][P4][P7]
+    private boolean fullWin, expanded, statusVisible = true, insetsVisible = true, shadeOpen, hostChanged, sysRegistered, fadeNext, secureOverlay;
     private boolean previewForce;   // Notic Space: ép hiện dù dialog fullscreen làm status bar bị ẩn
 private String pillHostKey;     // host pill đang vẽ cho -> nhận ra chuyển Lock<->Home để không trượt
     private int cur = 0;
@@ -184,7 +184,16 @@ private String pillHostKey;     // host pill đang vẽ cho -> nhận ra chuyể
     private int geoTries;
     private long lastSoundMs, fadeUntil;
     private final Runnable geoRun = this::geoSettle;
-    private final Runnable noHostRun = () -> { if (!bindHost()) { closePopup(false, false); shrinkRemove(false, false); } else relayout(); };
+    /* UX: retry tối đa 5 lần trong ~3.5s trước khi gỡ pill, tránh gỡ nhầm lúc
+       host chưa kịp layout/visible sau bouncer → nguyên nhân "lock thường không hiện Notic". */
+    private int noHostRetry;
+    private final Runnable noHostRun = () -> {
+        if (bindHost()) { noHostRetry = 0; relayout(); return; }
+        if (++noHostRetry < 5 && !items.isEmpty()) { h.postDelayed(noHostRun, 700); return; }
+        noHostRetry = 0;
+        closePopup(false, false);
+        shrinkRemove(false, false);
+    };
 private static final TimeInterpolator EMPH = new PathInterpolator(0.2f, 0f, 0f, 1f);
 private static final TimeInterpolator EMPH_IN = new PathInterpolator(0.3f, 0f, 0.8f, 0.15f);
 private static final int[] VIZ_COLORS = {0, 0xFF00E5FF, 0xFF8AB4F8, 0xFFFF4081, 0xFFFFC107, 0xFF69F0AE, 0xFFFFFFFF, 0xFFB388FF, 0};
@@ -681,7 +690,12 @@ private void refreshMedia(Item it) {
     while (items.size() > 20) unbindMedia(items.remove(items.size() - 1));
     announce();
     if (popup != null) renderPopup();
-    if (it.call) h.post(() -> showPopup(false, true));
+    if (it.call) {
+        /* UX: cuộc gọi đến → tạm ẩn mọi notic khác (không hiện pill) trong lúc bảng
+           cuộc gọi mở, tránh che nút Trả lời/Từ chối. Tự bật lại sau khi user chọn. */
+        setSecureOverlay(true);
+        h.post(() -> showPopup(false, true));
+    }
     else if (!it.transientItem && !it.media && screenOn && prefs.getBoolean("notic_auto_expand", false)) {
         // đợi animation chấm→tròn→thuốc xong (~500ms) rồi mới mở bảng
         h.postDelayed(() -> { showPopup(false, true); scheduleAutoClose(); }, 520);
@@ -719,10 +733,11 @@ public boolean interceptGesture(String key) {
         if (pendingTap != null && now - lastTapMs <= DTAP_MS) {
             cancelPendingTap();
             showPopup(true, false);
+            scheduleAutoClose();          // UX: 2 chạm cũng auto thu gọn sau vài giây
         } else {
             lastTapMs = now;
             cancelPendingTap();
-            pendingTap = () -> { pendingTap = null; showPopup(false, false); }; // chờ 280ms để phân biệt 1 chạm / 2 chạm
+            pendingTap = () -> { pendingTap = null; showPopup(false, false); scheduleAutoClose(); };
             h.postDelayed(pendingTap, DTAP_MS);
         }
         return true;
@@ -795,7 +810,8 @@ public void clearDemo() {
         if (items.isEmpty()) return;
         if (!bindHost()) {
             h.removeCallbacks(noHostRun);
-            h.postDelayed(noHostRun, 700);
+            noHostRetry = 0;
+            h.postDelayed(noHostRun, 200);   // thử sớm hơn (200ms) để bắt kịp bouncer biến mất
             return;
         }
         h.removeCallbacks(noHostRun);     
@@ -932,6 +948,15 @@ if (hr <= hl || hb <= ht) {
         shadeOpen = open;
         syncVisible();
     }
+
+    /* UX: EdgeBarService gọi khi PIN/camera/call/QS xuất hiện/biến mất → tạm ẩn
+       notic giống cách thu gọn, không xoá item, hiện lại khi overlay gone. */
+    public void setSecureOverlay(boolean on) {
+        if (secureOverlay == on) return;
+        secureOverlay = on;
+        syncVisible();
+    }
+
     private static boolean isDemo(Item it) { return it.key != null && it.key.startsWith("demo_"); }
 
 public void setPreview(boolean on) {
@@ -1112,17 +1137,15 @@ private void afterPopupGone() {
     if (pill != null) pill.setVisibility(View.VISIBLE);
     if (items.isEmpty()) collapse();
 }
-
-private void syncVisible() {
-    boolean v = previewForce || (insetsVisible && !shadeOpen);
-    if (v == statusVisible) return;
-    statusVisible = v;
-    h.post(() -> {
-        if (!statusVisible) { closePopup(false, false); shrinkRemove(false, true); }
-        else if (!items.isEmpty() && !userHidden) announce();
-    });
-}
-
+    private void syncVisible() {
+        boolean v = previewForce || (insetsVisible && !shadeOpen && !secureOverlay);
+        if (v == statusVisible) return;
+        statusVisible = v;
+        h.post(() -> {
+            if (!statusVisible) { closePopup(false, false); shrinkRemove(false, true); }
+            else if (!items.isEmpty() && !userHidden) announce();
+        });
+    }
 private void applyVisibility() {
     if (pill == null || pill.hidden) return;
     if (fadeNext) {
@@ -1236,15 +1259,17 @@ private void slidePopupToNewHost() {
 if (closing || pill.animating()) { if (force) { final boolean hh = history; h.postDelayed(() -> showPopup(hh, true), 250); } return; }
     if (popup != null) {
         if (force) { renderPopup(); placePopup(); return; }
-        if (!history || popupHistory) { closePopup(false, true); return; }  // chạm lại = đóng
-        popupHistory = true;                                                // đang xem 1 thông báo, 2 chạm = mở rộng ra lịch sử
+        if (!history || popupHistory) { closePopup(false, true); return; }
+        popupHistory = true;
         if (popupHead != null) popupHead.setVisibility(View.VISIBLE);
         renderPopup(); placePopup();
+        scheduleAutoClose();   // UX: đổi sang lịch sử cũng tự thu gọn sau vài giây
         return;
     }
     if (!force && SystemClock.elapsedRealtime() - lastCloseMs < 400) return;
     popupHistory = history;
     openPopup();
+    scheduleAutoClose();   // UX: mọi đường mở popup đều tự thu gọn sau notic_hold_sec giây
 }
 private int popW() { return (int) Math.min(scrW - dp(24), dp(420) * prefs.getInt("notic_pop_w_pct", 100) / 100f); }
 private int popX(int pw) { return (int) Math.max(dp(8), Math.min(scrW - pw - dp(8), px - pw / 2f)); }
@@ -1262,25 +1287,6 @@ private void openPopup() {
     popupBg = rounded(0xF22C2C2E, popRad);
     root.setBackground(popupBg);
     root.setPadding(dp(8), dp(8), dp(8), dp(8));
-    root.setOnTouchListener((v, e) -> {
-    if (previewForce) return false;
-    final int act = e.getActionMasked();
-    if (act == MotionEvent.ACTION_OUTSIDE) {
-        /* UX: tap ra ngoài popup trong lúc đang reply → nhả IME + đặt lại
-           NOT_FOCUSABLE trước khi đóng, nếu không window vẫn focusable và lần
-           mở sau sẽ không nhận được ACTION_OUTSIDE nữa. */
-        if (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0) {
-            releaseIme(popup);
-        }
-        closePopup(false, true);
-        return true;
-    }
-    if (act == MotionEvent.ACTION_UP) {
-        closePopup(false, true);
-        return true;
-    }
-    return act == MotionEvent.ACTION_DOWN;
-});
     LinearLayout head = new LinearLayout(ctx);
     head.setOrientation(LinearLayout.HORIZONTAL);
     head.setGravity(Gravity.CENTER_VERTICAL);
@@ -1298,11 +1304,21 @@ private void openPopup() {
     clear.setText("Clear all");
     clear.setTextColor(Color.parseColor("#8AB4F8"));
     clear.setTextSize(12.5f);
-    clear.setPadding(dp(8), dp(6), dp(8), dp(6));
+    clear.setPadding(dp(8), dp(6), dp(4), dp(6));
     clear.setOnClickListener(v -> clearAll());
+    /* UX: nút "^" thu gọn bảng mở rộng về notic — thay thế chip Dismiss đã bỏ. */
+    TextView collapse = new TextView(ctx);
+    collapse.setText("⌃");
+    collapse.setTextColor(Color.parseColor("#8AB4F8"));
+    collapse.setTextSize(20f);
+    collapse.setTypeface(Typeface.DEFAULT_BOLD);
+    collapse.setGravity(Gravity.CENTER);
+    collapse.setPadding(dp(10), dp(2), dp(10), dp(6));
+    collapse.setOnClickListener(v -> closePopup(false, true));
     head.addView(ttl);
     head.addView(clear);
-    head.setVisibility(popupHistory ? View.VISIBLE : View.GONE);
+    head.addView(collapse);
+    head.setVisibility(View.VISIBLE);   // UX: LUÔN hiện head — kể cả khi xem 1 thông báo — để có nút "^"
     popupHead = head;
     root.addView(head);
 
@@ -1311,6 +1327,12 @@ private void openPopup() {
     ScrollView sv = new ScrollView(ctx) {
         @Override protected void onMeasure(int wSpec, int hSpec) {
             super.onMeasure(wSpec, MeasureSpec.makeMeasureSpec(popMaxH(), MeasureSpec.AT_MOST));
+        }
+        /* UX: chỉ ăn MOVE dọc khi content THỰC SỰ overflow — nếu không, nhường
+           gesture lên MorphRoot để vuốt-lên-thu-gọn và vuốt-ngang-xoá hoạt động. */
+        @Override public boolean onInterceptTouchEvent(MotionEvent e) {
+            if (!canScrollVertically(1) && !canScrollVertically(-1)) return false;
+            return super.onInterceptTouchEvent(e);
         }
     };
     sv.addView(popupBody);
@@ -1392,10 +1414,13 @@ private void placePopup() {
     try { wm.updateViewLayout(popup, popupLp); } catch (Exception ignored) {}
     popup.invalidateOutline();
 }
-private void closePopup(boolean markRead, boolean animate) {
-    h.removeCallbacks(autoCloseRun);
-    swiping = false;
-    final LinearLayout p = popup;
+    private void closePopup(boolean markRead, boolean animate) {
+        h.removeCallbacks(autoCloseRun);
+        swiping = false;
+        /* UX: bảng cuộc gọi vừa đóng → tắt secureOverlay (nếu đang bật do call),
+           để pill notic hiện lại bình thường. */
+        if (secureOverlay && (items.isEmpty() || !items.get(0).call)) secureOverlay = false;
+        final LinearLayout p = popup;
     if (p != null) {
         final WindowManager.LayoutParams lp = popupLp;
         final GradientDrawable bgd = popupBg;
@@ -1577,8 +1602,7 @@ private View buildItemActions(final Item it) {
     final Notification.Action read = findReadAction(it);
     if (read != null) row.addView(actChip("Mark as read", v -> { try { read.actionIntent.send(); } catch (Exception ignored) {} dismissItem(it); }));
     if (it.snooze != null) row.addView(actChip("Snooze", v -> { try { it.snooze.actionIntent.send(); } catch (Exception ignored) {} dismissItem(it); }));
-    row.addView(actChip("Dismiss", v -> dismissItem(it)));
-    return row;
+    return row;   // UX: bỏ chip Dismiss — thay bằng nút "^" thu gọn ở head (Patch 2B)
 }
 private GradientDrawable cardBg(Item it, float r) {
     int m = prefs.getInt("notic_card_color", 0);
@@ -1606,6 +1630,7 @@ private GradientDrawable cardBg(Item it, float r) {
     final Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG), sp2 = new Paint(Paint.ANTI_ALIAS_FLAG);
     final RectF rr = new RectF();
     private float irX, irY;
+    boolean swipedX;   // ← THÊM DÒNG NÀY (cờ chống dismiss 2 lần trong 1 cử chỉ vuốt ngang)
     MorphRoot(Context c) { super(c); setWillNotDraw(false); sp2.setStyle(Paint.Style.STROKE); sp2.setStrokeWidth(1.6f * dens); }
     @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
         if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK
@@ -1621,21 +1646,44 @@ private GradientDrawable cardBg(Item it, float r) {
         int a = e.getActionMasked();
         if (a == MotionEvent.ACTION_DOWN) {
             irX = e.getRawX(); irY = e.getRawY();
-        } else if (a == MotionEvent.ACTION_MOVE) {
+            swipedX = false;
+        } else if (a == MotionEvent.ACTION_MOVE && !swipedX) {
             float dy = e.getRawY() - irY, dx = e.getRawX() - irX;
-            /* UX: vuốt lên ≥28dp = ẩn hẳn Notic (khác với tap đóng popup về pill). */
+            /* UX: vuốt ngang ≥72dp (không phải history) = xoá thẻ thông báo đang xem
+               — hoạt động ở BẤT KỲ đâu trên popup, kể cả vùng trống. */
+            if (!popupHistory && Math.abs(dx) > dp(72) && Math.abs(dx) > Math.abs(dy) * 1.2f) {
+                swipedX = true;
+                h.post(() -> { if (!items.isEmpty()) dismissItem(items.get(Math.min(cur, items.size() - 1))); });
+                return true;
+            }
+            /* UX: vuốt lên ≥28dp = ẩn hẳn Notic. */
             if (dy < -dp(28) && Math.abs(dy) > Math.abs(dx) * 1.5f) {
                 h.post(NoticEngine.this::hideNotic);
                 return true;
             }
-            /* UX: vuốt xuống ≥28dp khi popup đang mở = thu về pill — gesture
-               đối xứng, user cảm thấy "cuốn" được bảng thông báo. */
-            if (dy > dp(28) && Math.abs(dy) > Math.abs(dx) * 1.5f) {
-                h.post(() -> closePopup(false, true));
+        }
+        return super.onInterceptTouchEvent(e);
+    }
+    @Override public boolean onTouchEvent(MotionEvent e) {
+        int a = e.getActionMasked();
+        if (a == MotionEvent.ACTION_OUTSIDE) {
+            if (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0) releaseIme(popup);
+            closePopup(false, true);
+            return true;
+        }
+        /* UX: cử chỉ bắt đầu TRONG popup rồi kéo ra ngoài ≥40dp → thu gọn về pill.
+           Đây là cách bắt swipe-out mà ACTION_OUTSIDE không làm được. */
+        if (a == MotionEvent.ACTION_MOVE && popupLp != null) {
+            float rx = e.getRawX(), ry = e.getRawY();
+            float slop = dp(40);
+            if (rx < popupLp.x - slop || rx > popupLp.x + popupLp.width + slop
+                    || ry < popupLp.y - slop || ry > popupLp.y + popupLp.height + slop) {
+                if (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0) releaseIme(popup);
+                closePopup(false, true);
                 return true;
             }
         }
-        return super.onInterceptTouchEvent(e);
+        return super.onTouchEvent(e);
     }
     @Override protected void dispatchDraw(Canvas c) {
         if (popMorphing) {
@@ -1681,9 +1729,8 @@ private GradientDrawable cardBg(Item it, float r) {
         private boolean typing() { return popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0; }   // đang gõ reply -> không cướp cử chỉ
         private boolean horizontal(MotionEvent e) {
             float mx = e.getRawX() - x0, my = e.getRawY() - y0;
-            /* UX: hạ 1.2 → 0.7 cho phép swipe chéo ~35-55° vẫn intercept được —
-               trước đây swipe chéo bị coi là tap, UP rơi vào top, mở app. */
-            return Math.abs(mx) > slop && Math.abs(mx) > Math.abs(my) * 0.7f;
+            /* UX: hạ 0.7 → 0.45 cho phép swipe chéo ~30-55° vẫn intercept. */
+            return Math.abs(mx) > slop && Math.abs(mx) > Math.abs(my) * 0.45f;
         }
         private void begin(MotionEvent e) {
             swiping = true;
@@ -1715,9 +1762,6 @@ private GradientDrawable cardBg(Item it, float r) {
             if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) {
                 swiping = false;
                 if (!dragging) {
-                    /* UX: tap vùng trống trong card (không phải top/actions) = đóng
-                       popup về pill — vì DOWN đã bị SwipeCard consume nên UP không
-                       nổi lên MorphRoot được, phải tự gọi closePopup tại đây. */
                     if (a == MotionEvent.ACTION_UP) NoticEngine.this.closePopup(false, true);
                     return true;
                 }

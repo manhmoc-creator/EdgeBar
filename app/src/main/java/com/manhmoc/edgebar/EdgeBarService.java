@@ -2769,8 +2769,13 @@ private static final int[] SWALLOW_BAR_ORDER = {6, 8, 7, 3, 9, 4, 10, 5, 11, 1, 
 private static final int[] SWALLOW_CORNER_ORDER = {3, 2, 1, 0};
 private Object[] findSwallowHost() {
     boolean locked = km != null && km.isKeyguardLocked() && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs;
+    /* UX: PIN/Pattern/camera/calculator bouncer đang che màn khoá gốc → KHÔNG cho
+       Notic hiện (tránh lộ thông báo riêng tư trên bouncer bảo mật). */
+    boolean bouncerUp = locked && (isBouncerVisible || qrScannerOverlayActive)
+        && !prefs.getBoolean("preview_lock", false);
+    if (bouncerUp) return null;
     Object[] r = swallowHostIn(locked);
-    return r != null ? r : swallowHostIn(!locked);   // Lock vừa ẩn mà Home chưa hiện (hoặc ngược lại) vẫn có host, Notic không bị gỡ rồi dựng lại
+    return r != null ? r : swallowHostIn(!locked);
 }
 private Object[] swallowHostIn(boolean locked) {
     String px = locked ? "lock_" : "home_";
@@ -2811,6 +2816,8 @@ private void applyLockGateInstant() {
     boolean isPreview = prefs.getBoolean("preview_lock", false);
     boolean isLocked = (km != null && km.isKeyguardLocked()) || isPreview;
     boolean isSecureOverlayVisible = (isBouncerVisible || qrScannerOverlayActive) && !isPreview;
+    /* UX: notic tạm ẩn khi PIN/camera/call bouncer đang che, hiện lại khi gone. */
+    if (noticEngine != null) noticEngine.setSecureOverlay(isSecureOverlayVisible);
     for (int i = 0; i < 12; i++) {
         if (bars[i] == null) continue;
         int lockMode = prefs.getInt("lock_" + BARS[i] + "_lockmode", 1);
@@ -2835,11 +2842,8 @@ private void applyLockGateInstant() {
         corners[i].setAlpha(1f);
         corners[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
     }
-refreshLockShownFlag(); 
+    refreshLockShownFlag(); 
 }
-/** [MỚI] Chuyển tức thời Lock -> Homacc ngay lúc ACTION_USER_PRESENT — không animate,
- *  không chờ accessibility event kế tiếp, để mắt thường không kịp thấy Lock/LockEb
- *  còn sót lại trên Home dù chỉ đúng 1 khung hình. */
 private void instantSwitchLockToHomacc() {
     lockLayerShown = false; 
     for (int i = 0; i < 12; i++) {
