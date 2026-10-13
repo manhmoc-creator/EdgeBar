@@ -4508,7 +4508,10 @@ private void applyBarPackToSpace(String id, String targetPrefix, boolean geoOnly
     boolean and = prefs.getBoolean(src + "and_geo", false);
     int y = prefs.getInt(src + "y", 0);
     int spacing = prefs.getInt(src + "pair_spacing", 0);
-    String icons = prefs.getString(src + "icons", "");
+    /* UX: bỏ hẳn icon_en — có icon khi chuỗi không rỗng, không có khi rỗng.
+       AND bật → mỗi bên dùng bộ icon riêng; AND tắt → dùng chung 1 bộ. */
+    boolean iconsAnd = prefs.getBoolean(src + "icons_and", false);
+    String iconsShared = prefs.getString(src + "icons", "");
     boolean spreadY = TwinPairStore.signOfBarPair(pairId) == 0;
     int shiftX = prefs.getInt(src + "x", 0);
     int half = spacing / 2;
@@ -4518,7 +4521,7 @@ private void applyBarPackToSpace(String id, String targetPrefix, boolean geoOnly
         boolean isA = s == 0;
         String sf = isA ? "_L" : "_R";
         boolean en = TwinPairStore.isSideEnabled(prefs, targetPrefix + "pack_bar_", pairId, isA, true);
-        boolean iconOn = sideVal(src + "icon_en", isA, false, 0) == 1 || sideVal(src + "icon_en", isA, true, 0) == 1;
+        String iconCsv = iconsAnd ? prefs.getString(src + "icons" + sf, "") : iconsShared;
         String bk = targetPrefix + m[s] + "_";
         int xs;
         int ys;
@@ -4534,7 +4537,7 @@ private void applyBarPackToSpace(String id, String targetPrefix, boolean geoOnly
           .putInt(bk + "h", gi(src, "h", sf, and, 60))
           .putInt(bk + "x", xs).putInt(bk + "y", ys);
         if (!geoOnly) {
-            ed.putBoolean(bk + "en", en).putString(bk + "icons", iconOn ? icons : "");
+            ed.putBoolean(bk + "en", en).putString(bk + "icons", iconCsv);
             writeSideFields(ed, src, bk, isA, isLock);
         }
     }
@@ -5221,7 +5224,7 @@ private void showActionCategoryPicker(String title, List<String[]> items,
 private void buildMainMenuList() {
     pageMainMenu.removeAllViews();
     Object[][] items = {
-    {"touch_app_24px", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Lock · Home · Texture · VolKey · Sensor · App Icon", (Runnable)() -> openSpace(1)},
+    {"touch_app_24px", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Lock · Home · Texture · VolKey · Sensor · App Icon · Notic", (Runnable)() -> openSpace(1)},
     {"light_mode_24px", T("Display","Hiển thị"), "Anima · Lenap · Bubble · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
     {"flash_on_24px", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)this::openEcosystemMenu},
     {"file_present_24px", T("Storage","Bộ nhớ"), T("Storage Scan","Quét dung lượng"), (Runnable)() -> openEco(3, false)},
@@ -6848,32 +6851,83 @@ private static final int[] QS_ICON_POOL = {
         android.R.drawable.presence_video_online, android.R.drawable.sym_def_app_icon,
         android.R.drawable.sym_action_call, android.R.drawable.sym_action_chat
     };
-private void showQsIconPickerDialog(java.util.function.IntConsumer onPicked) {
+/* UX: 2 tab — SYSTEM (API pool như cũ) + CUSTOM (100 icon riêng trong APK).
+   Callback trả String "pool:N" hoặc "poolc:N" để lưu vào tilev2_<id>_icon_ref,
+   thay cho icon_idx int cũ. Bỏ hẳn index int để không phải hack offset. */
+private void showQsIconPickerDialog(java.util.function.Consumer<String> onPicked) {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212"));
+    root.setPadding(30, 80, 30, 30);
+
+    LinearLayout tabs = new LinearLayout(this);
+    tabs.setOrientation(LinearLayout.HORIZONTAL);
+    Button bApi = createTabBtn(T("SYSTEM", "HỆ THỐNG"));
+    Button bCustom = createTabBtn(T("CUSTOM", "TÙY CHỈNH"));
+    LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, -2, 1f);
+    tlp.setMargins(0, 0, 10, 0);
+    bApi.setLayoutParams(tlp);
+    bCustom.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    tabs.addView(bApi); tabs.addView(bCustom);
+    root.addView(tabs);
+
+    FrameLayout body = new FrameLayout(this);
+    body.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    root.addView(body);
+
+    ScrollView apiPage = buildQsIconGridPage(QS_ICON_POOL, "pool:", onPicked, d);
+    ScrollView customPage = buildQsIconGridPage(PanelEngine.getCustomIconPool(this), "poolc:", onPicked, d);
+    body.addView(apiPage);
+    body.addView(customPage);
+    customPage.setVisibility(View.GONE);
+
+    bApi.setOnClickListener(v -> {
+        bApi.setBackground(getRounded("#8AB4F8", 15f)); bApi.setTextColor(Color.BLACK);
+        bCustom.setBackground(getRounded("#222222", 15f)); bCustom.setTextColor(Color.WHITE);
+        apiPage.setVisibility(View.VISIBLE);
+        customPage.setVisibility(View.GONE);
+    });
+    bCustom.setOnClickListener(v -> {
+        bApi.setBackground(getRounded("#222222", 15f)); bApi.setTextColor(Color.WHITE);
+        bCustom.setBackground(getRounded("#8AB4F8", 15f)); bCustom.setTextColor(Color.BLACK);
+        apiPage.setVisibility(View.GONE);
+        customPage.setVisibility(View.VISIBLE);
+    });
+    bApi.performClick();
+
+    d.setContentView(root); d.show();
+}
+/* UX: 1 page grid 5 cột dùng chung cho cả API pool và Custom pool — tránh
+   duplicate ~25 dòng layout code. */
+private ScrollView buildQsIconGridPage(int[] pool, String prefixTag,
+        java.util.function.Consumer<String> onPicked, Dialog d) {
     ScrollView scroll = new ScrollView(this);
-    scroll.setBackgroundColor(Color.parseColor("#121212"));
     LinearLayout page = new LinearLayout(this);
     page.setOrientation(LinearLayout.VERTICAL);
-    page.setPadding(30, 80, 30, 30);
+    page.setPadding(0, 20, 0, 20);
     scroll.addView(page);
     LinearLayout row = null;
-    for (int i = 0; i < QS_ICON_POOL.length; i++) {
-        if (i % 5 == 0) { row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); page.addView(row); }
+    for (int i = 0; i < pool.length; i++) {
+        if (i % 5 == 0) {
+            row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            page.addView(row);
+        }
         ImageView iv = new ImageView(this);
-        Bitmap normBmp = normalizeIconBitmap(getDrawable(QS_ICON_POOL[i]), 140, 0.68f);
+        Bitmap normBmp = normalizeIconBitmap(getDrawable(pool[i]), 140, 0.68f);
         if (normBmp != null) iv.setImageBitmap(normBmp);
-        else { iv.setImageResource(QS_ICON_POOL[i]); iv.setPadding(24, 24, 24, 24); }
+        else { iv.setImageResource(pool[i]); iv.setPadding(24, 24, 24, 24); }
         LinearLayout.LayoutParams ivLp = new LinearLayout.LayoutParams(0, 140, 1f);
         ivLp.setMargins(6, 6, 6, 6);
         iv.setLayoutParams(ivLp);
         iv.setBackground(getRounded("#202124", 16f));
         final int idxFinal = i;
-        iv.setOnClickListener(v -> { onPicked.accept(idxFinal); d.dismiss(); });
+        iv.setOnClickListener(v -> { onPicked.accept(prefixTag + idxFinal); d.dismiss(); });
         row.addView(iv);
     }
-    d.setContentView(scroll); d.show();
+    return scroll;
 }
-    // THÊM 2 hàm sau openTileEditor():
 private void runDeepStorageScan() {
     Toast.makeText(this, "Đang quét, chờ vài giây...", Toast.LENGTH_SHORT).show();
     new Thread(() -> {
@@ -7554,22 +7608,20 @@ private void openTileEditorV2(String id) {
     content.addView(btnSys); content.addView(btnUtl); content.addView(btnInt); content.addView(btnMac);
     refreshCurrent.run();
     content.addView(tvCurrent);
-    final int[] chosenIconIdx = { prefs.getInt("tilev2_"+id+"_icon_idx", -1) };
+    /* UX: đổi icon_idx (int) → icon_ref (String) để chứa được cả "pool:N" và
+       "poolc:N". Bỏ index int cứng để không phải hack offset cho custom pool. */
+    final String[] chosenIconRef = { prefs.getString("tilev2_"+id+"_icon_ref", "") };
     TextView tvIconCurrent = new TextView(this);
     tvIconCurrent.setTextColor(Color.parseColor("#FFC107"));
     tvIconCurrent.setPadding(0, 10, 0, 10);
-    // [FIX CRASH] TILE_ICON_NAMES chỉ có 20 phần tử trong khi QS_ICON_POOL có 81 icon —
-    // index trả về từ showQsIconPickerDialog() có thể >= 20 và làm vỡ mảng
-    // (ArrayIndexOutOfBoundsException). Không tra tên theo mảng cũ nữa, chỉ báo
-    // trạng thái đã chọn hay chưa — an toàn với MỌI index, không giới hạn kích thước.
     Runnable refreshIconLabel = () -> tvIconCurrent.setText(
-        T("Icon: ", "Icon: ") + (chosenIconIdx[0] < 0 ? T("Auto", "Tự động") : T("Custom ✓", "Tuỳ chỉnh ✓")));
+        T("Icon: ", "Icon: ") + (chosenIconRef[0].isEmpty() ? T("Auto", "Tự động") : T("Custom ✓", "Tuỳ chỉnh ✓")));
     refreshIconLabel.run();
     Button btnPickIcon = new Button(this);
     btnPickIcon.setText("🎨 " + T("CHOOSE ICON", "CHỌN ICON"));
     btnPickIcon.setBackground(getRounded("#FFC107", 20f));
     btnPickIcon.setTextColor(Color.BLACK);
-    btnPickIcon.setOnClickListener(v -> showQsIconPickerDialog(idx -> { chosenIconIdx[0] = idx; refreshIconLabel.run(); }));
+    btnPickIcon.setOnClickListener(v -> showQsIconPickerDialog(ref -> { chosenIconRef[0] = ref; refreshIconLabel.run(); }));
     content.addView(btnPickIcon);
     content.addView(tvIconCurrent);
 
@@ -7613,7 +7665,8 @@ private void openTileEditorV2(String id) {
             .putString("tilev2_"+id+"_act", chosenAct[0])
             .putString("tilev2_"+id+"_launch_pkg", chosenPkg[0])
             .putString("tilev2_"+id+"_shortcut_id", chosenScId[0])
-            .putInt("tilev2_"+id+"_icon_idx", chosenIconIdx[0])
+            .putString("tilev2_"+id+"_icon_ref", chosenIconRef[0])
+            .remove("tilev2_"+id+"_icon_idx")   // dọn index cũ nếu có
             .putString("tile_slot_"+chosenSlot+"_id", id)
             .apply();
         setTileComponentEnabled(chosenSlot, prefs.getBoolean("tile_active_" + id, false));
@@ -9631,29 +9684,114 @@ private void addPairSettingRows(LinearLayout content, String packBase, String na
             T("Straight Up", "Thẳng lên"), T("Straight Down", "Thẳng xuống"),
             T("Straight Left", "Thẳng trái"), T("Straight Right", "Thẳng phải")}, 0, nameA, nameB));
     if (withIcon) {
-        content.addView(buildPairSettingCard(T("Icon on bar", "Icon trên Bar"), packBase + "icon_en",
-            new String[]{T("Hidden", "Không hiển thị"), T("Shown", "Có hiển thị")}, 0, nameA, nameB));
-        content.addView(buildBarIconPickerButton(packBase));   // KHÔI PHỤC bộ chọn icon: không có icon thì "Shown" và "Tự động đổi màu icon" chẳng có gì để áp
+        content.addView(buildIconPickerPairCard(packBase, nameA, nameB));
     }
 }
-// Nút mở bộ chọn icon (app / hệ thống / tuỳ chỉnh) giống bộ chọn icon của Panel. Ghi vào đúng key mà applyBarPackToSpace() đọc: packBase + "icons"
-private View buildBarIconPickerButton(final String packBase) {
-    final String iconsKey = packBase + "icons";
-    final Button b = new Button(this);
-    b.setTextColor(Color.BLACK);
-    b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    b.setBackground(getRounded("#8AB4F8", 20f));
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 130);
-    lp.setMargins(0, 8, 0, 8);
-    b.setLayoutParams(lp);
-    final Runnable label = () -> {
-        String s = prefs.getString(iconsKey, "");
-        int n = s.isEmpty() ? 0 : s.split(",").length;
-        b.setText("✨ " + T("PICK ICONS ON BAR", "CHỌN ICON TRÊN BAR") + " (" + n + ")");
+/* UX: card chọn icon cho Bar thay cho cặp (Hidden/Shown + Pick icon) cũ.
+   Bấm chip = mở picker 3 tab (APPS/SYSTEM/CUSTOM). Nhấn giữ card = chia AND
+   cho cặp, mỗi bên chọn bộ icon riêng. Chưa chọn = không có icon. */
+private View buildIconPickerPairCard(String packBase, String nameA, String nameB) {
+    final LinearLayout card = new LinearLayout(this);
+    card.setOrientation(LinearLayout.VERTICAL);
+    card.setBackground(getRounded("#1A1A1A", 22f));
+    card.setPadding(24, 20, 24, 20);
+    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
+    clp.setMargins(0, 8, 0, 8);
+    card.setLayoutParams(clp);
+
+    TextView tvTitle = new TextView(this);
+    tvTitle.setText(T("Icon on bar", "Icon trên Bar"));
+    tvTitle.setTextColor(Color.parseColor("#E8EAED"));
+    tvTitle.setTextSize(13.5f);
+    tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    card.addView(tvTitle);
+
+    TextView tvHint = new TextView(this);
+    tvHint.setText(T("Tap to pick icons · Hold to customize each side",
+                    "Chạm để chọn icon · Nhấn giữ để chỉnh riêng từng bên"));
+    tvHint.setTextColor(Color.parseColor("#6F757B"));
+    tvHint.setTextSize(10.5f);
+    card.addView(tvHint);
+
+    final LinearLayout body = new LinearLayout(this);
+    body.setOrientation(LinearLayout.HORIZONTAL);
+    body.setGravity(Gravity.CENTER_VERTICAL);
+    body.setPadding(0, 12, 0, 0);
+    card.addView(body);
+
+    final String andKey = packBase + "icons_and";
+    final Runnable[] render = new Runnable[1];
+    final View.OnLongClickListener enterAnd = v -> {
+        if (!prefs.getBoolean(andKey, false)) {
+            /* UX: bật AND — copy bộ icon đang dùng chung vào cả 2 nửa để user
+               bắt đầu từ đúng trạng thái họ đang thấy, không bị reset. */
+            String cur = prefs.getString(packBase + "icons", "");
+            prefs.edit()
+                .putBoolean(andKey, true)
+                .putString(packBase + "icons_L", cur)
+                .putString(packBase + "icons_R", cur)
+                .apply();
+            vibrateShort();
+            render[0].run();
+        }
+        return true;
     };
-    label.run();
-    b.setOnClickListener(v -> showBarIconMultiPicker(iconsKey, label));
-    return b;
+    card.setOnLongClickListener(enterAnd);
+    render[0] = () -> {
+        body.removeAllViews();
+        boolean and = prefs.getBoolean(andKey, false);
+        if (!and) {
+            body.addView(buildIconPickChip(null, packBase + "icons", enterAnd));
+        } else {
+            body.addView(buildIconPickChip(nameA, packBase + "icons_L", null));
+            body.addView(buildAndBridge(() -> {
+                /* UX: tắt AND — giữ bộ icon nửa A làm bộ chung, dọn key L/R. */
+                String keep = prefs.getString(packBase + "icons_L", "");
+                prefs.edit()
+                    .putBoolean(andKey, false)
+                    .putString(packBase + "icons", keep)
+                    .remove(packBase + "icons_L")
+                    .remove(packBase + "icons_R")
+                    .apply();
+                render[0].run();
+            }));
+            body.addView(buildIconPickChip(nameB, packBase + "icons_R", null));
+        }
+    };
+    render[0].run();
+    return card;
+}
+
+/* UX: chip gọn hiển thị "n icon đã chọn" hoặc "Chọn icon". Bấm = mở picker
+   multi-select 3 tab giống nút "Chọn icon trên Bar" cũ. */
+private View buildIconPickChip(String sideName, String prefKey, View.OnLongClickListener lc) {
+    LinearLayout half = new LinearLayout(this);
+    half.setOrientation(LinearLayout.VERTICAL);
+    half.setBackground(getRounded("#202124", 18f));
+    half.setPadding(18, 16, 18, 16);
+    LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(0, -2, 1f);
+    hlp.setMargins(6, 0, 6, 0);
+    half.setLayoutParams(hlp);
+    if (lc != null) half.setOnLongClickListener(lc);
+    if (sideName != null) {
+        TextView tvName = new TextView(this);
+        tvName.setText(sideName);
+        tvName.setTextColor(Color.parseColor("#9AA0A6"));
+        tvName.setTextSize(11f);
+        half.addView(tvName);
+    }
+    final TextView chip = pairChip("#2C2C2C", "#8AB4F8");
+    Runnable refresh = () -> {
+        String csv = prefs.getString(prefKey, "");
+        int n = csv.isEmpty() ? 0 : csv.split(",").length;
+        chip.setText(n == 0 ? T("Pick icons", "Chọn icon")
+                            : T(n + " icon(s)", n + " icon"));
+    };
+    refresh.run();
+    chip.setOnClickListener(v -> showBarIconMultiPicker(prefKey, refresh));
+    if (lc != null) chip.setOnLongClickListener(lc);
+    half.addView(chip);
+    return half;
 }
 private TextView buildPackLiveHint() {
     TextView tv = new TextView(this);

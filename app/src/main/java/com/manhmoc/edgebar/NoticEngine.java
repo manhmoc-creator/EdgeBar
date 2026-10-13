@@ -1291,6 +1291,9 @@ private void openPopup() {
     ttl.setTypeface(Typeface.DEFAULT_BOLD);
     ttl.setPadding(dp(8), dp(6), dp(8), dp(6));
     ttl.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    /* UX: tap vào "Notifications" = đóng popup — tránh trường hợp user tap
+       nhầm chỗ này rồi tưởng app treo (trước đây không làm gì cả). */
+    ttl.setOnClickListener(v -> closePopup(false, true));
     TextView clear = new TextView(ctx);
     clear.setText("Clear all");
     clear.setTextColor(Color.parseColor("#8AB4F8"));
@@ -1528,6 +1531,11 @@ private void renderPopup() {
         }        
         if (it.media && prefs.getBoolean("notic_viz_en", true)) top.addView(new VizView(ctx, it)); // visualizer nằm sát phải cùng
         top.setOnClickListener(v -> {
+            /* UX: nếu user đang cố swipe trên card (đã vượt slop) thì bỏ qua
+               click của top — tránh mở app ngoài ý muốn khi swipe chéo không
+               đủ để SwipeCard intercept. */
+            View p = (View) v.getParent();
+            if (p instanceof SwipeCard && ((SwipeCard) p).userMoved) return;
             openItem(it);
             if (!it.media) items.remove(it);
             closePopup(false, true);
@@ -1599,10 +1607,14 @@ private GradientDrawable cardBg(Item it, float r) {
     final RectF rr = new RectF();
     private float irX, irY;
     MorphRoot(Context c) { super(c); setWillNotDraw(false); sp2.setStyle(Paint.Style.STROKE); sp2.setStrokeWidth(1.6f * dens); }
-
-    // UX: vuốt lên trên bảng mở rộng = ẩn nhanh Notic — HARDCODED, không phụ
-    // thuộc rule user gán cho bar. Chặn ở onIntercept (trước cả SwipeCard) để
-    // bắt được swipe bắt đầu từ bất kỳ điểm nào trong bảng, kể cả trên card.
+    @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
+            if (popup != null) releaseIme(popup);
+            closePopup(false, true);
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
     @Override public boolean onInterceptTouchEvent(MotionEvent e) {
         if (previewForce) return super.onInterceptTouchEvent(e);
         int a = e.getActionMasked();
@@ -1610,14 +1622,20 @@ private GradientDrawable cardBg(Item it, float r) {
             irX = e.getRawX(); irY = e.getRawY();
         } else if (a == MotionEvent.ACTION_MOVE) {
             float dy = e.getRawY() - irY, dx = e.getRawX() - irX;
+            /* UX: vuốt lên ≥28dp = ẩn hẳn Notic (khác với tap đóng popup về pill). */
             if (dy < -dp(28) && Math.abs(dy) > Math.abs(dx) * 1.5f) {
-                h.post(NoticEngine.this::hideNotic);   // defer ra khỏi dispatch để tránh removeView giữa frame
+                h.post(NoticEngine.this::hideNotic);
+                return true;
+            }
+            /* UX: vuốt xuống ≥28dp khi popup đang mở = thu về pill — gesture
+               đối xứng, user cảm thấy "cuốn" được bảng thông báo. */
+            if (dy > dp(28) && Math.abs(dy) > Math.abs(dx) * 1.5f) {
+                h.post(() -> closePopup(false, true));
                 return true;
             }
         }
         return super.onInterceptTouchEvent(e);
     }
-
     @Override protected void dispatchDraw(Canvas c) {
         if (popMorphing) {
             float a = 1f - Math.max(0f, Math.min(1f, (morphF - 0.35f) / 0.5f));
@@ -1641,30 +1659,31 @@ private GradientDrawable cardBg(Item it, float r) {
         final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
         float x0, y0, dx;
         boolean dragging;
+        boolean userMoved;
         VelocityTracker vt;
         SwipeCard(Context c, Item it) { super(c); this.it = it; }
         @Override public boolean dispatchTouchEvent(MotionEvent e) {
     int a = e.getActionMasked();
     if (a == MotionEvent.ACTION_DOWN) {
-        x0 = e.getRawX(); y0 = e.getRawY(); dragging = false;
+        x0 = e.getRawX(); y0 = e.getRawY(); dragging = false; userMoved = false;
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
-        super.dispatchTouchEvent(e);
-        /* UX: bắt buộc consume DOWN tại SwipeCard — nếu để nổi lên MorphRoot
-           thì MOVE sau đó đi thẳng MorphRoot, card không bao giờ swipe được. */
-        return true;
     } else if (a == MotionEvent.ACTION_MOVE && !dragging) {
         float mx = Math.abs(e.getRawX() - x0), my = Math.abs(e.getRawY() - y0);
+        /* UX: đánh dấu userMoved ngay khi vượt slop theo BẤT KỲ hướng — chặn
+           top click fire khi user cố swipe chéo (mx < my*1.2 nên không intercept
+           được, nhưng vẫn đủ để UP trúng top và mở app). */
+        if (mx > slop || my > slop) userMoved = true;
         if (my > slop && my > mx && getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
     }
     return super.dispatchTouchEvent(e);
 }
         private boolean typing() { return popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0; }   // đang gõ reply -> không cướp cử chỉ
-
         private boolean horizontal(MotionEvent e) {
             float mx = e.getRawX() - x0, my = e.getRawY() - y0;
-            return Math.abs(mx) > slop && Math.abs(mx) > Math.abs(my) * 1.2f;
+            /* UX: hạ 1.2 → 0.7 cho phép swipe chéo ~35-55° vẫn intercept được —
+               trước đây swipe chéo bị coi là tap, UP rơi vào top, mở app. */
+            return Math.abs(mx) > slop && Math.abs(mx) > Math.abs(my) * 0.7f;
         }
-
         private void begin(MotionEvent e) {
             swiping = true;
             dragging = true;

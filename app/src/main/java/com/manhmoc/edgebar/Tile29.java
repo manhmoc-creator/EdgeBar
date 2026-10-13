@@ -133,17 +133,36 @@ private void updateTileUI() {
     String action = prefs.getString("tilev2_" + boundId + "_act", "NONE");
     String label = prefs.getString("tilev2_" + boundId + "_label", "Tile 29");
     t.setLabel(label);
-    int manualIconIdx = prefs.getInt("tilev2_" + boundId + "_icon_idx", -1);
-    int iconIdx = (manualIconIdx >= 0 && manualIconIdx < ICON_POOL.length) ? manualIconIdx : autoIconForAct(action);
+    /* UX: đọc icon_ref mới (String "pool:N"/"poolc:N") trước, fallback icon_idx
+       cũ để tương thích backup cũ. Zero IPC: 1 lần đọc prefs + 1 lần decode
+       bitmap, không polling, không thread. */
+    String iconRef = prefs.getString("tilev2_" + boundId + "_icon_ref", "");
+    android.graphics.drawable.Drawable iconDrawable = null;
+    if (iconRef.startsWith("poolc:")) {
+        try {
+            int idx = Integer.parseInt(iconRef.substring(6));
+            int[] pool = PanelEngine.getCustomIconPool(this);
+            if (idx >= 0 && idx < pool.length) iconDrawable = getDrawable(pool[idx]);
+        } catch (Exception ignored) {}
+    } else if (iconRef.startsWith("pool:")) {
+        try {
+            int idx = Integer.parseInt(iconRef.substring(5));
+            if (idx >= 0 && idx < ICON_POOL.length) iconDrawable = getDrawable(ICON_POOL[idx]);
+        } catch (Exception ignored) {}
+    }
+    if (iconDrawable == null) {
+        int manualIconIdx = prefs.getInt("tilev2_" + boundId + "_icon_idx", -1);
+        int iconIdx = (manualIconIdx >= 0 && manualIconIdx < ICON_POOL.length) ? manualIconIdx : autoIconForAct(action);
+        iconDrawable = getDrawable(ICON_POOL[iconIdx]);
+    }
     android.graphics.Bitmap tileIconBmp = null;
     try {
-    android.graphics.drawable.Drawable dTile = getDrawable(ICON_POOL[iconIdx]);
-    if (dTile != null) { dTile = dTile.mutate(); dTile.setTint(android.graphics.Color.WHITE); }
-    float contentScale = prefs.getInt("qs_global_icon_scale", 77) / 100f;
-    tileIconBmp = PanelEngine.normalizeIconBitmap(dTile, 96, contentScale);
-} catch (Exception ignored) {}
+        if (iconDrawable != null) { iconDrawable = iconDrawable.mutate(); iconDrawable.setTint(android.graphics.Color.WHITE); }
+        float contentScale = prefs.getInt("qs_global_icon_scale", 77) / 100f;
+        tileIconBmp = PanelEngine.normalizeIconBitmap(iconDrawable, 96, contentScale);
+    } catch (Exception ignored) {}
     if (tileIconBmp != null) t.setIcon(Icon.createWithBitmap(tileIconBmp));
-    else t.setIcon(Icon.createWithResource(this, ICON_POOL[iconIdx]));
+    else t.setIcon(Icon.createWithResource(this, ICON_POOL[0]));
     t.setState(action.equals("NONE") ? Tile.STATE_INACTIVE : Tile.STATE_ACTIVE);
     t.updateTile();
 }
