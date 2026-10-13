@@ -171,10 +171,7 @@ private String pillHostKey;     // host pill đang vẽ cho -> nhận ra chuyể
     private final Runnable settleRun = this::settle;
     private boolean userHidden;
     private final Runnable reshowRun = this::reshowNotic;
-private final Runnable recoverRun = () -> {
-    if (items.isEmpty() || userHidden || !prefs.getBoolean("notic_en", false)) return;
-    if (pill != null && pill.hidden && statusVisible) announce(); else relayout();
-};
+private final Runnable recoverRun;
 private void scheduleRecover() {
     h.removeCallbacks(recoverRun);
     h.postDelayed(recoverRun, 350);
@@ -393,9 +390,14 @@ private void refreshMedia(Item it) {
         instance = this;
         synchronized (ALL) { ALL.add(this); }
         cachePrefs();
-        if (prefs.getBoolean("notic_en", false)) registerSystemEvents();   // [P5] Notic tắt = không đăng ký receiver/camera/mic/network callback
-    }
+        if (prefs.getBoolean("notic_en", false)) registerSystemEvents();
 
+        // THÊM ĐOẠN NÀY VÀO ĐÂY (Sau khi this.prefs đã được gán)
+        this.recoverRun = () -> {
+            if (items.isEmpty() || userHidden || !prefs.getBoolean("notic_en", false)) return;
+            if (pill != null && pill.hidden && statusVisible) announce(); else relayout();
+        };
+    }
     private int dp(float v) { return Math.round(v * dens); }
     private float badgeExtra() { return pillH + 6 * dens; }   // [P2] đường kính ô tròn số (= bề dày pill) + khoảng cách 6dp
     public boolean hasHost() {
