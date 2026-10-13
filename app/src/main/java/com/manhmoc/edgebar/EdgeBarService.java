@@ -2714,31 +2714,57 @@ private void runShadeCheck() {
     }
     if (open) debounceHandler.postDelayed(shadeCheckRun, 400);   // dự phòng: chỉ poll trong lúc bảng đang mở, đóng là dừng
 }
-// Bảng thông báo/QS = cửa sổ SYSTEM của systemui đang được focus/active và cao >= 30% màn hình. Màn khoá bỏ qua (keyguard cũng là cửa sổ systemui toàn màn hình).
-private boolean computeShadeOpen() {
-    try {
-        /* UX: dùng isBouncerVisible thay km.isKeyguardLocked() — cho phép detect QS
-           khi đang ở Lock screen gốc (chưa vào bouncer PIN), nhưng vẫn không nhầm
-           bouncer thành QS vì cả 2 đều là systemui full-screen. */
-        if (isBouncerVisible) return false;
-        java.util.List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
-        if (ws == null) return false;
-        int sh = getResources().getDisplayMetrics().heightPixels;
-        android.graphics.Rect r = new android.graphics.Rect();
-        for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
-            if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM) continue;
-            if (!w.isFocused() && !w.isActive()) continue;
-            w.getBoundsInScreen(r);
-            if (r.height() < sh * 0.3f) continue;
-            android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
-            if (root == null) continue;
-            CharSequence pk = root.getPackageName();
-            root.recycle();
-            if (pk != null && pk.toString().contains("systemui")) return true;
+    private boolean computeShadeOpen() {
+        try {
+            if (isBouncerVisible) return false;
+            java.util.List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
+            if (ws == null) return false;
+            int sh = getResources().getDisplayMetrics().heightPixels;
+            android.graphics.Rect r = new android.graphics.Rect();
+            boolean keyguardLocked = km != null && km.isKeyguardLocked();
+            for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
+                if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM) continue;
+                if (!w.isFocused() && !w.isActive()) continue;
+                w.getBoundsInScreen(r);
+                if (r.height() < sh * 0.3f) continue;
+                android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
+                if (root == null) continue;
+                CharSequence pk = root.getPackageName();
+                boolean isSystemui = pk != null && pk.toString().contains("systemui");
+                if (!isSystemui) { root.recycle(); continue; }
+                if (keyguardLocked) {
+                    boolean isRealShade = isRealShadeNotKeyguard(root);
+                    root.recycle();
+                    if (!isRealShade) continue;
+                    return true;
+                }
+                root.recycle();
+                return true;
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    /* UX: heuristic nhận diện QS trên Pixel 2XL stock Android. Chỉ 4 ID dưới đây
+       xuất hiện khi QS/notification shade thực sự mở, KHÔNG xuất hiện ở keyguard
+       gốc. Zero-alloc thêm: mỗi lần gọi chỉ duyệt mảng 4 phần tử + recycle node. */
+    private boolean isRealShadeNotKeyguard(android.view.accessibility.AccessibilityNodeInfo root) {
+        String[] qsIds = {
+            "com.android.systemui:id/quick_settings_panel",
+            "com.android.systemui:id/qs_frame",
+            "com.android.systemui:id/notification_stack_scroller",
+            "com.android.systemui:id/notification_panel"
+        };
+        for (String id : qsIds) {
+            java.util.List<android.view.accessibility.AccessibilityNodeInfo> nodes = null;
+            try { nodes = root.findAccessibilityNodeInfosByViewId(id); } catch (Exception ignored) {}
+            if (nodes != null && !nodes.isEmpty()) {
+                for (android.view.accessibility.AccessibilityNodeInfo n : nodes) n.recycle();
+                return true;
+            }
         }
-    } catch (Exception ignored) {}
-    return false;
-}  
+        return false;
+    }
 private static final int[] SWALLOW_BAR_ORDER = {6, 8, 7, 3, 9, 4, 10, 5, 11, 1, 2, 0};   // ưu tiên bar phía trên, đáy xếp cuối
 private static final int[] SWALLOW_CORNER_ORDER = {3, 2, 1, 0};
 private Object[] findSwallowHost() {
