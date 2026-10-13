@@ -102,9 +102,7 @@ public static class Item {
     Notification.Action[] actions;
     Notification.Action reply;
     boolean media, transientItem, call, ongoing, person, playing = true, msg;
-    /* UX: action snooze do CHÍNH app gửi kèm — không tự bịa vì snooze cần
-       AlarmManager phía app đó mới reschedule được. Hầu hết notif hệ thống
-       và nhiều app bên thứ ba đều có sẵn action này. */
+    boolean senderIsApp;
     Notification.Action snooze;
     Object token;                       // MediaSession.Token do Listener truyền sang
     MediaController mc;
@@ -171,15 +169,23 @@ private String pillHostKey;     // host pill đang vẽ cho -> nhận ra chuyể
     private final Runnable settleRun = this::settle;
     private boolean userHidden;
     private final Runnable reshowRun = this::reshowNotic;
+    private boolean inCall, replayNext;
+private long lastReplayMs;
+private final Runnable callCheckRun = this::checkCall;
 private final Runnable recoverRun;
 private void scheduleRecover() {
     h.removeCallbacks(recoverRun);
     h.postDelayed(recoverRun, 350);
     h.postDelayed(recoverRun, 1500);
 }
-private boolean hasCall() {
-    for (Item x : items) if (x.call) return true;
-    return false;
+private void checkCall() {
+    h.removeCallbacks(callCheckRun);
+    if (audio == null) audio = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
+    int m = audio == null ? AudioManager.MODE_NORMAL : audio.getMode();
+    boolean c = m == AudioManager.MODE_IN_CALL || m == AudioManager.MODE_IN_COMMUNICATION; // không tính đang đổ chuông
+    if (c != inCall) { inCall = c; syncVisible(); }
+    // UX: chỉ dò lại 3s/lần khi đang gọi + màn sáng; hết gọi thì micCb báo, không polling lúc rảnh.
+    if (inCall && screenOn) h.postDelayed(callCheckRun, 3000);
 }
     private void reshowNotic() {
         if (previewForce) return;
@@ -279,8 +285,11 @@ private float spinAngle(Item it) {
     return it.spin;
 }
 static void drawViz(Canvas c, Paint p, float x, float cy, float w, float h, int color, boolean playing, float speed) {
-    final int n = 7;                       // muốn 9 thanh: đổi 7 -> 9 (thanh sẽ mảnh lại, nên tăng thêm bề rộng vùng vẽ)
-    float gap = w * 0.07f, bw = (w - gap * (n - 1)) / n;
+    drawViz(c, p, x, cy, w, h, color, playing, speed, 0.07f);
+}
+static void drawViz(Canvas c, Paint p, float x, float cy, float w, float h, int color, boolean playing, float speed, float gapFrac) {
+    final int n = 7;
+    float gap = w * gapFrac, bw = (w - gap * (n - 1)) / n;
     float t = (SystemClock.uptimeMillis() % 100000L) / 1000f * speed;
     p.setColor(color);
     for (int i = 0; i < n; i++) {
@@ -289,10 +298,7 @@ static void drawViz(Canvas c, Paint p, float x, float cy, float w, float h, int 
         c.drawRoundRect(l, cy - bh / 2f, l + bw, cy + bh / 2f, bw / 2f, bw / 2f, p);
     }
 }
-private Bitmap circleArt(Item it) {
-    if (it.artCircle != null) return it.artCircle;
-    Bitmap src = loadLarge(it);
-    if (src == null) src = it.icon;
+private Bitmap makeDisc(Bitmap src) {
     if (src == null) return null;
     int s = 96;
     Bitmap out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888);
@@ -306,35 +312,41 @@ private Bitmap circleArt(Item it) {
     c.drawCircle(s / 2f, s / 2f, s / 2f - 3, p);
     p.setStyle(Paint.Style.FILL);
     c.drawCircle(s / 2f, s / 2f, 7, p);       // lỗ giữa kiểu đĩa than
-    it.artCircle = out;                       // vẽ 1 lần, về sau chỉ rotate bitmap
     return out;
 }
+
+private Bitmap circleArt(Item it) {
+    if (it.artCircle != null) return it.artCircle;
+    Bitmap src = loadLarge(it);
+    it.artCircle = makeDisc(src != null ? src : it.icon); // vẽ 1 lần, về sau chỉ rotate bitmap
+    return it.artCircle;
+}
+
 private Bitmap senderCircle(Item it) {
     if (it.senderBmp != null) return it.senderBmp;
     if (it.media || it.transientItem) return null;
     Bitmap src = it.largeIcon != null ? loadLarge(it) : null;
-    if (src == null && !it.person) return null;      // thông báo thường: giữ icon app bên trái như cũ
-    int sz = 96;
+    if (src != null) { it.senderBmp = makeDisc(src); return it.senderBmp; }
+    if (!it.person) {                              // thông báo thường: icon app thành đĩa
+        it.senderIsApp = true;
+        it.senderBmp = makeDisc(it.icon);
+        return it.senderBmp;
+    }
+    int sz = 96;                                   // người nhắn/gọi không có avatar: chữ cái đầu như cũ
     Bitmap out = Bitmap.createBitmap(sz, sz, Bitmap.Config.ARGB_8888);
     Canvas cv = new Canvas(out);
     Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-    if (src != null) {
-        cv.drawCircle(sz / 2f, sz / 2f, sz / 2f, p);
-        p.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
-        cv.drawBitmap(src, null, new RectF(0, 0, sz, sz), p);
-    } else {                                          // không có avatar -> hình tròn + chữ cái đầu
-        String t = it.title == null ? "" : it.title.trim();
-        String ch = t.isEmpty() ? "?" : new String(Character.toChars(t.codePointAt(0))).toUpperCase(Locale.getDefault());
-        p.setColor(blend(0xFF3A3A3C, appColor(it), 0.55f));
-        cv.drawCircle(sz / 2f, sz / 2f, sz / 2f, p);
-        p.setColor(Color.WHITE);
-        p.setTextSize(sz * 0.5f);
-        p.setTextAlign(Paint.Align.CENTER);
-        p.setTypeface(Typeface.DEFAULT_BOLD);
-        Paint.FontMetrics fm = p.getFontMetrics();
-        cv.drawText(ch, sz / 2f, sz / 2f - (fm.ascent + fm.descent) / 2f, p);
-    }
-    it.senderBmp = out;                               // vẽ 1 lần, cache trong Item
+    String t = it.title == null ? "" : it.title.trim();
+    String ch = t.isEmpty() ? "?" : new String(Character.toChars(t.codePointAt(0))).toUpperCase(Locale.getDefault());
+    p.setColor(blend(0xFF3A3A3C, appColor(it), 0.55f));
+    cv.drawCircle(sz / 2f, sz / 2f, sz / 2f, p);
+    p.setColor(Color.WHITE);
+    p.setTextSize(sz * 0.5f);
+    p.setTextAlign(Paint.Align.CENTER);
+    p.setTypeface(Typeface.DEFAULT_BOLD);
+    Paint.FontMetrics fm = p.getFontMetrics();
+    cv.drawText(ch, sz / 2f, sz / 2f - (fm.ascent + fm.descent) / 2f, p);
+    it.senderBmp = out;
     return out;
 }
 private Bitmap square96(Bitmap b) {
@@ -392,7 +404,7 @@ private void refreshMedia(Item it) {
         if (prefs.getBoolean("notic_en", false)) registerSystemEvents();
         this.recoverRun = () -> {
             if (items.isEmpty() || userHidden || !screenOn || !prefs.getBoolean("notic_en", false)) return;
-            if (pill == null || pill.hidden) { if (statusVisible) announce(); }   // sinh lại có animation từ tâm
+            if (pill == null || pill.hidden || replayNext) { if (statusVisible) announce(); }
             else relayout();
         };
     }
@@ -425,24 +437,44 @@ private void refreshMedia(Item it) {
         } catch (Exception e) { return null; }
     }
 
-    private Bitmap emojiIcon(String emoji, int color) {
-        String k = "ev:" + emoji + color;
-        Bitmap b = iconCache.get(k);
-        if (b != null) return b;
-        b = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(b);
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(color);
-        c.drawCircle(48, 48, 48, p);
-        p.setColor(Color.WHITE);
-        p.setTextSize(52);
-        p.setTextAlign(Paint.Align.CENTER);
-        Paint.FontMetrics fm = p.getFontMetrics();
-        c.drawText(emoji, 48, 48 - (fm.ascent + fm.descent) / 2f, p);
-        iconCache.put(k, b);
-        return b;
-    }
+    // UX: muốn đổi icon sự kiện nào chỉ cần sửa 1 dòng trong bảng này (tên drawable trong CUSTOM_ICON_NAMES).
+private static final String[][] EV_ICONS = {
+    {"charging", "flash_on_24px"}, {"full", "battery_charging_full_24px"}, {"low", "warning_24px"},
+    {"nonet", "mobile_question_24px"}, {"wifi", "android_wifi_3_bar_lock_24px"}, {"vpn", "security_24px"},
+    {"hotspot", "share_location_24px"}, {"bt", "settings_bluetooth_24px"}, {"silent", ""},
+    {"vibrate", "stream_24px"}, {"ring", ""}, {"unlock", "mobile_lock_portrait_24px"},
+    {"screenon", "light_mode_24px"}, {"airplane", "flight_24px"}, {"headset", "headphones_24px"},
+    {"dnd", "dark_mode_24px"}, {"storage", "data_usage_24px"}, {"screenshot", "crop_24px"},
+    {"rec", "movie_24px"}, {"mic", "settings_voice_24px"}, {"camera", "photo_camera_24px"}
+};
 
+private Drawable eventDrawable(String id) {
+    String name = "";
+    for (String[] e : EV_ICONS) if (e[0].equals(id)) { name = e[1]; break; }
+    int res = name.isEmpty() ? 0 : ctx.getResources().getIdentifier(name, "drawable", ctx.getPackageName());
+    if (res == 0) res = id.equals("silent") ? android.R.drawable.ic_lock_silent_mode
+        : id.equals("ring") ? android.R.drawable.ic_lock_silent_mode_off : android.R.drawable.ic_dialog_info;
+    try { return ctx.getDrawable(res); } catch (Exception e) { return null; }
+}
+
+private Bitmap eventIcon(String id) {
+    String k = "ev:" + id;
+    Bitmap b = iconCache.get(k);
+    if (b != null) return b;
+    Drawable d = eventDrawable(id);
+    if (d == null) return null;
+    d = d.mutate();
+    d.setTint(0xFFE8EAED);
+    Bitmap g = PanelEngine.normalizeIconBitmap(d, 96, 0.5f);
+    b = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888);
+    Canvas c = new Canvas(b);
+    Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+    p.setColor(CARD_GRAY);
+    c.drawCircle(48, 48, 48, p);
+    if (g != null) { c.drawBitmap(g, 0, 0, null); g.recycle(); }
+    iconCache.put(k, b);
+    return b;
+}
     private Bitmap loadLarge(Item it) {
         if (it.art != null) return it.art;
         if (it.largeIcon == null) return null;
@@ -489,11 +521,11 @@ private void refreshMedia(Item it) {
                 } else if (Intent.ACTION_BATTERY_LOW.equals(a)) {
                     event("low", "⚠", "Battery low (" + batteryLevel() + "%)", "", 0xFFC62828);
                 } else if (Intent.ACTION_USER_PRESENT.equals(a)) {
-                    scheduleRecover();
+                    replayNext = true; h.post(callCheckRun); scheduleRecover();
                     event("unlock", "🔓", "Phone unlocked", "", 0xFF455A64);
                 } else if (Intent.ACTION_SCREEN_ON.equals(a)) {
     screenOn = true;
-    scheduleRecover();
+    replayNext = true; h.post(callCheckRun); scheduleRecover();
     if (pill != null) pill.invalidate();   // khởi động lại vòng vẽ đĩa/visualizer
     event("screenon", "💡", "Screen on", new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date()), 0xFF37474F);
                 } else if (Intent.ACTION_DEVICE_STORAGE_LOW.equals(a)) {
@@ -597,6 +629,7 @@ private void refreshMedia(Item it) {
             audio = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
             micCb = new AudioManager.AudioRecordingCallback() {
                 @Override public void onRecordingConfigChanged(List<AudioRecordingConfiguration> l) {
+                    h.removeCallbacks(callCheckRun); h.postDelayed(callCheckRun, 500);
                     boolean active = l != null && !l.isEmpty();
                     if (active && !micOn) {
                         micOn = true;
@@ -669,7 +702,7 @@ private void refreshMedia(Item it) {
         it.text = text;
         it.appName = "Edge Bar";
         it.sig = title + text + SystemClock.elapsedRealtime();
-        it.icon = emojiIcon(emoji, color);
+        it.icon = eventIcon(id);
         it.transientItem = true;
         post(it, false, false);
     }
@@ -702,8 +735,10 @@ public boolean post(final Item it, boolean wake, boolean sound) {
     items.add(0, it);
     cur = 0;
     while (items.size() > 20) unbindMedia(items.remove(items.size() - 1));
-    // UX: luôn giữ item trong hàng đợi kể cả khi chưa có host; host xuất hiện thì relayout()/recoverRun tự dựng lại pill
     syncVisible();
+    long nowR = SystemClock.elapsedRealtime();
+    // UX: chat dồn dập thì không replay liên tục (>=1.5s mới replay), đỡ nháy + đỡ tốn pin.
+    if (popup == null && nowR - lastReplayMs > 1500) { replayNext = true; lastReplayMs = nowR; }
     announce();
     if (popup != null) renderPopup();
     if (it.call) {
@@ -731,10 +766,11 @@ public void onScreenOff() {
     screenOn = false;
     shadeOpen = false;
     userHidden = false;
-    statusVisible = previewForce || (!secureOverlay && !hasCall());
+statusVisible = previewForce || (!secureOverlay && !inCall);
     cancelPendingTap();
     h.removeCallbacks(settleRun); h.removeCallbacks(autoCloseRun); h.removeCallbacks(geoRun);
     h.removeCallbacks(noHostRun); h.removeCallbacks(recoverRun); h.removeCallbacks(reshowRun);
+    h.removeCallbacks(callCheckRun);
     pendingGeo = ""; noHostRetry = 0;
     prefs.edit().putBoolean("notic_paused", false).apply();
     closePopup(false, false);
@@ -847,7 +883,7 @@ public void clearDemo() {
             else h.postDelayed(geoRun, 80);
         }
     }
-    private String geoKey() { return (int) hl + "|" + (int) ht + "|" + (int) hr + "|" + (int) hb + "|" + (int) px + "|" + (int) cy + "|" + (int) ew + "|" + (int) pillH + "|" + badgeLeft + "|" + cRadPct; }
+    private String geoKey() { return (int) hl + "|" + (int) ht + "|" + (int) hr + "|" + (int) hb + "|" + (int) px + "|" + (int) cy + "|" + (int) ew + "|" + (int) pillH + "|" + badgeLeft + "|" + cRadPct + "|" + hostKey; }
 
     private void geoSettle() {
         if (items.isEmpty() || !prefs.getBoolean("notic_en", false)) { pendingGeo = ""; return; }
@@ -1065,7 +1101,8 @@ if (!bindHost()) {   // UX: chưa có host (đang đổi Lock<->Home) thì tự 
     h.removeCallbacks(settleRun);
     Item it = items.get(Math.min(cur, items.size() - 1));
     final float tw = ew;
-    final boolean fresh = pill == null || pill.hidden;
+final boolean fresh = pill == null || pill.hidden || replayNext;
+replayNext = false;
     if (pill == null) {
         if (!createPill()) return;
         hostChanged = false;
@@ -1108,6 +1145,7 @@ private void shrinkRemove(final boolean thenReopen, final boolean keepWindow) {
     if (hostView != null) hostView.animate().alpha(1f).setStartDelay(150).setDuration(320).start();
     pv.go(px, cy, pillH, pillH, pillH / 2f, 1f, 0f, 220, EMPH_IN, () -> {
         if (pill != pv) return;
+        pv.animate().alpha(0f).setDuration(170).start();
         pv.go(px, cy, 2f, 2f, 1f, 1f, 0f, 170, EMPH_IN, () -> {
             if (pill != pv) return;
             boolean again = reopen;
@@ -1152,8 +1190,7 @@ private void afterPopupGone() {
     if (items.isEmpty()) collapse();
 }
 private void syncVisible() {
-    // UX: chỉ 3 nguồn ẩn tạm: bảng thông báo/QS, PIN/camera (service báo), cuộc gọi đến. Tất cả tự hết là tự hiện lại.
-    boolean v = previewForce || (!shadeOpen && !secureOverlay && !hasCall());
+boolean v = previewForce || (!shadeOpen && !secureOverlay && !inCall);
     if (v == statusVisible) return;
     statusVisible = v;
     h.post(() -> {
@@ -1171,6 +1208,7 @@ private void applyVisibility() {
         hostView.animate().cancel();
         hostView.setAlpha(0f);
     }
+    pill.animate().cancel(); // UX: huỷ fade-out dở của lần thu gọn trước, nếu không pill hiện lại sẽ bị trong suốt
     pill.setAlpha(1f);
     pill.invalidate();
     if (!fullWin) {
@@ -1507,7 +1545,9 @@ private void renderPopup() {
     ImageView iv = new ImageView(ctx);
     iv.setLayoutParams(new LinearLayout.LayoutParams(dp(42), dp(42)));
     Bitmap sb = senderCircle(it);
-    if (sb != null) {
+if (sb == null && it.media) sb = circleArt(it);        // media tắt quay: đĩa tĩnh
+if (sb == null && it.transientItem) sb = it.icon;      // huy hiệu sự kiện đã tròn sẵn
+if (sb != null) {
         iv.setImageBitmap(sb);                       // tròn, không nền vuông
     } else {
         iv.setBackground(rounded(0xFF2C2C2E, dp(10)));
@@ -1550,7 +1590,7 @@ private void renderPopup() {
             col.addView(t2);
         }
         top.addView(col);
-        if (!it.media && it.senderBmp != null && it.icon != null) {   // icon app ở cùng bên phải
+        if (!it.media && it.senderBmp != null && it.icon != null && !it.senderIsApp) {
             ImageView ai = new ImageView(ctx);
             ai.setImageBitmap(it.icon);
             LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(dp(24), dp(24));
@@ -2079,6 +2119,7 @@ private void smsQuick(Item it, String body) {
             if (key.equals(x.key)) {
                 items.remove(x);
                 unbindMedia(x);   // gỡ MediaController callback nếu là item media
+                if (x.call) h.postDelayed(callCheckRun, 800); // trả lời cuộc gọi trên Notic -> cuộc gọi vừa chuyển sang "đang diễn ra"
                 changed = true;
             }
         }
@@ -2266,21 +2307,21 @@ float dX0, dY0;
     float isz = h * 0.62f, ix = l + h * 0.2f;
     boolean spin = item.media && cSpin, viz = item.media && cViz;
     Bitmap sender = (!item.media && !item.transientItem) ? item.senderBmp : null;
-    Bitmap lead = spin ? circleArt(item) : (sender != null ? sender : item.icon);
+    Bitmap lead = item.media ? circleArt(item) : (sender != null ? sender : item.icon); // media tắt quay vẫn là đĩa tĩnh
     if (lead != null) {
         irect.set(ix, cyy - isz / 2f, ix + isz, cyy + isz / 2f);
         if (spin) { c.save(); c.rotate(spinAngle(item), ix + isz / 2f, cyy); c.drawBitmap(lead, null, irect, ip); c.restore(); }
         else c.drawBitmap(lead, null, irect, ip);
     }
     float textR = rr - h * 0.3f;
-    if (sender != null && item.icon != null && w >= pillH * 1.8f) {
+    if (sender != null && item.icon != null && !item.senderIsApp && w >= pillH * 1.8f) {
         float rx = rr - h * 0.2f - isz;
         irect.set(rx, cyy - isz / 2f, rx + isz, cyy + isz / 2f);
         c.drawBitmap(item.icon, null, irect, ip);
         textR = rx - h * 0.15f;
     }
-    float vw = h * 0.85f, vl = rr - h * 0.25f - vw;
-    if (viz) { drawViz(c, bp, vl, cyy, vw, h * 0.5f, vizColor(item), item.playing, speed()); textR = Math.min(textR, vl - h * 0.15f); }
+    float vw = h * 0.95f, vl = rr - h * 0.25f - vw; // thanh dày ~+35%
+if (viz) { drawViz(c, bp, vl, cyy, vw, h * 0.5f, vizColor(item), item.playing, speed(), 0.05f); textR = Math.min(textR, vl - h * 0.15f); }
     if (count > 1) {
         float ba = Math.max(0f, Math.min(1f, (w - pillH * 1.4f) / (pillH * 0.6f)));
         float br = h / 2f, bcx = badgeLeft ? l - 6 * dens - br : rr + 6 * dens + br;
