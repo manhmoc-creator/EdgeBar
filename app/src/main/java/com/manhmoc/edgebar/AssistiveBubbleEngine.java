@@ -646,16 +646,16 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
         centerAnim.start();
     }
 
-    private void openMenu() {
-        if (menuOverlay != null) return;
-        selectedMainIdx = null; selectedSubIdx = null; currentSubmenu = null;
+private void openMenu() {
+    if (menuOverlay != null) return;
+    selectedMainIdx = null; selectedSubIdx = null; currentSubmenu = null;
 
-        FrameLayout overlay = new FrameLayout(ctx) {
+    FrameLayout overlay = new FrameLayout(ctx) {
     @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
         if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK
                 && event.getAction() == android.view.KeyEvent.ACTION_UP) {
-            if (popup != null) releaseIme(popup);
-            closePopup(false, true);
+            // Vì menu của Bubble không giữ focus IME, chỉ cần đóng menu là đủ
+            if (menuOverlay != null) closeMenu();
             return true;
         }
         return super.dispatchKeyEvent(event);
