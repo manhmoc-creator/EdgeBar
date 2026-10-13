@@ -101,7 +101,7 @@ public static class Item {
     PendingIntent intent;
     Notification.Action[] actions;
     Notification.Action reply;
-    boolean media, transientItem, call, ongoing, person, playing = true;
+    boolean media, transientItem, call, ongoing, person, playing = true, msg;
     Object token;                       // MediaSession.Token do Listener truyền sang
     MediaController mc;
     MediaController.Callback mcCb;
@@ -1147,7 +1147,14 @@ private void applyGeo(String s) {
     if (s.equals(lastGeo)) { pill.invalidate(); applyVisibility(); return; }
     boolean first = lastGeo.isEmpty();
     lastGeo = s;
-    if (hostSwitch && !previewForce) { shrinkRemove(true, false); return; }   // Lock↔Home khác vị trí: co lại rồi nở ra ở chỗ mới
+        if (hostSwitch && !previewForce) {
+        if (popup != null && popupLp != null) {
+            slidePopupToNewHost();
+        } else {
+            shrinkRemove(true, false);
+        }
+        return;
+    }
     final boolean want = expanded || pill.towardsExpanded() || pill.animating();
     float tw = want ? ew : pillH;
     if (first || previewForce) {
@@ -1159,6 +1166,34 @@ private void applyGeo(String s) {
     }
     pill.invalidate();
     applyVisibility();
+}
+private void slidePopupToNewHost() {
+    if (popup == null || popupLp == null) return;
+    if (morphAnim != null) { morphAnim.cancel(); morphAnim = null; popMorphing = false; }
+
+    final int oldX = popupLp.x, oldY = popupLp.y;
+    int pw = popW();
+    popupLp.width = pw;
+    popup.measure(View.MeasureSpec.makeMeasureSpec(pw, View.MeasureSpec.EXACTLY),
+                  View.MeasureSpec.makeMeasureSpec((int) scrH, View.MeasureSpec.AT_MOST));
+    final int newX = popX(pw);
+    final int newY = popY(popup.getMeasuredHeight());
+
+    if (pill != null) {
+        pill.set(px, cy, ew, pillH, pillRad(), 1f, 1f);
+        winFit();
+    }
+
+    final ValueAnimator va = ValueAnimator.ofFloat(0f, 1f);
+    va.setDuration(280);
+    va.setInterpolator(EMPH);
+    va.addUpdateListener(a -> {
+        float f = (float) a.getAnimatedValue();
+        popupLp.x = Math.round(oldX + (newX - oldX) * f);
+        popupLp.y = Math.round(oldY + (newY - oldY) * f);
+        try { wm.updateViewLayout(popup, popupLp); } catch (Exception ignored) {}
+    });
+    va.start();
 }
     private void afterExpand() {
     expanded = true;
@@ -1525,18 +1560,18 @@ private View buildItemActions(final Item it) {
     row.addView(actChip("Dismiss", v -> dismissItem(it)));
     return row;
 }
-    // 0 Auto | 1 màu icon app, không viền | 2 "chỉ màu": nền pha nhẹ màu app, không viền | 3..10 màu nền cố định + viền màu app
 private GradientDrawable cardBg(Item it, float r) {
     int m = prefs.getInt("notic_card_color", 0);
-    if (m == 1) return rounded(blend(appColor(it), Color.BLACK, 0.35f), r);
-    if (m == 2) return rounded(blend(CARD_GRAY, appColor(it), 0.30f), r);
-    if (it.media && m == 0) {                       // thẻ nhạc: nền theo màu thông báo, các thẻ khác vẫn xám
-        GradientDrawable g = rounded(blend(appColor(it), Color.BLACK, 0.45f), r);
-        if (cBorder) g.setStroke(dp(1.5f), appColor(it));
-        return g;
+    GradientDrawable g;
+    if (m == 1) g = rounded(blend(appColor(it), Color.BLACK, 0.35f), r);
+    else if (m == 2) g = rounded(blend(CARD_GRAY, appColor(it), 0.30f), r);
+    else if (it.media && m == 0) g = rounded(blend(appColor(it), Color.BLACK, 0.45f), r);
+    else g = rounded(m >= 3 && m - 3 < CARD_HEX.length ? Color.parseColor(CARD_HEX[m - 3]) : CARD_GRAY, r);
+    if (it.msg && !it.call) {
+        g.setStroke(dp(1.8f), BADGE_BLUE);
+    } else if (m != 1 && m != 2 && cBorder) {
+        g.setStroke(dp(1.5f), appColor(it));
     }
-    GradientDrawable g = rounded(m >= 3 && m - 3 < CARD_HEX.length ? Color.parseColor(CARD_HEX[m - 3]) : CARD_GRAY, r);
-    if (cBorder) g.setStroke(dp(1.5f), appColor(it));
     return g;
 }
     private void dismissItem(Item it) {

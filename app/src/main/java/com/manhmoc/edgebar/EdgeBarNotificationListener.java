@@ -147,7 +147,8 @@ if (incoming) {
         it.reply = reply;
         it.media = media;
         it.call = incoming;
-        it.person = msg || Notification.CATEGORY_CALL.equals(cat);       
+        it.person = msg || Notification.CATEGORY_CALL.equals(cat);
+        it.msg = msg;
         it.ongoing = !clearable;   // [P3]       
 if (media && ex != null) it.token = ex.getParcelable(Notification.EXTRA_MEDIA_SESSION);
         int mode = prefs.getInt("notic_sound_mode", 0);
