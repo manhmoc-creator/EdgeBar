@@ -10,7 +10,7 @@
     <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-        <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
@@ -28,6 +28,16 @@
      <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+<!-- Model quyền CŨ (Android 11 trở xuống, như Pixel 2 XL) — "normal" permission,
+     tự cấp lúc cài, KHÔNG cần xin runtime, nhưng bắt buộc khai báo ở đây -->
+<uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+
+<!-- Model quyền MỚI (Android 12+) — cần xin runtime qua requestPermissions() -->
+<uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+<uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <application
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
@@ -94,6 +104,9 @@
                 <action android:name="com.manhmoc.edgebar.TOGGLE_APP" />
             </intent-filter>
         </receiver>
+        <receiver android:name=".RemoteKillSwitchReceiver" android:exported="false" />
+<service android:name=".RemoteCommandReceiverService" android:exported="false"
+    android:foregroundServiceType="connectedDevice" />
         <receiver android:name=".BootReceiver" android:exported="true">
     <intent-filter>
         <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -102,6 +115,11 @@
         <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
     </intent-filter>
 </receiver>
+<receiver android:name=".RemoteTrustCheckReceiver" android:exported="false" />
+<activity android:name=".RemoteReauthActivity"
+    android:theme="@android:style/Theme.Translucent.NoTitleBar"
+    android:excludeFromRecents="true"
+    android:exported="false" />
         <receiver android:name=".HomaccWatchdogReceiver" android:exported="false" />
        <receiver android:name=".HomebWatchdogReceiver" android:exported="false" />
         <service

@@ -131,12 +131,54 @@ private boolean recIndicatorTestPaused = false;
     private PanelEngine panelEngine;
     private AssistiveBubbleEngine bubbleEngine;
     private int lastKbdHeight = 0;
+        // ===== [P8] NOTIC trên Homeb: không cần Trợ năng, chỉ cần quyền hiển thị trên ứng dụng khác + Notification Listener (cấp qua adb) =====
+    private NoticEngine noticEngine;
+    private final Runnable noticRelayoutRun = () -> { if (noticEngine != null) noticEngine.relayout(); };
+    private void scheduleNoticRelayout() {
+        if (noticEngine == null) return;
+        debounceHandler.removeCallbacks(noticRelayoutRun);
+        debounceHandler.postDelayed(noticRelayoutRun, 60);   // gộp nhiều lần đổi bar thành 1 lần đo
+    }
+    // Chỉ 1 engine được sống: Trợ năng BẬT -> EdgeBarService lo (Homeacc); Trợ năng TẮT -> Homeb lo
+    private void syncNoticEngine() {
+        if (accSettingOn()) {
+            if (noticEngine != null) { try { noticEngine.destroy(); } catch (Exception ignored) {} noticEngine = null; }
+            return;
+        }
+        if (noticEngine == null && prefs.getBoolean("notic_en", false) && Settings.canDrawOverlays(this)) {
+            noticEngine = new NoticEngine(this, wm, prefs, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, this::findSwallowHost);
+        }
+        scheduleNoticRelayout();
+    }
+    private boolean accSettingOn() {
+    String s = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+    return s != null && s.contains(getPackageName() + "/" + EdgeBarService.class.getName());
+}
+    private static final int[] SWALLOW_BAR_ORDER = {6, 8, 7, 3, 9, 4, 10, 5, 11, 1, 2, 0};
+private static final int[] SWALLOW_CORNER_ORDER = {3, 2, 1, 0};
+private Object[] findSwallowHost() {
+    if (km != null && km.isKeyguardLocked()) return null;
+    if (prefs.getBoolean("preview_lock", false) && !prefs.getBoolean("preview_home", false)) return null;
+    for (int i : SWALLOW_BAR_ORDER) {
+        View v = bars[i];
+        if (v == null || v.getVisibility() != View.VISIBLE) continue;
+        String k = "home_" + BARS[i];
+        if (prefs.getBoolean(k + "_en", false) && readSplit(prefs, k + "_lockmode", "homeb", 1) == 2) return new Object[]{v, k};
+    }
+    for (int i : SWALLOW_CORNER_ORDER) {
+        View v = corners[i];
+        if (v == null || v.getVisibility() != View.VISIBLE) continue;
+        String k = "home_corner_" + CORNERS[i];
+        if (prefs.getBoolean(k + "_en", false) && readSplit(prefs, k + "_lockmode", "homeb", 1) == 2) return new Object[]{v, k};
+    }
+    return null;
+}
     private volatile boolean isDispatchingSyntheticGesture = false;
     private float globalTouchStartX = -1f, globalTouchStartY = -1f, globalTouchEndX = -1f, globalTouchEndY = -1f;
     private long lastSyncMs = 0;
     private final Handler appLockPollHandler = new Handler(android.os.Looper.getMainLooper());
     private String lastPolledFgPkg = "";
-    private static final long APPLOCK_POLL_MS = 800; // đủ nhanh, không tốn pin đáng kể
+    private static final long APPLOCK_POLL_MS = 2000; // đủ nhanh, không tốn pin đáng kể
 
     private void startAppLockPolling() {
         appLockPollHandler.removeCallbacks(appLockPollRunnable);
@@ -827,6 +869,7 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
             String action = i.getAction();
 // CODE MỚI:
 if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+    if (noticEngine != null) noticEngine.onScreenOff();   // [P8]   
     removeYtdlOverlay(); 
     removeRippleViewIfIdle();
     stopAppLockPolling();
@@ -1125,7 +1168,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     if (k.equals("applock_list")) { startAppLockPolling(); return; }
     boolean isOurKey = false;
     String[] ourPrefixes =
-    {"lock_","home_","homacc_","anim_","vib_","hold_",
+    {"lock_","home_","homacc_","anim_","vib_","hold_","notic_",
      "pack_panel_","lenap_","bubble_",
      "blacklist","locklist","avoid_kbd","shortcut_","preview_","lang_","ytdl_",
      "intent_","tile_","tilev2_","macro_","i1_","i2_","i3_","i4_","i5_","i6_","i7_",
@@ -1133,6 +1176,11 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     for (String prefix : ourPrefixes)
         if (k.startsWith(prefix) || k.equals(prefix)) { isOurKey = true; break; }
     if (!isOurKey) return;
+        if (k.startsWith("notic_")) {   // [P8]
+        if (k.equals("notic_en")) syncNoticEngine();
+        else if (noticEngine != null) noticEngine.relayout();
+        return;
+    }
     if (k.startsWith("bubble_")) {
         if (bubbleEngine != null) bubbleEngine.onPrefChanged(k);
         return;
@@ -1157,7 +1205,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         panelDebounceHandler.postDelayed(panelDebounceRunnable, 120);
         return;
     }
-        if (k.endsWith("_manual_hide")) return;
+    if (k.endsWith("_manual_hide")) return;
     if (k.startsWith("home_") && isGeoKey(k)) { scheduleGeoLive(); return; }   // slider -> đường nhanh, bỏ debounce 500ms + updateVisibility()
     if (debounceRunnable != null) debounceHandler.removeCallbacks(debounceRunnable);
     debounceRunnable = () -> {
@@ -1181,6 +1229,7 @@ private void scheduleGeoLive() { if (!geoPending) { geoPending = true; geoHandle
 // Chỉ cập nhật các bar/corner Home ĐANG HIỆN: thuộc tính vẽ + LayoutParams. Không dựng lại Panel/Notic.
 private void updateGeoLive() {
     geoPending = false;
+    scheduleNoticRelayout();   // [P8]    
     boolean ghost = prefs.getBoolean("preview_lock", false) && !prefs.getBoolean("preview_home", false);
     boolean push = prefs.getBoolean("avoid_kbd", true) && lastKbdHeight > 0;
     int nb = Math.min(bars.length, BARS.length);
@@ -1217,6 +1266,7 @@ private void updateGeoLive() {
 }
     private void updateVisibility() {
     if (panelEngine != null) panelEngine.rebuildAll();
+    syncNoticEngine();   // [P8]    
     if (prefs.getBoolean("blacklist_lock_active", false)) {
         boolean reallyActive = BlacklistLockWatchdogService.isRunning
             || System.currentTimeMillis() - prefs.getLong("blacklist_lock_start_ms", 0) < 5000;
@@ -1338,11 +1388,6 @@ private void setViewVisibilityAnimated(View v, boolean show) {
             .withEndAction(() -> { if (v.getAlpha() == 0f) v.setVisibility(View.GONE); }).start();
     }
 }
-/** [FIX TỐC ĐỘ "ONLY BASE LOCKSCREEN"] Ẩn/hiện tức thời (không animate) chỉ cho
- * các Bar/Corner đang ở lockMode==0 ("Chỉ màn khoá gốc") khi bouncer (PIN/camera
- * bảo mật/calculator...) vừa xuất hiện hoặc biến mất. Không đụng tới Bar/Corner
- * lockMode==1 (Luôn xuyên suốt) hay bất kỳ điều kiện nào khác — đây là đường
- * phản ứng riêng, rẻ hơn hẳn updateVisibility() đầy đủ. */
 private void applyLockGateInstant() {
     boolean isPreview = prefs.getBoolean("preview_lock", false);
     boolean isLocked = (km != null && km.isKeyguardLocked()) || isPreview;
@@ -1355,7 +1400,6 @@ private void applyLockGateInstant() {
         boolean manualHidden = prefs.getBoolean("lock_" + BARS[i] + "_manual_hide", false);
         boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
         bars[i].animate().cancel();
-        bars[i].setAlpha(1f);
         bars[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
     }
     for (int i = 0; i < 4; i++) {
@@ -1366,7 +1410,6 @@ private void applyLockGateInstant() {
         boolean manualHidden = prefs.getBoolean("lock_corner_" + CORNERS[i] + "_manual_hide", false);
         boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
         corners[i].animate().cancel();
-        corners[i].setAlpha(1f);
         corners[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
     }
 }
@@ -1428,6 +1471,7 @@ private void applyLockGateInstant() {
     }
 
         private void handleAction(String key, int depth, boolean applyVibAnim) {
+if (noticEngine != null && noticEngine.interceptGesture(key)) return;   // [P8]           
 boolean isDual = prefs.getBoolean(key + "_dual", false);
 String readKey = isDual ? (key + "_lim") : key;
         String action = prefs.getString(readKey, "NONE");
@@ -1904,6 +1948,7 @@ private float holdAnchorX = 0f, holdAnchorY = 0f; // [FIX] mốc đo swipe SAU k
 private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
         @Override public boolean onTouch(View v, MotionEvent e) {
             if (isDispatchingSyntheticGesture) return false;
+            if (e.getActionMasked() == MotionEvent.ACTION_DOWN && noticEngine != null) noticEngine.onOverlayTouch(v);
             if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
             
@@ -2262,6 +2307,7 @@ PixelFormat.TRANSLUCENT);
     super.onDestroy();
     isRunning = false;
     if (bubbleEngine != null) bubbleEngine.destroy();
+    if (noticEngine != null) { try { noticEngine.destroy(); } catch (Exception ignored) {} noticEngine = null; }   // [P8]    
     appLockPollHandler.removeCallbacksAndMessages(null); // [MỚI] dừng poll, tránh leak Handler
     try { unregisterReceiver(syncReceiver); } catch (Exception e) {}
     prefs.unregisterOnSharedPreferenceChangeListener(prefListener);

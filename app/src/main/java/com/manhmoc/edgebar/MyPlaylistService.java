@@ -544,14 +544,13 @@ private PendingIntent contentTapPI() {
     // Bộ nút giống media notification chuẩn của hệ thống: Lùi 10s - Trước - Play/Pause - Tiếp - Tới 10s,
     // nút Dừng đổi icon nguồn (power) để không còn giống dấu X gây hiểu nhầm.
         Notification.Builder b = new Notification.Builder(this, CHANNEL_ID)
-        .setContentTitle(paused ? "🎵 " + title : "🎵 " + title)
+        .setContentTitle(paused ? "" + title : "" + title)
         .setContentText(getCurrentPackName())
         .setSmallIcon(android.R.drawable.ic_media_play)
         .setLargeIcon(currentArt)
         .setVisibility(Notification.VISIBILITY_PUBLIC)
         .setOngoing(isRunning && !paused) // đang phát: khoá vuốt xoá; đang dừng: cho vuốt xoá để huỷ hẳn
         .setContentIntent(contentTapPI())
-
         .setDeleteIntent(actionPI(ACTION_STOP))   // vuốt xoá noti = dừng hẳn, không cần nút riêng nữa
 .addAction(android.R.drawable.ic_media_previous, "Playlist trước", actionPI(ACTION_PREV_PLAYLIST))
 .addAction(android.R.drawable.ic_media_rew, "Trước", actionPI(ACTION_PREV))
@@ -559,7 +558,6 @@ private PendingIntent contentTapPI() {
     paused ? "Phát" : "Tạm Dừng", actionPI(ACTION_TOGGLE))
 .addAction(android.R.drawable.ic_media_ff, "Tiếp", actionPI(ACTION_NEXT))
 .addAction(android.R.drawable.ic_media_next, "Playlist sau", actionPI(ACTION_NEXT_PLAYLIST));
-
     if (session != null) b.setStyle(new Notification.MediaStyle()
         .setMediaSession(session.getSessionToken())
         .setShowActionsInCompactView(1, 2, 3)); // Trước - Play/Pause - Tiếp trong khung thu gọn

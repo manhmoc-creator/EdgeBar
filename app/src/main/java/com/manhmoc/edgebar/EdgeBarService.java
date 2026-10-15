@@ -31,6 +31,7 @@ import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -117,10 +118,12 @@ private void removeRippleViewIfIdle() {
 private volatile boolean isBouncerVisible = false;
 private volatile long lastBouncerCheckMs = 0L;
 private volatile boolean qrScannerOverlayActive = false; // [MỚI] QR Scanner đang mở -> coi như có overlay bảo mật che lockscreen gốc
-private static final long BOUNCER_CHECK_THROTTLE_MS = 60;
+private static final long BOUNCER_CHECK_THROTTLE_MS = 300;
 
 private static final String[] KEYGUARD_BOUNCER_IDS = {
     "com.android.systemui:id/keyguard_pin_view",
+    "com.android.systemui:id/keyguard_pattern_view",
+    "com.android.systemui:id/keyguard_password_view",
     "com.android.systemui:id/keyguard_security_container"
 };
     private SharedPreferences prefs;
@@ -175,7 +178,7 @@ private volatile boolean isCapturingIconColorScreenshot = false;
 private volatile long iconColorCaptureStartMs = 0L;
 private static final long ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS = 1500; 
 private static final long ICON_COLOR_EVENT_GATE_MS = 3000;
-private static final long ICON_COLOR_MIN_GAP_MS = 1500;      // MỚI: giãn cách tối thiểu giữa 2 lần takeScreenshot
+private static final long ICON_COLOR_MIN_GAP_MS = 3000;      // MỚI: giãn cách tối thiểu giữa 2 lần takeScreenshot
 
 private static final long ICON_COLOR_INTERVAL_MIN_MS = 400;
 private static final long ICON_COLOR_INTERVAL_MAX_MS = 5000;
@@ -261,13 +264,6 @@ private void doSampleIconColors(boolean isFollowUp) {
             }
         });
     });
-                if (!isFollowUp && !iconColorFollowUpPending) {
-        iconColorFollowUpPending = true;
-        iconColorHandler.postDelayed(() -> {
-            iconColorFollowUpPending = false;
-            doSampleIconColors(true);
-        }, 400);
-    }
     } catch (java.util.concurrent.RejectedExecutionException ree) {
         // Executor đã bị shutdownNow() trong onDestroy() — bỏ qua an toàn
         isCapturingIconColorScreenshot = false;
@@ -394,12 +390,8 @@ private boolean isOurKey(String k) {
         if (k.startsWith(prefix) || k.equals(prefix)) return true;
     return false;
 }
-
 private static final long HOMACC_DEBOUNCE_MS = 1000;
 private static final long LOCK_DEBOUNCE_MS = 400;
-
-// UX/perf: slider kích thước/vị trí/độ mờ/bo góc -> đẩy thẳng LayoutParams của view ĐANG HIỆN, gom ~1-2 khung hình.
-// Trước đây Lock đợi 400ms rồi chạy cả updateVisibility() (dựng lại Panel, Notic...), Home đợi 1000ms -> cảm giác "không realtime".
 private static final String[] GEO_SUFFIX = {"_alpha","_w","_h","_x","_y","_shape","_moon_w","_moon_h","_moon_x","_moon_y",
     "_rad","_moon_rad","_radius","_thick","_icon_size"};
 private boolean isGeoKey(String k) {
@@ -522,11 +514,6 @@ if (k != null && k.startsWith("shortcut_") && k.endsWith("_icon_override")) {
     homaccDebounceHandler.postDelayed(homaccDebounceRunnable, HOMACC_DEBOUNCE_MS);
     return;
 }
-    // TẦNG 3.5: "_manual_hide" đã được set TRỰC TIẾP lên View ngay tại nơi ghi
-    // (checkAndYieldOS/hideSomeOverlay/showAllOverlay) — không cần rebuild lại
-    // toàn bộ 16 Bar/Corner + Panel qua updateVisibility() nữa. Bỏ debounce cho
-    // riêng key này để tránh giật hình khi "Nhường OS" trùng lúc TRIGGER_* đang
-    // chạy animation mở khoá.
     if (k != null && k.endsWith("_manual_hide")) return;
 
     // TẦNG 4: lock bars → debounce 400ms như cũ
@@ -541,7 +528,11 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         if ("com.manhmoc.edgebar.TEST_ANIM".equals(act)) {
             playAnim();
                 } else if (Intent.ACTION_SCREEN_OFF.equals(act)) {
-        if (noticEngine != null) noticEngine.onScreenOff();            
+        if (noticEngine != null) noticEngine.onScreenOff();
+        shadeOpenNow = false; shadeCheckPending = false; bouncerCheckPending = false; evTrailingPending = false;
+        debounceHandler.removeCallbacks(shadeCheckRun);
+        debounceHandler.removeCallbacks(bouncerCheckRun);
+        debounceHandler.removeCallbacks(evTrailingRun);
     forceUnlockedUntilMs = 0; // tắt màn rồi thì Lock phải được phép hiện lại ngay
     if (recentsBlur != null) recentsBlur.hide(); // [FIX 2B] gỡ lớp phủ Recents + reset phiên khi tắt màn
     for (int j = 0; j < 12; j++) {
@@ -570,6 +561,7 @@ private BroadcastReceiver stateReceiver = new BroadcastReceiver() {
 
 } else if (Intent.ACTION_USER_PRESENT.equals(act)) {
         forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 800;
+        isBouncerVisible = false;
     isDispatchingSyntheticGesture = false;
     setTransientUntouchable(false);
     SharedPreferences.Editor ed = prefs.edit();
@@ -1115,9 +1107,9 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
     private void removeAllIconLayers() {
         for (String k : new java.util.ArrayList<>(iconLayers.keySet())) removeIconLayer(k);
     }
-    // [PIN] Chỉ theo dõi bouncer khi có bar/corner Lock đặt chế độ "Chỉ màn khoá gốc" (lockmode==0)
-    private boolean needBouncerTracking() {
-        for (int i = 0; i < 12; i++)
+private boolean needBouncerTracking() {
+    if (prefs.getBoolean("notic_en", false)) return true;   // UX: Notic cần biết PIN/camera/cuộc gọi dù bar không ở chế độ "chỉ màn khoá gốc"
+    for (int i = 0; i < 12; i++)
             if (prefs.getBoolean("lock_" + BARS[i] + "_en", false)
                     && prefs.getInt("lock_" + BARS[i] + "_lockmode", 1) == 0) return true;
         for (int i = 0; i < 4; i++)
@@ -1413,7 +1405,7 @@ public void onInterrupt() {
 @Override public void onAccessibilityEvent(AccessibilityEvent event) {
 int eventType = event.getEventType();
 if (recentsBlur != null) recentsBlur.onEvent(event);
-// [FIX NHÁY LOCK Ở HOME] Máy đã mở khoá mà Lock vẫn còn hiện -> hạ NGAY, không chờ USER_PRESENT
+if (eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED || eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) scheduleShadeCheck();   // [P4]
 if ((eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         || eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
         && lockLayerShown && km != null && !km.isKeyguardLocked()
@@ -1427,35 +1419,22 @@ if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
     CharSequence _ep = event.getPackageName();
     if (_ep != null) {
         String _eps = _ep.toString();
-        if ((_eps.contains("launcher") || _eps.contains("quickstep")) && !_eps.contains("systemui")) {
+        if ((_eps.contains("launcher") || _eps.contains("quickstep")) && !_eps.contains("systemui")
+                && isLauncherTopWindow()) {   // UX: chỉ coi là mở khoá khi launcher thật sự đang ở trên cùng
             forceUnlockedUntilMs = SystemClock.elapsedRealtime() + 1500;
             instantSwitchLockToHomacc();   // ẩn Lock tức thì + hiện Homacc ngay
         }
     }
 }
-
-
-// [MỚI - FIX 1/3 BOUNCER] typeWindowContentChanged bắt được đúng lúc bouncer
-// PIN xuất hiện/biến mất (cùng window, chỉ đổi nội dung). Xử lý NGAY tại đây,
-// trước mọi early-return khác, throttle riêng 60ms — nhanh hơn nhiều so với
-// EVENT_THROTTLE_MS (200ms) dùng chung cho phần đổi app, giúp bar phản ứng
-// tức thời thay vì trễ/giật.
 if ((eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         || eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         || eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
         && km != null && needBouncerTracking() && km.isKeyguardLocked()) {
     String evPkg = event.getPackageName() != null ? event.getPackageName().toString() : "";
-
-    long nowBouncer = android.os.SystemClock.elapsedRealtime();
-    if (nowBouncer - lastBouncerCheckMs >= BOUNCER_CHECK_THROTTLE_MS) {
-        lastBouncerCheckMs = nowBouncer;
-        boolean prevBouncer = isBouncerVisible;
-        checkBouncerVisible(evPkg);
-        if (isBouncerVisible != prevBouncer) applyLockGateInstant();
-    }
+    // UX: CONTENT_CHANGED của app khác (camera, nhạc...) bắn liên tục, chỉ keyguard (systemui) mới đáng kiểm tra
+    boolean cheapSkip = eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && !evPkg.contains("systemui");
+    if (!cheapSkip) scheduleBouncerCheck();
 }
-    // [MỚI] Cuộn nội dung (không đổi app) vẫn phải cập nhật màu icon — đây chính là
-    // tình huống "lướt feed sáng/tối liên tục" mà bản cũ không có sự kiện nào bắt được.
     if (eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
         long nowEv = android.os.SystemClock.elapsedRealtime();
         if (nowEv - lastIconColorEventGateMs >= ICON_COLOR_EVENT_GATE_MS) {
@@ -1501,8 +1480,10 @@ if (km != null && km.isKeyguardLocked()
         if (hit != null) triggerBlacklistLockRevokeAcc(hit);
     }
 }
-
-    if (nowMs - lastEventMs < EVENT_THROTTLE_MS) return;
+    if (nowMs - lastEventMs < EVENT_THROTTLE_MS) {
+        if (!evTrailingPending) { evTrailingPending = true; debounceHandler.postDelayed(evTrailingRun, EVENT_THROTTLE_MS); }
+        return;
+    }
     lastEventMs = nowMs;
     boolean accShouldRun = AccessibleHomeService.isRunning;
 if (accShouldRun != lastAccHomeRunningState) {
@@ -1554,63 +1535,113 @@ if (!stateChanged) return;
     syncIntent.putExtra("kbd_height", cachedKbdHeight); // [MỚI]
     sendBroadcast(syncIntent);
 }
+private boolean bouncerCheckPending, evTrailingPending, shadeCheckPending;
+private int bouncerRecheck = 0, bouncerClearStreak = 0;
+private final Runnable bouncerCheckRun = () -> {
+    bouncerCheckPending = false;
+    if (km == null || !km.isKeyguardLocked()) { bouncerRecheck = 0; return; }
+    lastBouncerCheckMs = SystemClock.elapsedRealtime();
+    boolean prev = isBouncerVisible;
+    checkBouncerVisible("");
+    if (isBouncerVisible != prev) applyLockGateInstant();
+    // UX: animation PIN/camera kết thúc SAU event cuối -> kiểm tra bù 3 lần rồi dừng
+    if (bouncerRecheck < 3) { bouncerRecheck++; scheduleBouncerCheckIn(250); } else bouncerRecheck = 0;
+};
+private void scheduleBouncerCheckIn(long delayMs) {
+    if (bouncerCheckPending) return;
+    bouncerCheckPending = true;
+    debounceHandler.postDelayed(bouncerCheckRun, delayMs);
+}
+private void scheduleBouncerCheck() {
+    bouncerRecheck = 0;
+    scheduleBouncerCheckIn(Math.max(0, BOUNCER_CHECK_THROTTLE_MS - (SystemClock.elapsedRealtime() - lastBouncerCheckMs)));
+}
+private final Runnable evTrailingRun = () -> {
+    evTrailingPending = false;
+    if (km == null || prefs == null) return;
+    cachedKbdHeight = computeKbdHeightPx();
+    isKbd = cachedKbdHeight > 0;
+    updateVisibility();
+};
+private void resetAlpha(View v) {
+    if (v != null && !(noticEngine != null && noticEngine.isHostCovered(v))) v.setAlpha(1f);
+}
 private void checkBouncerVisible(String currentPkg) {
     try {
         boolean cover = false;
-
-        // 1) Đang đổ chuông / đang gọi (rẻ nhất, kiểm tra trước)
         AudioManager amCover = (AudioManager) getSystemService(AUDIO_SERVICE);
-        if (amCover != null && amCover.getMode() != AudioManager.MODE_NORMAL) cover = true;
-
-        // 2) Cửa sổ khác màn khoá gốc: camera, calculator, màn cuộc gọi (APPLICATION)
-        //    và Trợ lý (cửa sổ SYSTEM đang active/focused của app khác)
+        if (amCover != null) {
+            int md = amCover.getMode();
+            if (md == AudioManager.MODE_RINGTONE || md == AudioManager.MODE_IN_CALL
+                || md == AudioManager.MODE_IN_COMMUNICATION) cover = true;
+        }
         if (!cover) {
             java.util.List<android.view.accessibility.AccessibilityWindowInfo> windows = getWindows();
             if (windows != null) {
                 String self = getPackageName();
                 for (android.view.accessibility.AccessibilityWindowInfo w : windows) {
                     int type = w.getType();
-                    boolean app = type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION;
-                    boolean sys = type == android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM
-                        && (w.isActive() || w.isFocused());
-                    if (!app && !sys) continue;
+                    if (type != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION
+                        && type != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM) continue;
+                    // UX: chỉ cửa sổ đang active/focused mới thật sự che màn khoá (launcher nền thì không)
+                    if (!w.isActive() && !w.isFocused()) continue;
                     android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
                     if (root == null) continue;
                     String pkg = root.getPackageName() != null ? root.getPackageName().toString() : "";
                     root.recycle();
                     if (pkg.isEmpty() || pkg.equals(self) || pkg.equals("android")
-                        || pkg.contains("systemui") || pkg.contains("inputmethod")) continue;
+                        || pkg.contains("systemui") || pkg.contains("inputmethod")
+                        || pkg.contains("launcher") || pkg.contains("quickstep")) continue;
                     cover = true;
                     break;
                 }
             }
         }
-
-        // 3) Bouncer PIN (nằm trong chính cửa sổ systemui)
         if (!cover) {
             android.view.accessibility.AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root != null) {
+                int minH = (int) (getResources().getDisplayMetrics().heightPixels * 0.25f);
+                android.graphics.Rect r = new android.graphics.Rect();
                 for (String id : KEYGUARD_BOUNCER_IDS) {
                     java.util.List<android.view.accessibility.AccessibilityNodeInfo> nodes =
                         root.findAccessibilityNodeInfosByViewId(id);
                     if (nodes != null) {
-                        if (!nodes.isEmpty()) cover = true;
-                        for (android.view.accessibility.AccessibilityNodeInfo n : nodes) n.recycle();
+                        for (android.view.accessibility.AccessibilityNodeInfo n : nodes) {
+                            // UX: container PIN luôn tồn tại trong cây view, phải đang hiện và đủ cao mới tính
+                            if (!cover && n.isVisibleToUser()) { n.getBoundsInScreen(r); if (r.height() >= minH) cover = true; }
+                            n.recycle();
+                        }
                     }
                     if (cover) break;
                 }
                 root.recycle();
             }
         }
-        isBouncerVisible = cover;
+        // UX: bật thì tức thì; tắt phải 2 lần đọc liên tiếp (container PIN còn "visible" trong lúc animation thoát)
+        if (cover) { bouncerClearStreak = 0; isBouncerVisible = true; }
+        else if (isBouncerVisible && ++bouncerClearStreak < 2) { /* giữ true, chờ xác nhận */ }
+        else { bouncerClearStreak = 0; isBouncerVisible = false; }
     } catch (Exception e) {
         isBouncerVisible = false;
     }
 }
-    // V19.12.3.6.8 THE ETERNAL EGO
-// getForegroundPackageFromWindows(): lấy package foreground từ getWindows() API
-// Pixel 2XL opt: recycle NodeInfo ngay sau khi đọc, tránh leak native memory
-// flagRetrieveInteractiveWindows trong config.xml mới cho phép method này hoạt động
+private boolean isLauncherTopWindow() {
+    try {
+        java.util.List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
+        if (ws == null) return false;
+        for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
+            if (!w.isActive() && !w.isFocused()) continue;
+            android.view.accessibility.AccessibilityNodeInfo r = w.getRoot();
+            if (r == null) continue;
+            CharSequence pk = r.getPackageName();
+            r.recycle();
+            if (pk == null) continue;
+            String s = pk.toString();
+            return (s.contains("launcher") || s.contains("quickstep")) && !s.contains("systemui");
+        }
+    } catch (Exception ignored) {}
+    return false;
+}
 private String getForegroundPackageFromWindows() {
     try {
         java.util.List<android.view.accessibility.AccessibilityWindowInfo> windows = getWindows();
@@ -2597,6 +2628,7 @@ if (!isPreview && km.isKeyguardLocked() && needBouncerTracking()) {
 }
 
 boolean isSecureOverlayVisible = (isBouncerVisible || qrScannerOverlayActive) && !isPreview;
+        pushNoticSecure();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
         boolean hide = isBl; // isKbd không ẩn nữa — đẩy lên thay vì ẩn
 boolean pushForKbd = avoidKbd && cachedKbdHeight > 0;
@@ -2699,29 +2731,101 @@ if (panelEngine != null) panelEngine.rebuildAll();
   refreshEventSubscription();
   if (noticEngine != null) noticEngine.relayout();
   }
+// ===== [P4] NOTIC: phát hiện user đang kéo bảng thông báo / QS =====
+private boolean shadeOpenNow = false;
+private final Runnable shadeCheckRun = this::runShadeCheck;
+private void scheduleShadeCheck() {
+    if (noticEngine == null || shadeCheckPending || !prefs.getBoolean("notic_en", false)) return;
+    shadeCheckPending = true;
+    debounceHandler.postDelayed(shadeCheckRun, 90);
+}
+private void runShadeCheck() {
+    shadeCheckPending = false;
+    if (noticEngine == null) return;
+    PowerManager pwr = (PowerManager) getSystemService(POWER_SERVICE);
+    if (pwr != null && !pwr.isInteractive()) return;   // màn tắt: không dò
+    boolean open = computeShadeOpen();
+    if (open != shadeOpenNow) { shadeOpenNow = open; noticEngine.setShadeOpen(open); }
+    // UX: chỉ dò lặp khi bảng đang mở (để biết lúc nào đóng); đóng rồi thì dừng hẳn
+    if (open) { shadeCheckPending = true; debounceHandler.postDelayed(shadeCheckRun, 400); }
+}
+private boolean computeShadeOpen() {
+    try {
+        if (isBouncerVisible) return false;
+        java.util.List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
+        if (ws == null) return false;
+        int sh = getResources().getDisplayMetrics().heightPixels;
+        int sw = getResources().getDisplayMetrics().widthPixels;
+        android.graphics.Rect r = new android.graphics.Rect();
+        boolean keyguardLocked = km != null && km.isKeyguardLocked();
+        for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
+            if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM) continue;
+            if (keyguardLocked && !w.isFocused() && !w.isActive()) continue;
+            w.getBoundsInScreen(r);
+            if (r.height() < sh * 0.3f || r.width() < sw * 0.85f) continue;   // UX: volume/power menu hẹp, shade/QS thật thì full-width
+            android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
+            if (root == null) continue;
+            CharSequence pk = root.getPackageName();
+            boolean isSystemui = pk != null && pk.toString().contains("systemui");
+            // UX: màn khoá gốc cũng là window systemui full màn hình, chỉ coi là "bảng mở" khi QS thật sự đang hiện
+            boolean open = isSystemui && (!keyguardLocked || isQsOpenOnKeyguard(root));
+            root.recycle();
+            if (open) return true;
+        }
+    } catch (Exception ignored) {}
+    return false;
+}
+private boolean isQsOpenOnKeyguard(android.view.accessibility.AccessibilityNodeInfo root) {
+    // UX: chỉ tin quick_settings_panel (INVISIBLE khi thu gọn). Tuyệt đối không thêm qs_frame:
+    // view đó luôn "visible" trên màn khoá -> Notic bị ẩn vĩnh viễn + vòng dò 400ms tốn pin.
+    int sh = getResources().getDisplayMetrics().heightPixels;
+    android.graphics.Rect r = new android.graphics.Rect();
+    java.util.List<android.view.accessibility.AccessibilityNodeInfo> nodes = null;
+    try { nodes = root.findAccessibilityNodeInfosByViewId("com.android.systemui:id/quick_settings_panel"); }
+    catch (Exception ignored) {}
+    if (nodes == null) return false;
+    boolean hit = false;
+    for (android.view.accessibility.AccessibilityNodeInfo n : nodes) {
+        if (!hit && n.isVisibleToUser()) {
+            n.getBoundsInScreen(r);
+            hit = r.height() >= sh * 0.12f && r.bottom > sh * 0.2f && r.top < sh * 0.5f;
+        }
+        n.recycle();
+    }
+    return hit;
+}
+private static final int[] SWALLOW_BAR_ORDER = {6, 8, 7, 3, 9, 4, 10, 5, 11, 1, 2, 0};   // ưu tiên bar phía trên, đáy xếp cuối
+private static final int[] SWALLOW_CORNER_ORDER = {3, 2, 1, 0};
 private Object[] findSwallowHost() {
-    boolean locked = km != null && km.isKeyguardLocked() && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs;
+    boolean pvLock = prefs.getBoolean("preview_lock", false), pvHome = prefs.getBoolean("preview_home", false);
+    boolean locked = pvLock || (!pvHome && km != null && km.isKeyguardLocked() && SystemClock.elapsedRealtime() >= forceUnlockedUntilMs);
+    Object[] r = swallowHostIn(locked);
+    if (pvLock || pvHome) return r;
+    return r != null ? r : swallowHostIn(!locked);
+}
+private Object[] swallowHostIn(boolean locked) {
     String px = locked ? "lock_" : "home_";
     View[] barArr = locked ? bars : accHomeBars;
     View[] cornerArr = locked ? corners : accHomeCorners;
-    for (int i = 0; i < 12; i++) {
+    for (int i : SWALLOW_BAR_ORDER) {
         View v = barArr[i];
-        if (v == null) continue;
+        if (v == null || v.getVisibility() != View.VISIBLE) continue;
         String k = px + BARS[i];
         if (prefs.getBoolean(k + "_en", false) && prefs.getInt(k + "_lockmode", 1) == 2) return new Object[]{v, k};
     }
-    for (int i = 0; i < 4; i++) {
+    for (int i : SWALLOW_CORNER_ORDER) {
         View v = cornerArr[i];
-        if (v == null) continue;
+        if (v == null || v.getVisibility() != View.VISIBLE) continue;
         String k = px + "corner_" + CORNERS[i];
         if (prefs.getBoolean(k + "_en", false) && prefs.getInt(k + "_lockmode", 1) == 2) return new Object[]{v, k};
     }
     return null;
-}  
+}
 private void setViewVisibilityAnimated(View v, boolean show) {
     if (v == null) return;
     int dur = prefs.getInt("lock_anim_dur", 0);
     v.animate().cancel();
+    if (show && noticEngine != null && noticEngine.isHostCovered(v)) { v.setVisibility(View.VISIBLE); return; }
     if (dur <= 0) {
         v.setAlpha(1f);
         v.setVisibility(show ? View.VISIBLE : View.GONE);
@@ -2739,6 +2843,7 @@ private void applyLockGateInstant() {
     boolean isPreview = prefs.getBoolean("preview_lock", false);
     boolean isLocked = (km != null && km.isKeyguardLocked()) || isPreview;
     boolean isSecureOverlayVisible = (isBouncerVisible || qrScannerOverlayActive) && !isPreview;
+    pushNoticSecure();
     for (int i = 0; i < 12; i++) {
         if (bars[i] == null) continue;
         int lockMode = prefs.getInt("lock_" + BARS[i] + "_lockmode", 1);
@@ -2747,7 +2852,7 @@ private void applyLockGateInstant() {
         boolean manualHidden = prefs.getBoolean("lock_" + BARS[i] + "_manual_hide", false);
         boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
         bars[i].animate().cancel();
-        bars[i].setAlpha(1f);
+        resetAlpha(bars[i]);
         bars[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
         setIconLayerShown("lock_" + BARS[i], shouldShow);   // icon đi cùng bar, cùng khung hình
     }
@@ -2760,14 +2865,18 @@ private void applyLockGateInstant() {
         boolean manualHidden = prefs.getBoolean("lock_corner_" + CORNERS[i] + "_manual_hide", false);
         boolean shouldShow = en && isLocked && !isBl && !isSecureOverlayVisible && !manualHidden;
         corners[i].animate().cancel();
-        corners[i].setAlpha(1f);
+        resetAlpha(corners[i]);
         corners[i].setVisibility(shouldShow ? View.VISIBLE : View.GONE);
     }
-refreshLockShownFlag(); 
+    if (noticEngine != null) noticEngine.relayout();
+    refreshLockShownFlag(); 
 }
-/** [MỚI] Chuyển tức thời Lock -> Homacc ngay lúc ACTION_USER_PRESENT — không animate,
- *  không chờ accessibility event kế tiếp, để mắt thường không kịp thấy Lock/LockEb
- *  còn sót lại trên Home dù chỉ đúng 1 khung hình. */
+private void pushNoticSecure() {
+    if (noticEngine == null) return;
+    boolean preview = prefs.getBoolean("preview_lock", false);
+    noticEngine.setSecureOverlay(!preview
+        && ((km != null && km.isKeyguardLocked() && isBouncerVisible) || qrScannerOverlayActive));
+}
 private void instantSwitchLockToHomacc() {
     lockLayerShown = false; 
     for (int i = 0; i < 12; i++) {
@@ -2785,6 +2894,7 @@ private void instantSwitchLockToHomacc() {
     if (AccessibleHomeService.isRunning) {
         if (isHomaccDrawn) updateHomaccLive(); else drawAccessibleHome();
     }
+    if (noticEngine != null) noticEngine.relayout();
 }
 private static final int MAX_TRIGGER_DEPTH = 3;
 
@@ -2964,6 +3074,7 @@ private float holdAnchorX = 0f, holdAnchorY = 0f;
 private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                 @Override public boolean onTouch(View v, MotionEvent e) {
             if (isDispatchingSyntheticGesture) return false;
+            if (e.getActionMasked() == MotionEvent.ACTION_DOWN && noticEngine != null) noticEngine.onOverlayTouch(v);
             if (myView instanceof CornerView) ((CornerView)myView).triggerFlash();
             else if (myView instanceof BarView) ((BarView)myView).triggerFlash();
             
@@ -3226,9 +3337,6 @@ private void removeAccessibleHome() {
 }
 
 private void updateHomaccLive() {
-    // [FIX BỔ SUNG] Nếu phát hiện views bị OOM-kill (mất WM token), force rebuild
-    // NGAY thay vì tiếp tục cấu hình trên views mồ côi — tránh tình trạng user
-    // thấy bar/corner "biến mất" nhưng không có tín hiệu hồi phục nào.
     if (homaccViewsMissing()) {
         healHomaccIfNeeded();
         if (!isHomaccDrawn || homaccViewsMissing()) return; // vẫn chưa hồi -> thoát sạch
@@ -3309,8 +3417,7 @@ private void updateHomaccLive() {
         if (priMode == 0) applyAntiTapjacking(v, p.width, p.height);
     }
     refreshEventSubscription();
-
-
+    if (noticEngine != null) noticEngine.relayout();
 }
 @Override
 public boolean onUnbind(Intent intent) {
