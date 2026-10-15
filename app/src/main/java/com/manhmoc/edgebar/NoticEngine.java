@@ -108,7 +108,7 @@ public class NoticEngine {
         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
         | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;   // ép vẽ bằng GPU cho cả viên thuốc lẫn bảng mở rộng
-    private static final int POPUP_FLAGS
+    private static final int POPUP_FLAGS = NOT_FOCUSABLE
         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
     private static final int BAR_COLOR = Color.argb(200, 96, 125, 139);
