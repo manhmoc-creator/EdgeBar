@@ -1909,6 +1909,9 @@ gesMenuContainer.addView(createSettingsRow("routine_24px", "Home",
     T("Long-press launcher icon", "Giữ icon app ngoài Home"),
     this::openAppIconShortcutSpace));
     gesMenuContainer.addView(createSettingsRow("notifications_active_24px", "Notic",
+    gesMenuContainer.addView(createSettingsRow("settings_bluetooth_24px", "Remote Devices",
+    T("Send commands to paired devices (Wi-Fi/Hotspot/BT)", "Gửi lệnh tới thiết bị đã ghép đôi (Wi-Fi/Hotspot/BT)"),
+    this::openRemoteDevicesSpace));
     T("Dynamic island style notifications", "Thông báo kiểu Dynamic Island"),
     this::openNoticSpace));
     gesSubHeader = new LinearLayout(this);
@@ -8799,6 +8802,271 @@ private void showNoticAppPicker() {
 
     d.setContentView(root);
     d.show();
+}
+private RemoteDevicePairing pairingHelper;
+
+private void openRemoteDevicesSpace() {
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212"));
+    root.setPadding(30, 80, 30, 30);
+
+    TextView title = new TextView(this);
+    title.setText("📡 " + T("Remote Devices", "Thiết bị từ xa"));
+    title.setTextColor(Color.parseColor("#8AB4F8")); title.setTextSize(18);
+    title.setPadding(0, 0, 0, 10);
+    root.addView(title);
+
+    TextView note = new TextView(this);
+    note.setText(T(
+        "Pairing lần đầu cần PIN 9 số do 2 người tự trao đổi tận tay. Hiệu lực 7 ngày, cần xác thực lại (vân tay/PIN) để gia hạn.",
+        "Pairing lần đầu cần PIN 9 số do 2 người tự trao đổi tận tay. Hiệu lực 7 ngày, cần xác thực lại (vân tay/PIN) để gia hạn."));
+    note.setTextColor(Color.parseColor("#9AA0A6")); note.setTextSize(11.5f);
+    note.setPadding(0, 0, 0, 20);
+    root.addView(note);
+
+    ScrollView scroll = new ScrollView(this);
+    scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    LinearLayout content = new LinearLayout(this);
+    content.setOrientation(LinearLayout.VERTICAL);
+    scroll.addView(content);
+    root.addView(scroll);
+
+    // ---- Danh sách thiết bị đã pairing ----
+    content.addView(createSectionTitle(T("PAIRED DEVICES", "THIẾT BỊ ĐÃ GHÉP ĐÔI")));
+    LinearLayout deviceList = new LinearLayout(this);
+    deviceList.setOrientation(LinearLayout.VERTICAL);
+    content.addView(deviceList);
+    Runnable[] refreshDevices = new Runnable[1];
+    refreshDevices[0] = () -> renderRemoteDeviceList(deviceList, refreshDevices[0]);
+    refreshDevices[0].run();
+
+    Button btnPairNew = new Button(this);
+    btnPairNew.setText("➕ " + T("Pair New Device", "Ghép đôi thiết bị mới"));
+    btnPairNew.setBackground(getRounded("#7C4DFF", 20f));
+    btnPairNew.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-1, -2);
+    pLp.setMargins(0, 10, 0, 30);
+    btnPairNew.setLayoutParams(pLp);
+    btnPairNew.setOnClickListener(v -> openPairingDialog(refreshDevices[0]));
+    content.addView(btnPairNew);
+
+    // ---- Bảng nút lệnh (kéo-thả sắp xếp vị trí) ----
+    content.addView(createSectionTitle(T("QUICK COMMANDS (hold to reorder)", "NÚT LỆNH NHANH (nhấn giữ để đổi vị trí)")));
+    LinearLayout cmdGrid = new LinearLayout(this);
+    cmdGrid.setOrientation(LinearLayout.VERTICAL);
+    content.addView(cmdGrid);
+    renderRemoteCommandGrid(cmdGrid);
+
+    Button bClose = new Button(this);
+    bClose.setText(T("CLOSE", "ĐÓNG"));
+    bClose.setBackground(getRounded("#333333", 20f));
+    bClose.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, -2);
+    cLp.setMargins(0, 20, 0, 0);
+    bClose.setLayoutParams(cLp);
+    bClose.setOnClickListener(v -> d.dismiss());
+    root.addView(bClose);
+
+    d.setContentView(root);
+    d.show();
+}
+
+private void renderRemoteDeviceList(LinearLayout container, Runnable rerender) {
+    container.removeAllViews();
+    List<RemoteDeviceStore.Device> list = RemoteDeviceStore.loadAll(prefs);
+    if (list.isEmpty()) {
+        TextView empty = new TextView(this);
+        empty.setText(T("No paired device yet.", "Chưa ghép đôi thiết bị nào."));
+        empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER);
+        empty.setPadding(0, 20, 0, 20);
+        container.addView(empty);
+        return;
+    }
+    for (RemoteDeviceStore.Device dev : list) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setBackground(getRounded(dev.isExpired() ? "#4A1F1F" : "#1E1E1E", 20f));
+        card.setPadding(24, 20, 24, 20);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 6, 0, 6);
+        card.setLayoutParams(lp);
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView tName = new TextView(this);
+        tName.setText(dev.name); tName.setTextColor(Color.WHITE); tName.setTextSize(14.5f);
+        TextView tStatus = new TextView(this);
+        if (dev.isExpired()) {
+            tStatus.setText("🔒 " + T("Expired — needs re-pairing", "Hết hạn — cần ghép đôi lại"));
+            tStatus.setTextColor(Color.parseColor("#FF6B6B"));
+        } else {
+            long daysLeft = Math.max(0, (dev.trustedUntilMs - System.currentTimeMillis()) / 86400000);
+            tStatus.setText("✓ " + T("Trusted — ", "Tin cậy — ") + daysLeft + T(" days left", " ngày còn lại"));
+            tStatus.setTextColor(Color.parseColor("#8AB4F8"));
+        }
+        tStatus.setTextSize(11.5f); tStatus.setPadding(0, 4, 0, 0);
+        col.addView(tName); col.addView(tStatus);
+        card.addView(col);
+
+        Button btnRevoke = new Button(this);
+        btnRevoke.setText("🗑");
+        btnRevoke.setBackground(getRounded("#D32F2F", 14f));
+        btnRevoke.setTextColor(Color.WHITE);
+        btnRevoke.setPadding(20, 10, 20, 10);
+        btnRevoke.setOnClickListener(v -> {
+            new AlertDialog.Builder(this)
+                .setTitle(T("Revoke this device?", "Thu hồi thiết bị này?"))
+                .setPositiveButton(T("REVOKE", "THU HỒI"), (dg, w) -> {
+                    RemoteDeviceStore.revoke(prefs, dev.mac);
+                    rerender.run();
+                }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
+        });
+        card.addView(btnRevoke);
+        container.addView(card);
+    }
+}
+
+private void openPairingDialog(Runnable onDone) {
+    String[] opts = {T("Generate PIN (this device)", "Tạo PIN (máy này)"), T("Enter PIN (other device)", "Nhập PIN (máy kia)")};
+    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle(T("Which role?", "Vai trò nào?"))
+        .setItems(opts, (dg, which) -> {
+            if (which == 0) showGeneratedPinDialog(onDone); else showEnterPinDialog(onDone);
+        }).show();
+}
+
+private void showGeneratedPinDialog(Runnable onDone) {
+    if (pairingHelper != null) pairingHelper.stop();
+    pairingHelper = new RemoteDevicePairing(this);
+    TextView tv = new TextView(this);
+    tv.setTextColor(Color.parseColor("#8AB4F8")); tv.setTextSize(32); tv.setGravity(Gravity.CENTER);
+    tv.setPadding(40, 60, 40, 60);
+    tv.setText(T("Starting…", "Đang khởi động…"));
+    AlertDialog dlg = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle(T("Read this PIN aloud to the other person", "Đọc mã PIN này cho người kia"))
+        .setView(tv)
+        .setNegativeButton(T("CANCEL", "HỦY"), (dg, w) -> { if (pairingHelper != null) pairingHelper.stop(); })
+        .setCancelable(false)
+        .create();
+    dlg.show();
+    String pin = pairingHelper.startAsAdvertiser(new RemoteDevicePairing.PairResult() {
+        @Override public void onPaired(String mac, String name) {
+            runOnUiThread(() -> {
+                Toast.makeText(MainActivity.this, T("Paired with ", "Đã ghép đôi với ") + name, Toast.LENGTH_SHORT).show();
+                startService(new Intent(MainActivity.this, RemoteCommandReceiverService.class));
+                RemoteTrustCheckReceiver.scheduleNext(MainActivity.this);
+                dlg.dismiss(); onDone.run();
+            });
+        }
+        @Override public void onFailed(String reason) {
+            runOnUiThread(() -> { Toast.makeText(MainActivity.this, reason, Toast.LENGTH_SHORT).show(); dlg.dismiss(); });
+        }
+    });
+    if (pin != null) tv.setText(pin);
+}
+
+private void showEnterPinDialog(Runnable onDone) {
+    EditText et = new EditText(this);
+    et.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+    et.setHint(T("9-digit PIN", "Mã PIN 9 số"));
+    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle(T("Enter the PIN shown on the other device", "Nhập PIN hiện trên máy kia"))
+        .setView(et)
+        .setPositiveButton(T("PAIR", "GHÉP ĐÔI"), (dg, w) -> {
+            String pin = et.getText().toString().trim();
+            if (pin.length() != 9) { Toast.makeText(this, T("PIN must be 9 digits", "PIN phải đủ 9 số"), Toast.LENGTH_SHORT).show(); return; }
+            if (pairingHelper != null) pairingHelper.stop();
+            pairingHelper = new RemoteDevicePairing(this);
+            pairingHelper.startAsScanner(pin, new RemoteDevicePairing.PairResult() {
+                @Override public void onPaired(String mac, String name) {
+                    runOnUiThread(() -> {
+                        Toast.makeText(MainActivity.this, T("Paired with ", "Đã ghép đôi với ") + name, Toast.LENGTH_SHORT).show();
+                        startService(new Intent(MainActivity.this, RemoteCommandReceiverService.class));
+                        RemoteTrustCheckReceiver.scheduleNext(MainActivity.this);
+                        onDone.run();
+                    });
+                }
+                @Override public void onFailed(String reason) {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, reason, Toast.LENGTH_SHORT).show());
+                }
+            });
+        }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
+}
+
+// ---- Bảng nút lệnh: kéo-thả đổi vị trí, tái dùng attachDragReorder() đã có sẵn ----
+private static final String[] REMOTE_CMD_KEYS = {
+    RemoteCommandSender.CMD_WIFI_ON, RemoteCommandSender.CMD_WIFI_OFF,
+    RemoteCommandSender.CMD_HOTSPOT_ON, RemoteCommandSender.CMD_HOTSPOT_OFF,
+    RemoteCommandSender.CMD_BT_ON, RemoteCommandSender.CMD_BT_OFF
+};
+private String remoteCmdLabel(String cmd) {
+    switch (cmd) {
+        case "WIFI_ON": return "📶 " + T("Wi-Fi ON", "Bật Wi-Fi");
+        case "WIFI_OFF": return "📵 " + T("Wi-Fi OFF", "Tắt Wi-Fi");
+        case "HOTSPOT_ON": return "📡 " + T("Hotspot ON", "Bật Hotspot");
+        case "HOTSPOT_OFF": return "📡 " + T("Hotspot OFF", "Tắt Hotspot");
+        case "BT_ON": return "🔵 " + T("Bluetooth ON", "Bật Bluetooth");
+        case "BT_OFF": return "⚪ " + T("Bluetooth OFF", "Tắt Bluetooth");
+        default: return cmd;
+    }
+}
+
+private void renderRemoteCommandGrid(LinearLayout container) {
+    container.removeAllViews();
+    List<RemoteDeviceStore.Device> trusted = new ArrayList<>();
+    for (RemoteDeviceStore.Device d : RemoteDeviceStore.loadAll(prefs)) if (!d.isExpired()) trusted.add(d);
+    if (trusted.isEmpty()) {
+        TextView tv = new TextView(this);
+        tv.setText(T("Pair a trusted device first to enable commands.", "Hãy ghép đôi thiết bị tin cậy trước để dùng nút lệnh."));
+        tv.setTextColor(Color.GRAY); tv.setGravity(Gravity.CENTER); tv.setPadding(0, 20, 0, 20);
+        container.addView(tv);
+        return;
+    }
+    // Chọn thiết bị đích (nếu có nhiều) — đơn giản hoá: dùng thiết bị đầu tiên còn hạn
+    final RemoteDeviceStore.Device target = trusted.get(0);
+
+    // Thứ tự nút đã lưu — y hệt cách panel order đang lưu trong prefs
+    List<String> order = getDynamicIds("remote_cmd_order");
+    if (order.isEmpty()) { order.addAll(java.util.Arrays.asList(REMOTE_CMD_KEYS)); }
+    for (String k : REMOTE_CMD_KEYS) if (!order.contains(k)) order.add(k);
+
+    for (String cmd : order) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setBackground(getRounded(SURFACE_COLOR, 20f));
+        card.setPadding(24, 22, 24, 22);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 6, 0, 6);
+        card.setLayoutParams(lp);
+        card.setTag(cmd);
+
+        TextView tv = new TextView(this);
+        tv.setText(remoteCmdLabel(cmd));
+        tv.setTextColor(Color.WHITE); tv.setTextSize(14.5f);
+        tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        card.addView(tv);
+
+        Button btnSend = stdCardBtn(T("SEND", "GỬI"), ACCENT_COLOR, Color.BLACK);
+        btnSend.setOnClickListener(v -> {
+            RemoteCommandSender.send(this, target.mac, cmd, new RemoteCommandSender.SendResult() {
+                @Override public void onSent() {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "✓ " + T("Sent to ", "Đã gửi tới ") + target.name, Toast.LENGTH_SHORT).show());
+                }
+                @Override public void onFailed(String reason) {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "✗ " + reason, Toast.LENGTH_SHORT).show());
+                }
+            });
+        });
+        card.addView(btnSend);
+
+        attachDragReorder(card, order, "remote_cmd_order", () -> renderRemoteCommandGrid(container));
+        container.addView(card);
+    }
 }
 private void openAppIconShortcutSpace() {
     reloadActionLabels();

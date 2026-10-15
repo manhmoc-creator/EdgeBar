@@ -44,6 +44,8 @@ public class BootReceiver extends BroadcastReceiver {
         }
 // [MỚI] Đảm bảo watchdog định kỳ luôn được lên lịch lại sau mỗi lần khởi động máy
         HomebWatchdogReceiver.scheduleRepeating(c);
+        // Thêm vào BootReceiver.onReceive(), cạnh dòng HomebWatchdogReceiver.scheduleRepeating(c);
+RemoteTrustCheckReceiver.scheduleNext(c);
     }
     private boolean isAccEnabled(Context c) {
         String s = android.provider.Settings.Secure.getString(c.getContentResolver(),
