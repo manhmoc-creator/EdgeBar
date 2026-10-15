@@ -942,7 +942,6 @@ protected void onDestroy() {
     if (prefs.getBoolean("appicon_kill_recents", false) && isFinishing()) {
         try { finishAndRemoveTask(); } catch (Exception ignored) {}
     }
-    if (pairingHelper != null) pairingHelper.stop();
     super.onDestroy();
 }
     private void reloadActionLabels() {
