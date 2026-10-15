@@ -33,21 +33,24 @@ public class RemoteDevicePairing {
 
     public interface PairResult { void onPaired(String mac, String name); void onFailed(String reason); }
 
-    /** MÁY A: sinh PIN 9 số, bật advertise + GATT server trong tối đa 120s để chờ máy B nhập đúng PIN. */
     public String startAsAdvertiser(PairResult cb) {
+    try {
         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
         if (adapter == null || !adapter.isEnabled()) { cb.onFailed("Bluetooth đang tắt"); return null; }
-        String pin = generatePin9();
 
         advertiser = adapter.getBluetoothLeAdvertiser();
-        AdvertiseSettings settings = new AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-            .setTimeout(120_000).setConnectable(true).build();
-        AdvertiseData data = new AdvertiseData.Builder()
-            .addServiceUuid(new android.os.ParcelUuid(SERVICE_UUID)).build();
+        // [QUAN TRỌNG] Không phải máy nào cũng hỗ trợ BLE Peripheral (tự quảng bá) —
+        // null tại đây là nguyên nhân crash phổ biến nhất, phải chặn trước khi dùng.
+        if (advertiser == null) {
+            cb.onFailed("Thiết bị này không hỗ trợ chế độ quảng bá BLE (BLE Peripheral). Hãy thử vai trò 'Nhập PIN' thay vì 'Tạo PIN' trên máy này.");
+            return null;
+        }
+
+        String pin = generatePin9();
 
         gattServer = btMgr.openGattServer(ctx, new PairingGattCallback(pin, cb));
+        if (gattServer == null) { cb.onFailed("Không mở được GATT server"); return null; }
+
         BluetoothGattService svc = new BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY);
         svc.addCharacteristic(new BluetoothGattCharacteristic(CHAR_PIN_CHECK,
             BluetoothGattCharacteristic.PROPERTY_WRITE, BluetoothGattCharacteristic.PERMISSION_WRITE));
@@ -55,32 +58,53 @@ public class RemoteDevicePairing {
             BluetoothGattCharacteristic.PROPERTY_READ, BluetoothGattCharacteristic.PERMISSION_READ));
         gattServer.addService(svc);
 
+        AdvertiseSettings settings = new AdvertiseSettings.Builder()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+            .setTimeout(120_000).setConnectable(true).build();
+        AdvertiseData data = new AdvertiseData.Builder()
+            .addServiceUuid(new android.os.ParcelUuid(SERVICE_UUID)).build();
+
         advertiser.startAdvertising(settings, data, new AdvertiseCallback() {
             @Override public void onStartFailure(int errorCode) { cb.onFailed("Không bật được quảng bá BLE: " + errorCode); }
         });
 
-        h.postDelayed(this::stop, 120_000); // tự tắt sau 2 phút nếu không ai pairing — không giữ radio mở vô thời hạn
+        h.postDelayed(this::stop, 120_000);
         return pin;
+    } catch (SecurityException se) {
+        // Thiếu quyền BLUETOOTH_ADVERTISE/BLUETOOTH_CONNECT chưa được cấp runtime
+        cb.onFailed("Chưa được cấp quyền Bluetooth. Vào Cài đặt > Ứng dụng > Edge Bar > Quyền, bật Bluetooth thủ công.");
+        return null;
+    } catch (Exception e) {
+        cb.onFailed("Lỗi không xác định: " + e.getMessage());
+        return null;
     }
-
-    /** MÁY B: quét theo Service UUID riêng (lọc phần cứng, rẻ pin), kết nối khi tìm thấy, gửi PIN đã gõ. */
+}
     public void startAsScanner(String enteredPin, PairResult cb) {
+    try {
         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
         if (adapter == null || !adapter.isEnabled()) { cb.onFailed("Bluetooth đang tắt"); return; }
+
         scanner = adapter.getBluetoothLeScanner();
+        if (scanner == null) { cb.onFailed("Không khởi tạo được bộ quét BLE"); return; }
+
         ScanFilter filter = new ScanFilter.Builder().setServiceUuid(new android.os.ParcelUuid(SERVICE_UUID)).build();
         ScanSettings settings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build();
 
         pendingScanCb = new ScanCallback() {
             @Override public void onScanResult(int type, ScanResult result) {
-                scanner.stopScan(this); // tìm thấy -> dừng quét ngay, chuyển sang connect 1 lần duy nhất
+                scanner.stopScan(this);
                 connectAndSendPin(result.getDevice(), enteredPin, cb);
             }
         };
         scanner.startScan(java.util.Collections.singletonList(filter), settings, pendingScanCb);
         h.postDelayed(() -> { if (pendingScanCb != null) { scanner.stopScan(pendingScanCb); cb.onFailed("Không tìm thấy thiết bị — đảm bảo 2 máy để gần nhau"); } }, 30_000);
+    } catch (SecurityException se) {
+        cb.onFailed("Chưa được cấp quyền Bluetooth. Vào Cài đặt > Ứng dụng > Edge Bar > Quyền, bật Bluetooth thủ công.");
+    } catch (Exception e) {
+        cb.onFailed("Lỗi không xác định: " + e.getMessage());
     }
-
+}
     private void connectAndSendPin(BluetoothDevice device, String pin, PairResult cb) {
         device.connectGatt(ctx, false, new BluetoothGattCallback() {
             @Override public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
