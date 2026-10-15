@@ -1909,11 +1909,11 @@ gesMenuContainer.addView(createSettingsRow("routine_24px", "Home",
     T("Long-press launcher icon", "Giữ icon app ngoài Home"),
     this::openAppIconShortcutSpace));
     gesMenuContainer.addView(createSettingsRow("notifications_active_24px", "Notic",
+        T("Dynamic island style notifications", "Thông báo kiểu Dynamic Island"),
+        this::openNoticSpace));
     gesMenuContainer.addView(createSettingsRow("settings_bluetooth_24px", "Remote Devices",
-    T("Send commands to paired devices (Wi-Fi/Hotspot/BT)", "Gửi lệnh tới thiết bị đã ghép đôi (Wi-Fi/Hotspot/BT)"),
-    this::openRemoteDevicesSpace));
-    T("Dynamic island style notifications", "Thông báo kiểu Dynamic Island"),
-    this::openNoticSpace));
+        T("Send commands to paired devices (Wi-Fi/Hotspot/BT)", "Gửi lệnh tới thiết bị đã ghép đôi (Wi-Fi/Hotspot/BT)"),
+        this::openRemoteDevicesSpace));
     gesSubHeader = new LinearLayout(this);
     gesSubHeader.setOrientation(LinearLayout.HORIZONTAL);
     gesSubHeader.setGravity(Gravity.CENTER_VERTICAL);
