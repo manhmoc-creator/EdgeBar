@@ -29,6 +29,13 @@ import com.google.zxing.common.BitMatrix;
 import com.google.zxing.common.HybridBinarizer;
 import com.google.zxing.qrcode.QRCodeWriter;
 import java.util.*;
+/**
+ * Quét QR thông minh kiểu Zalo/iPhone Camera + nhận diện QR thanh toán ngân hàng.
+ * Tối ưu Pixel 2XL: analysis stream giữ cố định 1280x720 (đủ để giải mã, không
+ * tốn thêm CPU/pin so với res cao hơn); preview stream tự chọn size khớp camera
+ * thật rồi letterbox đúng tỉ lệ (fix lỗi hình bị bóp méo do trước đây ép SurfaceView
+ * full màn hình bất kể tỉ lệ buffer thật).
+ */
 public class QrScanActivity extends Activity {
     private static final int REQ_CAMERA = 8801;
     private CameraDevice camera;

@@ -128,14 +128,6 @@ private TextView tvFrontierSubTitle; // [MỚI] hoisted ra field để mở th�
 private final java.util.ArrayDeque<Runnable> navBackStack = new java.util.ArrayDeque<>();
 private Runnable currentLevelBackAction = null;
     private boolean frontierSelectMode = false;
-    private boolean deepEditOpen = false;
-    private int barDrawerCnt = 0;
-private final java.util.function.Consumer<Boolean> noticBarDrawerToggle = open -> {
-    barDrawerCnt = Math.max(0, barDrawerCnt + (open ? 1 : -1));
-    syncNoticSuppress();
-};
-private void syncNoticSuppress() { NoticEngine.setSuppressed(deepEditOpen || barDrawerCnt > 0); }
-private void resetNoticBarDrawers() { barDrawerCnt = 0; syncNoticSuppress(); }
     private boolean gestureSelectMode = false;
     private java.util.Set<String> gestureSelectedItems = new java.util.LinkedHashSet<>();
     private final java.util.Set<String> openGestureDrawers = new java.util.LinkedHashSet<>();
@@ -615,7 +607,7 @@ private View buildActionPickCard(String title, String prefKey, List<String[]> it
     final LinearLayout[] holder = new LinearLayout[1];
 
     Runnable openPicker = () -> {
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -853,7 +845,7 @@ private Bitmap normalizeIconBitmap(android.graphics.drawable.Drawable d, int tar
     }
     @Override protected void onResume() {
         super.onResume();
-        syncNoticSuppress();
+      // [MỚI] Tự dọn cờ Blacklist-Lock nếu bị kẹt (MIUI hay giết tiến trình Watchdog giữa chừng)
 if (prefs.getBoolean("blacklist_lock_active", false)
         && !BlacklistLockWatchdogService.isRunning
         && System.currentTimeMillis() - prefs.getLong("blacklist_lock_start_ms", 0) > 8000) {
@@ -939,11 +931,9 @@ if (prefs.getBoolean("blacklist_lock_active", false)
     }
     @Override protected void onPause() {
         super.onPause();
-        NoticEngine.setSuppressed(false);
         if (prefs.getBoolean("preview_lock", false) || prefs.getBoolean("preview_homacc", false) || prefs.getBoolean("preview_home", false)) {
             prefs.edit().putBoolean("preview_lock", false).putBoolean("preview_homacc", false).putBoolean("preview_home", false).apply();
             sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-            NoticEngine.endPreviewAll();
         }
     }
 
@@ -952,6 +942,7 @@ protected void onDestroy() {
     if (prefs.getBoolean("appicon_kill_recents", false) && isFinishing()) {
         try { finishAndRemoveTask(); } catch (Exception ignored) {}
     }
+    if (pairingHelper != null) pairingHelper.stop();
     super.onDestroy();
 }
     private void reloadActionLabels() {
@@ -1566,29 +1557,13 @@ btnUninstallTop.setMinimumHeight(0);
 btnUninstallTop.setOnClickListener(v -> confirmThenUninstallApp());
 Button btnUpdateTop = createSystemBtn("Update", "#333333", "#8AB4F8");
 btnUpdateTop.setTextSize(14f);
-btnUpdateTop.setPadding(24, 12, 24, 12);
+btnUpdateTop.setPadding(24, 12, 24, 12); // Tăng đệm dọc
 LinearLayout.LayoutParams upLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
 upLp.setMargins(4, 4, 4, 4);
 btnUpdateTop.setLayoutParams(upLp);
 btnUpdateTop.setMinimumHeight(0);
 btnUpdateTop.setOnClickListener(v -> {
-    Intent i = new Intent(Intent.ACTION_VIEW);
-    i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions"));
-    startActivity(i);
-    // [MỚI] Đánh dấu đã xem build mới nhất -> ẩn badge
-    UpdateChecker.markSeen(prefs);
-    btnUpdateTop.setText("Update");
-    btnUpdateTop.setBackground(getRounded("#333333", 20f));
-    btnUpdateTop.setTextColor(Color.parseColor("#8AB4F8"));
-});
-// [MỚI] Kiểm tra bản cập nhật — nếu có build mới hơn, đổi nút thành badge cam
-final Button fBtnUpdate = btnUpdateTop;
-UpdateChecker.check(this, prefs, (latestBuild, hasUpdate) -> {
-    if (hasUpdate && latestBuild > 0) {
-        fBtnUpdate.setText("⬆️ Update #" + latestBuild);
-        fBtnUpdate.setBackground(getRounded("#FF9800", 20f));
-        fBtnUpdate.setTextColor(Color.WHITE);
-    }
+    Intent i = new Intent(Intent.ACTION_VIEW); i.setData(Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")); startActivity(i);
 });
 rightCol.addView(btnUninstallTop);
 rightCol.addView(btnUpdateTop);
@@ -1871,8 +1846,7 @@ private void openSystemSpace() {
     updateFabVisibility();
 }
 private void showMainMenu() {
-    resetNoticBarDrawers();
-    navBackStack.clear(); // ← THÊM DÒNG NÀY 
+navBackStack.clear(); // ← THÊM DÒNG NÀY 
     currentMainTab = -1;
     pageDesign.setVisibility(View.GONE);
     pageConditions.setVisibility(View.GONE);
@@ -1909,11 +1883,8 @@ gesMenuContainer.addView(createSettingsRow("routine_24px", "Home",
     T("Long-press launcher icon", "Giữ icon app ngoài Home"),
     this::openAppIconShortcutSpace));
     gesMenuContainer.addView(createSettingsRow("notifications_active_24px", "Notic",
-        T("Dynamic island style notifications", "Thông báo kiểu Dynamic Island"),
-        this::openNoticSpace));
-    gesMenuContainer.addView(createSettingsRow("settings_bluetooth_24px", "Remote Devices",
-        T("Send commands to paired devices (Wi-Fi/Hotspot/BT)", "Gửi lệnh tới thiết bị đã ghép đôi (Wi-Fi/Hotspot/BT)"),
-        this::openRemoteDevicesSpace));
+    T("Dynamic island style notifications", "Thông báo kiểu Dynamic Island"),
+    this::openNoticSpace));
     gesSubHeader = new LinearLayout(this);
     gesSubHeader.setOrientation(LinearLayout.HORIZONTAL);
     gesSubHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -2206,7 +2177,7 @@ private void addAutoColorOffCheckboxes(LinearLayout container, String fullPrefKe
     }
 }
 private void openOrBridgeEditor(String baseKey, String title) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -2272,7 +2243,7 @@ private void renderBarsCornersEditor(LinearLayout container, String prefix,
         hideCornerWrap.addView(createDrawer("📁 " + T("Corners to hide","Góc viền cần ẩn") + " (▼)", gdHide));
         gd.addView(hideCornerWrap);
         return gd;
-    }, noticBarDrawerToggle));
+    }));
 
     container.addView(createLazyDrawer("TÙY CHỈNH CHUNG THANH CẠNH", () -> {
         LinearLayout bd = new LinearLayout(this);
@@ -2305,7 +2276,7 @@ addAutoColorOffCheckboxes(autoColorBody, prefix + "bar_auto_icon_color_off", aut
         autoColorWrap.addView(createDrawer("🎨 " + T("Auto Icon Color","Tự động đổi màu Icon") + " (▼)", autoColorBody));
         bd.addView(autoColorWrap);
         return bd;
-    }, noticBarDrawerToggle));
+    }));
 }
 private LinearLayout buildGestureIconDrawer() {
     LinearLayout body = new LinearLayout(this);
@@ -2585,7 +2556,7 @@ private void refreshGestureChecksForComponent(ArrayList<CheckBox> boxes,
         boxes.get(i).setChecked(!action.equals("NONE") && !action.isEmpty());
     }
 }
-    private void openRuleBuilderDialog(String editKey, int preComp, int preGes, String copyActs) { Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar); d.setContentView(buildRuleEditor(d, editKey, preComp, preGes, copyActs)); d.show(); }
+    private void openRuleBuilderDialog(String editKey, int preComp, int preGes, String copyActs) { Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen); d.setContentView(buildRuleEditor(d, editKey, preComp, preGes, copyActs)); d.show(); }
 private int indexInDefaultOrder(String itemKey){
     for (int i = 0; i < TwinPairStore.DEFAULT_DISPLAY_ORDER.length; i++)
         if (TwinPairStore.DEFAULT_DISPLAY_ORDER[i].equals(itemKey)) return i;
@@ -2969,7 +2940,7 @@ private void openSensorPackEditor(String space, String editId) {
         Toast.makeText(this, T("Only 1 Data Pack allowed", "Chỉ được 1 Data Pack duy nhất"), Toast.LENGTH_SHORT).show();
         return;
     }
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -3200,7 +3171,6 @@ private void openSpaceDirect(int spaceIdx) {
 }
 private void redrawFrontierBody(LinearLayout body) {
         body.removeAllViews();
-        resetNoticBarDrawers();
 String prefix = frontierSubTab == 0 ? "lock_" : frontierSubTab == 1 ? "home_" : "homacc_";
 int packTabState = frontierSubTab == 0 ? 0 : frontierSubTab == 1 ? 1 : 4;
         renderBarsCornersEditor(body, prefix, BARS, BAR_NAMES, frontierSubTab == 2);
@@ -3218,7 +3188,7 @@ private void ensureHomeServiceForPreview() {
         sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE")), 300);
 }
     private void openPackRuleSpace(String appliedItemKey, int tabState) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     final boolean isHomebSpace = (tabState == 1);
         final String ruleSpace = tabState == 1 ? "home_" : "lock_";
     curRuleSpace = ruleSpace;
@@ -3372,7 +3342,7 @@ private void ensureHomeServiceForPreview() {
     }
 
 private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String currentItemKey, Runnable onDone) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -3684,7 +3654,7 @@ private void openHalfActionPicker(boolean isLeft, String kind,
         String[] pkgHolder, String[] shortcutHolder, Runnable onSave) {
 
     boolean isLimited = isCommonKind(kind);
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -3813,7 +3783,7 @@ private void openPackRuleEditor(String appliedItemKey, String editId, String cop
 private void openPackRuleEditor(String appliedItemKey, String editId, String copyId, Runnable onRefresh, boolean isHomebSpace, String focusSide) {
 
     reloadActionLabels();
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -4525,6 +4495,7 @@ private int gi(String src, String f, String sf, boolean and, int def) {
     int common = prefs.getInt(src + f, def);
     return and ? prefs.getInt(src + f + sf, common) : common;
 }
+
 private void applyBarPackToSpace(String id, String targetPrefix) { applyBarPackToSpace(id, targetPrefix, false); }
 // geoOnly=true: đường NHANH cho slider kéo tay — chỉ ghi alpha/w/h/x/y; bỏ ensureScopedPack (quét toàn bộ prefs), icon, side-fields và rules
 private void applyBarPackToSpace(String id, String targetPrefix, boolean geoOnly) {
@@ -4538,10 +4509,7 @@ private void applyBarPackToSpace(String id, String targetPrefix, boolean geoOnly
     boolean and = prefs.getBoolean(src + "and_geo", false);
     int y = prefs.getInt(src + "y", 0);
     int spacing = prefs.getInt(src + "pair_spacing", 0);
-    /* UX: bỏ hẳn icon_en — có icon khi chuỗi không rỗng, không có khi rỗng.
-       AND bật → mỗi bên dùng bộ icon riêng; AND tắt → dùng chung 1 bộ. */
-    boolean iconsAnd = prefs.getBoolean(src + "icons_and", false);
-    String iconsShared = prefs.getString(src + "icons", "");
+    String icons = prefs.getString(src + "icons", "");
     boolean spreadY = TwinPairStore.signOfBarPair(pairId) == 0;
     int shiftX = prefs.getInt(src + "x", 0);
     int half = spacing / 2;
@@ -4551,7 +4519,7 @@ private void applyBarPackToSpace(String id, String targetPrefix, boolean geoOnly
         boolean isA = s == 0;
         String sf = isA ? "_L" : "_R";
         boolean en = TwinPairStore.isSideEnabled(prefs, targetPrefix + "pack_bar_", pairId, isA, true);
-        String iconCsv = iconsAnd ? prefs.getString(src + "icons" + sf, "") : iconsShared;
+        boolean iconOn = sideVal(src + "icon_en", isA, false, 0) == 1 || sideVal(src + "icon_en", isA, true, 0) == 1;
         String bk = targetPrefix + m[s] + "_";
         int xs;
         int ys;
@@ -4567,7 +4535,7 @@ private void applyBarPackToSpace(String id, String targetPrefix, boolean geoOnly
           .putInt(bk + "h", gi(src, "h", sf, and, 60))
           .putInt(bk + "x", xs).putInt(bk + "y", ys);
         if (!geoOnly) {
-            ed.putBoolean(bk + "en", en).putString(bk + "icons", iconCsv);
+            ed.putBoolean(bk + "en", en).putString(bk + "icons", iconOn ? icons : "");
             writeSideFields(ed, src, bk, isA, isLock);
         }
     }
@@ -4660,7 +4628,7 @@ private void reapplyPackIfEnabledByItemKey(String itemKey, String spacePrefix) {
     reapplyPackIfEnabled(isBar ? 0 : 1, id, spacePrefix);
 }
     private void openRuleBuilderDialogNoComp(String copyActs) {
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         d.setContentView(buildRuleEditor(d, null, -1, -1, copyActs));
         d.show();
     }
@@ -5109,7 +5077,7 @@ private Button singleActionCategoryBtn(String title, String color, List<String[]
     b.setBackground(getRounded(color, 20f)); b.setTextColor(Color.WHITE);
     b.setText(title);
     b.setOnClickListener(v -> {
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
         ListView lv = new ListView(this);
@@ -5159,7 +5127,7 @@ private void showActionCategoryPicker(String title, List<String[]> items,
     final java.util.LinkedHashSet<String> working = new java.util.LinkedHashSet<>();
     for (String s : selectedSet) if (categoryKeys.contains(s)) working.add(s);
 
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30, 80, 30, 30);
 
@@ -5254,7 +5222,7 @@ private void showActionCategoryPicker(String title, List<String[]> items,
 private void buildMainMenuList() {
     pageMainMenu.removeAllViews();
     Object[][] items = {
-    {"touch_app_24px", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Lock · Home · Texture · VolKey · Sensor · App Icon · Notic", (Runnable)() -> openSpace(1)},
+    {"touch_app_24px", T("Gestures & Touch Zones","Cử chỉ & Vùng chạm"), "Lock · Home · Texture · VolKey · Sensor · App Icon", (Runnable)() -> openSpace(1)},
     {"light_mode_24px", T("Display","Hiển thị"), "Anima · Lenap · Bubble · " + T("Language","Ngôn ngữ"), (Runnable)this::openDesignSpace},
     {"flash_on_24px", T("Custom Actions","Hành động tùy chỉnh"), "Intents · QS Tiles · Macros", (Runnable)this::openEcosystemMenu},
     {"file_present_24px", T("Storage","Bộ nhớ"), T("Storage Scan","Quét dung lượng"), (Runnable)() -> openEco(3, false)},
@@ -5384,7 +5352,7 @@ private void buildSystemSpace() {
             startActivityForResult(i, 102);
         })));
     pageSystemSpace.addView(wrapCard(buildShowcaseItem("🔄", T("Update","Cập nhật"),
-        "GitHub Actions", () -> {
+         "GitHub Actions", () -> {
             startActivity(new Intent(Intent.ACTION_VIEW,
                 Uri.parse("https://github.com/manhmoc-creator/EdgeBar/actions")));
         })));
@@ -6327,9 +6295,10 @@ private void renderMyPlaylistPackList() {
         optCol.setGravity(Gravity.CENTER);
         optCol.setPadding(0, 0, 15, 0);
         TextView tIcon = new TextView(this);
-tIcon.setText(id.equals(curPlayingId) ? "\u25B6" : "");
-tIcon.setTextSize(24);
-optCol.addView(tIcon);
+        tIcon.setText(id.equals(curPlayingId) ? "▶" : "🎵");
+        tIcon.setTextSize(24);
+        optCol.addView(tIcon);
+
         Button btnOpen = stdCardBtn(T("SONGS", "BÀI HÁT"), ACCENT_COLOR, Color.BLACK);
         btnOpen.setOnClickListener(v -> openMyPlaylistPackEditor(id));
 
@@ -6421,7 +6390,7 @@ private LinearLayout buildMyPlaylistPackSelectionToolbar(List<String> ids) {
 
 // ==================== TRÌNH CHỈNH SỬA 1 PLAYLIST (đổi tên + danh sách bài) ====================
 private void openMyPlaylistPackEditor(String packId) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     RelativeLayout root = new RelativeLayout(this);
     root.setBackgroundColor(Color.parseColor("#000000"));
 
@@ -6881,83 +6850,32 @@ private static final int[] QS_ICON_POOL = {
         android.R.drawable.presence_video_online, android.R.drawable.sym_def_app_icon,
         android.R.drawable.sym_action_call, android.R.drawable.sym_action_chat
     };
-/* UX: 2 tab — SYSTEM (API pool như cũ) + CUSTOM (100 icon riêng trong APK).
-   Callback trả String "pool:N" hoặc "poolc:N" để lưu vào tilev2_<id>_icon_ref,
-   thay cho icon_idx int cũ. Bỏ hẳn index int để không phải hack offset. */
-private void showQsIconPickerDialog(java.util.function.Consumer<String> onPicked) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
-    LinearLayout root = new LinearLayout(this);
-    root.setOrientation(LinearLayout.VERTICAL);
-    root.setBackgroundColor(Color.parseColor("#121212"));
-    root.setPadding(30, 80, 30, 30);
-
-    LinearLayout tabs = new LinearLayout(this);
-    tabs.setOrientation(LinearLayout.HORIZONTAL);
-    Button bApi = createTabBtn(T("SYSTEM", "HỆ THỐNG"));
-    Button bCustom = createTabBtn(T("CUSTOM", "TÙY CHỈNH"));
-    LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, -2, 1f);
-    tlp.setMargins(0, 0, 10, 0);
-    bApi.setLayoutParams(tlp);
-    bCustom.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    tabs.addView(bApi); tabs.addView(bCustom);
-    root.addView(tabs);
-
-    FrameLayout body = new FrameLayout(this);
-    body.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-    root.addView(body);
-
-    ScrollView apiPage = buildQsIconGridPage(QS_ICON_POOL, "pool:", onPicked, d);
-    ScrollView customPage = buildQsIconGridPage(PanelEngine.getCustomIconPool(this), "poolc:", onPicked, d);
-    body.addView(apiPage);
-    body.addView(customPage);
-    customPage.setVisibility(View.GONE);
-
-    bApi.setOnClickListener(v -> {
-        bApi.setBackground(getRounded("#8AB4F8", 15f)); bApi.setTextColor(Color.BLACK);
-        bCustom.setBackground(getRounded("#222222", 15f)); bCustom.setTextColor(Color.WHITE);
-        apiPage.setVisibility(View.VISIBLE);
-        customPage.setVisibility(View.GONE);
-    });
-    bCustom.setOnClickListener(v -> {
-        bApi.setBackground(getRounded("#222222", 15f)); bApi.setTextColor(Color.WHITE);
-        bCustom.setBackground(getRounded("#8AB4F8", 15f)); bCustom.setTextColor(Color.BLACK);
-        apiPage.setVisibility(View.GONE);
-        customPage.setVisibility(View.VISIBLE);
-    });
-    bApi.performClick();
-
-    d.setContentView(root); d.show();
-}
-/* UX: 1 page grid 5 cột dùng chung cho cả API pool và Custom pool — tránh
-   duplicate ~25 dòng layout code. */
-private ScrollView buildQsIconGridPage(int[] pool, String prefixTag,
-        java.util.function.Consumer<String> onPicked, Dialog d) {
+private void showQsIconPickerDialog(java.util.function.IntConsumer onPicked) {
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     ScrollView scroll = new ScrollView(this);
+    scroll.setBackgroundColor(Color.parseColor("#121212"));
     LinearLayout page = new LinearLayout(this);
     page.setOrientation(LinearLayout.VERTICAL);
-    page.setPadding(0, 20, 0, 20);
+    page.setPadding(30, 80, 30, 30);
     scroll.addView(page);
     LinearLayout row = null;
-    for (int i = 0; i < pool.length; i++) {
-        if (i % 5 == 0) {
-            row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            page.addView(row);
-        }
+    for (int i = 0; i < QS_ICON_POOL.length; i++) {
+        if (i % 5 == 0) { row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); page.addView(row); }
         ImageView iv = new ImageView(this);
-        Bitmap normBmp = normalizeIconBitmap(getDrawable(pool[i]), 140, 0.68f);
+        Bitmap normBmp = normalizeIconBitmap(getDrawable(QS_ICON_POOL[i]), 140, 0.68f);
         if (normBmp != null) iv.setImageBitmap(normBmp);
-        else { iv.setImageResource(pool[i]); iv.setPadding(24, 24, 24, 24); }
+        else { iv.setImageResource(QS_ICON_POOL[i]); iv.setPadding(24, 24, 24, 24); }
         LinearLayout.LayoutParams ivLp = new LinearLayout.LayoutParams(0, 140, 1f);
         ivLp.setMargins(6, 6, 6, 6);
         iv.setLayoutParams(ivLp);
         iv.setBackground(getRounded("#202124", 16f));
         final int idxFinal = i;
-        iv.setOnClickListener(v -> { onPicked.accept(prefixTag + idxFinal); d.dismiss(); });
+        iv.setOnClickListener(v -> { onPicked.accept(idxFinal); d.dismiss(); });
         row.addView(iv);
     }
-    return scroll;
+    d.setContentView(scroll); d.show();
 }
+    // THÊM 2 hàm sau openTileEditor():
 private void runDeepStorageScan() {
     Toast.makeText(this, "Đang quét, chờ vài giây...", Toast.LENGTH_SHORT).show();
     new Thread(() -> {
@@ -7533,7 +7451,7 @@ private LinearLayout buildVideoSelectionToolbar() {
 }
 // ==================== [KẾT THÚC PHẦN MỚI] ====================
     private void openIntentEditorV2(String id) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,120,40,40);
     ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
     LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); scroll.addView(content); root.addView(scroll);
@@ -7568,7 +7486,7 @@ private LinearLayout buildVideoSelectionToolbar() {
 }
 
 private void openMacroEditorV2(String id) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,120,40,40);
     ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
     LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); scroll.addView(content); root.addView(scroll);
@@ -7590,7 +7508,7 @@ private void openMacroEditorV2(String id) {
     d.setContentView(root); d.show();
 }
 private void openTileEditorV2(String id) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(40,120,40,40);
     ScrollView scroll = new ScrollView(this); scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,0,1f));
     LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); scroll.addView(content); root.addView(scroll);
@@ -7638,20 +7556,22 @@ private void openTileEditorV2(String id) {
     content.addView(btnSys); content.addView(btnUtl); content.addView(btnInt); content.addView(btnMac);
     refreshCurrent.run();
     content.addView(tvCurrent);
-    /* UX: đổi icon_idx (int) → icon_ref (String) để chứa được cả "pool:N" và
-       "poolc:N". Bỏ index int cứng để không phải hack offset cho custom pool. */
-    final String[] chosenIconRef = { prefs.getString("tilev2_"+id+"_icon_ref", "") };
+    final int[] chosenIconIdx = { prefs.getInt("tilev2_"+id+"_icon_idx", -1) };
     TextView tvIconCurrent = new TextView(this);
     tvIconCurrent.setTextColor(Color.parseColor("#FFC107"));
     tvIconCurrent.setPadding(0, 10, 0, 10);
+    // [FIX CRASH] TILE_ICON_NAMES chỉ có 20 phần tử trong khi QS_ICON_POOL có 81 icon —
+    // index trả về từ showQsIconPickerDialog() có thể >= 20 và làm vỡ mảng
+    // (ArrayIndexOutOfBoundsException). Không tra tên theo mảng cũ nữa, chỉ báo
+    // trạng thái đã chọn hay chưa — an toàn với MỌI index, không giới hạn kích thước.
     Runnable refreshIconLabel = () -> tvIconCurrent.setText(
-        T("Icon: ", "Icon: ") + (chosenIconRef[0].isEmpty() ? T("Auto", "Tự động") : T("Custom ✓", "Tuỳ chỉnh ✓")));
+        T("Icon: ", "Icon: ") + (chosenIconIdx[0] < 0 ? T("Auto", "Tự động") : T("Custom ✓", "Tuỳ chỉnh ✓")));
     refreshIconLabel.run();
     Button btnPickIcon = new Button(this);
     btnPickIcon.setText("🎨 " + T("CHOOSE ICON", "CHỌN ICON"));
     btnPickIcon.setBackground(getRounded("#FFC107", 20f));
     btnPickIcon.setTextColor(Color.BLACK);
-    btnPickIcon.setOnClickListener(v -> showQsIconPickerDialog(ref -> { chosenIconRef[0] = ref; refreshIconLabel.run(); }));
+    btnPickIcon.setOnClickListener(v -> showQsIconPickerDialog(idx -> { chosenIconIdx[0] = idx; refreshIconLabel.run(); }));
     content.addView(btnPickIcon);
     content.addView(tvIconCurrent);
 
@@ -7695,8 +7615,7 @@ private void openTileEditorV2(String id) {
             .putString("tilev2_"+id+"_act", chosenAct[0])
             .putString("tilev2_"+id+"_launch_pkg", chosenPkg[0])
             .putString("tilev2_"+id+"_shortcut_id", chosenScId[0])
-            .putString("tilev2_"+id+"_icon_ref", chosenIconRef[0])
-            .remove("tilev2_"+id+"_icon_idx")   // dọn index cũ nếu có
+            .putInt("tilev2_"+id+"_icon_idx", chosenIconIdx[0])
             .putString("tile_slot_"+chosenSlot+"_id", id)
             .apply();
         setTileComponentEnabled(chosenSlot, prefs.getBoolean("tile_active_" + id, false));
@@ -8253,7 +8172,7 @@ dCommon.addView(createSlider(T("Bubble Opacity (%)", "Độ đậm bong bóng (%
         List<String> selectedOrder = new ArrayList<>();
         for (String s : csvToList(prefs.getString(prefKey, ""))) if (!s.isEmpty()) selectedOrder.add(s);
         
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -8510,102 +8429,28 @@ private LinearLayout noticSwitchRow(String label, String key, boolean def) {
     return row;
 }
 
-private LinearLayout noticDrawerBody() {
-    LinearLayout l = new LinearLayout(this);
-    l.setOrientation(LinearLayout.VERTICAL);
-    l.setPadding(20, 10, 20, 20);
-    return l;
-}
-private void runNoticDemo(boolean toggle) {
-    boolean ok = NoticEngine.previewAll(toggle);
-    if (!ok && toggle) Toast.makeText(this, T("Turn Notic on and set a bar/corner to \"Swallow notifications\" first",
-        "Hãy bật Notic và đặt 1 bar/corner sang \"Nuốt thông báo\" trước"), Toast.LENGTH_LONG).show();
-}
-private View noticPalette(String title, String key, String[] specials, String[] hexes) {
-    LinearLayout box = new LinearLayout(this);
-    box.setOrientation(LinearLayout.VERTICAL);
-    box.setPadding(0, 10, 0, 10);
-    TextView tv = new TextView(this);
-    tv.setText(title); tv.setTextColor(Color.parseColor("#E91E63")); tv.setTextSize(14f);
-    box.addView(tv);
-    final List<View> cells = new ArrayList<>();
-    final int total = specials.length + hexes.length;
-    final Runnable[] paint = new Runnable[1];
-    LinearLayout rowS = new LinearLayout(this), rowC = new LinearLayout(this);
-    for (int i = 0; i < total; i++) {
-        final int idx = i;
-        View v;
-        LinearLayout.LayoutParams lp;
-        if (i < specials.length) {
-            TextView c = new TextView(this);
-            c.setText(specials[i]); c.setTextSize(12.5f); c.setGravity(Gravity.CENTER); c.setPadding(28, 18, 28, 18);
-            v = c; lp = new LinearLayout.LayoutParams(-2, -2);
-        } else { v = new View(this); lp = new LinearLayout.LayoutParams(70, 70); }
-        lp.setMargins(6, 8, 6, 8);
-        v.setLayoutParams(lp);
-        v.setOnClickListener(x -> { prefs.edit().putInt(key, idx).apply(); paint[0].run(); });
-        cells.add(v);
-        (i < specials.length ? rowS : rowC).addView(v);
-    }
-    paint[0] = () -> {
-        int sel = prefs.getInt(key, 0);
-        for (int i = 0; i < total; i++) {
-            View v = cells.get(i);
-            boolean on = i == sel;
-            if (i < specials.length) {
-                ((TextView) v).setTextColor(on ? Color.BLACK : Color.WHITE);
-                v.setBackground(getRounded(on ? "#8AB4F8" : "#2C2C2C", 40f));
-            } else {
-                GradientDrawable g = new GradientDrawable();
-                g.setShape(GradientDrawable.OVAL);
-                g.setColor(Color.parseColor(hexes[i - specials.length]));
-                g.setStroke(on ? 6 : 2, on ? Color.WHITE : Color.parseColor("#555555"));
-                v.setBackground(g);
-            }
-        }
-    };
-    paint[0].run();
-    box.addView(rowS); box.addView(rowC);
-    return box;
-}
-
 private void openNoticSpace() {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
     root.setPadding(30, 80, 30, 30);
 
-    LinearLayout head = new LinearLayout(this);
-    head.setOrientation(LinearLayout.HORIZONTAL);
-    head.setGravity(Gravity.CENTER_VERTICAL);
     TextView title = new TextView(this);
     title.setText("🔔 NOTIC");
     title.setTextColor(Color.parseColor("#8AB4F8"));
     title.setTextSize(18);
-    title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-    ImageButton btnTest = new ImageButton(this);
-    btnTest.setImageResource(android.R.drawable.ic_media_play);   // tam giác = thử notic
-    btnTest.setColorFilter(Color.parseColor(ACCENT_COLOR));
-    btnTest.setBackground(getRounded("#333333", 100f));
-    btnTest.setLayoutParams(new LinearLayout.LayoutParams(110, 110));
-    btnTest.setOnClickListener(x -> runNoticDemo(true));
-    head.addView(title); head.addView(btnTest);
-    root.addView(head);
+    title.setPadding(0, 0, 0, 10);
+    root.addView(title);
 
     TextView note = new TextView(this);
     note.setText(T(
-        "Setup: needs Notification Access. Open Lock/Home > a bar/corner Data Pack > Screen Visibility > \"Swallow notifications\". "
-        + "Notic is drawn ONLY inside that bar/corner (it can never leave it), so make the bar thick/long enough. "
-        + "While Notic shows: tap = expand, 2 taps = all, long = open app, swipe left/right = switch, swipe up = hide. "
-        + "With no notification, the bar uses its own rules; every other gesture is shared in both modes.",
-        "Cách dùng: cần quyền Truy cập thông báo. Vào Lock/Home > Data Pack của bar/corner > Screen Visibility > \"Nuốt thông báo\". "
-        + "Notic chỉ được vẽ BÊN TRONG đúng bar/corner đó (không thể ra ngoài), nên hãy để bar đủ dày/dài. "
-        + "Khi Notic đang hiện: 1 chạm = mở rộng, 2 chạm = toàn bộ, giữ = vào app, vuốt trái/phải = chuyển, vuốt lên = ẩn. "
-        + "Khi không có thông báo, bar chạy theo rule riêng; các cử chỉ còn lại dùng chung cho cả 2 chế độ."));
+        "Needs Notification Access. Set a bar/corner to \"Swallow notifications\" in its Screen Visibility to make it a Notic host.",
+        "Cần quyền Truy cập thông báo. Chọn \"Nuốt thông báo\" ở mục Screen Visibility của bar/corner để biến nó thành Notic."));
     note.setTextColor(Color.parseColor("#9AA0A6"));
     note.setTextSize(12f);
-    note.setPadding(0, 10, 0, 20);
+    note.setPadding(0, 0, 0, 20);
+    root.addView(note);
 
     ScrollView scroll = new ScrollView(this);
     scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -8614,84 +8459,50 @@ private void openNoticSpace() {
     scroll.addView(content);
     root.addView(scroll);
 
-    content.addView(note);
     content.addView(noticSwitchRow(T("Enable Notic", "Bật Notic"), "notic_en", false));
 
-    // ---- NOTIFICATIONS ----
-    LinearLayout bN = noticDrawerBody();
+    content.addView(createSectionTitle(T("NOTIFICATIONS", "THÔNG BÁO")));
     Button btnApps = new Button(this);
     btnApps.setText("📱 " + T("Choose apps to swallow", "Chọn app được nuốt thông báo"));
     btnApps.setBackground(getRounded("#7C4DFF", 20f));
     btnApps.setTextColor(Color.WHITE);
-    btnApps.setOnClickListener(x -> showNoticAppPicker());
-    bN.addView(btnApps);
-    bN.addView(noticSwitchRow(T("Do Not Disturb: don't swallow", "Đang DND: không nuốt thông báo"), "notic_dnd_skip", true));
-    bN.addView(noticSwitchRow(T("Ignore everything until screen off", "Bỏ qua mọi thông báo đến khi tắt màn hình"), "notic_paused", false));
-    bN.addView(createCycleRow(T("Sound", "Âm thanh"), "notic_sound_mode",
+    btnApps.setOnClickListener(v -> showNoticAppPicker());
+    content.addView(btnApps);
+    content.addView(noticSwitchRow(T("Do Not Disturb: don't swallow", "Đang DND: không nuốt thông báo"), "notic_dnd_skip", true));
+    content.addView(noticSwitchRow(T("Ignore everything until screen off", "Bỏ qua mọi thông báo đến khi tắt màn hình"), "notic_paused", false));
+    content.addView(createCycleRow(T("Sound", "Âm thanh"), "notic_sound_mode",
         new String[]{T("Off", "Tắt"), T("Sound only", "Chỉ âm báo"), T("Sound + screen on", "Âm báo + bật màn hình")}));
-    bN.addView(noticSwitchRow(T("Replace system popups", "Thay popup thông báo hệ thống"), "notic_hide_system", false));
-    bN.addView(noticSwitchRow(T("Auto expand new notification", "Tự mở rộng thông báo mới"), "notic_auto_expand", false));
-    bN.addView(createSlider(T("Expanded hold time (sec)", "Thời gian giữ thông báo mở rộng (giây)"), "notic_hold_sec", 15, 4));
-    bN.addView(createSlider(T("Auto-restore after swipe up (sec)", "Tự hồi lại sau khi vuốt ẩn (giây)"), "notic_hide_duration_sec", 60, 12));
-    content.addView(createDrawer("🔔 " + T("NOTIFICATIONS", "THÔNG BÁO"), bN));
-
-    // ---- APPEARANCE ----
-    LinearLayout bA = noticDrawerBody();
-    bA.addView(noticPalette(T("Notic color", "Màu Notic"), "notic_pill_color",
-        new String[]{T("Black", "Đen")}, NoticEngine.PILL_HEX));
-    bA.addView(noticPalette(T("Notification card color", "Màu thẻ thông báo"), "notic_card_color",
-        new String[]{"Auto", T("App icon", "Màu icon app"), T("Color only", "Chỉ màu")}, NoticEngine.CARD_HEX));
-    bA.addView(noticSwitchRow(T("Border = app color", "Viền thông báo theo màu app"), "notic_border_en", true));
-    bA.addView(noticSwitchRow(T("Show count badge", "Hiện số thông báo"), "notic_badge_en", true));
-    bA.addView(noticSwitchRow(T("Count badge on the left", "Số thông báo ở bên trái"), "notic_badge_left", false));
-    bA.addView(createSlider(T("Animation speed (%)", "Tốc độ hiệu ứng (%)"), "notic_anim_speed", 300, 100));
-    bA.addView(noticSwitchRow(T("Spinning album art", "Ảnh bài hát xoay tròn (thay icon app)"), "notic_art_spin", true));
-    bA.addView(noticSwitchRow(T("Music visualizer", "Visualizer âm nhạc (giả lập, không ghi âm)"), "notic_viz_en", true));
-    bA.addView(createCycleRow(T("Visualizer color", "Màu visualizer"), "notic_viz_color",
-        new String[]{T("App color", "Theo màu app"), "Cyan", "Blue", "Pink", "Amber", "Green", "White", "Violet", T("Track color", "Màu bài nhạc")}));
-    bA.addView(createSlider(T("Visualizer speed (%)", "Tốc độ visualizer (%)"), "notic_viz_speed", 300, 100));
-    content.addView(createDrawer("🎨 " + T("APPEARANCE", "GIAO DIỆN"), bA));
-
-    // ---- POSITION ----
-    LinearLayout bP = noticDrawerBody();
-    bP.addView(createSectionTitle(T("NOTIC (always stays inside its bar/corner)", "NOTIC (luôn nằm trong bar/corner của nó)")));
-    bP.addView(createSignedSlider(T("Position X (px)", "Vị trí X (px)"), "notic_off_x", -1000, 1000, 0));
-    bP.addView(createSignedSlider(T("Position Y (px)", "Vị trí Y (px)"), "notic_off_y", -1000, 1000, 0));
-    bP.addView(createSignedSlider(T("Length (%)", "Chiều dài (%)"), "notic_w_pct", 50, 200, 100));
-    bP.addView(createSignedSlider(T("Thickness (%)", "Độ dày (%)"), "notic_h_pct", 50, 200, 100));
-    bP.addView(createSignedSlider(T("Roundness (%)", "Độ bo cong (%)"), "notic_rad_pct", 0, 100, 100));
-    bP.addView(createSectionTitle(T("EXPANDED PANEL", "BẢNG THÔNG BÁO MỞ RỘNG")));
-bP.addView(createSignedSlider(T("Max length (%)", "Chiều dài tối đa (%)"), "notic_pop_h_pct", 20, 90, 55));
-    bP.addView(createSignedSlider(T("Width (%)", "Chiều rộng (%)"), "notic_pop_w_pct", 60, 480, 100));
-    bP.addView(createSignedSlider(T("Corner radius (dp)", "Độ bo cong (dp)"), "notic_pop_rad", 0, 60, 26));
-    content.addView(createDrawer("📐 " + T("POSITION", "VỊ TRÍ"), bP));
-
-    // ---- EVENTS ----
-    LinearLayout bE = noticDrawerBody();
+    content.addView(noticSwitchRow(T("Replace system popups", "Thay popup thông báo hệ thống"), "notic_hide_system", false));
+    content.addView(createSectionTitle(T("APPEARANCE", "GIAO DIỆN")));
+content.addView(noticSwitchRow(T("Border = app color", "Viền thông báo theo màu app"), "notic_border_en", true));
+content.addView(noticSwitchRow(T("Spinning album art", "Ảnh bài hát xoay tròn (thay icon app)"), "notic_art_spin", true));
+content.addView(noticSwitchRow(T("Music visualizer", "Visualizer âm nhạc (giả lập, không ghi âm)"), "notic_viz_en", true));
+content.addView(createCycleRow(T("Visualizer color", "Màu visualizer"), "notic_viz_color",
+    new String[]{T("App color", "Theo màu app"), "Cyan", "Blue", "Pink", "Amber", "Green", "White", "Violet"}));
+content.addView(createSlider(T("Visualizer speed (%)", "Tốc độ visualizer (%)"), "notic_viz_speed", 300, 100));
+    content.addView(createSectionTitle(T("SYSTEM EVENTS", "SỰ KIỆN HỆ THỐNG")));
     String[][] evs = {
-        {"charging", "Phone is charging"}, {"full", "Phone is fully charged"}, {"low", "Battery low (15%)"},
-        {"nonet", "No Internet"}, {"wifi", "Wi-Fi connected / disconnected"}, {"vpn", "VPN on / off"},
-        {"hotspot", "Hotspot on / off"}, {"bt", "Bluetooth connected"}, {"silent", "Silent"},
-        {"vibrate", "Vibrate"}, {"ring", "Ring"}, {"unlock", "Phone unlocked"},
-        {"screenon", "Screen on"}, {"airplane", "Airplane mode"}, {"headset", "Headphones connected"},
-        {"dnd", "Do Not Disturb"}, {"storage", "Storage almost full"}, {"screenshot", "Screenshot captured"},
-        {"rec", "Recording started / stopped"}, {"mic", "Microphone in use"}, {"camera", "Camera in use"}
-    };
-    for (String[] ev : evs) bE.addView(noticSwitchRow(ev[1], "notic_ev_" + ev[0], !(ev[0].equals("unlock") || ev[0].equals("screenon"))));
-    content.addView(createDrawer("⚡ " + T("EVENTS", "SỰ KIỆN HỆ THỐNG"), bE));
+    {"charging", "Phone is charging"}, {"full", "Phone is fully charged"}, {"low", "Battery low (15%)"},
+    {"nonet", "No Internet"}, {"wifi", "Wi-Fi connected / disconnected"}, {"vpn", "VPN on / off"},
+    {"hotspot", "Hotspot on / off"}, {"bt", "Bluetooth connected"}, {"silent", "Silent"},
+    {"vibrate", "Vibrate"}, {"ring", "Ring"}, {"unlock", "Phone unlocked"},
+    {"screenon", "Screen on"}, {"airplane", "Airplane mode"}, {"headset", "Headphones connected"},
+    {"dnd", "Do Not Disturb"}, {"storage", "Storage almost full"}, {"screenshot", "Screenshot captured"},
+    {"rec", "Recording started / stopped"}, {"mic", "Microphone in use"}, {"camera", "Camera in use"}
+};
+    for (String[] ev : evs) content.addView(noticSwitchRow(ev[1], "notic_ev_" + ev[0], true));
 
     Button bClose = new Button(this);
     bClose.setText(T("CLOSE", "ĐÓNG"));
     bClose.setBackground(getRounded("#333333", 20f));
     bClose.setTextColor(Color.WHITE);
-    bClose.setOnClickListener(x -> d.dismiss());
+    bClose.setOnClickListener(v -> d.dismiss());
     root.addView(bClose);
 
-    d.setOnDismissListener(x -> NoticEngine.endPreviewAll());
-d.setContentView(root);
-d.show();
-new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> { if (d.isShowing()) runNoticDemo(false); }, 400);
+    d.setContentView(root);
+    d.show();
 }
+
 private void showNoticAppPicker() {
     final java.util.LinkedHashMap<String, String> apps = new java.util.LinkedHashMap<>();
     for (String[] a : getAppListCached()) if (!apps.containsKey(a[1])) apps.put(a[1], a[0].replace(" [Island]", ""));
@@ -8703,7 +8514,7 @@ private void showNoticAppPicker() {
         if (!apps.containsKey(p)) keepExcluded.add(p);
     }
 
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -8803,278 +8614,13 @@ private void showNoticAppPicker() {
     d.setContentView(root);
     d.show();
 }
-private RemoteDevicePairing pairingHelper;
-
-private void openRemoteDevicesSpace() {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
-    LinearLayout root = new LinearLayout(this);
-    root.setOrientation(LinearLayout.VERTICAL);
-    root.setBackgroundColor(Color.parseColor("#121212"));
-    root.setPadding(30, 80, 30, 30);
-
-    TextView title = new TextView(this);
-    title.setText("📡 " + T("Remote Devices", "Thiết bị từ xa"));
-    title.setTextColor(Color.parseColor("#8AB4F8")); title.setTextSize(18);
-    title.setPadding(0, 0, 0, 10);
-    root.addView(title);
-
-    TextView note = new TextView(this);
-    note.setText(T(
-        "Pairing lần đầu cần PIN 9 số do 2 người tự trao đổi tận tay. Hiệu lực 7 ngày, cần xác thực lại (vân tay/PIN) để gia hạn.",
-        "Pairing lần đầu cần PIN 9 số do 2 người tự trao đổi tận tay. Hiệu lực 7 ngày, cần xác thực lại (vân tay/PIN) để gia hạn."));
-    note.setTextColor(Color.parseColor("#9AA0A6")); note.setTextSize(11.5f);
-    note.setPadding(0, 0, 0, 20);
-    root.addView(note);
-
-    ScrollView scroll = new ScrollView(this);
-    scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-    LinearLayout content = new LinearLayout(this);
-    content.setOrientation(LinearLayout.VERTICAL);
-    scroll.addView(content);
-    root.addView(scroll);
-
-    // ---- Danh sách thiết bị đã pairing ----
-    content.addView(createSectionTitle(T("PAIRED DEVICES", "THIẾT BỊ ĐÃ GHÉP ĐÔI")));
-    LinearLayout deviceList = new LinearLayout(this);
-    deviceList.setOrientation(LinearLayout.VERTICAL);
-    content.addView(deviceList);
-    Runnable[] refreshDevices = new Runnable[1];
-    refreshDevices[0] = () -> renderRemoteDeviceList(deviceList, refreshDevices[0]);
-    refreshDevices[0].run();
-
-    Button btnPairNew = new Button(this);
-    btnPairNew.setText("➕ " + T("Pair New Device", "Ghép đôi thiết bị mới"));
-    btnPairNew.setBackground(getRounded("#7C4DFF", 20f));
-    btnPairNew.setTextColor(Color.WHITE);
-    LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-1, -2);
-    pLp.setMargins(0, 10, 0, 30);
-    btnPairNew.setLayoutParams(pLp);
-    btnPairNew.setOnClickListener(v -> openPairingDialog(refreshDevices[0]));
-    content.addView(btnPairNew);
-
-    // ---- Bảng nút lệnh (kéo-thả sắp xếp vị trí) ----
-    content.addView(createSectionTitle(T("QUICK COMMANDS (hold to reorder)", "NÚT LỆNH NHANH (nhấn giữ để đổi vị trí)")));
-    LinearLayout cmdGrid = new LinearLayout(this);
-    cmdGrid.setOrientation(LinearLayout.VERTICAL);
-    content.addView(cmdGrid);
-    renderRemoteCommandGrid(cmdGrid);
-
-    Button bClose = new Button(this);
-    bClose.setText(T("CLOSE", "ĐÓNG"));
-    bClose.setBackground(getRounded("#333333", 20f));
-    bClose.setTextColor(Color.WHITE);
-    LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, -2);
-    cLp.setMargins(0, 20, 0, 0);
-    bClose.setLayoutParams(cLp);
-    bClose.setOnClickListener(v -> d.dismiss());
-    root.addView(bClose);
-
-    d.setContentView(root);
-    d.show();
-}
-
-private void renderRemoteDeviceList(LinearLayout container, Runnable rerender) {
-    container.removeAllViews();
-    List<RemoteDeviceStore.Device> list = RemoteDeviceStore.loadAll(prefs);
-    if (list.isEmpty()) {
-        TextView empty = new TextView(this);
-        empty.setText(T("No paired device yet.", "Chưa ghép đôi thiết bị nào."));
-        empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER);
-        empty.setPadding(0, 20, 0, 20);
-        container.addView(empty);
-        return;
-    }
-    for (RemoteDeviceStore.Device dev : list) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setBackground(getRounded(dev.isExpired() ? "#4A1F1F" : "#1E1E1E", 20f));
-        card.setPadding(24, 20, 24, 20);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 6, 0, 6);
-        card.setLayoutParams(lp);
-
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        TextView tName = new TextView(this);
-        tName.setText(dev.name); tName.setTextColor(Color.WHITE); tName.setTextSize(14.5f);
-        TextView tStatus = new TextView(this);
-        if (dev.isExpired()) {
-            tStatus.setText("🔒 " + T("Expired — needs re-pairing", "Hết hạn — cần ghép đôi lại"));
-            tStatus.setTextColor(Color.parseColor("#FF6B6B"));
-        } else {
-            long daysLeft = Math.max(0, (dev.trustedUntilMs - System.currentTimeMillis()) / 86400000);
-            tStatus.setText("✓ " + T("Trusted — ", "Tin cậy — ") + daysLeft + T(" days left", " ngày còn lại"));
-            tStatus.setTextColor(Color.parseColor("#8AB4F8"));
-        }
-        tStatus.setTextSize(11.5f); tStatus.setPadding(0, 4, 0, 0);
-        col.addView(tName); col.addView(tStatus);
-        card.addView(col);
-
-        Button btnRevoke = new Button(this);
-        btnRevoke.setText("🗑");
-        btnRevoke.setBackground(getRounded("#D32F2F", 14f));
-        btnRevoke.setTextColor(Color.WHITE);
-        btnRevoke.setPadding(20, 10, 20, 10);
-        btnRevoke.setOnClickListener(v -> {
-            new AlertDialog.Builder(this)
-                .setTitle(T("Revoke this device?", "Thu hồi thiết bị này?"))
-                .setPositiveButton(T("REVOKE", "THU HỒI"), (dg, w) -> {
-                    RemoteDeviceStore.revoke(prefs, dev.mac);
-                    rerender.run();
-                }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
-        });
-        card.addView(btnRevoke);
-        container.addView(card);
-    }
-}
-
-private void openPairingDialog(Runnable onDone) {
-    String[] opts = {T("Generate PIN (this device)", "Tạo PIN (máy này)"), T("Enter PIN (other device)", "Nhập PIN (máy kia)")};
-    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-        .setTitle(T("Which role?", "Vai trò nào?"))
-        .setItems(opts, (dg, which) -> {
-            if (which == 0) showGeneratedPinDialog(onDone); else showEnterPinDialog(onDone);
-        }).show();
-}
-
-private void showGeneratedPinDialog(Runnable onDone) {
-    if (pairingHelper != null) pairingHelper.stop();
-    pairingHelper = new RemoteDevicePairing(this);
-    TextView tv = new TextView(this);
-    tv.setTextColor(Color.parseColor("#8AB4F8")); tv.setTextSize(32); tv.setGravity(Gravity.CENTER);
-    tv.setPadding(40, 60, 40, 60);
-    tv.setText(T("Starting…", "Đang khởi động…"));
-    AlertDialog dlg = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-        .setTitle(T("Read this PIN aloud to the other person", "Đọc mã PIN này cho người kia"))
-        .setView(tv)
-        .setNegativeButton(T("CANCEL", "HỦY"), (dg, w) -> { if (pairingHelper != null) pairingHelper.stop(); })
-        .setCancelable(false)
-        .create();
-    dlg.show();
-    String pin = pairingHelper.startAsAdvertiser(new RemoteDevicePairing.PairResult() {
-        @Override public void onPaired(String mac, String name) {
-            runOnUiThread(() -> {
-                Toast.makeText(MainActivity.this, T("Paired with ", "Đã ghép đôi với ") + name, Toast.LENGTH_SHORT).show();
-                startService(new Intent(MainActivity.this, RemoteCommandReceiverService.class));
-                RemoteTrustCheckReceiver.scheduleNext(MainActivity.this);
-                dlg.dismiss(); onDone.run();
-            });
-        }
-        @Override public void onFailed(String reason) {
-            runOnUiThread(() -> { Toast.makeText(MainActivity.this, reason, Toast.LENGTH_SHORT).show(); dlg.dismiss(); });
-        }
-    });
-    if (pin != null) tv.setText(pin);
-}
-
-private void showEnterPinDialog(Runnable onDone) {
-    EditText et = new EditText(this);
-    et.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-    et.setHint(T("9-digit PIN", "Mã PIN 9 số"));
-    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-        .setTitle(T("Enter the PIN shown on the other device", "Nhập PIN hiện trên máy kia"))
-        .setView(et)
-        .setPositiveButton(T("PAIR", "GHÉP ĐÔI"), (dg, w) -> {
-            String pin = et.getText().toString().trim();
-            if (pin.length() != 9) { Toast.makeText(this, T("PIN must be 9 digits", "PIN phải đủ 9 số"), Toast.LENGTH_SHORT).show(); return; }
-            if (pairingHelper != null) pairingHelper.stop();
-            pairingHelper = new RemoteDevicePairing(this);
-            pairingHelper.startAsScanner(pin, new RemoteDevicePairing.PairResult() {
-                @Override public void onPaired(String mac, String name) {
-                    runOnUiThread(() -> {
-                        Toast.makeText(MainActivity.this, T("Paired with ", "Đã ghép đôi với ") + name, Toast.LENGTH_SHORT).show();
-                        startService(new Intent(MainActivity.this, RemoteCommandReceiverService.class));
-                        RemoteTrustCheckReceiver.scheduleNext(MainActivity.this);
-                        onDone.run();
-                    });
-                }
-                @Override public void onFailed(String reason) {
-                    runOnUiThread(() -> Toast.makeText(MainActivity.this, reason, Toast.LENGTH_SHORT).show());
-                }
-            });
-        }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
-}
-
-// ---- Bảng nút lệnh: kéo-thả đổi vị trí, tái dùng attachDragReorder() đã có sẵn ----
-private static final String[] REMOTE_CMD_KEYS = {
-    RemoteCommandSender.CMD_WIFI_ON, RemoteCommandSender.CMD_WIFI_OFF,
-    RemoteCommandSender.CMD_HOTSPOT_ON, RemoteCommandSender.CMD_HOTSPOT_OFF,
-    RemoteCommandSender.CMD_BT_ON, RemoteCommandSender.CMD_BT_OFF
-};
-private String remoteCmdLabel(String cmd) {
-    switch (cmd) {
-        case "WIFI_ON": return "📶 " + T("Wi-Fi ON", "Bật Wi-Fi");
-        case "WIFI_OFF": return "📵 " + T("Wi-Fi OFF", "Tắt Wi-Fi");
-        case "HOTSPOT_ON": return "📡 " + T("Hotspot ON", "Bật Hotspot");
-        case "HOTSPOT_OFF": return "📡 " + T("Hotspot OFF", "Tắt Hotspot");
-        case "BT_ON": return "🔵 " + T("Bluetooth ON", "Bật Bluetooth");
-        case "BT_OFF": return "⚪ " + T("Bluetooth OFF", "Tắt Bluetooth");
-        default: return cmd;
-    }
-}
-
-private void renderRemoteCommandGrid(LinearLayout container) {
-    container.removeAllViews();
-    List<RemoteDeviceStore.Device> trusted = new ArrayList<>();
-    for (RemoteDeviceStore.Device d : RemoteDeviceStore.loadAll(prefs)) if (!d.isExpired()) trusted.add(d);
-    if (trusted.isEmpty()) {
-        TextView tv = new TextView(this);
-        tv.setText(T("Pair a trusted device first to enable commands.", "Hãy ghép đôi thiết bị tin cậy trước để dùng nút lệnh."));
-        tv.setTextColor(Color.GRAY); tv.setGravity(Gravity.CENTER); tv.setPadding(0, 20, 0, 20);
-        container.addView(tv);
-        return;
-    }
-    // Chọn thiết bị đích (nếu có nhiều) — đơn giản hoá: dùng thiết bị đầu tiên còn hạn
-    final RemoteDeviceStore.Device target = trusted.get(0);
-
-    // Thứ tự nút đã lưu — y hệt cách panel order đang lưu trong prefs
-    List<String> order = getDynamicIds("remote_cmd_order");
-    if (order.isEmpty()) { order.addAll(java.util.Arrays.asList(REMOTE_CMD_KEYS)); }
-    for (String k : REMOTE_CMD_KEYS) if (!order.contains(k)) order.add(k);
-
-    for (String cmd : order) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setBackground(getRounded(SURFACE_COLOR, 20f));
-        card.setPadding(24, 22, 24, 22);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 6, 0, 6);
-        card.setLayoutParams(lp);
-        card.setTag(cmd);
-
-        TextView tv = new TextView(this);
-        tv.setText(remoteCmdLabel(cmd));
-        tv.setTextColor(Color.WHITE); tv.setTextSize(14.5f);
-        tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        card.addView(tv);
-
-        Button btnSend = stdCardBtn(T("SEND", "GỬI"), ACCENT_COLOR, Color.BLACK);
-        btnSend.setOnClickListener(v -> {
-            RemoteCommandSender.send(this, target.mac, cmd, new RemoteCommandSender.SendResult() {
-                @Override public void onSent() {
-                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "✓ " + T("Sent to ", "Đã gửi tới ") + target.name, Toast.LENGTH_SHORT).show());
-                }
-                @Override public void onFailed(String reason) {
-                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "✗ " + reason, Toast.LENGTH_SHORT).show());
-                }
-            });
-        });
-        card.addView(btnSend);
-
-        attachDragReorder(card, order, "remote_cmd_order", () -> renderRemoteCommandGrid(container));
-        container.addView(card);
-    }
-}
 private void openAppIconShortcutSpace() {
     reloadActionLabels();
     prefs.edit().putBoolean("preview_lock", false)
         .putBoolean("preview_homacc", false)
         .putBoolean("preview_home", false).apply();
     sendBroadcast(new Intent("com.manhmoc.edgebar.SYNC_STATE"));
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -9262,7 +8808,7 @@ private View buildAppIconSlotCard(String shortcutId, int slotNum, List<String[]>
     }
 
     View.OnClickListener openPicker = v -> {
-        Dialog pd = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+        Dialog pd = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout r = new LinearLayout(this); r.setOrientation(LinearLayout.VERTICAL);
         r.setBackgroundColor(Color.parseColor("#121212")); r.setPadding(30, 80, 30, 30);
 
@@ -9354,7 +8900,7 @@ pin.addView(bOpenUi);
 
     private void openBubbleGestureSpace() {
         reloadActionLabels();
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -9420,7 +8966,7 @@ renderRules[0].run();
 }
 private void openBubbleRuleEditor(String editId, Runnable onRefresh) {
         reloadActionLabels();
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -9981,114 +9527,29 @@ private void addPairSettingRows(LinearLayout content, String packBase, String na
             T("Straight Up", "Thẳng lên"), T("Straight Down", "Thẳng xuống"),
             T("Straight Left", "Thẳng trái"), T("Straight Right", "Thẳng phải")}, 0, nameA, nameB));
     if (withIcon) {
-        content.addView(buildIconPickerPairCard(packBase, nameA, nameB));
+        content.addView(buildPairSettingCard(T("Icon on bar", "Icon trên Bar"), packBase + "icon_en",
+            new String[]{T("Hidden", "Không hiển thị"), T("Shown", "Có hiển thị")}, 0, nameA, nameB));
+        content.addView(buildBarIconPickerButton(packBase));   // KHÔI PHỤC bộ chọn icon: không có icon thì "Shown" và "Tự động đổi màu icon" chẳng có gì để áp
     }
 }
-/* UX: card chọn icon cho Bar thay cho cặp (Hidden/Shown + Pick icon) cũ.
-   Bấm chip = mở picker 3 tab (APPS/SYSTEM/CUSTOM). Nhấn giữ card = chia AND
-   cho cặp, mỗi bên chọn bộ icon riêng. Chưa chọn = không có icon. */
-private View buildIconPickerPairCard(String packBase, String nameA, String nameB) {
-    final LinearLayout card = new LinearLayout(this);
-    card.setOrientation(LinearLayout.VERTICAL);
-    card.setBackground(getRounded("#1A1A1A", 22f));
-    card.setPadding(24, 20, 24, 20);
-    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
-    clp.setMargins(0, 8, 0, 8);
-    card.setLayoutParams(clp);
-
-    TextView tvTitle = new TextView(this);
-    tvTitle.setText(T("Icon on bar", "Icon trên Bar"));
-    tvTitle.setTextColor(Color.parseColor("#E8EAED"));
-    tvTitle.setTextSize(13.5f);
-    tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    card.addView(tvTitle);
-
-    TextView tvHint = new TextView(this);
-    tvHint.setText(T("Tap to pick icons · Hold to customize each side",
-                    "Chạm để chọn icon · Nhấn giữ để chỉnh riêng từng bên"));
-    tvHint.setTextColor(Color.parseColor("#6F757B"));
-    tvHint.setTextSize(10.5f);
-    card.addView(tvHint);
-
-    final LinearLayout body = new LinearLayout(this);
-    body.setOrientation(LinearLayout.HORIZONTAL);
-    body.setGravity(Gravity.CENTER_VERTICAL);
-    body.setPadding(0, 12, 0, 0);
-    card.addView(body);
-
-    final String andKey = packBase + "icons_and";
-    final Runnable[] render = new Runnable[1];
-    final View.OnLongClickListener enterAnd = v -> {
-        if (!prefs.getBoolean(andKey, false)) {
-            /* UX: bật AND — copy bộ icon đang dùng chung vào cả 2 nửa để user
-               bắt đầu từ đúng trạng thái họ đang thấy, không bị reset. */
-            String cur = prefs.getString(packBase + "icons", "");
-            prefs.edit()
-                .putBoolean(andKey, true)
-                .putString(packBase + "icons_L", cur)
-                .putString(packBase + "icons_R", cur)
-                .apply();
-            vibrateShort();
-            render[0].run();
-        }
-        return true;
+// Nút mở bộ chọn icon (app / hệ thống / tuỳ chỉnh) giống bộ chọn icon của Panel. Ghi vào đúng key mà applyBarPackToSpace() đọc: packBase + "icons"
+private View buildBarIconPickerButton(final String packBase) {
+    final String iconsKey = packBase + "icons";
+    final Button b = new Button(this);
+    b.setTextColor(Color.BLACK);
+    b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+    b.setBackground(getRounded("#8AB4F8", 20f));
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 130);
+    lp.setMargins(0, 8, 0, 8);
+    b.setLayoutParams(lp);
+    final Runnable label = () -> {
+        String s = prefs.getString(iconsKey, "");
+        int n = s.isEmpty() ? 0 : s.split(",").length;
+        b.setText("✨ " + T("PICK ICONS ON BAR", "CHỌN ICON TRÊN BAR") + " (" + n + ")");
     };
-    card.setOnLongClickListener(enterAnd);
-    render[0] = () -> {
-        body.removeAllViews();
-        boolean and = prefs.getBoolean(andKey, false);
-        if (!and) {
-            body.addView(buildIconPickChip(null, packBase + "icons", enterAnd));
-        } else {
-            body.addView(buildIconPickChip(nameA, packBase + "icons_L", null));
-            body.addView(buildAndBridge(() -> {
-                /* UX: tắt AND — giữ bộ icon nửa A làm bộ chung, dọn key L/R. */
-                String keep = prefs.getString(packBase + "icons_L", "");
-                prefs.edit()
-                    .putBoolean(andKey, false)
-                    .putString(packBase + "icons", keep)
-                    .remove(packBase + "icons_L")
-                    .remove(packBase + "icons_R")
-                    .apply();
-                render[0].run();
-            }));
-            body.addView(buildIconPickChip(nameB, packBase + "icons_R", null));
-        }
-    };
-    render[0].run();
-    return card;
-}
-
-/* UX: chip gọn hiển thị "n icon đã chọn" hoặc "Chọn icon". Bấm = mở picker
-   multi-select 3 tab giống nút "Chọn icon trên Bar" cũ. */
-private View buildIconPickChip(String sideName, String prefKey, View.OnLongClickListener lc) {
-    LinearLayout half = new LinearLayout(this);
-    half.setOrientation(LinearLayout.VERTICAL);
-    half.setBackground(getRounded("#202124", 18f));
-    half.setPadding(18, 16, 18, 16);
-    LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(0, -2, 1f);
-    hlp.setMargins(6, 0, 6, 0);
-    half.setLayoutParams(hlp);
-    if (lc != null) half.setOnLongClickListener(lc);
-    if (sideName != null) {
-        TextView tvName = new TextView(this);
-        tvName.setText(sideName);
-        tvName.setTextColor(Color.parseColor("#9AA0A6"));
-        tvName.setTextSize(11f);
-        half.addView(tvName);
-    }
-    final TextView chip = pairChip("#2C2C2C", "#8AB4F8");
-    Runnable refresh = () -> {
-        String csv = prefs.getString(prefKey, "");
-        int n = csv.isEmpty() ? 0 : csv.split(",").length;
-        chip.setText(n == 0 ? T("Pick icons", "Chọn icon")
-                            : T(n + " icon(s)", n + " icon"));
-    };
-    refresh.run();
-    chip.setOnClickListener(v -> showBarIconMultiPicker(prefKey, refresh));
-    if (lc != null) chip.setOnLongClickListener(lc);
-    half.addView(chip);
-    return half;
+    label.run();
+    b.setOnClickListener(v -> showBarIconMultiPicker(iconsKey, label));
+    return b;
 }
 private TextView buildPackLiveHint() {
     TextView tv = new TextView(this);
@@ -10201,7 +9662,7 @@ private void openDataPackEditor(int type, String id) {
     openDataPackEditor(type, id, "");
 }
 private void openDataPackEditor(int type, String id, String space) {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -10399,14 +9860,13 @@ prefs.registerOnSharedPreferenceChangeListener(previewListenerHolder[0]);
         packLiveHandler.removeCallbacksAndMessages(null);
         removeLivePreviewOverlay();
         if (type == 2) prefs.edit().putBoolean(prefix + id + "_preview_handle", false).apply();
-        else { deepEditOpen = false; syncNoticSuppress(); renderRulesList(); }
+        else renderRulesList();
     });
 d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-    if (type != 2) { deepEditOpen = true; NoticEngine.setSuppressed(true); }
     d.setContentView(root); d.show();
 }
 private void openEmptyPillDialog() {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -10438,7 +9898,7 @@ private void openEmptyPillDialog() {
 }
 private void openBubbleGestureEditor() {
         reloadActionLabels();
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -10609,7 +10069,7 @@ private void showPanelMultiPicker(String prefKey, boolean isApp, boolean isShort
             : (isPanelAppPicker
                 ? prefKey.substring("pack_panel_".length(), prefKey.length() - "_apps".length())
                 : "");
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -10857,7 +10317,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
     List<String> selApps = new ArrayList<>(csvToList(prefs.getString(prefPrefix + "apps", "")));
     List<String> selActs = new ArrayList<>(csvToList(prefs.getString(prefPrefix + "acts", "")));
     List<String> selScs = new ArrayList<>(csvToList(prefs.getString(prefPrefix + "shortcuts", "")));
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -11174,7 +10634,7 @@ private void showCombinedPanelPicker(String panelId, Runnable onSaved) {
     String cur = prefs.getString(prefKey, "");
     final java.util.List<String> selectedOrder = new java.util.ArrayList<>();
     for (String s : cur.split(",")) { String t = s.trim(); if (!t.isEmpty() && !selectedOrder.contains(t)) selectedOrder.add(t); }
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -11353,7 +10813,7 @@ private FrameLayout buildIconGridCell(String ref, java.util.function.Supplier<Im
         showIconPickerDialog("pack_panel_" + panelId + "_icon_override_" + actionKey, onSaved);
     }
     private void showIconPickerDialog(String prefKey, Runnable onSaved) {
-        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+        Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#121212"));
@@ -11815,7 +11275,7 @@ private void showSingleAppPickerDialog(EditText target) {
 }
 private void showSingleAppPickerDialogCallback(java.util.function.Consumer<String> onPicked) {
     List<String[]> combined = getAppListCached();
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
     TextView title = new TextView(this); title.setText(T("Choose one app", "Chọn 1 ứng dụng"));
@@ -11873,7 +11333,7 @@ private boolean myPlPackSelectMode = false;
 private final java.util.Set<String> myPlPackSelectedItems = new java.util.LinkedHashSet<>();
 private void showShortcutPickerDialog(java.util.function.BiConsumer<String,String> onPicked) {
     List<android.content.pm.ResolveInfo> providers = ShortcutScanner.getProviders(this);
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212")); root.setPadding(30,80,30,30);
     TextView title = new TextView(this); title.setText(T("Choose a Shortcut Provider","Chọn một ứng dụng"));
@@ -11953,7 +11413,7 @@ private void deleteShortcutGlobally(String id) {
     ed.apply();
 }
     private void showYTDLDialog() {
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -12028,7 +11488,7 @@ private String queryDisplayName(Uri uri) {
     } catch (Exception ignored) {}
     return "Song";
 }
-    private static final String[] PACK_GEO_FIELDS = {"alpha","w","h","x","y","pair_spacing","shape",
+private static final String[] PACK_GEO_FIELDS = {"alpha","w","h","x","y","pair_spacing","shape",
         "moon_w","moon_h","moon_x","moon_y","rad","moon_rad"};
     private boolean isPackGeoField(String f) {
         if (f.endsWith("_L") || f.endsWith("_R")) f = f.substring(0, f.length() - 2);   // chế độ AND chia đôi cặp dùng hậu tố _L/_R
@@ -12285,10 +11745,6 @@ private void doRevokeAdminAndUninstall() {
     startActivity(uninstallIntent);
 }
 private LinearLayout createLazyDrawer(String title, java.util.function.Supplier<View> factory) {
-    return createLazyDrawer(title, factory, null);
-}
-private LinearLayout createLazyDrawer(String title, java.util.function.Supplier<View> factory,
-        java.util.function.Consumer<Boolean> onToggle) {
     LinearLayout container = new LinearLayout(this);
     container.setOrientation(LinearLayout.VERTICAL);
     container.setBackground(getRounded("#222222", 20f));
@@ -12309,7 +11765,6 @@ private LinearLayout createLazyDrawer(String title, java.util.function.Supplier<
         if (open && !built[0]) { built[0] = true; body.addView(factory.get()); }
         body.setVisibility(open ? View.VISIBLE : View.GONE);
         header.setBackground(getRounded(open ? "#333333" : "#222222", 20f));
-        if (onToggle != null) onToggle.accept(open);
     });
     container.addView(header);
     container.addView(body);
@@ -12397,7 +11852,7 @@ private LinearLayout buildOrSideDrawer(String title, String key, String[] items,
     return c;
 }
 private void openSplitIconDialog(String iconsKey, Runnable onSaved){
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));
@@ -12508,7 +11963,7 @@ private LinearLayout buildIconOrQuadRow(String sideLabel, String iconsKey, boole
     return wrap;
 }
 private void openOrQuadDialog(String title, String key, String[] items, int def, boolean isLeft, Runnable refreshBadge){
-    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.parseColor("#121212"));

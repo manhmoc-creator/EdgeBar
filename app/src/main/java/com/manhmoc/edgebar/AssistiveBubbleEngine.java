@@ -646,21 +646,21 @@ if (!acts.isEmpty() && !acts.equals("NONE")) {
         centerAnim.start();
     }
 
-private void openMenu() {
-    if (menuOverlay != null) return;
-    selectedMainIdx = null; selectedSubIdx = null; currentSubmenu = null;
+    private void openMenu() {
+        if (menuOverlay != null) return;
+        selectedMainIdx = null; selectedSubIdx = null; currentSubmenu = null;
 
-    FrameLayout overlay = new FrameLayout(ctx) {
-    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
-        if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK
-                && event.getAction() == android.view.KeyEvent.ACTION_UP) {
-            // Vì menu của Bubble không giữ focus IME, chỉ cần đóng menu là đủ
-            if (menuOverlay != null) closeMenu();
-            return true;
-        }
-        return super.dispatchKeyEvent(event);
-        }
-    };
+        FrameLayout overlay = new FrameLayout(ctx) {
+            @Override
+            public boolean dispatchKeyEvent(KeyEvent event) {
+                if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
+                    if (currentSubmenu != null) { currentSubmenu = null; refreshPanelCard(); } 
+                    else closeMenu(); 
+                    return true;
+                }
+                return super.dispatchKeyEvent(event);
+            }
+        };
         int wmType = isAnyMode ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         
         menuLp = new WindowManager.LayoutParams(
@@ -1606,6 +1606,12 @@ private void openCircleSearchOverlay() {
     final int outerD = Math.min(viewSize, Math.round((ringR + bgW / 2f) * 2f));
 
     FrameLayout overlay = new FrameLayout(ctx) {
+        @Override public boolean dispatchKeyEvent(KeyEvent event) {
+            if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
+                closeCircleSearchOverlay(); return true;
+            }
+            return super.dispatchKeyEvent(event);
+        }
     };
     circleSearchLp = new WindowManager.LayoutParams(outerD, outerD, wmType,
         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
@@ -2072,7 +2078,7 @@ return true;
             runItem(ref);
             closeCircleMenu();
        }
-       }    
+       }
      }
   }
 }

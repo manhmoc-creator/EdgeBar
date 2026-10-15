@@ -220,6 +220,9 @@ ACT_ICON_RES.put("QUICK_SETTINGS", android.R.drawable.ic_menu_preferences);
         normalized.recycle();
 
         Canvas gc = new Canvas(glyph);
+        // [FIX RĂNG CƯA] Thêm FILTER_BITMAP + DITHER — đây là paint phủ gradient SRC_IN,
+        // các pixel alpha-trung-gian ở viền glyph nhận màu gradient mượt mà không bị
+        // "dải liti" ở chỗ chuyển màu Deep Blue → Purple → Neon Blue.
         Paint gp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         gp.setFilterBitmap(true); // ← THÊM
         gp.setDither(true);       // ← THÊM
