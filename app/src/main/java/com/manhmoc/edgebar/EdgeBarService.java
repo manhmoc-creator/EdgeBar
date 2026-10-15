@@ -178,7 +178,7 @@ private volatile boolean isCapturingIconColorScreenshot = false;
 private volatile long iconColorCaptureStartMs = 0L;
 private static final long ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS = 1500; 
 private static final long ICON_COLOR_EVENT_GATE_MS = 3000;
-private static final long ICON_COLOR_MIN_GAP_MS = 1500;      // MỚI: giãn cách tối thiểu giữa 2 lần takeScreenshot
+private static final long ICON_COLOR_MIN_GAP_MS = 3000;      // MỚI: giãn cách tối thiểu giữa 2 lần takeScreenshot
 
 private static final long ICON_COLOR_INTERVAL_MIN_MS = 400;
 private static final long ICON_COLOR_INTERVAL_MAX_MS = 5000;
@@ -264,13 +264,6 @@ private void doSampleIconColors(boolean isFollowUp) {
             }
         });
     });
-                if (!isFollowUp && !iconColorFollowUpPending) {
-        iconColorFollowUpPending = true;
-        iconColorHandler.postDelayed(() -> {
-            iconColorFollowUpPending = false;
-            doSampleIconColors(true);
-        }, 400);
-    }
     } catch (java.util.concurrent.RejectedExecutionException ree) {
         // Executor đã bị shutdownNow() trong onDestroy() — bỏ qua an toàn
         isCapturingIconColorScreenshot = false;

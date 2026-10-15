@@ -178,7 +178,7 @@ private Object[] findSwallowHost() {
     private long lastSyncMs = 0;
     private final Handler appLockPollHandler = new Handler(android.os.Looper.getMainLooper());
     private String lastPolledFgPkg = "";
-    private static final long APPLOCK_POLL_MS = 800; // đủ nhanh, không tốn pin đáng kể
+    private static final long APPLOCK_POLL_MS = 2000; // đủ nhanh, không tốn pin đáng kể
 
     private void startAppLockPolling() {
         appLockPollHandler.removeCallbacks(appLockPollRunnable);
