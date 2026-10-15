@@ -10,15 +10,12 @@ import java.security.KeyPairGenerator;
 import java.security.KeyPair;
 import java.util.List;
 import java.util.UUID;
-
-/** Pairing 2 máy bằng PIN 9 số do máy A sinh ra, máy B tự gõ bằng tay.
- *  Trao đổi public key qua GATT NGAY TRONG LÚC pairing rồi disconnect —
- *  không giữ kết nối sau khi xong. */
 public class RemoteDevicePairing {
-    SERVICE_UUID = UUID.fromString("7a9e2c10-0001-4edb-a100-0000edbe0001");
-CHAR_PIN_CHECK = UUID.fromString("7a9e2c10-0002-4edb-a100-0000edbe0001");
-CHAR_PUBKEY    = UUID.fromString("7a9e2c10-0003-4edb-a100-0000edbe0001");
-CHAR_CMD       = UUID.fromString("7a9e2c10-0004-4edb-a100-0000edbe0001");
+    private static final UUID SERVICE_UUID    = UUID.fromString("7a9e2c10-0001-4edb-a100-0000edbe0001");
+    private static final UUID CHAR_PIN_CHECK  = UUID.fromString("7a9e2c10-0002-4edb-a100-0000edbe0001");
+    private static final UUID CHAR_PUBKEY     = UUID.fromString("7a9e2c10-0003-4edb-a100-0000edbe0001");
+    private static final UUID CHAR_CMD        = UUID.fromString("7a9e2c10-0004-4edb-a100-0000edbe0001");
+
     private final Context ctx;
     private final SharedPreferences prefs;
     private final BluetoothManager btMgr;
