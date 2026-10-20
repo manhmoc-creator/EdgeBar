@@ -234,16 +234,9 @@ private void checkCall() {                                    // ← BẮT BUỘ
 private static final TimeInterpolator EMPH = new PathInterpolator(0.2f, 0f, 0f, 1f);
 private static final TimeInterpolator EMPH_IN = new PathInterpolator(0.3f, 0f, 0.8f, 0.15f);
 private static final int[] VIZ_COLORS = {0, 0xFF00E5FF, 0xFF8AB4F8, 0xFFFF4081, 0xFFFFC107, 0xFF69F0AE, 0xFFFFFFFF, 0xFFB388FF, 0};
-static final String[] PILL_HEX = {
-    "#0A84FF", "#30D158", "#FF453A", "#FF9F0A", "#BF5AF2", 
-    "#64D2FF", "#FF375F", "#8E8E93", "#00E5FF", "#FFD60A", 
-    "#32D74B", "#FF9F0A", "#5E5CE6", "#FF2D55", "#A2845E"
-};
-static final String[] CARD_HEX = {
-    "#0F1B2D", "#1D1030", "#2D0F1C", "#0F2D1C", "#2D230F", 
-    "#0F252D", "#1F1F1F", "#2D140F", "#1C1C1E", "#2C2C2E", 
-    "#101820", "#1A2A3A", "#2A1A3A", "#3A1A2A", "#2A2A1A"
-};
+static final String[] PILL_HEX = {"#0A84FF","#30D158","#FF453A","#FF9F0A","#BF5AF2","#64D2FF","#FF375F","#8E8E93",
+    "#FFD60A","#5E5CE6","#40C8E0","#AC8E68","#FF6482","#32ADE6","#66D4CF"};
+static final String[] CARD_HEX = PILL_HEX;   // UX: 1 bảng 15 màu glass dùng chung cho cả viên notic và bảng mở rộng
 private static final long DTAP_MS = 280;
 private static final Pattern PHONE = Pattern.compile("\\+?\\d[\\d .\\-()]{6,}\\d");
 private final Map<String, Integer> colorCache = new HashMap<>();
@@ -252,7 +245,9 @@ private LinearLayout popupHead;
 private GradientDrawable popupBg;
 private Runnable pendingTap;
 private long lastTapMs;
-private int cPill = Color.BLACK, cRadPct = 100, cPillMode = PM_SOLID, cPillA = 100, cPopA = 85, cCardMode, cGlass = 60, cPopGap, cLedSpeed = 100, cCardHexIndex = -1;
+private int cPill = Color.BLACK, cRadPct = 100, cPillMode = PM_SOLID, cPillA = 100, cPopA = 85,
+    cCardMode, cGlass = 60, cPopGap, cLedSpeed = 100;
+    private int cPillTint;   // 0 = glass trung tính, khác 0 = glass có màu
 private boolean cLed = true;
 private boolean badgeLeft, popMorphing;
 private boolean closing, reopen, swiping;
@@ -273,25 +268,13 @@ private final Runnable autoCloseRun = this::autoClose;
     cRadPct = prefs.getInt("notic_rad_pct", 100);
     cBadge = prefs.getBoolean("notic_badge_en", true);
     cAnimScale = Math.max(20, Math.min(300, prefs.getInt("notic_anim_speed", 100))) / 100f;
-    // 0 = đen, 1 = trong suốt, 2 = kính giọt nước, >=3 = màu trong PILL_HEX (các giá trị đã lưu cũ sẽ lệch 1 mức)
-int pi = prefs.getInt("notic_pill_color", 0);
+    int pi = prefs.getInt("notic_pill_color", 0);   // 0 đen, 1 trong suốt, 2 glass, >=3 glass có màu (PILL_HEX)
+cPillMode = pi == 1 ? PM_CLEAR : (pi >= 2 ? PM_GLASS : PM_SOLID);
+cPillTint = (pi >= 3 && pi - 3 < PILL_HEX.length) ? Color.parseColor(PILL_HEX[pi - 3]) : 0;
 cPill = Color.BLACK;
-cPillMode = PM_SOLID;
-if (pi == 1) cPillMode = PM_CLEAR;
-else if (pi == 2) cPillMode = PM_GLASS;
-else if (pi >= 3 && pi - 3 < PILL_HEX.length) {
-    cPillMode = PM_GLASS;
-    cPill = Color.parseColor(PILL_HEX[pi - 3]);
-}
 cPillA = Math.max(0, Math.min(100, prefs.getInt("notic_pill_alpha", 100)));
 cPopA = Math.max(0, Math.min(100, prefs.getInt("notic_pop_alpha", 85)));
-
 cCardMode = prefs.getInt("notic_card_color", 0);
-if (cCardMode >= 5 && cCardMode - 5 < CARD_HEX.length) {
-    cCardMode = 4; // Ép sang chế độ Glass (4)
-    // Ta sẽ lưu màu index trực tiếp vào 1 biến tạm hoặc dùng nó ngay trong cardBg
-}
-cCardHexIndex = prefs.getInt("notic_card_color", 0) - 5; // Biến mới lưu index màu card
 cGlass = Math.max(0, Math.min(100, prefs.getInt("notic_glass_relief", 60)));
 cPopGap = Math.max(0, prefs.getInt("notic_pop_gap", 0));
 cLed = prefs.getBoolean("notic_led_en", true);
@@ -364,12 +347,14 @@ static void drawViz(Canvas c, Paint p, float x, float cy, float w, float h, int 
 private static int withA(int color, int pct) {
     return (Math.round(Color.alpha(color) * Math.max(0, Math.min(100, pct)) / 100f) << 24) | (color & 0x00FFFFFF);
 }
+private static final int GLASS_BODY_A = 150;   // UX: độ đậm tối đa của nền glass khi thanh kéo = 100%; chỉnh số này nếu muốn glass đậm/nhạt hơn
+private static int glassTint(int rgb, int pct) {
+    int c = blend(rgb | 0xFF000000, Color.BLACK, 0.25f);   // tối nhẹ để chữ trắng luôn đọc được
+    return (Math.round(GLASS_BODY_A * Math.max(0, Math.min(100, pct)) / 100f) << 24) | (c & 0x00FFFFFF);
+}
 private int pillFill() {
     if (cPillMode == PM_CLEAR) return 0;
-    if (cPillMode == PM_GLASS) {
-        int base = cPill == Color.BLACK ? 0xFF141416 : blend(cPill, Color.BLACK, 0.4f);
-        return withA(base, cPillA);
-    }
+    if (cPillMode == PM_GLASS) return glassTint(cPillTint != 0 ? cPillTint : 0xFF14181E, cPillA);
     return withA(cPill, cPillA);
 }
 private static final class Glass {
@@ -399,15 +384,12 @@ private final class GlassDrawable extends Drawable {
     private final Glass g = new Glass(1.6f * dens);
     private final Paint body = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF r = new RectF();
-    private final float rad;
-    GlassDrawable(float rad, int tint, int alphaPct) {
-    this.rad = rad;
-    body.setColor(withA(tint, alphaPct));
-}
+    private final float rad, k;
+    GlassDrawable(float rad, int tint, float k) { this.rad = rad; this.k = k; body.setColor(tint); }
     @Override public void draw(Canvas c) {
         r.set(getBounds());
         c.drawRoundRect(r, rad, rad, body);
-        g.draw(c, r, rad, cGlass, 1f);
+        g.draw(c, r, rad, cGlass, k);   // UX: viền/bóng glass cũng mờ theo độ mờ để thanh kéo có tác dụng thật
     }
     @Override public void setAlpha(int a) {}
     @Override public void setColorFilter(android.graphics.ColorFilter cf) {}
@@ -447,7 +429,8 @@ private Bitmap makeDisc(Bitmap src) {
 private Bitmap circleArt(Item it) {
     if (it.artCircle != null) return it.artCircle;
     Bitmap src = loadLarge(it);
-    it.artCircle = makeDisc(src != null ? src : it.icon); // vẽ 1 lần, về sau chỉ rotate bitmap
+// UX: có ảnh bìa thật -> cắt tròn; không có (chỉ icon vuông) -> icon nằm giữa đĩa, 4 góc thừa tô màu icon app
+it.artCircle = src != null ? makeDisc(src) : makeAppDisc(it.icon, appColor(it));
     return it.artCircle;
 }
 
@@ -1651,7 +1634,7 @@ private void renderPopup(boolean force) {
     if (popupBg != null) {
     if (popupHistory) {
         if (cCardMode == 3) { popupBg.setColor(Color.TRANSPARENT); popupBg.setStroke(0, 0); }
-        else if (cCardMode == 4) { popupBg.setColor(Color.argb(Math.round(90 * cPopA / 100f), 20, 24, 30)); popupBg.setStroke(0, 0); }
+        else if (cCardMode >= 4) { popupBg.setColor(glassTint(0xFF14181E, cPopA)); popupBg.setStroke(0, 0); }
         else { popupBg.setColor(withA(0xFF121214, cPopA)); popupBg.setStroke(dp(2), withA(0xAA8AB4F8, cPopA)); }
         popup.setPadding(dp(10), dp(10), dp(10), dp(10));
     } else {
@@ -1688,6 +1671,7 @@ else popupBody.addView(buildRow(curIt));
     }
     private View buildRow(final Item it) {
     LinearLayout card = buildRowCard(it);
+    if (popupHistory || it.call) return card;   // UX: danh sách lịch sử gắn X ngay trong thẻ (xem buildRowCard) để X trượt theo khi vuốt xoá
     FrameLayout w = new FrameLayout(ctx);
     w.setLayoutParams(card.getLayoutParams());
     card.setLayoutParams(new FrameLayout.LayoutParams(-1, -2));
@@ -1723,7 +1707,7 @@ private View closeX(final Item it) {
         LinearLayout top = new LinearLayout(ctx);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        if (!it.call) top.setPadding(0, 0, dp(22), 0);
+        if (!popupHistory && !it.call) top.setPadding(0, 0, dp(22), 0);   // chừa chỗ cho nút X
         if (it.media && prefs.getBoolean("notic_art_spin", true)) {
     top.addView(new ArtView(ctx, it));
 } else {
@@ -1783,6 +1767,12 @@ if (sb != null) {
             top.addView(ai, alp);
         }        
         if (it.media && prefs.getBoolean("notic_viz_en", true)) top.addView(new VizView(ctx, it)); // visualizer nằm sát phải cùng
+        if (popupHistory && !it.call) {
+    LinearLayout.LayoutParams xl = new LinearLayout.LayoutParams(dp(30), dp(30));
+    xl.gravity = Gravity.TOP;
+    xl.setMargins(dp(4), 0, 0, 0);
+    top.addView(closeX(it), xl);   // X góc phải trên, bấm = xoá đúng thông báo đó
+}
         top.setOnClickListener(v -> {
             /* UX: nếu user đang cố swipe trên card (đã vượt slop) thì bỏ qua
                click của top — tránh mở app ngoài ý muốn khi swipe chéo không
@@ -1875,20 +1865,15 @@ private View buildSingleFooter(final Item it) {
 }
 private Drawable cardBg(Item it, float r) {
     int m = cCardMode;
-    if (m == 3) return rounded(Color.TRANSPARENT, r);
-    
-    int tint = Color.argb(Math.round(90 * cPopA / 100f), 20, 24, 30);
-    if (m == 4) {
-        if (cCardHexIndex >= 0 && cCardHexIndex < CARD_HEX.length) {
-            tint = blend(Color.parseColor(CARD_HEX[cCardHexIndex]), appColor(it), 0.15f);
-        }
-        return new GlassDrawable(r, tint, cPopA);
-    }
+    if (m == 3) return rounded(Color.TRANSPARENT, r);   // Clear: không viền
+    if (m == 4 || m >= 5) {
+    int rgb = (m >= 5 && m - 5 < CARD_HEX.length) ? Color.parseColor(CARD_HEX[m - 5]) : 0xFF14181E;
+    return new GlassDrawable(r, glassTint(rgb, cPopA), cPopA / 100f);
+}
     int base;
     if (m == 1) base = blend(appColor(it), Color.BLACK, 0.65f);
     else if (m == 2) base = blend(CARD_DARK, appColor(it), 0.20f);
     else if (it.media && m == 0) base = blend(appColor(it), Color.BLACK, 0.70f);
-    else if (m >= 5 && m - 5 < CARD_HEX.length) base = Color.parseColor(CARD_HEX[m - 5]);
     else base = CARD_DARK;
     GradientDrawable g = rounded(withA(base, cPopA), r);
     if (cBorder) g.setStroke(dp(1.5f), appColor(it));   // mọi thẻ, mọi app, mọi chế độ màu
@@ -1954,10 +1939,10 @@ private Drawable cardBg(Item it, float r) {
             }
         }
     }
-    if (popupHistory && cCardMode == 4) {
-        rr.set(0, 0, getWidth(), getHeight());
-        glass.draw(c, rr, popRad, cGlass, popMorphing ? Math.min(1f, morphF * 3f) : 1f);
-    }
+    if (popupHistory && cCardMode >= 4) {
+    rr.set(0, 0, getWidth(), getHeight());
+    glass.draw(c, rr, popRad, cGlass, (popMorphing ? Math.min(1f, morphF * 3f) : 1f) * cPopA / 100f);
+}
     super.dispatchDraw(c);
 }
     private float swX0, swY0, swDx; private boolean swDrag, swDown; private VelocityTracker swVt;
@@ -2397,7 +2382,6 @@ private class VizView extends View {
         final Paint sp = new Paint(Paint.ANTI_ALIAS_FLAG);
         final Glass glass = new Glass(1.6f * dens);
 final Paint lp2 = new Paint(Paint.ANTI_ALIAS_FLAG);
-final RectF lr = new RectF();
 final Runnable tick = () -> invalidate();
         final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         final TextPaint np = new TextPaint(Paint.ANTI_ALIAS_FLAG);
@@ -2415,21 +2399,17 @@ final Runnable tick = () -> invalidate();
             sp.setStyle(Paint.Style.STROKE);
 sp.setStrokeWidth(1.6f * dens);
         }
-        void drawLedDot(Canvas c, float x, float cyy, float hh, int color) {
-            long period = Math.max(300L, (long) (2200f / (cLedSpeed / 100f)));
-            float ph = (SystemClock.uptimeMillis() % period) / (float) period;
-            float a = 0.18f + 0.82f * (0.5f - 0.5f * (float) Math.cos(ph * 2 * Math.PI));
-            float r = hh * 0.18f; // Bán kính lõi chấm tròn
-            
-            lp2.setColor(color);
-            // Vẽ quầng sáng mờ bao quanh
-            lp2.setAlpha((int) (90 * a));
-            c.drawCircle(x, cyy, r * 2.2f, lp2);
-            
-            // Vẽ lõi chấm tròn sáng
-            lp2.setAlpha((int) (255 * a));
-            c.drawCircle(x, cyy, r, lp2);
-        }
+        void drawLaser(Canvas c, float x, float cyy, float d, float hh, int color) {
+    long period = Math.max(300L, (long) (2200f / (cLedSpeed / 100f)));
+    float ph = (SystemClock.uptimeMillis() % period) / (float) period;
+    float a = 0.18f + 0.82f * (0.5f - 0.5f * (float) Math.cos(ph * 2 * Math.PI));   // nhịp thở kiểu LED thông báo
+    float mx = x + d / 2f;
+    lp2.setColor(color);
+    lp2.setAlpha((int) (80 * a));
+    c.drawCircle(mx, cyy, d * 0.9f, lp2);   // quầng sáng (không dùng BlurMaskFilter để khỏi bật software layer, đỡ RAM/pin)
+    lp2.setAlpha((int) (255 * a));
+    c.drawCircle(mx, cyy, d / 2f, lp2);      // chấm tròn đặc
+}
         void set(float cx, float cyy, float ww, float hh, float rr, float m, float ta) {
             cancelAnim();
             ccx = cx; ccy = cyy; w = ww; h = hh; r = rr; mix = m; textAlpha = ta;
@@ -2490,7 +2470,7 @@ sp.setStrokeWidth(1.6f * dens);
             return hv != null && !hidden && hv.dispatchTouchEvent(e);
         }
         @Override protected void onDetachedFromWindow() { removeCallbacks(tick); super.onDetachedFromWindow(); }
-                                @Override protected void onDraw(Canvas c) {
+                @Override protected void onDraw(Canvas c) {
     if (item == null || hidden) return;
     float cx = ccx - ox, cyy = ccy - oy;
     float l = cx - w / 2f, t = cyy - h / 2f, rr = cx + w / 2f, b = cyy + h / 2f;
@@ -2499,7 +2479,7 @@ sp.setStrokeWidth(1.6f * dens);
     float rad = Math.min(r, Math.min(w, h) / 2f);
     c.drawRoundRect(rect, rad, rad, bg);
     if (mix > 0.05f) {
-        if (cPillMode == PM_GLASS) glass.draw(c, rect, rad, cGlass, Math.min(1f, mix));
+        if (cPillMode == PM_GLASS) glass.draw(c, rect, rad, cGlass, Math.min(1f, mix) * cPillA / 100f);
         else if (cBorder && cPillMode != PM_CLEAR) {   // Clear = không viền
             sp.setColor(appColor(item));
             sp.setAlpha((int) (255 * Math.min(1f, mix)));
@@ -2518,36 +2498,31 @@ sp.setStrokeWidth(1.6f * dens);
         if (spin) { c.save(); c.rotate(spinAngle(item), ix + isz / 2f, cyy); c.drawBitmap(lead, null, irect, ip); c.restore(); }
         else c.drawBitmap(lead, null, irect, ip);
     }
-    
     float textR = rr - h * 0.3f;
-    if (led) {
-        // [UX] Căn chỉnh lại vị trí tâm để chấm tròn nằm cân đối bên phải Notic
-        float lx = rr - h * 0.35f; 
-        drawLedDot(c, lx, cyy, h, appColor(item));
-        textR = Math.min(textR, lx - h * 0.3f);
+    if (led) {   // thay icon app bên phải: icon app chỉ còn hiện trong bảng mở rộng
+        float lw = h * 0.34f, lx = rr - h * 0.25f - lw;
+        drawLaser(c, lx, cyy, lw, h, appColor(item));
+        textR = Math.min(textR, lx - h * 0.15f);
     }
-    
     float vw = h * 0.95f, vl = rr - h * 0.25f - vw;
     if (viz) { drawViz(c, bp, vl, cyy, vw, h * 0.5f, vizColor(item), item.playing, speed(), 0.05f); textR = Math.min(textR, vl - h * 0.15f); }
-    
     if (count > 1 && cBadge) {
         float ba = Math.max(0f, Math.min(1f, (w - pillH * 1.4f) / (pillH * 0.6f)));
         float br = h / 2f, bcx = badgeLeft ? l - 6 * dens - br : rr + 6 * dens + br;
-        bp.setColor(Color.BLACK); bp.setAlpha((int) (255 * ba));
-        c.drawCircle(bcx, cyy, br, bp);
-        
-        // [UX] Đồng bộ màu viền Badge theo màu của Notic hoặc màu App thay vì màu xanh mặc định.
-        // Nếu Notic là dạng đơn sắc (không đen), Badge lấy màu Notic. Ngược lại lấy màu App.
-        int badgeColor = cPillMode == PM_SOLID ? (cPill == Color.BLACK ? appColor(item) : cPill) : appColor(item);
-        sp.setColor(badgeColor); sp.setAlpha((int) (255 * ba));
-        c.drawCircle(bcx, cyy, br - sp.getStrokeWidth() / 2f, sp);
-        
+        rect.set(bcx - br, cyy - br, bcx + br, cyy + br);
+int pf2 = pillFill();   // UX: badge luôn dùng đúng nền + viền của viên notic
+bp.setColor(pf2); bp.setAlpha(Math.round(Color.alpha(pf2) * ba));
+c.drawCircle(bcx, cyy, br, bp);
+if (cPillMode == PM_GLASS) glass.draw(c, rect, br, cGlass, ba * cPillA / 100f);
+else if (cBorder && cPillMode == PM_SOLID) {
+    sp.setColor(appColor(item)); sp.setAlpha((int) (255 * ba));
+    c.drawCircle(bcx, cyy, br - sp.getStrokeWidth() / 2f, sp);
+}
         np.setTextSize(Math.min(13f * dens, h * 0.46f)); np.setAlpha((int) (255 * ba));
         Paint.FontMetrics fm = np.getFontMetrics();
         c.drawText(String.valueOf(Math.min(count, 99)), bcx, cyy - (fm.ascent + fm.descent) / 2f, np);
         bp.setAlpha(255); np.setAlpha(255);
     }
-    
     if (line != null && textAlpha > 0.02f) {
         tp.setAlpha((int) (255 * textAlpha));
         float tx = ix + isz + h * 0.2f;
@@ -2560,6 +2535,6 @@ sp.setStrokeWidth(1.6f * dens);
     // LED chỉ chạy 15fps và tự dừng khi tắt màn / Notic bị ẩn -> gần như 0 pin khi không nhìn
     if (screenOn && statusVisible && ((item.media && item.playing && (spin || viz)) || led))
         postOnAnimationDelayed(tick, led ? 66 : 50);
-  }
+   }
  }
 }

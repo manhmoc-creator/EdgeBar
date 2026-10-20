@@ -8518,6 +8518,37 @@ private void runNoticDemo(boolean toggle) {
     if (!ok && toggle) Toast.makeText(this, T("Turn Notic on and set a bar/corner to \"Swallow notifications\" first",
         "Hãy bật Notic và đặt 1 bar/corner sang \"Nuốt thông báo\" trước"), Toast.LENGTH_LONG).show();
 }
+private class GlassSwatch extends View {
+    private final int tint;
+    private boolean sel;
+    private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final android.graphics.RectF r = new android.graphics.RectF();
+    private android.graphics.LinearGradient sheen;
+    GlassSwatch(Context c, int tint) { super(c); this.tint = tint; }
+    void setSel(boolean s) { if (sel != s) { sel = s; invalidate(); } }
+    @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
+        float d = Math.min(w, h), cx = w / 2f, cy = h / 2f, rad = d / 2f - 4;
+        r.set(cx - rad, cy - rad, cx + rad, cy + rad);
+        // UX: shader dựng 1 lần ở đây, onDraw không cấp phát gì thêm
+        sheen = new android.graphics.LinearGradient(r.left, r.top, r.left, r.bottom,
+            new int[]{0xB3FFFFFF, 0x00FFFFFF, 0x66000000}, new float[]{0f, 0.5f, 1f}, android.graphics.Shader.TileMode.CLAMP);
+    }
+    @Override protected void onDraw(Canvas c) {
+        if (sheen == null) return;
+        float cx = r.centerX(), cy = r.centerY(), rad = r.width() / 2f;
+        p.setStyle(Paint.Style.FILL); p.setShader(null);
+        p.setColor(Color.argb(190, Color.red(tint), Color.green(tint), Color.blue(tint)));
+        c.drawCircle(cx, cy, rad, p);
+        p.setShader(sheen);
+        c.drawCircle(cx, cy, rad, p);
+        p.setShader(null);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(sel ? 6f : 2.5f);
+        p.setColor(sel ? Color.WHITE : 0x99FFFFFF);
+        c.drawCircle(cx, cy, rad, p);
+    }
+}
+
 private View noticPalette(String title, String key, String[] specials, String[] hexes) {
     LinearLayout box = new LinearLayout(this);
     box.setOrientation(LinearLayout.VERTICAL);
@@ -8528,17 +8559,10 @@ private View noticPalette(String title, String key, String[] specials, String[] 
     final List<View> cells = new ArrayList<>();
     final int total = specials.length + hexes.length;
     final Runnable[] paint = new Runnable[1];
-    
-    // [UX] Chia 15 màu thành 3 hàng (5 màu/hàng) để không bị tràn viền màn hình Pixel 2XL.
-    LinearLayout rowS = new LinearLayout(this); 
-    rowS.setGravity(Gravity.CENTER);
-    LinearLayout rowC1 = new LinearLayout(this);
-    rowC1.setGravity(Gravity.CENTER);
-    LinearLayout rowC2 = new LinearLayout(this);
-    rowC2.setGravity(Gravity.CENTER);
-    LinearLayout rowC3 = new LinearLayout(this);
-    rowC3.setGravity(Gravity.CENTER);
-    
+    LinearLayout rowS = new LinearLayout(this);
+    LinearLayout rowC = new LinearLayout(this);   // hàng duy nhất chứa toàn bộ màu glass
+    rowC.setOrientation(LinearLayout.HORIZONTAL);
+    rowC.setWeightSum(hexes.length);              // UX: chia đều theo weight nên 15 màu luôn vừa 1 hàng ở mọi độ rộng màn hình
     for (int i = 0; i < total; i++) {
         final int idx = i;
         View v;
@@ -8547,49 +8571,31 @@ private View noticPalette(String title, String key, String[] specials, String[] 
             TextView c = new TextView(this);
             c.setText(specials[i]); c.setTextSize(12.5f); c.setGravity(Gravity.CENTER); c.setPadding(28, 18, 28, 18);
             v = c; lp = new LinearLayout.LayoutParams(-2, -2);
-            lp.setMargins(4, 8, 4, 8);
-            v.setLayoutParams(lp);
-            rowS.addView(v); // Hàng 1: Các nút đặc biệt (Đen, Trong suốt, Kính...)
-        } else { 
-            v = new View(this); 
-            lp = new LinearLayout.LayoutParams(60, 60); // Thu nhỏ kích thước màu xuống 60 cho vừa 5 ô 1 hàng
-            lp.setMargins(4, 8, 4, 8);
-            v.setLayoutParams(lp);
-            
-            // Phân bổ 15 màu vào 3 hàng
-            int hexIdx = i - specials.length;
-            if (hexIdx < 5) rowC1.addView(v);
-            else if (hexIdx < 10) rowC2.addView(v);
-            else rowC3.addView(v);
+            lp.setMargins(6, 8, 6, 8);
+        } else {
+            v = new GlassSwatch(this, Color.parseColor(hexes[i - specials.length]));
+            lp = new LinearLayout.LayoutParams(0, 76, 1f);
+            lp.setMargins(2, 8, 2, 8);
         }
+        v.setLayoutParams(lp);
         v.setOnClickListener(x -> { prefs.edit().putInt(key, idx).apply(); paint[0].run(); });
         cells.add(v);
+        (i < specials.length ? rowS : rowC).addView(v);
     }
-    
     paint[0] = () -> {
         int sel = prefs.getInt(key, 0);
         for (int i = 0; i < total; i++) {
             View v = cells.get(i);
             boolean on = i == sel;
-            if (i < specials.length) {
+            if (v instanceof GlassSwatch) ((GlassSwatch) v).setSel(on);
+            else {
                 ((TextView) v).setTextColor(on ? Color.BLACK : Color.WHITE);
                 v.setBackground(getRounded(on ? "#8AB4F8" : "#2C2C2C", 40f));
-            } else {
-                GradientDrawable g = new GradientDrawable();
-                g.setShape(GradientDrawable.OVAL);
-                g.setColor(Color.parseColor(hexes[i - specials.length]));
-                g.setStroke(on ? 6 : 2, on ? Color.WHITE : Color.parseColor("#555555"));
-                v.setBackground(g);
             }
         }
     };
     paint[0].run();
-    
-    // Add toàn bộ 4 hàng vào box
-    box.addView(rowS); 
-    box.addView(rowC1); 
-    box.addView(rowC2); 
-    box.addView(rowC3);
+    box.addView(rowS); box.addView(rowC);
     return box;
 }
 private void openNoticSpace() {
