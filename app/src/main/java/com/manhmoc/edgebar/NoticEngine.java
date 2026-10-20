@@ -1688,7 +1688,6 @@ else popupBody.addView(buildRow(curIt));
     }
     private View buildRow(final Item it) {
     LinearLayout card = buildRowCard(it);
-    if (popupHistory || it.call) return card;   // muốn X ở cả danh sách: bỏ điều kiện popupHistory
     FrameLayout w = new FrameLayout(ctx);
     w.setLayoutParams(card.getLayoutParams());
     card.setLayoutParams(new FrameLayout.LayoutParams(-1, -2));
@@ -1724,7 +1723,7 @@ private View closeX(final Item it) {
         LinearLayout top = new LinearLayout(ctx);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        if (!popupHistory && !it.call) top.setPadding(0, 0, dp(22), 0);   // chừa chỗ cho nút X
+        if (!it.call) top.setPadding(0, 0, dp(22), 0);
         if (it.media && prefs.getBoolean("notic_art_spin", true)) {
     top.addView(new ArtView(ctx, it));
 } else {

@@ -8528,7 +8528,17 @@ private View noticPalette(String title, String key, String[] specials, String[] 
     final List<View> cells = new ArrayList<>();
     final int total = specials.length + hexes.length;
     final Runnable[] paint = new Runnable[1];
-    LinearLayout rowS = new LinearLayout(this), rowC = new LinearLayout(this);
+    
+    // [UX] Chia 15 màu thành 3 hàng (5 màu/hàng) để không bị tràn viền màn hình Pixel 2XL.
+    LinearLayout rowS = new LinearLayout(this); 
+    rowS.setGravity(Gravity.CENTER);
+    LinearLayout rowC1 = new LinearLayout(this);
+    rowC1.setGravity(Gravity.CENTER);
+    LinearLayout rowC2 = new LinearLayout(this);
+    rowC2.setGravity(Gravity.CENTER);
+    LinearLayout rowC3 = new LinearLayout(this);
+    rowC3.setGravity(Gravity.CENTER);
+    
     for (int i = 0; i < total; i++) {
         final int idx = i;
         View v;
@@ -8537,13 +8547,25 @@ private View noticPalette(String title, String key, String[] specials, String[] 
             TextView c = new TextView(this);
             c.setText(specials[i]); c.setTextSize(12.5f); c.setGravity(Gravity.CENTER); c.setPadding(28, 18, 28, 18);
             v = c; lp = new LinearLayout.LayoutParams(-2, -2);
-        } else { v = new View(this); lp = new LinearLayout.LayoutParams(70, 70); }
-        lp.setMargins(6, 8, 6, 8);
-        v.setLayoutParams(lp);
+            lp.setMargins(4, 8, 4, 8);
+            v.setLayoutParams(lp);
+            rowS.addView(v); // Hàng 1: Các nút đặc biệt (Đen, Trong suốt, Kính...)
+        } else { 
+            v = new View(this); 
+            lp = new LinearLayout.LayoutParams(60, 60); // Thu nhỏ kích thước màu xuống 60 cho vừa 5 ô 1 hàng
+            lp.setMargins(4, 8, 4, 8);
+            v.setLayoutParams(lp);
+            
+            // Phân bổ 15 màu vào 3 hàng
+            int hexIdx = i - specials.length;
+            if (hexIdx < 5) rowC1.addView(v);
+            else if (hexIdx < 10) rowC2.addView(v);
+            else rowC3.addView(v);
+        }
         v.setOnClickListener(x -> { prefs.edit().putInt(key, idx).apply(); paint[0].run(); });
         cells.add(v);
-        (i < specials.length ? rowS : rowC).addView(v);
     }
+    
     paint[0] = () -> {
         int sel = prefs.getInt(key, 0);
         for (int i = 0; i < total; i++) {
@@ -8562,10 +8584,14 @@ private View noticPalette(String title, String key, String[] specials, String[] 
         }
     };
     paint[0].run();
-    box.addView(rowS); box.addView(rowC);
+    
+    // Add toàn bộ 4 hàng vào box
+    box.addView(rowS); 
+    box.addView(rowC1); 
+    box.addView(rowC2); 
+    box.addView(rowC3);
     return box;
 }
-
 private void openNoticSpace() {
     Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
     LinearLayout root = new LinearLayout(this);
