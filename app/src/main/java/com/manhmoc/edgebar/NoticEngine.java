@@ -2457,12 +2457,9 @@ sp.setStrokeWidth(1.6f * dens);
         }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
-    View hv = hostView;
-    return hv != null && !hidden && hv.dispatchTouchEvent(e);
-}
-    } else if ((a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) && upFired) { upFired = false; return true; }
-    return hv.dispatchTouchEvent(e);
-}
+            View hv = hostView;
+            return hv != null && !hidden && hv.dispatchTouchEvent(e);
+        }
         @Override protected void onDetachedFromWindow() { removeCallbacks(tick); super.onDetachedFromWindow(); }
                 @Override protected void onDraw(Canvas c) {
     if (item == null || hidden) return;
