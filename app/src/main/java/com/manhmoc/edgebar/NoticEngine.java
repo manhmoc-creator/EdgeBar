@@ -234,8 +234,16 @@ private void checkCall() {                                    // ← BẮT BUỘ
 private static final TimeInterpolator EMPH = new PathInterpolator(0.2f, 0f, 0f, 1f);
 private static final TimeInterpolator EMPH_IN = new PathInterpolator(0.3f, 0f, 0.8f, 0.15f);
 private static final int[] VIZ_COLORS = {0, 0xFF00E5FF, 0xFF8AB4F8, 0xFFFF4081, 0xFFFFC107, 0xFF69F0AE, 0xFFFFFFFF, 0xFFB388FF, 0};
-static final String[] PILL_HEX = {"#0A84FF","#30D158","#FF453A","#FF9F0A","#BF5AF2","#64D2FF","#FF375F","#8E8E93"};
-static final String[] CARD_HEX = {"#0F1B2D","#1D1030","#2D0F1C","#0F2D1C","#2D230F","#0F252D","#1F1F1F","#2D140F"};
+static final String[] PILL_HEX = {
+    "#0A84FF", "#30D158", "#FF453A", "#FF9F0A", "#BF5AF2", 
+    "#64D2FF", "#FF375F", "#8E8E93", "#00E5FF", "#FFD60A", 
+    "#32D74B", "#FF9F0A", "#5E5CE6", "#FF2D55", "#A2845E"
+};
+static final String[] CARD_HEX = {
+    "#0F1B2D", "#1D1030", "#2D0F1C", "#0F2D1C", "#2D230F", 
+    "#0F252D", "#1F1F1F", "#2D140F", "#1C1C1E", "#2C2C2E", 
+    "#101820", "#1A2A3A", "#2A1A3A", "#3A1A2A", "#2A2A1A"
+};
 private static final long DTAP_MS = 280;
 private static final Pattern PHONE = Pattern.compile("\\+?\\d[\\d .\\-()]{6,}\\d");
 private final Map<String, Integer> colorCache = new HashMap<>();
@@ -244,8 +252,7 @@ private LinearLayout popupHead;
 private GradientDrawable popupBg;
 private Runnable pendingTap;
 private long lastTapMs;
-private int cPill = Color.BLACK, cRadPct = 100, cPillMode = PM_SOLID, cPillA = 100, cPopA = 85,
-    cCardMode, cGlass = 60, cPopGap, cLedSpeed = 100;
+private int cPill = Color.BLACK, cRadPct = 100, cPillMode = PM_SOLID, cPillA = 100, cPopA = 85, cCardMode, cGlass = 60, cPopGap, cLedSpeed = 100, cCardHexIndex = -1;
 private boolean cLed = true;
 private boolean badgeLeft, popMorphing;
 private boolean closing, reopen, swiping;
@@ -268,11 +275,23 @@ private final Runnable autoCloseRun = this::autoClose;
     cAnimScale = Math.max(20, Math.min(300, prefs.getInt("notic_anim_speed", 100))) / 100f;
     // 0 = đen, 1 = trong suốt, 2 = kính giọt nước, >=3 = màu trong PILL_HEX (các giá trị đã lưu cũ sẽ lệch 1 mức)
 int pi = prefs.getInt("notic_pill_color", 0);
-cPillMode = pi == 1 ? PM_CLEAR : pi == 2 ? PM_GLASS : PM_SOLID;
-cPill = (pi >= 3 && pi - 3 < PILL_HEX.length) ? Color.parseColor(PILL_HEX[pi - 3]) : Color.BLACK;
+cPill = Color.BLACK;
+cPillMode = PM_SOLID;
+if (pi == 1) cPillMode = PM_CLEAR;
+else if (pi == 2) cPillMode = PM_GLASS;
+else if (pi >= 3 && pi - 3 < PILL_HEX.length) {
+    cPillMode = PM_GLASS;
+    cPill = Color.parseColor(PILL_HEX[pi - 3]);
+}
 cPillA = Math.max(0, Math.min(100, prefs.getInt("notic_pill_alpha", 100)));
 cPopA = Math.max(0, Math.min(100, prefs.getInt("notic_pop_alpha", 85)));
+
 cCardMode = prefs.getInt("notic_card_color", 0);
+if (cCardMode >= 5 && cCardMode - 5 < CARD_HEX.length) {
+    cCardMode = 4; // Ép sang chế độ Glass (4)
+    // Ta sẽ lưu màu index trực tiếp vào 1 biến tạm hoặc dùng nó ngay trong cardBg
+}
+cCardHexIndex = prefs.getInt("notic_card_color", 0) - 5; // Biến mới lưu index màu card
 cGlass = Math.max(0, Math.min(100, prefs.getInt("notic_glass_relief", 60)));
 cPopGap = Math.max(0, prefs.getInt("notic_pop_gap", 0));
 cLed = prefs.getBoolean("notic_led_en", true);
@@ -347,12 +366,12 @@ private static int withA(int color, int pct) {
 }
 private int pillFill() {
     if (cPillMode == PM_CLEAR) return 0;
-    if (cPillMode == PM_GLASS) return Color.argb(Math.round(90 * cPillA / 100f), 20, 24, 30);
+    if (cPillMode == PM_GLASS) {
+        int base = cPill == Color.BLACK ? 0xFF141416 : blend(cPill, Color.BLACK, 0.4f);
+        return withA(base, cPillA);
+    }
     return withA(cPill, cPillA);
 }
-
-/* UX: Shader dựng 1 lần ở hệ toạ độ đơn vị (0..1), mỗi khung chỉ setLocalMatrix.
-   Pill animate 60fps nên tuyệt đối không new LinearGradient trong onDraw (tốn RAM/pin Pixel 2XL). */
 private static final class Glass {
     private final Paint sheenP = new Paint(Paint.ANTI_ALIAS_FLAG), rimP = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final LinearGradient sheen = new LinearGradient(0, 0, 0, 1,
@@ -381,7 +400,10 @@ private final class GlassDrawable extends Drawable {
     private final Paint body = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF r = new RectF();
     private final float rad;
-    GlassDrawable(float rad, int tint) { this.rad = rad; body.setColor(tint); }
+    GlassDrawable(float rad, int tint, int alphaPct) {
+    this.rad = rad;
+    body.setColor(withA(tint, alphaPct));
+}
     @Override public void draw(Canvas c) {
         r.set(getBounds());
         c.drawRoundRect(r, rad, rad, body);
@@ -1854,9 +1876,15 @@ private View buildSingleFooter(final Item it) {
 }
 private Drawable cardBg(Item it, float r) {
     int m = cCardMode;
-    if (m == 3) return rounded(Color.TRANSPARENT, r);   // Clear: không viền
+    if (m == 3) return rounded(Color.TRANSPARENT, r);
+    
     int tint = Color.argb(Math.round(90 * cPopA / 100f), 20, 24, 30);
-    if (m == 4) return new GlassDrawable(r, tint);
+    if (m == 4) {
+        if (cCardHexIndex >= 0 && cCardHexIndex < CARD_HEX.length) {
+            tint = blend(Color.parseColor(CARD_HEX[cCardHexIndex]), appColor(it), 0.15f);
+        }
+        return new GlassDrawable(r, tint, cPopA);
+    }
     int base;
     if (m == 1) base = blend(appColor(it), Color.BLACK, 0.65f);
     else if (m == 2) base = blend(CARD_DARK, appColor(it), 0.20f);
@@ -2388,19 +2416,21 @@ final Runnable tick = () -> invalidate();
             sp.setStyle(Paint.Style.STROKE);
 sp.setStrokeWidth(1.6f * dens);
         }
-        void drawLaser(Canvas c, float x, float cyy, float lw, float hh, int color) {
-    long period = Math.max(300L, (long) (2200f / (cLedSpeed / 100f)));
-    float ph = (SystemClock.uptimeMillis() % period) / (float) period;
-    float a = 0.18f + 0.82f * (0.5f - 0.5f * (float) Math.cos(ph * 2 * Math.PI));   // nhịp thở chậm kiểu đèn LED thông báo
-    float th = hh * 0.2f;
-    lp2.setColor(color);
-    lp2.setAlpha((int) (70 * a));
-    lr.set(x - th * 0.6f, cyy - th * 1.5f, x + lw + th * 0.6f, cyy + th * 1.5f);
-    c.drawRoundRect(lr, th * 1.5f, th * 1.5f, lp2);          // quầng sáng (không dùng BlurMaskFilter để khỏi phải bật software layer)
-    lp2.setAlpha((int) (255 * a));
-    lr.set(x, cyy - th / 2f, x + lw, cyy + th / 2f);
-    c.drawRoundRect(lr, th / 2f, th / 2f, lp2);
-}
+        void drawLedDot(Canvas c, float x, float cyy, float hh, int color) {
+            long period = Math.max(300L, (long) (2200f / (cLedSpeed / 100f)));
+            float ph = (SystemClock.uptimeMillis() % period) / (float) period;
+            float a = 0.18f + 0.82f * (0.5f - 0.5f * (float) Math.cos(ph * 2 * Math.PI));
+            float r = hh * 0.18f; // Bán kính lõi chấm tròn
+            
+            lp2.setColor(color);
+            // Vẽ quầng sáng mờ bao quanh
+            lp2.setAlpha((int) (90 * a));
+            c.drawCircle(x, cyy, r * 2.2f, lp2);
+            
+            // Vẽ lõi chấm tròn sáng
+            lp2.setAlpha((int) (255 * a));
+            c.drawCircle(x, cyy, r, lp2);
+        }
         void set(float cx, float cyy, float ww, float hh, float rr, float m, float ta) {
             cancelAnim();
             ccx = cx; ccy = cyy; w = ww; h = hh; r = rr; mix = m; textAlpha = ta;
@@ -2461,7 +2491,7 @@ sp.setStrokeWidth(1.6f * dens);
             return hv != null && !hidden && hv.dispatchTouchEvent(e);
         }
         @Override protected void onDetachedFromWindow() { removeCallbacks(tick); super.onDetachedFromWindow(); }
-                @Override protected void onDraw(Canvas c) {
+                                @Override protected void onDraw(Canvas c) {
     if (item == null || hidden) return;
     float cx = ccx - ox, cyy = ccy - oy;
     float l = cx - w / 2f, t = cyy - h / 2f, rr = cx + w / 2f, b = cyy + h / 2f;
@@ -2489,26 +2519,36 @@ sp.setStrokeWidth(1.6f * dens);
         if (spin) { c.save(); c.rotate(spinAngle(item), ix + isz / 2f, cyy); c.drawBitmap(lead, null, irect, ip); c.restore(); }
         else c.drawBitmap(lead, null, irect, ip);
     }
+    
     float textR = rr - h * 0.3f;
-    if (led) {   // thay icon app bên phải: icon app chỉ còn hiện trong bảng mở rộng
-        float lw = h * 0.7f, lx = rr - h * 0.25f - lw;
-        drawLaser(c, lx, cyy, lw, h, appColor(item));
-        textR = Math.min(textR, lx - h * 0.15f);
+    if (led) {
+        // [UX] Căn chỉnh lại vị trí tâm để chấm tròn nằm cân đối bên phải Notic
+        float lx = rr - h * 0.35f; 
+        drawLedDot(c, lx, cyy, h, appColor(item));
+        textR = Math.min(textR, lx - h * 0.3f);
     }
+    
     float vw = h * 0.95f, vl = rr - h * 0.25f - vw;
     if (viz) { drawViz(c, bp, vl, cyy, vw, h * 0.5f, vizColor(item), item.playing, speed(), 0.05f); textR = Math.min(textR, vl - h * 0.15f); }
+    
     if (count > 1 && cBadge) {
         float ba = Math.max(0f, Math.min(1f, (w - pillH * 1.4f) / (pillH * 0.6f)));
         float br = h / 2f, bcx = badgeLeft ? l - 6 * dens - br : rr + 6 * dens + br;
         bp.setColor(Color.BLACK); bp.setAlpha((int) (255 * ba));
         c.drawCircle(bcx, cyy, br, bp);
-        sp.setColor(BADGE_BLUE); sp.setAlpha((int) (255 * ba));
+        
+        // [UX] Đồng bộ màu viền Badge theo màu của Notic hoặc màu App thay vì màu xanh mặc định.
+        // Nếu Notic là dạng đơn sắc (không đen), Badge lấy màu Notic. Ngược lại lấy màu App.
+        int badgeColor = cPillMode == PM_SOLID ? (cPill == Color.BLACK ? appColor(item) : cPill) : appColor(item);
+        sp.setColor(badgeColor); sp.setAlpha((int) (255 * ba));
         c.drawCircle(bcx, cyy, br - sp.getStrokeWidth() / 2f, sp);
+        
         np.setTextSize(Math.min(13f * dens, h * 0.46f)); np.setAlpha((int) (255 * ba));
         Paint.FontMetrics fm = np.getFontMetrics();
         c.drawText(String.valueOf(Math.min(count, 99)), bcx, cyy - (fm.ascent + fm.descent) / 2f, np);
         bp.setAlpha(255); np.setAlpha(255);
     }
+    
     if (line != null && textAlpha > 0.02f) {
         tp.setAlpha((int) (255 * textAlpha));
         float tx = ix + isz + h * 0.2f;
@@ -2521,6 +2561,6 @@ sp.setStrokeWidth(1.6f * dens);
     // LED chỉ chạy 15fps và tự dừng khi tắt màn / Notic bị ẩn -> gần như 0 pin khi không nhìn
     if (screenOn && statusVisible && ((item.media && item.playing && (spin || viz)) || led))
         postOnAnimationDelayed(tick, led ? 66 : 50);
-   }
+  }
  }
 }
