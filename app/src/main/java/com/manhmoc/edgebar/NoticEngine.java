@@ -2521,4 +2521,6 @@ sp.setStrokeWidth(1.6f * dens);
     // LED chỉ chạy 15fps và tự dừng khi tắt màn / Notic bị ẩn -> gần như 0 pin khi không nhìn
     if (screenOn && statusVisible && ((item.media && item.playing && (spin || viz)) || led))
         postOnAnimationDelayed(tick, led ? 66 : 50);
+   }
+ }
 }
