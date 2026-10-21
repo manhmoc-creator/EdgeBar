@@ -62,10 +62,10 @@ public class LockEbService extends Service {
     private AssistiveBubbleEngine bubbleEngine;
     private boolean rxOn = false;
     private long unlockGraceUntil = 0;
-private static final long UNLOCK_GRACE_MS = 2500;
+    private static final long UNLOCK_GRACE_MS = 2500;
     private final Runnable reapplyRunnable = this::applyVisibility;
 
-private static class BarView extends View {
+    private static class BarView extends View {
     BarView(Context c, int alpha, float radius) {
         super(c);
         GlassFx.Surface gd = new GlassFx.Surface();
@@ -482,4 +482,5 @@ private boolean isLeftMember(String m){ return m.equals("l")||m.equals("t_l")||m
         for (int i = 0; i < 12; i++) if (bars[i] != null) { try { wm.removeView(bars[i]); } catch (Exception ignored) {} bars[i] = null; }
         for (int i = 0; i < 4; i++) if (corners[i] != null) { try { wm.removeView(corners[i]); } catch (Exception ignored) {} corners[i] = null; }
         super.onDestroy();
+    }
 }
