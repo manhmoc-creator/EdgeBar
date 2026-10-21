@@ -2297,18 +2297,11 @@ et.addTextChangedListener(new android.text.TextWatcher() {
         if (sd != null) { sd = sd.mutate(); sd.setTint(Color.WHITE); send.setImageDrawable(sd); }
         send.setScaleType(ImageView.ScaleType.FIT_CENTER);
         send.setPadding(dp(9), dp(9), dp(9), dp(9));
-        GradientDrawable sbg = new GradientDrawable();   // lớp viền xanh
+        GradientDrawable sbg = new GradientDrawable();
 sbg.setShape(GradientDrawable.OVAL);
-sbg.setColor(Color.TRANSPARENT);
-sbg.setStroke(dp(1.5f), BADGE_BLUE);
-GradientDrawable scrim = new GradientDrawable();   // lớp tối nhẹ để mũi tên trắng vẫn đọc được trên icon app
-scrim.setShape(GradientDrawable.OVAL);
-scrim.setColor(0x66000000);
-Bitmap ad = appDisc(it);
-send.setBackground(ad != null
-    ? new android.graphics.drawable.LayerDrawable(new Drawable[]{
-        new android.graphics.drawable.BitmapDrawable(ctx.getResources(), ad), scrim, sbg})
-    : rounded(0xFF2C2C2E, dp(20)));
+sbg.setColor(0xFF2C2C2E);                    // xám đậm
+sbg.setStroke(dp(1.5f), BADGE_BLUE);         // viền xanh lam
+send.setBackground(sbg);
         send.setOnClickListener(v -> sendReply(it, et));
         row.addView(et);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(dp(40), dp(40));
