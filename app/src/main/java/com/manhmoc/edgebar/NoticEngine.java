@@ -197,15 +197,14 @@ private void scheduleCallCheck(long delayMs) {
     callCheckQueued = true;
     h.postDelayed(callCheckRun, delayMs);
 }
-
-private void checkCall() {                                    // ← BẮT BUỘC PHẢI CÓ
+private void checkCall() {
     h.removeCallbacks(callCheckRun);
     callCheckQueued = false;
     if (audio == null) audio = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
     int m = audio == null ? AudioManager.MODE_NORMAL : audio.getMode();
     boolean c = m == AudioManager.MODE_IN_CALL || m == AudioManager.MODE_IN_COMMUNICATION;
     if (c != inCall) { inCall = c; syncVisible(); }
-    if (inCall && screenOn) {
+    if (screenOn && hideOn("call", true) && (inCall || !items.isEmpty())) {   // UX: dò nhẹ 1,5s/lần, CHỈ khi có thông báo hoặc đang gọi; hết thông báo + hết gọi là tự dừng (tiết kiệm pin)
         callCheckQueued = true;
         h.postDelayed(callCheckRun, 1500);
     }
@@ -776,6 +775,7 @@ private Bitmap eventIcon(String id) {
                 }
             };
             audio.registerAudioRecordingCallback(micCb, h);
+            micOn = !audio.getActiveRecordingConfigurations().isEmpty();   // UX: mic đã mở sẵn trước khi đăng ký callback thì trước đây không bao giờ được tính
         } catch (Exception e) { micCb = null; }
         try {
             camMgr = (CameraManager) ctx.getSystemService(Context.CAMERA_SERVICE);
@@ -785,10 +785,10 @@ private Bitmap eventIcon(String id) {
             camCb = new CameraManager.AvailabilityCallback() {
                 @Override public void onCameraUnavailable(String id) {
     long now = SystemClock.elapsedRealtime();
-    if (now < armedAt || now - lastTorchMs < 1500) return;
-    if (camBusy.add(id)) {
-        if (camBusy.size() == 1 && !hideOn("cam", false)) event("camera", "📷", "Camera in use", "", 0xFFEF6C00);
-        syncVisible();
+if (now - lastTorchMs < 1500) return;   // UX: chỉ loại đèn pin; bỏ điều kiện armedAt để camera mở ngay sau khi bật Notic vẫn được tính
+if (camBusy.add(id)) {
+    if (now >= armedAt && camBusy.size() == 1 && !hideOn("cam", false)) event("camera", "📷", "Camera in use", "", 0xFFEF6C00);
+    syncVisible();
     }
 }
 @Override public void onCameraAvailable(String id) { if (camBusy.remove(id)) syncVisible(); }
@@ -877,6 +877,7 @@ public boolean post(final Item it, boolean wake, boolean sound) {
     cur = 0;
     while (items.size() > 20) unbindMedia(items.remove(items.size() - 1));
     syncVisible();
+    if (!callCheckQueued) h.post(callCheckRun);   // thông báo mới tới lúc đang gọi là ẩn ngay
     long nowR = SystemClock.elapsedRealtime();
     // UX: chat dồn dập thì không replay liên tục (>=1.5s mới replay), đỡ nháy + đỡ tốn pin.
     if (popup == null && nowR - lastReplayMs > 1500) { replayNext = true; lastReplayMs = nowR; }
@@ -994,6 +995,7 @@ public void clearDemo() {
 
     public void relayout() {
         cachePrefs();   // service gọi relayout() mỗi khi key notic_* đổi -> nơi duy nhất cần nạp lại cache
+        syncVisible();   // UX: công tắc "ẩn khi..." và mọi thay đổi trạng thái có hiệu lực ngay, không chờ sự kiện sau
         if (!prefs.getBoolean("notic_en", false)) {
             unregisterSystemEvents();   // [P5]
             h.removeCallbacks(geoRun); h.removeCallbacks(noHostRun); pendingGeo = "";
@@ -1011,7 +1013,13 @@ public void clearDemo() {
         }
         h.removeCallbacks(noHostRun);
         noHostRetry = 0;
-                String s = geoKey();
+        if (pill != null && pillHostKey != null && !pillHostKey.equals(hostKey) && !previewForce && popup == null) {
+    h.removeCallbacks(geoRun); pendingGeo = "";
+    removePill();   // UX: Lock -> Home: pill Lock biến mất ngay trong cùng khung hình
+    if (!items.isEmpty() && statusVisible && !userHidden) announce();   // pill Home sinh từ tâm ngay
+    return;
+}
+        String s = geoKey();
         if (pill != null && s.equals(lastGeo)) {
             hostChanged = false;
             pillHostKey = hostKey;
@@ -1081,21 +1089,15 @@ private boolean bindHost() {
     try { wm.getDefaultDisplay().getRealMetrics(dm); } catch (Exception e) { dm = ctx.getResources().getDisplayMetrics(); }
     scrW = dm.widthPixels;
     scrH = dm.heightPixels;
-int[] loc = new int[2];
-v.getLocationOnScreen(loc);
-hl = loc[0];
-ht = loc[1];
-hr = hl + v.getWidth();
-hb = ht + v.getHeight();
-if (hr <= hl || hb <= ht) {
-    /* View chưa kịp layout (width/height = 0 lúc service vừa start) → fallback
-       sang 2 cách cũ. updateVisibility() sẽ tự gọi noticEngine.relayout() lại
-       sau vài chục ms nên lần 2 sẽ có toạ độ thật. */
-    float[] rc = rectFromLayoutParams(v, scrW, scrH);
-    if (rc == null) rc = barRectFromPrefs(hostKey, scrW, scrH);
-    if (rc == null) return false;
-    hl = rc[0]; ht = rc[1]; hr = rc[2]; hb = rc[3];
+float[] rc = rectFromLayoutParams(v, scrW, scrH);   // UX: đọc từ LayoutParams (chính xác ngay lập tức); getLocationOnScreen trả kích thước cũ 1x1 ngay lúc bar Home vừa hiện nên trước đây phải chờ debounce
+if (rc == null) {
+    int[] loc = new int[2];
+    v.getLocationOnScreen(loc);
+    rc = new float[]{loc[0], loc[1], loc[0] + v.getWidth(), loc[1] + v.getHeight()};
+    if (rc[2] <= rc[0] || rc[3] <= rc[1]) rc = barRectFromPrefs(hostKey, scrW, scrH);
 }
+if (rc == null) return false;
+hl = rc[0]; ht = rc[1]; hr = rc[2]; hb = rc[3];
     float wP = prefs.getInt("notic_w_pct", 100) / 100f, hP = prefs.getInt("notic_h_pct", 100) / 100f;
     float barW = hr - hl, barH = hb - ht;
     pillH = Math.min(barH, Math.max(8 * dens, Math.min(barH, 44 * dens) * hP));
@@ -1389,14 +1391,11 @@ private void applyGeo(String s) {
     if (s.equals(lastGeo)) { pill.invalidate(); applyVisibility(); return; }
     boolean first = lastGeo.isEmpty();
     lastGeo = s;
-        if (hostSwitch && !previewForce) {
-        if (popup != null && popupLp != null) {
-            slidePopupToNewHost();
-        } else {
-            shrinkRemove(true, false);
-        }
-        return;
-    }
+    if (hostSwitch && !previewForce) {
+    if (popup != null && popupLp != null) slidePopupToNewHost();
+    else { removePill(); if (!items.isEmpty() && statusVisible && !userHidden) announce(); }   // UX: không animation thu gọn khi đổi host
+    return;
+}
     final boolean want = expanded || pill.towardsExpanded() || pill.animating();
     float tw = want ? ew : pillH;
     if (first || previewForce) {
@@ -1487,9 +1486,7 @@ private int popW() {   // UX: 100% = gần full màn (lề 12dp mỗi bên); tr�
     float full = scrW - dp(12);
     return Math.round(Math.max(dp(160), Math.min(full, full * prefs.getInt("notic_pop_w_pct", 100) / 100f)));
 }
-private int popX(int pw) { return (int) Math.max(dp(8), Math.min(scrW - pw - dp(8), px - pw / 2f)); }
-/* UX: gap = 0 -> bảng "mọc" ra từ chính viên thuốc và viên thuốc bị ẩn (hành vi cũ).
-   gap > 0 -> viên thuốc giữ nguyên hiển thị, bảng đặt cách mép notic đúng gap dp. */
+private int popX(int pw) { return Math.round((scrW - pw) / 2f); }   // UX: luôn cách đều 2 mép; notic lệch bao nhiêu cũng không kéo bảng lệch theo
 private int popY(int ph) {
     int g = dp(cPopGap);
     int y;
@@ -2442,14 +2439,18 @@ sp.setStrokeWidth(1.6f * dens);
         void drawLaser(Canvas c, float x, float cyy, float d, Bitmap disc, int color) {
     long period = Math.max(300L, (long) (2200f / (cLedSpeed / 100f)));
     float ph = (SystemClock.uptimeMillis() % period) / (float) period;
-    float a = 0.18f + 0.82f * (0.5f - 0.5f * (float) Math.cos(ph * 2 * Math.PI));   // nhịp thở kiểu LED thông báo
+    float a = 0.18f + 0.82f * (0.5f - 0.5f * (float) Math.cos(ph * 2 * Math.PI));
     float mx = x + d / 2f;
-    if (disc != null) { lr.set(x, cyy - d / 2f, x + d, cyy + d / 2f); c.drawBitmap(disc, null, lr, ip); }   // nền = icon app
+    lr.set(x, cyy - d / 2f, x + d, cyy + d / 2f);
+    boolean gl = cPillMode == PM_GLASS;
+    if (cPillMode != PM_CLEAR) { bp.setColor(pillFill()); c.drawCircle(mx, cyy, d / 2f, bp); }   // nền cùng kiểu với viên notic
+    if (disc != null) { ip.setAlpha(gl ? 120 : 255); c.drawBitmap(disc, null, lr, ip); ip.setAlpha(255); }   // glass: icon app mờ để thấy lớp kính
     lp2.setColor(color);
     lp2.setAlpha((int) (40 + 150 * a));
-    c.drawCircle(mx, cyy, d / 2f, lp2);          // chấm điền đầy nhấp nháy phủ lên icon
+    c.drawCircle(mx, cyy, d / 2f, lp2);
     lp2.setAlpha((int) (80 * a));
-    c.drawCircle(mx, cyy, d * 0.58f, lp2);       // quầng sáng (không dùng BlurMaskFilter để khỏi bật software layer)
+    c.drawCircle(mx, cyy, d * 0.58f, lp2);
+    if (gl) glass.draw(c, lr, d / 2f, cGlass, cPillA / 100f);   // bóng + viền phản quang đè lên trên cùng
 }
         void set(float cx, float cyy, float ww, float hh, float rr, float m, float ta) {
             cancelAnim();

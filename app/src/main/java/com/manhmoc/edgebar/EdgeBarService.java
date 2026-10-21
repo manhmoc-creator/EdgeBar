@@ -1545,6 +1545,7 @@ if (!stateChanged) return;
     sendBroadcast(syncIntent);
 }
 private boolean bouncerCheckPending, evTrailingPending, shadeCheckPending;
+private int shadeRecheck;
 private int bouncerRecheck = 0, bouncerClearStreak = 0;
 private final Runnable bouncerCheckRun = () -> {
     bouncerCheckPending = false;
@@ -2742,6 +2743,7 @@ private boolean shadeOpenNow = false;
 private final Runnable shadeCheckRun = this::runShadeCheck;
 private void scheduleShadeCheck() {
     if (noticEngine == null || shadeCheckPending || !prefs.getBoolean("notic_en", false)) return;
+    shadeRecheck = 3;
     shadeCheckPending = true;
     debounceHandler.postDelayed(shadeCheckRun, 90);
 }
@@ -2752,8 +2754,8 @@ private void runShadeCheck() {
     if (pwr != null && !pwr.isInteractive()) return;   // màn tắt: không dò
     boolean open = computeShadeOpen();
     if (open != shadeOpenNow) { shadeOpenNow = open; noticEngine.setShadeOpen(open); }
-    // UX: chỉ dò lặp khi bảng đang mở (để biết lúc nào đóng); đóng rồi thì dừng hẳn
-    if (open) { shadeCheckPending = true; debounceHandler.postDelayed(shadeCheckRun, 400); }
+    if (open) { shadeRecheck = 4; shadeCheckPending = true; debounceHandler.postDelayed(shadeCheckRun, 400); }
+else if (shadeRecheck > 0) { shadeRecheck--; shadeCheckPending = true; debounceHandler.postDelayed(shadeCheckRun, 220); }   // UX: dò bù vài lần khi kéo dở chừng rồi tự dừng
 }
 private boolean computeShadeOpen() {
     try {
@@ -2768,7 +2770,7 @@ private boolean computeShadeOpen() {
             if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM) continue;
             if (keyguardLocked && !w.isFocused() && !w.isActive()) continue;
             w.getBoundsInScreen(r);
-            if (r.height() < sh * 0.3f || r.width() < sw * 0.85f) continue;   // UX: volume/power menu hẹp, shade/QS thật thì full-width
+            if (r.height() < sh * 0.18f || r.width() < sw * 0.85f) continue;   // UX: volume/power menu hẹp, shade/QS thật thì full-width
             android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
             if (root == null) continue;
             CharSequence pk = root.getPackageName();
