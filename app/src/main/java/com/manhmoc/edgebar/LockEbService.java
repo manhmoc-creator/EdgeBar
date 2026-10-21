@@ -321,17 +321,18 @@ private boolean isLeftMember(String m){ return m.equals("l")||m.equals("t_l")||m
         }
     }
     private void handleAction(String key) {
-        String action = prefs.getString(key, "NONE");
-        if (action.equals("NONE") || !prefs.getBoolean(key + "_on", true)) return;
-        if (prefs.getBoolean(key + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
-        if (prefs.getBoolean(key + "_snd", false)) TouchSoundHelper.play(this, prefs);
-        for (String a : action.split(",")) {
-            String at = a.trim();
-            if (at.equals("LAUNCH_APP")) launchPkg(prefs.getString(rk + "_launch_pkg", ""));
-            else if (at.equals("RUN_SHORTCUT")) runShortcut(prefs.getString(rk + "_shortcut_id", ""));
-            else exec(at);
-        }
+    String rk = prefs.getBoolean(key + "_dual", false) ? key + "_lim" : key;
+    String action = prefs.getString(rk, "NONE");
+    if (action.equals("NONE") || !prefs.getBoolean(key + "_on", true)) return;
+    if (prefs.getBoolean(rk + "_vib", true)) doVibrate(prefs.getInt("vib_dur", 30));
+    if (prefs.getBoolean(rk + "_snd", false)) TouchSoundHelper.play(this, prefs);
+    for (String a : action.split(",")) {
+        String at = a.trim();
+        if (at.equals("LAUNCH_APP")) launchPkg(prefs.getString(rk + "_launch_pkg", ""));
+        else if (at.equals("RUN_SHORTCUT")) runShortcut(prefs.getString(rk + "_shortcut_id", ""));
+        else exec(at);
     }
+}
     private void handleIpc(Intent i) {
         String act = i.getStringExtra("act");
         if (act == null) return;

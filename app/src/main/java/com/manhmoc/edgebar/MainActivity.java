@@ -248,6 +248,7 @@ private static final String[] PACK_SYS_KEYS_COMMON = new String[]{
 private static boolean isFullKind(String kind) {
     return "FULL".equals(kind);
 }
+
 private static final int SPAN_UNITS = 6;
 private int getPackSpanUnits(String key) { return prefs.getInt(key, 3); }
 private String packDisplayName(boolean isBar, String id) {
@@ -305,15 +306,7 @@ private void ensureScopedRules(String space, String itemKey) {
     for (String rId : getDynamicIds(itemKey + "_pack_rules")) {
         String nId = java.util.UUID.randomUUID().toString().substring(0, 8);
         newIds.add(nId);
-        String from = "prule_" + rId + "_";
-        for (java.util.Map.Entry<String, ?> e : all.entrySet()) {
-            if (!e.getKey().startsWith(from)) continue;
-            String nk = "prule_" + nId + "_" + e.getKey().substring(from.length());
-            Object v = e.getValue();
-            if (v instanceof Boolean) ed.putBoolean(nk, (Boolean) v);
-            else if (v instanceof Integer) ed.putInt(nk, (Integer) v);
-            else if (v instanceof String) ed.putString(nk, (String) v);
-        }
+        copyRuleKeys(rId, nId);
     }
     ed.putString(sKey, TextUtils.join(",", newIds));
     ed.apply();
@@ -3438,8 +3431,8 @@ private void showShareTargetPicker(java.util.Set<String> rIdsToShare, String cur
             for (String rId : rIdsToShare) {
                 String newId = java.util.UUID.randomUUID().toString().substring(0, 8);
                 targetRules.add(newId);
-                copyPruleAll(rId, newId);
-  prefs.edit().putBoolean("prule_" + newId + "_en", true).apply();
+                copyRuleKeys(rId, newId);
+prefs.edit().putBoolean("prule_" + newId + "_en", true).apply();
                 totalCopied++;
             }
             prefs.edit().putString(targetListKey, TextUtils.join(",", targetRules)).apply();
@@ -3480,7 +3473,7 @@ btnDupP.setOnClickListener(v -> {
     for (String rId : new java.util.ArrayList<>(prulesSelectedItems)) {
         String newRuleId = java.util.UUID.randomUUID().toString().substring(0, 8);
         rules.add(newRuleId);
-        copyPruleAll(rId, newRuleId);
+        copyRuleKeys(rId, newRuleId);
     }
     prefs.edit().putString(listKey, android.text.TextUtils.join(",", rules)).apply();
     prulesSelectMode = false; prulesSelectedItems.clear();
@@ -3517,8 +3510,6 @@ btnDupP.setOnClickListener(v -> {
 private void showShareMultipleRulesToPackDialog(java.util.Set<String> rIds, String currentItemKey, Runnable onDone) {
     showShareTargetPicker(rIds, currentItemKey, onDone);
 }
-    return sb.toString();
-}
 private void openHalfActionPicker(boolean isLeft, String kind,
         java.util.LinkedHashSet<String> targetSet,
         String[] pkgHolder, String[] shortcutHolder, Runnable onSave) {
@@ -3536,7 +3527,447 @@ private void openHalfActionPicker(boolean isLeft, String kind,
             "Blacklist's action (không cần Trợ năng)")
         : T("Accessibility's action (needs Accessibility)",
             "Accessibility's action (cần Trợ năng)")));
-    title.setTextCobSave.setOnClickListener(v -> {
+    title.setTextColor(Color.parseColor("#8AB4F8"));
+    title.setTextSize(17f);
+    title.setPadding(0, 0, 0, 20);
+    root.addView(title);
+    ScrollView scroll = new ScrollView(this);
+    scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    LinearLayout content = new LinearLayout(this);
+    content.setOrientation(LinearLayout.VERTICAL);
+    content.setPadding(0, 20, 0, 20);
+    scroll.addView(content);
+    root.addView(scroll);
+
+    String[] sysKeys = isLimited ? PACK_SYS_KEYS_COMMON : PACK_SYS_KEYS_FULL;
+    List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeys, ACT_KEYS, ACT_LABS);
+    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{
+        "HIDE_SOME_OVERLAY","SHOW_ALL_OVERLAY","TOGGLE_OVERLAY","TOGGLE_RECORD",
+        "PAUSE_RECORD","YTDL_DOWNLOAD","TOGGLE_WORK_PROFILE","OPEN_STORAGE_SCAN",
+        "SCAN_QR","PLAY_MY_PLAYLIST"}, ACT_KEYS, ACT_LABS);
+    List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids","pack_panel_","PANEL_","Panel Mới");
+    List<String[]> INTENT_ITEMS = buildDynamicPackItems("intent_ids","intent_","INTENT_","Intent");
+    List<String[]> MACRO_ITEMS = buildDynamicPackItems("macro_ids","macro_","MACRO_","Macro");
+
+        content.addView(buildActionCategoryDrawer("SYSTEM", "⚙️", "#4CAF50", SYS_ITEMS, targetSet, null, true));
+    content.addView(buildActionCategoryDrawer("UTILITIES", "🛠️", "#FF9800", UTIL_ITEMS, targetSet, null, true));
+    if (!isLimited) {
+        List<String[]> TRIGGER_ITEMS_PACK = buildItemsForKeys(new String[]{
+            "TRIGGER_TAP","TRIGGER_DTAP","TRIGGER_LONG",
+            "TRIGGER_UP","TRIGGER_DOWN","TRIGGER_LEFT","TRIGGER_RIGHT","TRIGGER_DIAG",
+            "TRIGGER_UP_DOWN","TRIGGER_DOWN_UP","TRIGGER_LEFT_RIGHT","TRIGGER_RIGHT_LEFT",
+            "TRIGGER_UP_HOLD","TRIGGER_DOWN_HOLD","TRIGGER_LEFT_HOLD","TRIGGER_RIGHT_HOLD","TRIGGER_DIAG_HOLD"
+        }, ACT_KEYS, ACT_LABS);
+        content.addView(buildActionCategoryDrawer("GESTURES", "🌀", "#009688", TRIGGER_ITEMS_PACK, targetSet, null, true));
+    }
+    content.addView(buildActionCategoryDrawer("PANEL", "🗂️", "#9C27B0", PANEL_ITEMS, targetSet, null, true));
+    content.addView(buildActionCategoryDrawer("INTENTS", "⚡", "#D32F2F", INTENT_ITEMS, targetSet, null, true));
+    content.addView(buildActionCategoryDrawer("MACROS", "🤖", "#2196F3", MACRO_ITEMS, targetSet, null, true));
+
+    // Ô APP + SHORTCUT riêng cho nửa này (không còn dùng checkbox chung như cũ,
+    // vì 2 nửa có thể chạy 2 pkg/2 shortcut khác nhau).
+    LinearLayout rowApp = new LinearLayout(this);
+    rowApp.setOrientation(LinearLayout.HORIZONTAL);
+    rowApp.setGravity(Gravity.CENTER_VERTICAL);
+    rowApp.setPadding(0, 16, 0, 8);
+    CheckBox cbApp = new CheckBox(this);
+    cbApp.setText("Mở App cụ thể" + (pkgHolder[0].isEmpty() ? "" : " — " + getAppLabelCached(pkgHolder[0])));
+    cbApp.setTextColor(Color.WHITE);
+    cbApp.setChecked(targetSet.contains("LAUNCH_APP"));
+    cbApp.setOnCheckedChangeListener((v, c) -> {
+        if (c) {
+            showSingleAppPickerDialogCallback(pkg -> {
+                pkgHolder[0] = pkg;
+                targetSet.add("LAUNCH_APP");
+                cbApp.setText("Mở App cụ thể — " + getAppLabelCached(pkg));
+            });
+        } else {
+            targetSet.remove("LAUNCH_APP");
+            pkgHolder[0] = "";
+            cbApp.setText("Mở App cụ thể");
+        }
+    });
+    rowApp.addView(cbApp);
+    content.addView(rowApp);
+
+    LinearLayout rowSc = new LinearLayout(this);
+    rowSc.setOrientation(LinearLayout.HORIZONTAL);
+    rowSc.setGravity(Gravity.CENTER_VERTICAL);
+    rowSc.setPadding(0, 8, 0, 8);
+    CheckBox cbSc = new CheckBox(this);
+    String scName = shortcutHolder[0].isEmpty() ? "" : prefs.getString("shortcut_" + shortcutHolder[0] + "_name", "");
+    cbSc.setText("Chạy Shortcut cụ thể" + (scName.isEmpty() ? "" : " — " + scName));
+    cbSc.setTextColor(Color.WHITE);
+    cbSc.setChecked(targetSet.contains("RUN_SHORTCUT"));
+    cbSc.setOnCheckedChangeListener((v, c) -> {
+        if (c) {
+            showShortcutPickerDialog((id, name) -> {
+                shortcutHolder[0] = id;
+                targetSet.add("RUN_SHORTCUT");
+                cbSc.setText("Chạy Shortcut cụ thể — " + name);
+            });
+        } else {
+            targetSet.remove("RUN_SHORTCUT");
+            shortcutHolder[0] = "";
+            cbSc.setText("Chạy Shortcut cụ thể");
+        }
+    });
+    rowSc.addView(cbSc);
+    content.addView(rowSc);
+
+    LinearLayout footer = new LinearLayout(this);
+    footer.setOrientation(LinearLayout.HORIZONTAL);
+    footer.setPadding(0, 20, 0, 0);
+    Button bCancel = new Button(this);
+    bCancel.setText("HỦY");
+    bCancel.setBackground(getRounded("#333333", 20f));
+    bCancel.setTextColor(Color.WHITE);
+    bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Button bSave = new Button(this);
+    bSave.setText("XONG");
+    bSave.setBackground(getRounded("#4CAF50", 20f));
+    bSave.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f);
+    slp.setMargins(20, 0, 0, 0);
+    bSave.setLayoutParams(slp);
+    footer.addView(bCancel); footer.addView(bSave);
+    root.addView(footer);
+
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave.setOnClickListener(v -> { if (onSave != null) onSave.run(); d.dismiss(); });
+    d.setContentView(root);
+    d.show();
+}
+private void openPackRuleEditor(String appliedItemKey, String editId, String copyId, Runnable onRefresh, boolean isHomebSpace) {
+    openPackRuleEditor(appliedItemKey, editId, copyId, onRefresh, isHomebSpace, null);
+}
+// ======================= ACTION BLOB (AND / OR) =======================
+private static class ActBlob {
+    boolean or;          // đã tách OR: Homacc (trên) / Homeb (dưới)
+    boolean rTouched;    // nửa Homeb đã tự chọn từ bộ Common
+    final java.util.LinkedHashSet<String> shared = new java.util.LinkedHashSet<>();
+    final java.util.LinkedHashSet<String> hacc = new java.util.LinkedHashSet<>();
+    final java.util.LinkedHashSet<String> hbeb = new java.util.LinkedHashSet<>();
+    String pkg = "", sc = "", pkgL = "", scL = "", pkgR = "", scR = "";
+}
+private static final String[] COMMON_UTIL_KEYS = {"HIDE_SOME_OVERLAY","SHOW_ALL_OVERLAY","TOGGLE_OVERLAY",
+    "TOGGLE_RECORD","PAUSE_RECORD","YTDL_DOWNLOAD","TOGGLE_WORK_PROFILE","OPEN_STORAGE_SCAN","SCAN_QR","PLAY_MY_PLAYLIST"};
+
+private boolean isCommonAct(String a) {
+    if (a.startsWith("PANEL_") || a.startsWith("INTENT_") || a.startsWith("MACRO_")
+        || a.startsWith("RUN_SHORTCUT") || a.equals("LAUNCH_APP")) return true;
+    for (String k : PACK_SYS_KEYS_COMMON) if (k.equals(a)) return true;
+    for (String k : COMMON_UTIL_KEYS) if (k.equals(a)) return true;
+    return false;
+}
+private String blobPkg(ActBlob b) { return b.or ? (b.pkgL.isEmpty() ? b.pkgR : b.pkgL) : b.pkg; }
+private String blobSc(ActBlob b)  { return b.or ? (b.scL.isEmpty() ? b.scR : b.scL) : b.sc; }
+
+private ActBlob loadBlob(String bid) {
+    ActBlob b = new ActBlob();
+    String px = "prule_" + bid + "_";
+    b.or = prefs.getBoolean(px + "dual", false);
+    b.shared.addAll(csvToList(prefs.getString(px + "acts", "")));
+    b.pkg = prefs.getString(px + "launch_pkg", "");
+    b.sc = prefs.getString(px + "shortcut_id", "");
+    if (b.or) {
+        b.hacc.addAll(csvToList(prefs.getString(px + "acts_l", "")));
+        b.hbeb.addAll(csvToList(prefs.getString(px + "acts_r", "")));
+        b.pkgL = prefs.getString(px + "launch_pkg_l", ""); b.scL = prefs.getString(px + "shortcut_id_l", "");
+        b.pkgR = prefs.getString(px + "launch_pkg_r", ""); b.scR = prefs.getString(px + "shortcut_id_r", "");
+        b.rTouched = prefs.getBoolean(px + "r_touched", false);
+    }
+    return b;
+}
+private void saveBlob(SharedPreferences.Editor ed, ActBlob b, String bid) {
+    String px = "prule_" + bid + "_";
+    if (b.or) {
+        java.util.LinkedHashSet<String> u = new java.util.LinkedHashSet<>(b.hacc); u.addAll(b.hbeb);
+        ed.putBoolean(px + "dual", true)
+          .putString(px + "acts", TextUtils.join(",", u))
+          .putString(px + "acts_l", TextUtils.join(",", b.hacc))
+          .putString(px + "acts_r", TextUtils.join(",", b.hbeb))
+          .putString(px + "launch_pkg_l", b.pkgL).putString(px + "launch_pkg_r", b.pkgR)
+          .putString(px + "shortcut_id_l", b.scL).putString(px + "shortcut_id_r", b.scR)
+          .putString(px + "l_kind", "FULL").putString(px + "r_kind", b.rTouched ? "COMMON" : "FULL")
+          .putBoolean(px + "r_touched", b.rTouched)
+          .putString(px + "launch_pkg", blobPkg(b)).putString(px + "shortcut_id", blobSc(b));
+    } else {
+        ed.putBoolean(px + "dual", false)
+          .putString(px + "acts", TextUtils.join(",", b.shared))
+          .putString(px + "launch_pkg", b.pkg).putString(px + "shortcut_id", b.sc)
+          .remove(px + "acts_l").remove(px + "acts_r").remove(px + "l_kind").remove(px + "r_kind")
+          .remove(px + "launch_pkg_l").remove(px + "launch_pkg_r")
+          .remove(px + "shortcut_id_l").remove(px + "shortcut_id_r").remove(px + "r_touched");
+    }
+}
+private void blobCopy(ActBlob s, ActBlob d) {
+    d.or = s.or; d.rTouched = s.rTouched;
+    d.shared.clear(); d.shared.addAll(s.shared);
+    d.hacc.clear();   d.hacc.addAll(s.hacc);
+    d.hbeb.clear();   d.hbeb.addAll(s.hbeb);
+    d.pkg = s.pkg; d.sc = s.sc; d.pkgL = s.pkgL; d.scL = s.scL; d.pkgR = s.pkgR; d.scR = s.scR;
+}
+/** Tách OR: cả 2 nửa tự set = CÙNG action Full đang có. */
+private void blobSplitOr(ActBlob b) {
+    b.or = true; b.rTouched = false;
+    b.hacc.clear(); b.hacc.addAll(b.shared);
+    b.hbeb.clear(); b.hbeb.addAll(b.shared);
+    b.pkgL = b.pkgR = b.pkg; b.scL = b.scR = b.sc;
+}
+/** Gộp OR: giữ nửa Homacc. */
+private void blobMergeOr(ActBlob b) {
+    b.or = false;
+    b.shared.clear(); b.shared.addAll(b.hacc);
+    b.pkg = b.pkgL; b.sc = b.scL;
+    b.hacc.clear(); b.hbeb.clear(); b.rTouched = false;
+}
+/** which: 0 = chung, 1 = Homacc (Full), 2 = Homeb (Common). Làm việc trên bản sao, Huỷ thì không đổi gì. */
+private void pickInto(final ActBlob b, final int which, final Runnable done) {
+    final java.util.LinkedHashSet<String> tmp = new java.util.LinkedHashSet<>(
+        which == 0 ? b.shared : which == 1 ? b.hacc : b.hbeb);
+    if (which == 2) tmp.removeIf(a -> !isCommonAct(a));   // bộ Common chỉ giữ action Common
+    final String[] pk = { which == 0 ? b.pkg : which == 1 ? b.pkgL : b.pkgR };
+    final String[] sc = { which == 0 ? b.sc  : which == 1 ? b.scL  : b.scR };
+    openHalfActionPicker(which != 2, which == 2 ? "COMMON" : "FULL", tmp, pk, sc, () -> {
+        java.util.LinkedHashSet<String> dst = which == 0 ? b.shared : which == 1 ? b.hacc : b.hbeb;
+        dst.clear(); dst.addAll(tmp);
+        if (which == 0) { b.pkg = pk[0]; b.sc = sc[0]; }
+        else if (which == 1) { b.pkgL = pk[0]; b.scL = sc[0]; }
+        else { b.pkgR = pk[0]; b.scR = sc[0]; b.rTouched = true; }
+        done.run();
+    });
+}
+/** Nhấn giữ 1 nửa của cầu AND -> menu tuỳ chọn. */
+private void showBlobHalfOptions(final ActBlob b, final Runnable rerender) {
+    final String del = "🗑️ " + T("Clear this half", "Xoá action nửa này");
+    final String[] items = b.or ? new String[]{del}
+        : new String[]{"🔀 " + T("Split OR (Homacc ↑ / Homeb ↓)", "Tách OR (Homacc ↑ / Homeb ↓)"), del};
+    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setItems(items, (dg, w) -> {
+            if (!b.or && w == 0) blobSplitOr(b);
+            else {
+                b.or = false; b.rTouched = false;
+                b.shared.clear(); b.hacc.clear(); b.hbeb.clear();
+                b.pkg = b.sc = b.pkgL = b.scL = b.pkgR = b.scR = "";
+            }
+            rerender.run();
+        }).show();
+}
+private View buildBlobView(final ActBlob b, final String title, final Runnable rerender, final Runnable onHold) {
+    if (!b.or) {
+        Button test = stdCardBtn("TEST", "#FFC107", Color.BLACK);
+        test.setOnClickListener(v -> fireTestActions(b.shared, b.pkg, b.sc));
+        LinearLayout card = buildStdPackCard(null, title,
+            T("Shared: Homacc + Homeb", "Chung: Homacc + Homeb"),
+            formatActionCsvLabel(TextUtils.join(",", b.shared), b.pkg, b.sc), test);
+        card.setOnClickListener(v -> pickInto(b, 0, rerender));
+        if (onHold != null) card.setOnLongClickListener(v -> { vibrateShort(); onHold.run(); return true; });
+        return wrapPackCard(card, "blob");
+    }
+    LinearLayout col = new LinearLayout(this);
+    col.setOrientation(LinearLayout.VERTICAL);
+
+    Button t1 = stdCardBtn("TEST", "#FFC107", Color.BLACK);
+    t1.setOnClickListener(v -> fireTestActions(b.hacc, b.pkgL, b.scL));
+    LinearLayout c1 = buildStdPackCard(null, title + " · Homacc ⚡", "Full action",
+        formatActionCsvLabel(TextUtils.join(",", b.hacc), b.pkgL, b.scL), t1);
+    c1.setOnClickListener(v -> pickInto(b, 1, rerender));
+    col.addView(wrapPackCard(c1, "hacc"));
+
+    TextView orB = new TextView(this);
+    orB.setText("OR"); orB.setTextColor(Color.parseColor("#FFC107")); orB.setTextSize(13f);
+    orB.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); orB.setGravity(Gravity.CENTER);
+    orB.setBackground(getRounded("#333333", 100f));
+    LinearLayout.LayoutParams olp = new LinearLayout.LayoutParams(110, 110);
+    olp.gravity = Gravity.CENTER_HORIZONTAL; olp.setMargins(0, 6, 0, 6);
+    orB.setLayoutParams(olp);
+    orB.setOnLongClickListener(v -> { vibrateShort(); blobMergeOr(b); rerender.run(); return true; });
+    col.addView(orB);
+
+    Button t2 = stdCardBtn("TEST", "#FFC107", Color.BLACK);
+    t2.setOnClickListener(v -> fireTestActions(b.hbeb, b.pkgR, b.scR));
+    Button undo = stdCardBtn("↩", "#333333", Color.WHITE);   // nút huỷ: về lại "dùng chung Full action"
+    undo.setOnClickListener(v -> {
+        b.hbeb.clear(); b.hbeb.addAll(b.hacc); b.pkgR = b.pkgL; b.scR = b.scL; b.rTouched = false;
+        rerender.run();
+    });
+    LinearLayout c2 = buildStdPackCard(null, title + " · Homeb ✓",
+        b.rTouched ? "Common action" : T("Same as Full (tap to pick Common)", "Dùng chung Full (chạm để chọn Common)"),
+        formatActionCsvLabel(TextUtils.join(",", b.hbeb), b.pkgR, b.scR), t2, undo);
+    c2.setOnClickListener(v -> pickInto(b, 2, rerender));
+    col.addView(wrapPackCard(c2, "hbeb"));
+    return col;
+}
+// copy TOÀN BỘ key của 1 rule (gồm cả blob A/B)
+private void copyRuleKeys(String src, String dst) {
+    SharedPreferences.Editor ed = prefs.edit();
+    for (java.util.Map.Entry<String, ?> e : prefs.getAll().entrySet()) {
+        String k = e.getKey();
+        for (String suf : new String[]{"", "A", "B"}) {
+            String from = "prule_" + src + suf + "_";
+            if (!k.startsWith(from)) continue;
+            String nk = "prule_" + dst + suf + "_" + k.substring(from.length());
+            Object v = e.getValue();
+            if (v instanceof Boolean) ed.putBoolean(nk, (Boolean) v);
+            else if (v instanceof Integer) ed.putInt(nk, (Integer) v);
+            else if (v instanceof Long) ed.putLong(nk, (Long) v);
+            else if (v instanceof String) ed.putString(nk, (String) v);
+            break;
+        }
+    }
+    ed.apply();
+}
+private void openPackRuleEditor(String appliedItemKey, String editId, String copyId, Runnable onRefresh, boolean isHomebSpace, String focusSide) {
+
+    reloadActionLabels();
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212"));
+    root.setPadding(30, 120, 30, 30); // khớp buildRuleEditor — tránh dính status bar
+
+    LinearLayout tabs = new LinearLayout(this);
+    tabs.setOrientation(LinearLayout.HORIZONTAL);
+    Button bTrig = createTabBtn("TRIGGER"); Button bAct = createTabBtn("ACTION");
+    LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(0, -2, 1f);
+    tabLp.setMargins(10, 0, 10, 0);
+    bTrig.setLayoutParams(tabLp); bAct.setLayoutParams(tabLp);
+    tabs.addView(bTrig); tabs.addView(bAct); root.addView(tabs);
+
+    ScrollView scroll = new ScrollView(this);
+    scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    LinearLayout content = new LinearLayout(this);
+    content.setOrientation(LinearLayout.VERTICAL);
+    content.setPadding(0, 40, 0, 0);
+    scroll.addView(content);
+    root.addView(scroll);
+    String sourceId = editId != null ? editId : copyId;
+final String ruleId = editId != null ? editId : java.util.UUID.randomUUID().toString().substring(0, 8);
+final String srcId = sourceId != null ? sourceId : "";
+final ActBlob single = loadBlob(srcId);
+final ActBlob blobA = loadBlob(srcId + "A");
+final ActBlob blobB = loadBlob(srcId + "B");
+final boolean[] andOn = { !srcId.isEmpty() && prefs.getBoolean("prule_" + srcId + "_and", false) };
+final LinearLayout actHost = new LinearLayout(this);
+actHost.setOrientation(LinearLayout.VERTICAL);
+vAct.addView(actHost);
+final Runnable[] renderAct = new Runnable[1];
+renderAct[0] = () -> {
+    actHost.removeAllViews();
+    if (!andOn[0]) {
+        actHost.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG"));
+        // giữ thẻ ở chế độ chung -> tách AND (trái/phải), mỗi nửa là bản sao của action hiện tại
+        Runnable splitAnd = single.or ? null : () -> {
+            blobCopy(single, blobA); blobCopy(single, blobB);
+            andOn[0] = true; renderAct[0].run();
+        };
+        actHost.addView(buildBlobView(single, "Data Pack Action", renderAct[0], splitAnd));
+    } else {
+        actHost.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (TRÁI AND PHẢI)"));
+        LinearLayout andRow = new LinearLayout(this);
+        andRow.setOrientation(LinearLayout.HORIZONTAL);
+        andRow.setGravity(Gravity.CENTER_VERTICAL);
+        View left = buildBlobView(blobA, "⬅ Trái/Đỉnh", renderAct[0], () -> showBlobHalfOptions(blobA, renderAct[0]));
+        View right = buildBlobView(blobB, "Phải/Đáy ➡", renderAct[0], () -> showBlobHalfOptions(blobB, renderAct[0]));
+        left.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        right.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        andRow.addView(left);
+        andRow.addView(buildAndBridge(() -> {            // nhấn giữ AND = gộp, giữ nửa trái
+            blobCopy(blobA, single); andOn[0] = false; renderAct[0].run();
+        }));
+        andRow.addView(right);
+        actHost.addView(andRow);
+    }
+};
+renderAct[0].run();
+LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
+    ArrayList<CheckBox> gestureBoxes = new ArrayList<>();
+    String savedGestures = sourceId != null ? prefs.getString("prule_" + sourceId + "_gestures", "") : "";
+    int safeLimit = Math.min(C_GESTURES.length, C_GESTURE_NAMES.length);
+    
+    LinearLayout gestureContainer = new LinearLayout(this);
+    gestureContainer.setOrientation(LinearLayout.VERTICAL);
+    gestureContainer.setPadding(20, 10, 20, 20);
+    
+    for (int i = 0; i < safeLimit; i++) {
+        CheckBox cb = new CheckBox(this);
+        cb.setText(C_GESTURE_NAMES[i]);
+        cb.setTextColor(Color.WHITE);
+        cb.setPadding(0, 20, 0, 20);
+        cb.setChecked(("," + savedGestures + ",").contains("," + C_GESTURES[i] + ","));
+        gestureBoxes.add(cb);
+        gestureContainer.addView(cb);
+    }
+    vTrig.addView(createDrawer("1. CHỌN CỬ CHỈ (OR LOGIC)", gestureContainer));
+    LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
+    TextView tvOpt = new TextView(this);
+    tvOpt.setText(T("2. CHOOSE OPTIONS", "2. CHỌN TÙY CHỌN"));
+    tvOpt.setTextColor(Color.parseColor("#E91E63"));
+    tvOpt.setPadding(30, 30, 30, 30);
+    tvOpt.setTextSize(16);
+    tvOpt.setBackground(getRounded("#222222", 20f));
+    LinearLayout.LayoutParams optLp = new LinearLayout.LayoutParams(-1, -2);
+    optLp.setMargins(0, 20, 0, 10);
+    tvOpt.setLayoutParams(optLp);
+    vTrig.addView(tvOpt);
+    CheckBox cbJump = new CheckBox(this);
+    cbJump.setText("Icon Jump (Icon nhảy khi kích hoạt)");
+    cbJump.setTextColor(Color.WHITE);
+    cbJump.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_jump_on", true));
+    vTrig.addView(cbJump);
+    CheckBox cbVib = new CheckBox(this);
+    cbVib.setText("Bật Rung (Haptic Feedback)");
+    cbVib.setTextColor(Color.WHITE);
+    cbVib.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_vib", true));
+    vTrig.addView(cbVib);
+        CheckBox cbSnd = new CheckBox(this);
+    cbSnd.setText(T("Touch Sound", "Âm chạm (Touch Sound)"));
+    cbSnd.setTextColor(Color.WHITE);
+    cbSnd.setChecked(sourceId != null && prefs.getBoolean("prule_" + sourceId + "_snd", false));
+    vTrig.addView(cbSnd);
+    CheckBox cbAnim = new CheckBox(this);
+    cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)");
+    cbAnim.setTextColor(Color.WHITE);
+    cbAnim.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_anim", true));
+    vTrig.addView(cbAnim);
+CheckBox cbOs = new CheckBox(this);
+cbOs.setText("Ẩn Overlay Này (Tạm thời)");
+cbOs.setTextColor(Color.parseColor("#FFC107"));
+cbOs.setChecked(sourceId != null && prefs.getBoolean("prule_" + sourceId + "_os", false));
+vTrig.addView(cbOs);
+    content.addView(vTrig); content.addView(vAct);
+    View.OnClickListener tabClick = v -> {
+        bTrig.setBackground(getRounded(v==bTrig?"#8AB4F8":"#222222", 15f));
+        bTrig.setTextColor(v==bTrig?Color.BLACK:Color.WHITE);
+        bAct.setBackground(getRounded(v==bAct?"#8AB4F8":"#222222", 15f));
+        bAct.setTextColor(v==bAct?Color.BLACK:Color.WHITE);
+        vTrig.setVisibility(v==bTrig?View.VISIBLE:View.GONE);
+        vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE);
+    };
+    bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick);
+    bTrig.performClick();
+    LinearLayout footer = new LinearLayout(this);
+    footer.setOrientation(LinearLayout.HORIZONTAL);
+    footer.setPadding(0, 20, 0, 0);
+    Button bCancel = new Button(this);
+    bCancel.setText("HỦY");
+    bCancel.setBackground(getRounded("#333333", 20f));
+    bCancel.setTextColor(Color.WHITE);
+    bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Button bSave = new Button(this);
+    bSave.setText("SAVE RULE");
+    bSave.setBackground(getRounded("#4CAF50", 20f));
+    bSave.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f);
+    slp.setMargins(20, 0, 0, 0);
+    bSave.setLayoutParams(slp);
+    footer.addView(bCancel);
+    footer.addView(bSave);
+    root.addView(footer);
+    bCancel.setOnClickListener(v -> d.dismiss());
+        bSave.setOnClickListener(v -> {
+        bSave.setOnClickListener(v -> {
     ArrayList<String> gestures = new ArrayList<>();
     for (int i = 0; i < gestureBoxes.size(); i++)
         if (gestureBoxes.get(i).isChecked()) gestures.add(C_GESTURES[i]);
@@ -3544,22 +3975,36 @@ private void openHalfActionPicker(boolean isLeft, String kind,
         Toast.makeText(this, "Hãy chọn ít nhất 1 Cử chỉ!", Toast.LENGTH_SHORT).show();
         return;
     }
-    if (st.allEmpty()) {
-        Toast.makeText(this, "Chọn ít nhất 1 action", Toast.LENGTH_SHORT).show();
+    final ActBlob[] used = andOn[0] ? new ActBlob[]{blobA, blobB} : new ActBlob[]{single};
+    java.util.LinkedHashSet<String> union = new java.util.LinkedHashSet<>();
+    for (ActBlob b : used) {
+        if (b.or) { union.addAll(b.hacc); union.addAll(b.hbeb); } else union.addAll(b.shared);
+    }
+    if (union.isEmpty()) {
+        Toast.makeText(this, "Cần ít nhất 1 action", Toast.LENGTH_SHORT).show();
         return;
     }
-    String targetId = editId != null ? editId : java.util.UUID.randomUUID().toString().substring(0, 8);
+    final String space = isHomebSpace ? "home_" : "lock_";
     if (editId == null) {
-        String listKey = rulesKey(isHomebSpace ? "home_" : "lock_", appliedItemKey);
-        java.util.List<String> curRules = getDynamicIds(listKey);
-        curRules.add(targetId);
-        prefs.edit().putString(listKey, android.text.TextUtils.join(",", curRules)).apply();
+        String listKey = rulesKey(space, appliedItemKey);
+        List<String> curRules = getDynamicIds(listKey);
+        curRules.add(ruleId);
+        prefs.edit().putString(listKey, TextUtils.join(",", curRules)).apply();
     }
-    String px = "prule_" + targetId + "_";
+    final String px = "prule_" + ruleId + "_";
     SharedPreferences.Editor ed = prefs.edit();
-    saveActionState(ed, px, st);
-    ed.putString(px + "gestures", android.text.TextUtils.join(",", gestures))
-      .remove(px + "l_touched").remove(px + "r_touched")
+    if (andOn[0]) {
+        saveBlob(ed, blobA, ruleId + "A");
+        saveBlob(ed, blobB, ruleId + "B");
+        ed.putBoolean(px + "dual", false)
+          .putString(px + "launch_pkg", blobPkg(blobA).isEmpty() ? blobPkg(blobB) : blobPkg(blobA))
+          .putString(px + "shortcut_id", blobSc(blobA).isEmpty() ? blobSc(blobB) : blobSc(blobA));
+    } else {
+        saveBlob(ed, single, ruleId);
+    }
+    ed.putBoolean(px + "and", andOn[0])
+      .putString(px + "gestures", TextUtils.join(",", gestures))
+      .putString(px + "acts", TextUtils.join(",", union))     // union dùng cho nhãn/scrub
       .putBoolean(px + "jump_on", cbJump.isChecked())
       .putBoolean(px + "vib", cbVib.isChecked())
       .putBoolean(px + "snd", cbSnd.isChecked())
@@ -3567,16 +4012,14 @@ private void openHalfActionPicker(boolean isLeft, String kind,
       .putBoolean(px + "os", cbOs.isChecked())
       .putBoolean(px + "en", true)
       .apply();
-    reapplyPackIfEnabledByItemKey(appliedItemKey, isHomebSpace ? "home_" : "lock_");
+    reapplyPackIfEnabledByItemKey(appliedItemKey, space);
     if (onRefresh != null) onRefresh.run();
     d.dismiss();
 });
     d.setContentView(root);
     d.show();
 }
-private void applyPackRulesToSpace(String itemKey, String targetPrefix, String compKey) {
-    final SharedPreferences.Editor ed = prefs.edit();
-    fprivate void applyPackRulesToSpace(String itemKey, String targetPrefix, String compKey, String side) {
+private void applyPackRulesToSpace(String itemKey, String targetPrefix, String compKey, int side) {
     final SharedPreferences.Editor ed = prefs.edit();
     for (String g : C_GESTURES) {
         String b = targetPrefix + compKey + "_" + g;
@@ -3586,66 +4029,55 @@ private void applyPackRulesToSpace(String itemKey, String targetPrefix, String c
     }
     ensureScopedRules(targetPrefix, itemKey);
     for (String rId : getDynamicIds(rulesKey(targetPrefix, itemKey))) {
-        final String px = "prule_" + rId + "_";
-        if (!prefs.getBoolean(px + "en", true)) continue;
-        String gestures = prefs.getString(px + "gestures", "");
+        if (!prefs.getBoolean("prule_" + rId + "_en", true)) continue;
+        String gestures = prefs.getString("prule_" + rId + "_gestures", "");
         if (gestures.isEmpty()) continue;
 
-        final String sc = prefs.getBoolean(px + "and", false) ? side + "_" : "";
-        String fullActs = "", fullPkg = "", fullSc = "", limActs = "", limPkg = "", limSc = "";
-        boolean orSplit = false;
-        if (prefs.contains(px + sc + "acts_l") || prefs.contains(px + sc + "acts_r")) {
-            String aL = prefs.getString(px + sc + "acts_l", ""), aR = prefs.getString(px + sc + "acts_r", "");
-            String pL = prefs.getString(px + sc + "launch_pkg_l", ""), pR = prefs.getString(px + sc + "launch_pkg_r", "");
-            String sL = prefs.getString(px + sc + "shortcut_id_l", ""), sR = prefs.getString(px + sc + "shortcut_id_r", "");
-            orSplit = prefs.getBoolean(px + sc + "dual", false);
-            if (orSplit) {
-                fullActs = aL; fullPkg = pL; fullSc = sL;
-                limActs = aR; limPkg = pR; limSc = sR;
-                // UX: Homacc chạy được mọi action nên nửa Full trống thì mượn nửa Common; Homeb trống thì chạy bản Full (tự bỏ qua action cần Trợ năng)
-                if (fullActs.isEmpty()) { fullActs = limActs; fullPkg = limPkg; fullSc = limSc; }
-                if (limActs.isEmpty()) { limActs = fullActs; limPkg = fullPkg; limSc = fullSc; }
-            } else {
-                fullActs = aL.isEmpty() ? aR : aL;
-                fullPkg = aL.isEmpty() ? pR : pL;
-                fullSc = aL.isEmpty() ? sR : sL;
-                limActs = fullActs; limPkg = fullPkg; limSc = fullSc;
-            }
-        } else {
-            fullActs = limActs = prefs.getString(px + "acts", "");
-            fullPkg = limPkg = prefs.getString(px + "launch_pkg", "");
-            fullSc = limSc = prefs.getString(px + "shortcut_id", "");
-        }
-        if (fullActs.isEmpty() || fullActs.equals("NONE")) continue;
+        // AND: side 0 (trái/đỉnh) dùng blob A, side 1 (phải/đáy) dùng blob B
+        boolean and = prefs.getBoolean("prule_" + rId + "_and", false);
+        String bx = "prule_" + rId + (and ? (side == 0 ? "A" : "B") : "") + "_";
+        boolean isDual = prefs.getBoolean(bx + "dual", false);
 
-        boolean vib  = prefs.getBoolean(px + "vib", true);
-        boolean snd  = prefs.getBoolean(px + "snd", false);
-        boolean anim = prefs.getBoolean(px + "anim", true);
-        boolean jump = prefs.getBoolean(px + "jump_on", true);
-        boolean os   = prefs.getBoolean(px + "os", false);
+        String fullActs, fullPkg, fullSc, limActs, limPkg, limSc;
+        if (isDual) {   // OR: Homacc = nửa trên, Homeb = nửa dưới
+            fullActs = prefs.getString(bx + "acts_l", "");
+            fullPkg  = prefs.getString(bx + "launch_pkg_l", "");
+            fullSc   = prefs.getString(bx + "shortcut_id_l", "");
+            limActs  = prefs.getString(bx + "acts_r", "");
+            limPkg   = prefs.getString(bx + "launch_pkg_r", "");
+            limSc    = prefs.getString(bx + "shortcut_id_r", "");
+            // tương thích data cũ: nửa Common nằm bên trái -> đổi chỗ
+            if (isCommonKind(prefs.getString(bx + "l_kind", "")) && isFullKind(prefs.getString(bx + "r_kind", ""))) {
+                String ta = fullActs, tp = fullPkg, ts = fullSc;
+                fullActs = limActs; fullPkg = limPkg; fullSc = limSc;
+                limActs = ta; limPkg = tp; limSc = ts;
+            }
+        } else {        // CHUNG: chạy cả 2 server (đây là chỗ sửa lỗi Common không chạy ở Homacc)
+            fullActs = limActs = prefs.getString(bx + "acts", "");
+            fullPkg = limPkg = prefs.getString(bx + "launch_pkg", "");
+            fullSc  = limSc  = prefs.getString(bx + "shortcut_id", "");
+        }
+
+        String rx = "prule_" + rId + "_";
+        boolean vib = prefs.getBoolean(rx + "vib", true), snd = prefs.getBoolean(rx + "snd", false),
+            anim = prefs.getBoolean(rx + "anim", true), jump = prefs.getBoolean(rx + "jump_on", true),
+            os = prefs.getBoolean(rx + "os", false);
 
         for (String g : gestures.split(",")) {
             String gt = g.trim();
             if (gt.isEmpty()) continue;
-            String finalKey = targetPrefix + compKey + "_" + gt;
-            ed.putString(finalKey, fullActs)
-              .putBoolean(finalKey + "_vib", vib)
-              .putBoolean(finalKey + "_snd", snd)
-              .putBoolean(finalKey + "_anim", anim)
-              .putBoolean(finalKey + "_jump_on", jump)
-              .putBoolean(finalKey + "_os", os)
-              .putString(finalKey + "_launch_pkg", fullPkg)
-              .putString(finalKey + "_shortcut_id", fullSc);
-            if (orSplit) {
-                ed.putString(finalKey + "_lim", limActs)
-                  .putBoolean(finalKey + "_lim_vib", vib)
-                  .putBoolean(finalKey + "_lim_snd", snd)
-                  .putBoolean(finalKey + "_lim_anim", anim)
-                  .putBoolean(finalKey + "_lim_jump_on", jump)
-                  .putBoolean(finalKey + "_lim_os", os)
-                  .putString(finalKey + "_lim_launch_pkg", limPkg)
-                  .putString(finalKey + "_lim_shortcut_id", limSc)
-                  .putBoolean(finalKey + "_dual", true);
+            String fk = targetPrefix + compKey + "_" + gt;
+            ed.putString(fk, fullActs.isEmpty() ? "NONE" : fullActs)
+              .putBoolean(fk + "_vib", vib).putBoolean(fk + "_snd", snd).putBoolean(fk + "_anim", anim)
+              .putBoolean(fk + "_jump_on", jump).putBoolean(fk + "_os", os)
+              .putString(fk + "_launch_pkg", fullPkg).putString(fk + "_shortcut_id", fullSc);
+            if (isDual) {
+                ed.putString(fk + "_lim", limActs.isEmpty() ? "NONE" : limActs)
+                  .putBoolean(fk + "_lim_vib", vib).putBoolean(fk + "_lim_snd", snd)
+                  .putBoolean(fk + "_lim_anim", anim).putBoolean(fk + "_lim_jump_on", jump)
+                  .putBoolean(fk + "_lim_os", os)
+                  .putString(fk + "_lim_launch_pkg", limPkg).putString(fk + "_lim_shortcut_id", limSc)
+                  .putBoolean(fk + "_dual", true);
             }
         }
     }
@@ -3738,8 +4170,8 @@ private void applyBarPackToSpace(String id, String targetPrefix, boolean geoOnly
     }
     ed.apply();
     if (geoOnly) return;
-    applyPackRulesToSpace("bar_" + id, targetPrefix, m[0], "a");
-applyPackRulesToSpace("bar_" + id, targetPrefix, m[1], "b");
+    applyPackRulesToSpace("bar_" + id, targetPrefix, m[0], 0);
+    applyPackRulesToSpace("bar_" + id, targetPrefix, m[1], 1);
 }
 private void applyCornerPackToSpace(String id, String targetPrefix) { applyCornerPackToSpace(id, targetPrefix, false); }
 private void applyCornerPackToSpace(String id, String targetPrefix, boolean geoOnly) {
@@ -3777,8 +4209,8 @@ private void applyCornerPackToSpace(String id, String targetPrefix, boolean geoO
     }
     ed.apply();
     if (geoOnly) return;
-    applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + m[0], "a");
-applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + m[1], "b");
+    applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + m[0], 0);
+    applyPackRulesToSpace("corner_" + id, targetPrefix, "corner_" + m[1], 1);
 }
 private void disableBarPackFromSpace(String id, String targetPrefix) {
     int loc = prefs.getInt("pack_bar_" + id + "_loc", 0);
@@ -8807,10 +9239,9 @@ private void vibrateShort() {
         if (vb != null) vb.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE));
     } catch (Exception ignored) {}
 }
-private TextView buildAndBridge(Runnable onMerge) { return buildBridge("AND", onMerge); }
-private TextView buildBridge(String label, Runnable onMerge) {
+private TextView buildAndBridge(Runnable onMerge) {
     TextView t = new TextView(this);
-    t.setText(label);
+    t.setText("AND");
     t.setTextColor(Color.parseColor("#FFC107"));
     t.setTextSize(13f);
     t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -8823,6 +9254,7 @@ private TextView buildBridge(String label, Runnable onMerge) {
     t.setOnLongClickListener(v -> { vibrateShort(); onMerge.run(); return true; });
     return t;
 }
+
 private int readSideVal(String baseKey, boolean isA, int def, int max) {
     int v = TwinPairStore.readOrValue(prefs, baseKey, isA, "acc", def);
     return Math.max(0, Math.min(max, v));
@@ -11915,11 +12347,11 @@ private String readPruleActsJoined(String rId) {
     return l + "," + r;
 }
 private String describePruleScope(String rId) {
-    boolean dual = prefs.getBoolean("prule_" + rId + "_dual", false);
-   if (dual) return T("Split: Accessibility's ⚡ | Blacklist's ✓",
-                   "Tách: Accessibility's ⚡ | Blacklist's ✓");
-return T("Shared: Accessibility's + Blacklist's",
-         "Chung: Accessibility's + Blacklist's");
+    if (prefs.getBoolean("prule_" + rId + "_and", false))
+        return T("Split: Left AND Right", "Tách: Trái AND Phải");
+    if (prefs.getBoolean("prule_" + rId + "_dual", false))
+        return "OR: Homacc ⚡ | Homeb ✓";
+    return T("Shared: Accessibility's + Blacklist's", "Chung: Accessibility's + Blacklist's");
 }
 private LinearLayout createSignedSlider(String t, String k, int min, int max, int def) {
         LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(0,10,0,10); 

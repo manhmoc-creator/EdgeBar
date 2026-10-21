@@ -2911,8 +2911,7 @@ if (key != null && key.startsWith("homacc_")
     String fallback = "home_" + key.substring("homacc_".length());
     if (!prefs.getString(fallback, "NONE").equals("NONE")) key = fallback;
 }
-        final String rk = prefs.getBoolean(key + "_dual", false) ? key + "_lim" : key;
-String action = prefs.getString(rk, "NONE");
+        String action = prefs.getString(key, "NONE");
         boolean isOn = prefs.getBoolean(key + "_on", true);
         android.util.Log.d("EdgeBar_Gesture",
             "handleAction key=" + key + " action=" + action + " isOn=" + isOn);
