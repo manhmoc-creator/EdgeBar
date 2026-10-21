@@ -1484,7 +1484,7 @@ if (closing || pill.animating()) { if (force) { final boolean hh = history; h.po
     scheduleAutoClose();   // UX: mọi đường mở popup đều tự thu gọn sau notic_hold_sec giây
 }
 private int popW() {   // UX: 100% = gần full màn (lề 12dp mỗi bên); trước đây cap 420dp nên kéo >92% không đổi
-    float full = scrW - dp(24);
+    float full = scrW - dp(12);
     return Math.round(Math.max(dp(160), Math.min(full, full * prefs.getInt("notic_pop_w_pct", 100) / 100f)));
 }
 private int popX(int pw) { return (int) Math.max(dp(8), Math.min(scrW - pw - dp(8), px - pw / 2f)); }
