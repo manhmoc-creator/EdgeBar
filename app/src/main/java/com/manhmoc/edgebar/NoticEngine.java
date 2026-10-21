@@ -1013,13 +1013,7 @@ public void clearDemo() {
         }
         h.removeCallbacks(noHostRun);
         noHostRetry = 0;
-        if (pill != null && pillHostKey != null && !pillHostKey.equals(hostKey) && !previewForce && popup == null) {
-    h.removeCallbacks(geoRun); pendingGeo = "";
-    removePill();   // UX: Lock -> Home: pill Lock biến mất ngay trong cùng khung hình
-    if (!items.isEmpty() && statusVisible && !userHidden) announce();   // pill Home sinh từ tâm ngay
-    return;
-}
-        String s = geoKey();
+                String s = geoKey();
         if (pill != null && s.equals(lastGeo)) {
             hostChanged = false;
             pillHostKey = hostKey;
@@ -1089,15 +1083,21 @@ private boolean bindHost() {
     try { wm.getDefaultDisplay().getRealMetrics(dm); } catch (Exception e) { dm = ctx.getResources().getDisplayMetrics(); }
     scrW = dm.widthPixels;
     scrH = dm.heightPixels;
-float[] rc = rectFromLayoutParams(v, scrW, scrH);   // UX: đọc từ LayoutParams (chính xác ngay lập tức); getLocationOnScreen trả kích thước cũ 1x1 ngay lúc bar Home vừa hiện nên trước đây phải chờ debounce
-if (rc == null) {
-    int[] loc = new int[2];
-    v.getLocationOnScreen(loc);
-    rc = new float[]{loc[0], loc[1], loc[0] + v.getWidth(), loc[1] + v.getHeight()};
-    if (rc[2] <= rc[0] || rc[3] <= rc[1]) rc = barRectFromPrefs(hostKey, scrW, scrH);
+int[] loc = new int[2];
+v.getLocationOnScreen(loc);
+hl = loc[0];
+ht = loc[1];
+hr = hl + v.getWidth();
+hb = ht + v.getHeight();
+if (hr <= hl || hb <= ht) {
+    /* View chưa kịp layout (width/height = 0 lúc service vừa start) → fallback
+       sang 2 cách cũ. updateVisibility() sẽ tự gọi noticEngine.relayout() lại
+       sau vài chục ms nên lần 2 sẽ có toạ độ thật. */
+    float[] rc = rectFromLayoutParams(v, scrW, scrH);
+    if (rc == null) rc = barRectFromPrefs(hostKey, scrW, scrH);
+    if (rc == null) return false;
+    hl = rc[0]; ht = rc[1]; hr = rc[2]; hb = rc[3];
 }
-if (rc == null) return false;
-hl = rc[0]; ht = rc[1]; hr = rc[2]; hb = rc[3];
     float wP = prefs.getInt("notic_w_pct", 100) / 100f, hP = prefs.getInt("notic_h_pct", 100) / 100f;
     float barW = hr - hl, barH = hb - ht;
     pillH = Math.min(barH, Math.max(8 * dens, Math.min(barH, 44 * dens) * hP));
@@ -1391,11 +1391,14 @@ private void applyGeo(String s) {
     if (s.equals(lastGeo)) { pill.invalidate(); applyVisibility(); return; }
     boolean first = lastGeo.isEmpty();
     lastGeo = s;
-    if (hostSwitch && !previewForce) {
-    if (popup != null && popupLp != null) slidePopupToNewHost();
-    else { removePill(); if (!items.isEmpty() && statusVisible && !userHidden) announce(); }   // UX: không animation thu gọn khi đổi host
-    return;
-}
+        if (hostSwitch && !previewForce) {
+        if (popup != null && popupLp != null) {
+            slidePopupToNewHost();
+        } else {
+            shrinkRemove(true, false);
+        }
+        return;
+    }
     final boolean want = expanded || pill.towardsExpanded() || pill.animating();
     float tw = want ? ew : pillH;
     if (first || previewForce) {
