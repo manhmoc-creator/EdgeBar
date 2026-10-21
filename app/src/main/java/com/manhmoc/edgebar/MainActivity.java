@@ -3851,7 +3851,8 @@ final ActBlob blobB = loadBlob(srcId + "B");
 final boolean[] andOn = { !srcId.isEmpty() && prefs.getBoolean("prule_" + srcId + "_and", false) };
 final LinearLayout actHost = new LinearLayout(this);
 actHost.setOrientation(LinearLayout.VERTICAL);
-vAct.addView(actHost);
+// Thêm actHost vào content (hoặc root) – biến đã có sẵn trong hàm
+content.addView(actHost);   // hoặc root.addView(actHost);
 final Runnable[] renderAct = new Runnable[1];
 renderAct[0] = () -> {
     actHost.removeAllViews();
