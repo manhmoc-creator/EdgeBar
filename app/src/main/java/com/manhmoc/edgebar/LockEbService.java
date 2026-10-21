@@ -72,8 +72,6 @@ BarView(Context c, int alpha, float radius) {
     gd.setColor(Color.argb(alpha, 0, 0, 0));
     setBackground(gd);
 }
-    }
-
         private static class CornerView extends View {
         private final Paint pFill = new Paint(Paint.ANTI_ALIAS_FLAG), pStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path moonPath = new Path(), strokePath = new Path(); // [TỐI ƯU] tái dùng
@@ -481,5 +479,4 @@ private boolean isLeftMember(String m){ return m.equals("l")||m.equals("t_l")||m
         for (int i = 0; i < 12; i++) if (bars[i] != null) { try { wm.removeView(bars[i]); } catch (Exception ignored) {} bars[i] = null; }
         for (int i = 0; i < 4; i++) if (corners[i] != null) { try { wm.removeView(corners[i]); } catch (Exception ignored) {} corners[i] = null; }
         super.onDestroy();
-    }
 }

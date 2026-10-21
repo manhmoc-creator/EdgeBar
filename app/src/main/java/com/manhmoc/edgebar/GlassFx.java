@@ -1,4 +1,3 @@
-cat << 'EOF' > app/src/main/java/com/manhmoc/edgebar/GlassFx.java
 package com.manhmoc.edgebar;
 
 import android.content.SharedPreferences;
