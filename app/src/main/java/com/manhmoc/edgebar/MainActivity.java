@@ -3849,9 +3849,7 @@ final ActBlob single = loadBlob(srcId);
 final ActBlob blobA = loadBlob(srcId + "A");
 final ActBlob blobB = loadBlob(srcId + "B");
 final boolean[] andOn = { !srcId.isEmpty() && prefs.getBoolean("prule_" + srcId + "_and", false) };
-final LinearLayout actHost = new LinearLayout(this);
-actHost.setOrientation(LinearLayout.VERTICAL);
-// Thêm actHost v        // UX: Khởi tạo vTrig và vAct trước để tránh lỗi scope "cannot find symbol"
+        // UX: Khởi tạo vTrig và vAct trước để tránh lỗi scope "cannot find symbol"
         final LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
         final LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
 
