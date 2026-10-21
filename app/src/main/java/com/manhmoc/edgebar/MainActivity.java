@@ -238,7 +238,7 @@ private List<String[]> getPanelAppListCached() {
 private static final String[] PACK_SYS_KEYS_FULL = new String[]{
     "BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME",
     "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN",
-    "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE", "TRIGGER_ACC_MENU_2F"};
+    "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE", "TRIGGER_ACC_MENU_2F", "PREV_APP"};
 private static final String[] PACK_SYS_KEYS_COMMON = new String[]{
     "HOME", "FLASH", "VOLUME", "CAMERA", "SCREEN_OFF", "SCREENSHOT",
     "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
@@ -967,8 +967,7 @@ String[] bK = {"NONE", "BACK", "HOME", "RECENTS", "SCREEN_OFF", "SCREEN_ON",
         "TRIGGER_UP", "TRIGGER_DOWN", "TRIGGER_LEFT", "TRIGGER_RIGHT",
         "TRIGGER_DIAG",
         "TRIGGER_UP_DOWN", "TRIGGER_DOWN_UP", "TRIGGER_LEFT_RIGHT", "TRIGGER_RIGHT_LEFT",
-        "TRIGGER_UP_HOLD", "TRIGGER_DOWN_HOLD", "TRIGGER_LEFT_HOLD", "TRIGGER_RIGHT_HOLD", "TRIGGER_DIAG_HOLD",
-        "TRIGGER_ACC_MENU_2F"};
+        "TRIGGER_UP_HOLD", "TRIGGER_DOWN_HOLD", "TRIGGER_LEFT_HOLD", "TRIGGER_RIGHT_HOLD", "TRIGGER_DIAG_HOLD", "PREV_APP", "TRIGGER_ACC_MENU_2F"};
 String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn chính"),
         T("Recents", "Đa nhiệm"), T("Screen Off", "Tắt màn hình"), T("Screen On", "Bật màn hình"), T("Flashlight", "Đèn pin"),
         T("Power Menu", "Menu Nguồn"), T("Volume", "Âm Lượng"), T("Screenshot", "Chụp màn hình"), "Camera", T("Notifications", "Mở Thông Báo"), T("Quick Settings", "Bảng Cài Đặt Nhanh"), T("Toggle Overlay (Trợ năng)", "Bật/Tắt Trợ Năng (Homeb ⇄ Overlay)"), "YTDLnis", T("Toggle Voice Record", "Bật/Tắt Ghi Âm"),
@@ -986,6 +985,7 @@ String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn
         T("Trigger: Swipe Up + Hold", "Giả Lập: Vuốt Lên + Giữ"), T("Trigger: Swipe Down + Hold", "Giả Lập: Vuốt Xuống + Giữ"),
         T("Trigger: Swipe Left + Hold", "Giả Lập: Vuốt Trái + Giữ"), T("Trigger: Swipe Right + Hold", "Giả Lập: Vuốt Phải + Giữ"),
         T("Trigger: Diagonal + Hold", "Giả Lập: Chéo + Giữ"),
+        T("Previous App (Recents x2)", "Về app trước (Đa nhiệm)"),
         T("2-Finger Accessibility Menu (Nav Bar)", "Giả Lập: 2 Ngón Gọi Trợ Năng (Nav Bar)")};
 for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
 // [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
@@ -4763,7 +4763,7 @@ for (String sa : savedArray) {
         } else if (isHomebSpace) {
             sysKeys = new String[]{"HOME", "FLASH", "VOLUME", "CAMERA", "SCREEN_OFF", "SCREENSHOT", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
         } else {
-            sysKeys = new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE", "TRIGGER_ACC_MENU_2F"};
+            sysKeys = new String[]{"BACK", "HOME", "RECENTS", "SCREEN_OFF", "FLASH", "POWER_DIALOG", "VOLUME", "SCREENSHOT", "CAMERA", "NOTIFICATIONS", "QUICK_SETTINGS", "SPLIT_SCREEN", "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE", "PREV_APP", "TRIGGER_ACC_MENU_2F"};
         }
                         List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeys, actKeysUsed, actLabsUsed);
         List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids", "pack_panel_", "PANEL_", "Panel Mới");
@@ -7880,6 +7880,12 @@ dOpt.addView(btnTestSnd);
     dOpt.addView(createSlider("Thời lượng Tap/2Tap giả lập (ms)", "sim_tap_dur", 50, 5));
     dOpt.addView(createSlider("Thời lượng Long Press giả lập (ms)", "sim_long_dur", 2000, 600));
     designSliderContainer.addView(createDrawer("⚙️ " + T("GENERAL OPTIONS","TÙY CHỌN CHUNG"), dOpt));
+    LinearLayout dGlass = new LinearLayout(this);
+dGlass.setOrientation(LinearLayout.VERTICAL); dGlass.setPadding(20, 10, 20, 20);
+dGlass.addView(noticSwitchRow(T("Glass style (Bar, Corner, Panel, Bubble)", "Kiểu Glass (Bar, Corner, Panel, Bubble)"), "glass_on", false));
+dGlass.addView(noticPalette(T("Glass color (Bar, Corner, Bubble, Circle)", "Màu glass (Bar, Corner, Bubble, Circle)"),
+    "glass_color_idx", new String[]{}, GlassFx.HEX));
+designSliderContainer.addView(createDrawer("🧊 GLASS", dGlass));
 
     // DRAWER 4: ICON CHO 13 CỬ CHỈ (đã chuyển hẳn sang Display, không add lại ở Gesture & Touch)
     designSliderContainer.addView(buildGestureIconDrawer());
@@ -8661,6 +8667,13 @@ private void openNoticSpace() {
     bN.addView(noticSwitchRow(T("Replace system popups", "Thay popup thông báo hệ thống"), "notic_hide_system", false));
     bN.addView(noticSwitchRow(T("Auto expand new notification", "Tự mở rộng thông báo mới"), "notic_auto_expand", false));
     bN.addView(createSlider(T("Expanded hold time (sec)", "Thời gian giữ thông báo mở rộng (giây)"), "notic_hold_sec", 15, 4));
+    bN.addView(noticSwitchRow(T("Reply box for apps without one (copies text & opens app)", "Ô trả lời cho app không có sẵn (chép chữ & mở app)"), "notic_fallback_reply", false));
+Button btnReplyApps = new Button(this);
+btnReplyApps.setText("🤖 " + T("Choose apps (Claude, Gemini...)", "Chọn app (Claude, Gemini...)"));
+btnReplyApps.setBackground(getRounded("#009688", 20f));
+btnReplyApps.setTextColor(Color.WHITE);
+btnReplyApps.setOnClickListener(x -> showPanelMultiPicker("notic_reply_apps", true));
+bN.addView(btnReplyApps);
     content.addView(createDrawer("🔔 " + T("NOTIFICATIONS", "THÔNG BÁO"), bN));
 
     // ---- APPEARANCE ----
@@ -8683,6 +8696,21 @@ bA.addView(createSlider(T("LED speed (%)", "Tốc độ LED (%)"), "notic_led_sp
     bA.addView(createCycleRow(T("Visualizer color", "Màu visualizer"), "notic_viz_color",
         new String[]{T("App color", "Theo màu app"), "Cyan", "Blue", "Pink", "Amber", "Green", "White", "Violet", T("Track color", "Màu bài nhạc")}));
     bA.addView(createSlider(T("Visualizer speed (%)", "Tốc độ visualizer (%)"), "notic_viz_speed", 300, 100));
+    LinearLayout bH = noticDrawerBody();
+bH.addView(noticSwitchRow(T("While expanded panel is open", "Khi bảng mở rộng đang mở"), "notic_hide_expand", true));
+bH.addView(noticSwitchRow(T("System notification shade / Quick settings", "Khi kéo bảng thông báo / Cài đặt nhanh"), "notic_hide_shade", true));
+bH.addView(noticSwitchRow(T("PIN / secure screen", "Khi nhập PIN / màn bảo mật"), "notic_hide_pin", true));
+bH.addView(noticSwitchRow(T("During a call (any app)", "Khi đang trong cuộc gọi (mọi app)"), "notic_hide_call", true));
+bH.addView(noticSwitchRow(T("When camera is in use", "Khi camera đang mở"), "notic_hide_cam", false));
+bH.addView(noticSwitchRow(T("When microphone is in use", "Khi micro đang dùng"), "notic_hide_mic", false));
+bH.addView(noticSwitchRow(T("When chosen apps are open (needs Accessibility)", "Khi mở các app đã chọn (cần Trợ năng)"), "notic_hide_app_en", false));
+Button btnHideApps = new Button(this);
+btnHideApps.setText("📱 " + T("Choose apps", "Chọn app"));
+btnHideApps.setBackground(getRounded("#7C4DFF", 20f));
+btnHideApps.setTextColor(Color.WHITE);
+btnHideApps.setOnClickListener(x -> showPanelMultiPicker("notic_hide_apps", true));
+bH.addView(btnHideApps);
+content.addView(createDrawer("🙈 " + T("TEMPORARILY HIDE NOTIC", "ẨN NOTIC TẠM THỜI KHI"), bH));
     content.addView(createDrawer("🎨 " + T("APPEARANCE", "GIAO DIỆN"), bA));
 
     // ---- POSITION ----
@@ -8696,7 +8724,7 @@ bA.addView(createSlider(T("LED speed (%)", "Tốc độ LED (%)"), "notic_led_sp
     bP.addView(createSectionTitle(T("EXPANDED PANEL", "BẢNG THÔNG BÁO MỞ RỘNG")));
     bP.addView(createSignedSlider(T("Max length (%)", "Chiều dài tối đa (%)"), "notic_pop_h_pct", 20, 90, 55));
     bP.addView(createSlider(T("Gap to Notic (dp, 0 = attached)", "Khoảng cách tới Notic (dp, 0 = dính liền)"), "notic_pop_gap", 150, 0));
-    bP.addView(createSignedSlider(T("Width (%)", "Chiều rộng (%)"), "notic_pop_w_pct", 60, 480, 100));
+    bP.addView(createSignedSlider(T("Width (%)", "Chiều rộng (%)"), "notic_pop_w_pct", 35, 100, 100));
     bP.addView(createSignedSlider(T("Corner radius (dp)", "Độ bo cong (dp)"), "notic_pop_rad", 0, 60, 26));
     content.addView(createDrawer("📐 " + T("POSITION", "VỊ TRÍ"), bP));
 

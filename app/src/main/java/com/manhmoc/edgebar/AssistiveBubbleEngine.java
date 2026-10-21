@@ -188,6 +188,7 @@ private boolean isCircleModeActive() { return prefs.getBoolean("bubble_circle_en
        public void onPrefChanged(String key) {
     if (key == null) return;
     if (key.equals("bubble_en") || key.equals("bubble_circle_en") || key.equals("bubble_size")
+    || key.startsWith("glass_")
     || key.equals("bubble_icon_size") || key.equals("bubble_main_icon")
     || key.equals("bubble_circle_main_icon") || key.equals("bubble_node_bg_alpha")
     || key.equals("bubble_alpha_pct")) {   // ← THÊM
@@ -358,15 +359,13 @@ private void updateBubbleIcon() {
             try { iv.setImageDrawable(ctx.getPackageManager().getApplicationIcon(ctx.getPackageName())); }
             catch (Exception e) { iv.setImageResource(android.R.drawable.sym_def_app_icon); }
         }
-        
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.OVAL);
         int alphaPct = prefs.getInt("bubble_alpha_pct", 87); // mặc định 87% như cũ
 int alphaByte = Math.max(0, Math.min(255, Math.round(alphaPct * 255f / 100f)));
-bg.setColor(Color.argb(alphaByte, 32, 33, 36)); // nền #202124
-
-        bg.setStroke(4, Color.parseColor("#8AB4F8"));
-        iv.setBackground(bg);
+GlassFx.Surface bg = new GlassFx.Surface(0x202124);
+bg.refresh(prefs); bg.setOval();
+bg.setColor(Color.argb(alphaByte, 0, 0, 0));
+bg.setStroke(4, Color.parseColor("#8AB4F8"));   // glass bật thì viền này tự bỏ, dùng viền phản quang
+iv.setBackground(bg);
         iv.setPadding(15, 15, 15, 15);
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
         
@@ -863,10 +862,11 @@ return "Action";
     private LinearLayout buildPanelCard() {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-                GradientDrawable bg = new GradientDrawable();
-bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 220), 18, 18, 18)); // #121212
+        GlassFx.Surface bg = new GlassFx.Surface(0x121212);
+bg.refresh(prefs);
+bg.setColor(Color.argb(prefs.getInt("bubble_bg_alpha", 220), 0, 0, 0));
 bg.setCornerRadius(prefs.getInt("bubble_bg_radius", 40));
-bg.setStroke(4, Color.argb(150, 138, 180, 248)); // viền xanh nhạt đồng bộ màu accent
+bg.setStroke(4, Color.argb(150, 138, 180, 248));
 card.setBackground(bg);
         card.setPadding(20, 30, 20, 30);
 
@@ -1739,6 +1739,7 @@ for (String[] item : allItems) {
     private Runnable spinHoldRunnable;
     private float lastSpinVelocity = 0f;
     private class CircleMenuView extends View {
+    private final RectF gArc = new RectF();
     private List<String[]> items = new ArrayList<>();
         private final Paint pRingBg = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -1867,15 +1868,24 @@ private Bitmap drawableToNodeBitmap(Drawable d, int size, boolean isApp) {
         float bgWidth = prefs.getInt("bubble_circle_bg_width", 60);
         int bgAlpha = prefs.getInt("bubble_circle_bg_alpha", 160);
 
-                pRingBg.setColor(Color.argb(bgAlpha, 18, 18, 18)); // [MỚI] nền đen #121212 đồng bộ Bubble Panel
-        pRingBg.setStrokeWidth(bgWidth);
-        canvas.drawCircle(cx, cy, ringR, pRingBg);
+        boolean gl = GlassFx.on(prefs);
+float gk = (float) Math.sqrt(bgAlpha / 255f);
+int ringRgb = gl ? GlassFx.tint(prefs) : 0x121212;
+pRingBg.setColor((Math.round(bgAlpha * (gl ? 0.78f : 1f)) << 24) | ringRgb);
+pRingBg.setStrokeWidth(bgWidth);
+canvas.drawCircle(cx, cy, ringR, pRingBg);
 
-        pStroke.setColor(Color.parseColor("#8AB4F8")); // [MỚI] viền xanh accent, đồng bộ toàn app
-        pStroke.setStrokeWidth(4f);
-        canvas.drawCircle(cx, cy, ringR + bgWidth / 2f, pStroke);
-        canvas.drawCircle(cx, cy, ringR - bgWidth / 2f, pStroke);
-
+pStroke.setColor(gl ? Color.argb((int) (200 * gk), 255, 255, 255) : Color.parseColor("#8AB4F8"));
+pStroke.setStrokeWidth(4f);
+canvas.drawCircle(cx, cy, ringR + bgWidth / 2f, pStroke);
+canvas.drawCircle(cx, cy, ringR - bgWidth / 2f, pStroke);
+if (gl) {   // vệt sáng cung trên của vòng, mờ theo thanh kéo
+    pStroke.setColor(Color.argb((int) (110 * gk), 255, 255, 255));
+    pStroke.setStrokeWidth(bgWidth * 0.25f);
+    gArc.set(cx - ringR, cy - ringR, cx + ringR, cy + ringR);
+    canvas.drawArc(gArc, 200f, 140f, false, pStroke);
+    pStroke.setStrokeWidth(4f);
+}
                 // [MỚI] Vẽ nền tròn + viền xanh giống hệt bong bóng chat thật (buildBubble())
         // trước khi vẽ icon lên trên — đây chính là "vòng xanh" mà trước đây bị thiếu.
         float centerR = prefs.getInt("bubble_size", 120) / 2f;

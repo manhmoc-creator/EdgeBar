@@ -105,7 +105,7 @@ static void setSuppressed(boolean on) {
     public static synchronized boolean consumeSelfCancel(String k) { return selfCancel.remove(k); }
 public static class Item {
     String key, pkg, title, text, sig, appName;
-    Bitmap icon, art, artCircle, senderBmp;   // [P7] senderBmp = ảnh người gửi/người gọi, cắt tròn
+    Bitmap icon, art, artCircle, senderBmp, appDisc;
     Icon largeIcon;
     PendingIntent intent;
     Notification.Action[] actions;
@@ -256,6 +256,27 @@ private float oL, oT, oR, oB, oRad, popRad;
 private ValueAnimator morphAnim;
 private final Runnable autoCloseRun = this::autoClose;
     private boolean cBorder = true, cSpin = true, cViz = true;
+    private boolean appHidden;
+private final Map<String, String> drafts = new HashMap<>();   // UX: nháp reply theo key thông báo, đóng/mở lại bảng không mất chữ
+private boolean hideOn(String id, boolean def) { return prefs.getBoolean("notic_hide_" + id, def); }
+private boolean hasDraft() { for (String v : drafts.values()) if (v != null && !v.trim().isEmpty()) return true; return false; }
+public void setForegroundPkg(String pkg) {
+    if (pkg == null || pkg.isEmpty() || pkg.contains("inputmethod") || pkg.contains("systemui")) return;   // bàn phím/systemui không được tính là đổi app
+    boolean hit = prefs.getBoolean("notic_hide_app_en", false)
+        && ("," + prefs.getString("notic_hide_apps", "") + ",").contains("," + pkg + ",");
+    if (hit == appHidden) return;
+    appHidden = hit;
+    syncVisible();
+}
+private Bitmap appDisc(Item it) {
+    if (it.appDisc == null && it.icon != null) it.appDisc = makeAppDisc(it.icon, appColor(it));
+    return it.appDisc;
+}
+private boolean canFallbackReply(Item it) {   // app không có RemoteInput (Claude, Gemini...): chép chữ + mở app
+    return it.reply == null && !it.media && !it.call && !it.transientItem && !isDemo(it) && it.intent != null
+        && it.pkg != null && prefs.getBoolean("notic_fallback_reply", false)
+        && ("," + prefs.getString("notic_reply_apps", "") + ",").contains("," + it.pkg + ",");
+}
     private int cVizColor = 0, cVizSpeed = 100;
     private boolean cBadge = true;
     private float cAnimScale = 1f;
@@ -409,7 +430,7 @@ private Bitmap makeAppDisc(Bitmap src, int color) {
     c.drawBitmap(src, null, new RectF(q, q, s - q, s - q), p);
     return out;
 }
-private Bitmap makeDisc(Bitmap src) {
+private Bitmap makeDisc(Bitmap src, boolean vinyl) {
     if (src == null) return null;
     int s = 96;
     Bitmap out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888);
@@ -422,7 +443,7 @@ private Bitmap makeDisc(Bitmap src) {
     p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(4); p.setColor(Color.argb(200, 20, 20, 20));
     c.drawCircle(s / 2f, s / 2f, s / 2f - 3, p);
     p.setStyle(Paint.Style.FILL);
-    c.drawCircle(s / 2f, s / 2f, 7, p);       // lỗ giữa kiểu đĩa than
+    if (vinyl) c.drawCircle(s / 2f, s / 2f, 7, p);   // UX: lỗ đĩa than chỉ cho app nhạc (đĩa quay + visualizer)
     return out;
 }
 
@@ -430,7 +451,7 @@ private Bitmap circleArt(Item it) {
     if (it.artCircle != null) return it.artCircle;
     Bitmap src = loadLarge(it);
 // UX: có ảnh bìa thật -> cắt tròn; không có (chỉ icon vuông) -> icon nằm giữa đĩa, 4 góc thừa tô màu icon app
-it.artCircle = src != null ? makeDisc(src) : makeAppDisc(it.icon, appColor(it));
+it.artCircle = src != null ? makeDisc(src, true) : makeAppDisc(it.icon, appColor(it));
     return it.artCircle;
 }
 
@@ -438,7 +459,7 @@ private Bitmap senderCircle(Item it) {
     if (it.senderBmp != null) return it.senderBmp;
     if (it.media || it.transientItem) return null;
     Bitmap src = it.largeIcon != null ? loadLarge(it) : null;
-    if (src != null) { it.senderBmp = makeDisc(src); return it.senderBmp; }
+    if (src != null) { it.senderBmp = makeDisc(src, false); return it.senderBmp; }
     if (!it.person) {                              // thông báo thường: icon app thành đĩa
         it.senderIsApp = true;
         it.senderBmp = makeAppDisc(it.icon, appColor(it));
@@ -747,10 +768,11 @@ private Bitmap eventIcon(String id) {
                     h.removeCallbacks(callCheckRun); h.postDelayed(callCheckRun, 500);
                     boolean active = l != null && !l.isEmpty();
                     if (active && !micOn) {
-                        micOn = true;
-                        if (!VoiceRecorderService.isRunning && !ScreenRecorderService.isRunning && SystemClock.elapsedRealtime() > armedAt)
-                            event("mic", "🎙", "Microphone in use", "", 0xFFF57C00);
-                    } else if (!active) micOn = false;
+    micOn = true;
+    if (!hideOn("mic", false) && !VoiceRecorderService.isRunning && !ScreenRecorderService.isRunning && SystemClock.elapsedRealtime() > armedAt)
+        event("mic", "🎙", "Microphone in use", "", 0xFFF57C00);
+    syncVisible();
+} else if (!active && micOn) { micOn = false; syncVisible(); }
                 }
             };
             audio.registerAudioRecordingCallback(micCb, h);
@@ -762,11 +784,14 @@ private Bitmap eventIcon(String id) {
             };
             camCb = new CameraManager.AvailabilityCallback() {
                 @Override public void onCameraUnavailable(String id) {
-                    long now = SystemClock.elapsedRealtime();
-                    if (now < armedAt || now - lastTorchMs < 1500) return;
-                    if (camBusy.add(id) && camBusy.size() == 1) event("camera", "📷", "Camera in use", "", 0xFFEF6C00);
-                }
-                @Override public void onCameraAvailable(String id) { camBusy.remove(id); }
+    long now = SystemClock.elapsedRealtime();
+    if (now < armedAt || now - lastTorchMs < 1500) return;
+    if (camBusy.add(id)) {
+        if (camBusy.size() == 1 && !hideOn("cam", false)) event("camera", "📷", "Camera in use", "", 0xFFEF6C00);
+        syncVisible();
+    }
+}
+@Override public void onCameraAvailable(String id) { if (camBusy.remove(id)) syncVisible(); }
             };
             camMgr.registerTorchCallback(torchCb, h);
             camMgr.registerAvailabilityCallback(camCb, h);
@@ -871,6 +896,7 @@ private void scheduleAutoClose() {
     h.postDelayed(autoCloseRun, Math.max(1, prefs.getInt("notic_hold_sec", 4)) * 1000L);
 }
 private void autoClose() {
+    if (hasDraft()) return;   // đang soạn dở: không tự thu gọn (UP sẽ lên lịch lại)
     if (popup == null) return;
     if (popupTouching || swiping || (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0)) {
         h.postDelayed(autoCloseRun, 1500); return;   // đang vuốt/gõ -> hoãn
@@ -884,7 +910,7 @@ public void onScreenOff() {
     screenOn = false;
     shadeOpen = false;
     userHidden = false;
-statusVisible = !suppressed && (previewForce || (!secureOverlay && !inCall));
+    statusVisible = wantVisible();
     cancelPendingTap();
     h.removeCallbacks(settleRun); h.removeCallbacks(autoCloseRun); h.removeCallbacks(geoRun);
     h.removeCallbacks(showRun);
@@ -1306,7 +1332,14 @@ private void afterPopupGone() {
 }
 private final Runnable showRun = () -> { if (wantVisible()) applyVisible(true); };
 private boolean wantVisible() {
-    return !suppressed && (previewForce || (!shadeOpen && !secureOverlay && !inCall));
+    if (suppressed) return false;
+    if (previewForce) return true;
+    if (shadeOpen && hideOn("shade", true)) return false;
+    if (secureOverlay && hideOn("pin", true)) return false;
+    if (inCall && hideOn("call", true)) return false;
+    if (!camBusy.isEmpty() && hideOn("cam", false)) return false;
+    if (micOn && hideOn("mic", false)) return false;
+    return !appHidden;
 }
 private void syncVisible() {
     h.removeCallbacks(showRun);
@@ -1450,7 +1483,10 @@ if (closing || pill.animating()) { if (force) { final boolean hh = history; h.po
     openPopup();
     scheduleAutoClose();   // UX: mọi đường mở popup đều tự thu gọn sau notic_hold_sec giây
 }
-private int popW() { return (int) Math.min(scrW - dp(24), dp(420) * prefs.getInt("notic_pop_w_pct", 100) / 100f); }
+private int popW() {   // UX: 100% = gần full màn (lề 12dp mỗi bên); trước đây cap 420dp nên kéo >92% không đổi
+    float full = scrW - dp(24);
+    return Math.round(Math.max(dp(160), Math.min(full, full * prefs.getInt("notic_pop_w_pct", 100) / 100f)));
+}
 private int popX(int pw) { return (int) Math.max(dp(8), Math.min(scrW - pw - dp(8), px - pw / 2f)); }
 /* UX: gap = 0 -> bảng "mọc" ra từ chính viên thuốc và viên thuốc bị ẩn (hành vi cũ).
    gap > 0 -> viên thuốc giữ nguyên hiển thị, bảng đặt cách mép notic đúng gap dp. */
@@ -1529,6 +1565,7 @@ private void openPopup() {
     root.setClipToOutline(true);
     setMorph(root, popupLp, popupBg, 0f);
     try { wm.addView(root, popupLp); } catch (Exception e) { popup = null; popupBody = null; popupHead = null; popupBg = null; return; }
+    if (hideOn("expand", true) && pill != null) pill.setVisibility(View.INVISIBLE);   // UX: MorphRoot tự vẽ hình viên thuốc lúc morph nên nhìn như pill biến thành bảng; INVISIBLE còn tiết kiệm pin vì ngừng vẽ LED/đĩa. afterPopupGone() đã có sẵn setVisibility(VISIBLE) khi thu gọn
     final LinearLayout fr = root; final WindowManager.LayoutParams flp = popupLp; final GradientDrawable fbg = popupBg;
 root.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
     @Override public boolean onPreDraw() {
@@ -1669,26 +1706,18 @@ else popupBody.addView(buildRow(curIt));
         g.setCornerRadius(r);
         return g;
     }
-    private View buildRow(final Item it) {
-    LinearLayout card = buildRowCard(it);
-    if (popupHistory || it.call) return card;   // UX: danh sách lịch sử gắn X ngay trong thẻ (xem buildRowCard) để X trượt theo khi vuốt xoá
-    FrameLayout w = new FrameLayout(ctx);
-    w.setLayoutParams(card.getLayoutParams());
-    card.setLayoutParams(new FrameLayout.LayoutParams(-1, -2));
-    w.addView(card);
-    FrameLayout.LayoutParams xl = new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.TOP | Gravity.END);
-    xl.setMargins(0, dp(4), dp(4), 0);
-    w.addView(closeX(it), xl);
-    return w;   // vuốt ngang xoá thẻ vẫn dùng getChildAt(0) = wrapper nên X trượt theo thẻ
-}
+    private View buildRow(final Item it) { return buildRowCard(it); }
 private View closeX(final Item it) {
     View v = new View(ctx) {
-        final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        { p.setColor(0xCCFFFFFF); p.setStrokeWidth(1.8f * dens); p.setStrokeCap(Paint.Cap.ROUND); }
+        final Paint pc = new Paint(Paint.ANTI_ALIAS_FLAG);
         @Override protected void onDraw(Canvas c) {
-            float mx = getWidth() / 2f, my = getHeight() / 2f, a = 5f * dens;
-            c.drawLine(mx - a, my - a, mx + a, my + a, p);
-            c.drawLine(mx + a, my - a, mx - a, my + a, p);
+            float mx = getWidth() / 2f, my = getHeight() / 2f, r = Math.min(mx, my);
+            pc.setStyle(Paint.Style.FILL); pc.setColor(0x33FFFFFF);
+            c.drawCircle(mx, my, r, pc);
+            pc.setStyle(Paint.Style.STROKE); pc.setStrokeWidth(2.2f * dens); pc.setStrokeCap(Paint.Cap.ROUND); pc.setColor(0xF2FFFFFF);
+            float a = r * 0.36f;
+            c.drawLine(mx - a, my - a, mx + a, my + a, pc);
+            c.drawLine(mx + a, my - a, mx - a, my + a, pc);
         }
     };
     v.setOnClickListener(x -> dismissItem(it));
@@ -1707,7 +1736,6 @@ private View closeX(final Item it) {
         LinearLayout top = new LinearLayout(ctx);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        if (!popupHistory && !it.call) top.setPadding(0, 0, dp(22), 0);   // chừa chỗ cho nút X
         if (it.media && prefs.getBoolean("notic_art_spin", true)) {
     top.addView(new ArtView(ctx, it));
 } else {
@@ -1758,20 +1786,13 @@ if (sb != null) {
             t2.setEllipsize(TextUtils.TruncateAt.END);
             col.addView(t2);
         }
-        top.addView(col);
-        if (!it.media && it.senderBmp != null && it.icon != null && !it.senderIsApp) {
-            ImageView ai = new ImageView(ctx);
-            ai.setImageBitmap(it.icon);
-            LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(dp(24), dp(24));
-            alp.setMargins(dp(4), 0, 0, 0);
-            top.addView(ai, alp);
-        }        
+        top.addView(col);       
         if (it.media && prefs.getBoolean("notic_viz_en", true)) top.addView(new VizView(ctx, it)); // visualizer nằm sát phải cùng
-        if (popupHistory && !it.call) {
-    LinearLayout.LayoutParams xl = new LinearLayout.LayoutParams(dp(30), dp(30));
+        if (!it.call) {
+    LinearLayout.LayoutParams xl = new LinearLayout.LayoutParams(dp(36), dp(36));
     xl.gravity = Gravity.TOP;
-    xl.setMargins(dp(4), 0, 0, 0);
-    top.addView(closeX(it), xl);   // X góc phải trên, bấm = xoá đúng thông báo đó
+    xl.setMargins(dp(6), 0, 0, 0);
+    top.addView(closeX(it), xl);
 }
         top.setOnClickListener(v -> {
             /* UX: nếu user đang cố swipe trên card (đã vượt slop) thì bỏ qua
@@ -1787,7 +1808,7 @@ if (sb != null) {
         card.addView(top);
         if (it.call) card.addView(buildCallControls(it));
 else if (it.media) card.addView(buildMediaControls(it));
-else { if (it.reply != null) card.addView(buildReplyBar(it)); card.addView(buildItemActions(it)); }
+else { if (it.reply != null || canFallbackReply(it)) card.addView(buildReplyBar(it)); card.addView(buildItemActions(it)); }
 return card;
     }
     private Notification.Action findReadAction(Item it) {
@@ -1905,12 +1926,10 @@ private Drawable cardBg(Item it, float r) {
     @Override public boolean onTouchEvent(MotionEvent e) {
         int a = e.getActionMasked();
         if (a == MotionEvent.ACTION_OUTSIDE) {
-            if (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0) releaseIme(popup);
-            closePopup(false, true);
-            return true;
-        }
-        /* UX: cử chỉ bắt đầu TRONG popup rồi kéo ra ngoài ≥40dp → thu gọn về pill.
-           Đây là cách bắt swipe-out mà ACTION_OUTSIDE không làm được. */
+    if (popupLp != null && (popupLp.flags & NOT_FOCUSABLE) == 0) { releaseIme(popup); return true; }   // UX: đang gõ -> chạm ngoài chỉ hạ bàn phím, lần 2 mới đóng (và chữ vẫn nằm trong drafts)
+    closePopup(false, true);
+    return true;
+}
         if (a == MotionEvent.ACTION_MOVE && popupLp != null) {
             float rx = e.getRawX(), ry = e.getRawY();
             float slop = dp(40);
@@ -2252,6 +2271,15 @@ private void smsQuick(Item it, String body) {
         et.setBackground(etBg);
         et.setPadding(dp(14), dp(8), dp(14), dp(8));
         et.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        if (it.reply == null) et.setHint("Reply (chép & mở app)…");
+final String dk = it.key == null ? "" : it.key;
+String saved = drafts.get(dk);
+if (saved != null) et.setText(saved);
+et.addTextChangedListener(new android.text.TextWatcher() {
+    public void afterTextChanged(android.text.Editable s) { if (s.length() == 0) drafts.remove(dk); else drafts.put(dk, s.toString()); }
+    public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+    public void onTextChanged(CharSequence s, int a, int b, int c) {}
+});
         et.setOnTouchListener((v, e) -> {
             if (e.getAction() == MotionEvent.ACTION_DOWN) {
                 makePopupFocusable();
@@ -2269,11 +2297,18 @@ private void smsQuick(Item it, String body) {
         if (sd != null) { sd = sd.mutate(); sd.setTint(Color.WHITE); send.setImageDrawable(sd); }
         send.setScaleType(ImageView.ScaleType.FIT_CENTER);
         send.setPadding(dp(9), dp(9), dp(9), dp(9));
-        GradientDrawable sbg = new GradientDrawable();
-        sbg.setShape(GradientDrawable.OVAL);
-        sbg.setColor(0xFF2C2C2E);                    // xám đậm
-        sbg.setStroke(dp(1.5f), BADGE_BLUE);         // viền xanh lam
-        send.setBackground(sbg);
+        GradientDrawable sbg = new GradientDrawable();   // lớp viền xanh
+sbg.setShape(GradientDrawable.OVAL);
+sbg.setColor(Color.TRANSPARENT);
+sbg.setStroke(dp(1.5f), BADGE_BLUE);
+GradientDrawable scrim = new GradientDrawable();   // lớp tối nhẹ để mũi tên trắng vẫn đọc được trên icon app
+scrim.setShape(GradientDrawable.OVAL);
+scrim.setColor(0x66000000);
+Bitmap ad = appDisc(it);
+send.setBackground(ad != null
+    ? new android.graphics.drawable.LayerDrawable(new Drawable[]{
+        new android.graphics.drawable.BitmapDrawable(ctx.getResources(), ad), scrim, sbg})
+    : rounded(0xFF2C2C2E, dp(20)));
         send.setOnClickListener(v -> sendReply(it, et));
         row.addView(et);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(dp(40), dp(40));
@@ -2284,7 +2319,18 @@ private void smsQuick(Item it, String body) {
 
     private void sendReply(Item it, EditText et) {
         String s = et.getText().toString().trim();
-        if (s.isEmpty() || it.reply == null || it.reply.actionIntent == null) return;
+        if (s.isEmpty()) return;
+if (it.reply == null || it.reply.actionIntent == null) {   // fallback: app không có ô trả lời trực tiếp
+    if (!canFallbackReply(it)) return;
+    ((android.content.ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE))
+        .setPrimaryClip(android.content.ClipData.newPlainText("Notic", s));
+    et.setText("");
+    try { it.intent.send(); } catch (Exception ignored) {}
+    android.widget.Toast.makeText(ctx, "Đã chép — dán vào ô chat", android.widget.Toast.LENGTH_SHORT).show();
+    if (popup != null) releaseIme(popup);
+    closePopup(false, true);
+    return;
+}
         try {
             RemoteInput[] ris = it.reply.getRemoteInputs();
             Intent fill = new Intent();
@@ -2313,6 +2359,7 @@ private void smsQuick(Item it, String body) {
     public void destroy() {
         h.removeCallbacksAndMessages(null);
         cancelPendingTap();
+        drafts.clear();
 for (Item x : items) unbindMedia(x);
         unregisterSystemEvents();   // [P5] gom toàn bộ phần gỡ receiver/callback vào 1 hàm
         closePopup(false, false);
@@ -2387,7 +2434,7 @@ final Runnable tick = () -> invalidate();
         final TextPaint np = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         final RectF rect = new RectF();
         final RectF irect = new RectF();
-
+        final RectF lr = new RectF();
         PillView(Context c) {
             super(c);
             tp.setColor(Color.WHITE);
@@ -2399,16 +2446,17 @@ final Runnable tick = () -> invalidate();
             sp.setStyle(Paint.Style.STROKE);
 sp.setStrokeWidth(1.6f * dens);
         }
-        void drawLaser(Canvas c, float x, float cyy, float d, float hh, int color) {
+        void drawLaser(Canvas c, float x, float cyy, float d, Bitmap disc, int color) {
     long period = Math.max(300L, (long) (2200f / (cLedSpeed / 100f)));
     float ph = (SystemClock.uptimeMillis() % period) / (float) period;
     float a = 0.18f + 0.82f * (0.5f - 0.5f * (float) Math.cos(ph * 2 * Math.PI));   // nhịp thở kiểu LED thông báo
     float mx = x + d / 2f;
+    if (disc != null) { lr.set(x, cyy - d / 2f, x + d, cyy + d / 2f); c.drawBitmap(disc, null, lr, ip); }   // nền = icon app
     lp2.setColor(color);
+    lp2.setAlpha((int) (40 + 150 * a));
+    c.drawCircle(mx, cyy, d / 2f, lp2);          // chấm điền đầy nhấp nháy phủ lên icon
     lp2.setAlpha((int) (80 * a));
-    c.drawCircle(mx, cyy, d * 0.9f, lp2);   // quầng sáng (không dùng BlurMaskFilter để khỏi bật software layer, đỡ RAM/pin)
-    lp2.setAlpha((int) (255 * a));
-    c.drawCircle(mx, cyy, d / 2f, lp2);      // chấm tròn đặc
+    c.drawCircle(mx, cyy, d * 0.58f, lp2);       // quầng sáng (không dùng BlurMaskFilter để khỏi bật software layer)
 }
         void set(float cx, float cyy, float ww, float hh, float rr, float m, float ta) {
             cancelAnim();
@@ -2499,11 +2547,11 @@ sp.setStrokeWidth(1.6f * dens);
         else c.drawBitmap(lead, null, irect, ip);
     }
     float textR = rr - h * 0.3f;
-    if (led) {   // thay icon app bên phải: icon app chỉ còn hiện trong bảng mở rộng
-        float lw = h * 0.34f, lx = rr - h * 0.25f - lw;
-        drawLaser(c, lx, cyy, lw, h, appColor(item));
-        textR = Math.min(textR, lx - h * 0.15f);
-    }
+    if (led) {
+    float lw = isz, lx = rr - h * 0.2f - lw;   // cùng kích thước với đĩa trái
+    drawLaser(c, lx, cyy, lw, appDisc(item), appColor(item));
+    textR = Math.min(textR, lx - h * 0.15f);
+}
     float vw = h * 0.95f, vl = rr - h * 0.25f - vw;
     if (viz) { drawViz(c, bp, vl, cyy, vw, h * 0.5f, vizColor(item), item.playing, speed(), 0.05f); textR = Math.min(textR, vl - h * 0.15f); }
     if (count > 1 && cBadge) {

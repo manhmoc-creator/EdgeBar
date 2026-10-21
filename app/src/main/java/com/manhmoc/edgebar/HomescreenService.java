@@ -178,7 +178,7 @@ private Object[] findSwallowHost() {
     private long lastSyncMs = 0;
     private final Handler appLockPollHandler = new Handler(android.os.Looper.getMainLooper());
     private String lastPolledFgPkg = "";
-    private static final long APPLOCK_POLL_MS = 2000; // đủ nhanh, không tốn pin đáng kể
+    private static final long APPLOCK_POLL_MS = 1000; // đủ nhanh, không tốn pin đáng kể
 
     private void startAppLockPolling() {
         appLockPollHandler.removeCallbacks(appLockPollRunnable);
@@ -692,7 +692,7 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
     private int baseAlpha, hideDelay;
     private boolean isAutoHiding = false, isInv = false;
     private Handler autoHideHandler = new Handler();
-    private GradientDrawable gd = new GradientDrawable();
+    private final GlassFx.Surface gd = new GlassFx.Surface();
     private java.util.List<android.graphics.Bitmap> icons = new java.util.ArrayList<>();
     private Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     public BarView(Context c) { super(c); gd.setCornerRadius(24f); setBackground(gd); }
@@ -718,6 +718,7 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
         this.baseAlpha = alpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
         autoHideHandler.removeCallbacksAndMessages(null);
         gd.setCornerRadius(radius); // [MỚI] Độ bo tròn tuỳ chỉnh từ slider "bar_radius"
+        gd.refresh(prefs);
         if (inv) { gd.setColor(Color.argb(0, 96, 125, 139)); iconAlphaFactor = 0; }
         else if (!autoHide) { gd.setColor(Color.argb(alpha, 96, 125, 139)); iconAlphaFactor = 255; }
         else { gd.setColor(Color.argb(0, 96, 125, 139)); iconAlphaFactor = 255; }
@@ -772,6 +773,7 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
     private class CornerView extends View {
             private Paint pFill, pStroke; private int type; private String prefix;
             private final Path moonPath = new Path(), strokePath = new Path();
+            private final GlassFx.Sheen gfx = new GlassFx.Sheen();
             private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
             private boolean isInv = false;
 
@@ -860,7 +862,11 @@ private static final long CAPTURE_WARMUP_MS = 350; // chờ dialog hệ thống 
                 canvas.drawPath(strokePath, pStroke);
                 float mx = prefs.getInt(ck+"moon_x", 1250) - 1250;
                 float my = prefs.getInt(ck+"moon_y", 1250) - 1250;
-                canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill); canvas.restore();
+                pFill.setColor((pFill.getColor() & 0xFF000000) | (GlassFx.rgb(prefs) & 0xFFFFFF));   // chỉ đổi RGB, giữ nguyên alpha (kéo về 0 vẫn tàng hình)
+canvas.save(); canvas.translate(mx, my); canvas.drawPath(moonPath, pFill);
+int fa = Color.alpha(pFill.getColor());
+if (fa > 0 && GlassFx.on(prefs)) { canvas.clipPath(moonPath); gfx.draw(canvas, tw, th, (float) Math.sqrt(fa / 255f)); }
+canvas.restore();
             }
         }
     private BroadcastReceiver syncReceiver = new BroadcastReceiver() {
@@ -1168,7 +1174,7 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     if (k.equals("applock_list")) { startAppLockPolling(); return; }
     boolean isOurKey = false;
     String[] ourPrefixes =
-    {"lock_","home_","homacc_","anim_","vib_","hold_","notic_",
+    {"lock_","home_","homacc_","anim_","vib_","hold_","notic_","glass_",
      "pack_panel_","lenap_","bubble_",
      "blacklist","locklist","avoid_kbd","shortcut_","preview_","lang_","ytdl_",
      "intent_","tile_","tilev2_","macro_","i1_","i2_","i3_","i4_","i5_","i6_","i7_",
@@ -1176,6 +1182,10 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
     for (String prefix : ourPrefixes)
         if (k.startsWith(prefix) || k.equals(prefix)) { isOurKey = true; break; }
     if (!isOurKey) return;
+    if (k.startsWith("glass_")) {
+    if (panelEngine != null) panelEngine.rebuildAll();
+    if (bubbleEngine != null) bubbleEngine.onPrefChanged(k);
+}
         if (k.startsWith("notic_")) {   // [P8]
         if (k.equals("notic_en")) syncNoticEngine();
         else if (noticEngine != null) noticEngine.relayout();

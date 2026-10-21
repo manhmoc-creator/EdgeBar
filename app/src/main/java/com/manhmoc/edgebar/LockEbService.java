@@ -64,21 +64,20 @@ public class LockEbService extends Service {
     private long unlockGraceUntil = 0;
 private static final long UNLOCK_GRACE_MS = 2500;
 private final Runnable reapplyRunnable = this::applyVisibility;
-
-    // ---------- View ----------
-    private static class BarView extends View {
-        BarView(Context c, int alpha, float radius) {
-            super(c);
-            GradientDrawable gd = new GradientDrawable();
-            gd.setCornerRadius(radius);
-            gd.setColor(Color.argb(alpha, 96, 125, 139));
-            setBackground(gd);
-        }
+BarView(Context c, int alpha, float radius) {
+    super(c);
+    GlassFx.Surface gd = new GlassFx.Surface();
+    gd.refresh(c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE));
+    gd.setCornerRadius(radius);
+    gd.setColor(Color.argb(alpha, 0, 0, 0));
+    setBackground(gd);
+}
     }
 
         private static class CornerView extends View {
         private final Paint pFill = new Paint(Paint.ANTI_ALIAS_FLAG), pStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path moonPath = new Path(), strokePath = new Path(); // [TỐI ƯU] tái dùng
+        private final GlassFx.Sheen gfx = new GlassFx.Sheen();
         private final int type; private final String ck; private final SharedPreferences prefs;
 
         CornerView(Context c, SharedPreferences prefs, int type, String ck, int thick, int moonAlpha, int strokeAlpha) {
@@ -121,10 +120,11 @@ private final Runnable reapplyRunnable = this::applyVisibility;
             else { moonPath.moveTo(mTipX, mRootY); moonPath.lineTo(mRootX, mRootY); moonPath.lineTo(mRootX, mTipY); moonPath.quadTo(mCtrlX, mCtrlY, mTipX, mRootY); }
             moonPath.close();
             canvas.drawPath(strokePath, pStroke);
-            canvas.save();
-            canvas.translate(prefs.getInt(ck+"moon_x", 1250) - 1250, prefs.getInt(ck+"moon_y", 1250) - 1250);
-            canvas.drawPath(moonPath, pFill);
-            canvas.restore();
+            pFill.setColor((pFill.getColor() & 0xFF000000) | (GlassFx.rgb(prefs) & 0xFFFFFF));   // chỉ đổi RGB, giữ nguyên alpha (kéo về 0 vẫn tàng hình)
+canvas.save(); canvas.translate(prefs.getInt(ck+"moon_x", 1250) - 1250, prefs.getInt(ck+"moon_y", 1250) - 1250); canvas.drawPath(moonPath, pFill);
+int fa = Color.alpha(pFill.getColor());
+if (fa > 0 && GlassFx.on(prefs)) { canvas.clipPath(moonPath); gfx.draw(canvas, tw, th, (float) Math.sqrt(fa / 255f)); }
+canvas.restore();
         }
     }
     @Override public IBinder onBind(Intent i) { return null; }

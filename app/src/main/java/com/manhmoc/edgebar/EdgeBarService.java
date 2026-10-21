@@ -178,7 +178,7 @@ private volatile boolean isCapturingIconColorScreenshot = false;
 private volatile long iconColorCaptureStartMs = 0L;
 private static final long ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS = 1500; 
 private static final long ICON_COLOR_EVENT_GATE_MS = 3000;
-private static final long ICON_COLOR_MIN_GAP_MS = 3000;      // MỚI: giãn cách tối thiểu giữa 2 lần takeScreenshot
+private static final long ICON_COLOR_MIN_GAP_MS = 1500;      // MỚI: giãn cách tối thiểu giữa 2 lần takeScreenshot
 
 private static final long ICON_COLOR_INTERVAL_MIN_MS = 400;
 private static final long ICON_COLOR_INTERVAL_MAX_MS = 5000;
@@ -218,6 +218,13 @@ private void doSampleIconColors(boolean isFollowUp) {
     if (isCapturingIconColorScreenshot) {
         if (System.currentTimeMillis() - iconColorCaptureStartMs > ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS)
             isCapturingIconColorScreenshot = false;
+if (!isFollowUp && !iconColorFollowUpPending) {
+    iconColorFollowUpPending = true;
+    iconColorHandler.postDelayed(() -> {
+        iconColorFollowUpPending = false;
+        doSampleIconColors(true);
+    }, 400);
+}
         else return;
     }
     final java.util.List<Object[]> lockJobs = buildColorSampleJobs("lock_");
@@ -380,7 +387,7 @@ private static final java.util.Set<String> EB_KEY_PREFIXES =
         "blacklist","avoid_kbd","shortcut_","preview_",
         "lang_","ytdl_","intent_","tile_","tilev2_","macro_",
         // (Preview Handle, Enable, slider...) ngay từ vòng lọc whitelist.
-        "pack_panel_","lenap_","bubble_","sensor_","texture_","volkey_","applock_","recents_","notic_",
+        "pack_panel_","lenap_","bubble_","sensor_","texture_","volkey_","applock_","recents_","notic_","glass_",
         "i1_","i2_","i3_","i4_","i5_","i6_","i7_","i8_",
         "i9_","i10_","i11_","i12_","i13_","i14_","i15_"
     ));
@@ -447,6 +454,10 @@ private SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, k)
         else if ((AccessibleHomeService.isRunning || prefs.getBoolean("preview_home", false)) && isHomaccDrawn) scheduleHomeGeo();
         return;
     }
+        if (k.startsWith("glass_")) {   // không return: rơi xuống updateVisibility() để Bar/Corner nạp lại kiểu glass
+    if (panelEngine != null) panelEngine.rebuildAll();
+    if (bubbleEngine != null) bubbleEngine.onPrefChanged(k);
+}
         if (k.startsWith("notic_")) {
         if (noticEngine != null) noticEngine.relayout();
         return;
@@ -1024,12 +1035,13 @@ iconPaint.setAlpha((int) (jumpAlpha * jAlpha));
         private int baseAlpha, hideDelay;
         private boolean isAutoHiding = false, isInv = false;
         private Handler autoHideHandler = new Handler();
-        private GradientDrawable gd = new GradientDrawable();
+        private final GlassFx.Surface gd = new GlassFx.Surface();
         public BarView(Context c) { super(c); gd.setCornerRadius(24f); setBackground(gd); }
         public void updateProps(int alpha, boolean autoHide, int delay, boolean inv, float radius) {
             this.baseAlpha = alpha; this.isAutoHiding = autoHide; this.hideDelay = delay; this.isInv = inv;
             autoHideHandler.removeCallbacksAndMessages(null);
             gd.setCornerRadius(radius);
+            gd.refresh(prefs);
             gd.setColor(Color.argb((inv || autoHide) ? 0 : alpha, 96, 125, 139));
             invalidate();
         }
@@ -1196,7 +1208,9 @@ private boolean needBouncerTracking() {
             private Handler autoHideHandler = new Handler(); private boolean isAutoHiding = false; private int baseMoonAlpha, baseStrokeAlpha, hideDelay;
             private boolean isInv = false;
 
-                     private final Path moonPath = new Path(), strokePath = new Path();             public CornerView(Context c, int type, String prefix) {  
+                     private final Path moonPath = new Path(), strokePath = new Path();
+                     private final GlassFx.Sheen gfx = new GlassFx.Sheen();
+                public CornerView(Context c, int type, String prefix) {  
                 super(c); this.type = type; this.prefix = prefix; 
                 setLayerType(LAYER_TYPE_HARDWARE, null);
                 pFill = new Paint(); pFill.setStyle(Paint.Style.FILL); pFill.setAntiAlias(true); 
@@ -1456,12 +1470,6 @@ if ((eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         lastLockCheckMs = nowMs;
         checkAppLock(pName);
     }
-   // [MỚI] Blacklist tại Lock — phát hiện app Blacklist mở khi đang khoá máy
-// thì tạm thu hồi Trợ năng (case Viettel Tammi).
-// MỚI
-// [TỐI ƯU] Bỏ qua ngay nếu vẫn là app y hệt lần kiểm tra trước — WINDOWS_CHANGED
-// có thể bắn liên tục cho cùng 1 app đang mở, tránh split(",")+contains() lặp
-// vô ích trên mỗi sự kiện đó (đỡ CPU/pin, đặc biệt lúc dồn sự kiện vì cuộc gọi).
 if (km != null && km.isKeyguardLocked()
     && prefs.getBoolean("blacklist_lock_revoke_acc_en", false)
     && !isBlacklistLockReallyActive()
@@ -1523,6 +1531,7 @@ if (HomescreenService.isRunning) {
 
 if (!stateChanged) return;
     lastEventPkg = pName;
+    if (noticEngine != null) noticEngine.setForegroundPkg(pName);
     lastIsKbd_cache = newIsKbd;
     lastIsBl_cache = newIsBl;
 
@@ -1812,14 +1821,6 @@ private void triggerBlacklistAutoHomeb() {
         HomeEngineManager.turnOnHomeb(this); // đã tự tắt Trợ năng bên trong — KHÔNG ghi lại lần 2
     } catch (Exception ignored) {}
 }
-
-// [FIX BADTOKEN + TỐI ƯU PIXEL 2XL] Dialog gọi từ Context của AccessibilityService
-    // KHÔNG có Activity window token — .show() trực tiếp sẽ ném BadTokenException âm
-    // thầm (bị nuốt bởi try-catch của exec()). Ép window type sang loại Overlay hệ
-    // thống (TYPE_ACCESSIBILITY_OVERLAY vì đây là AccessibilityService) để dialog vẽ
-    // được mà không cần token Activity nào — đây là dialog TẠM (chỉ tồn tại lúc user
-    // đang chọn tùy chọn ghi), Zero RAM dư thừa vì object bị GC thu hồi ngay khi dismiss,
-    // không giữ reference nào ở field cấp class.
     private void showScreenRecordOptionsThenCapture() {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -2002,6 +2003,11 @@ private void triggerBlacklistAutoHomeb() {
                 case "TRIGGER_LEFT_HOLD": case "TRIGGER_RIGHT_HOLD": case "TRIGGER_DIAG_HOLD":
                     dispatchRealScreenGesture(a);
                     break;
+                    case "PREV_APP": {   // UX: bấm Đa nhiệm 2 lần liên tiếp = nhảy về app ngay trước (hành vi chuẩn của launcher Pixel)
+    performGlobalAction(GLOBAL_ACTION_RECENTS);
+    new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> performGlobalAction(GLOBAL_ACTION_RECENTS), 220);
+    break;
+}
                 case "TRIGGER_ACC_MENU_2F":
                     dispatchTwoFingerAccMenuGesture();
                     break;

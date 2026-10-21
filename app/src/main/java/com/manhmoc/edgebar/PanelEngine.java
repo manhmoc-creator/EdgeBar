@@ -403,10 +403,11 @@ liveUpdateCosmetic(id);
             int size = prefs.getInt(px + "size", 700);
             int iconSize = prefs.getInt(px + "icon_size", 110);
 
-            GradientDrawable pgd = new GradientDrawable();
-            pgd.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
-            pgd.setStroke(4, Color.argb(180, Color.red(color), Color.green(color), Color.blue(color)));
-            pgd.setCornerRadius(panelR);
+            GlassFx.Surface pgd = new GlassFx.Surface(color);
+pgd.refresh(prefs); pgd.setGlassRgb(color);   // Panel dùng màu riêng của Data Pack cả khi glass
+pgd.setColor(Color.argb(alpha, 0, 0, 0));
+pgd.setStroke(4, Color.argb(180, Color.red(color), Color.green(color), Color.blue(color)));
+pgd.setCornerRadius(panelR);
             panel.setBackground(pgd);
 
             int cols = Math.max(1, prefs.getInt(px + "cols", 4));
@@ -442,6 +443,7 @@ private String computeSignature(String id) {
     String px = "pack_panel_" + id + "_";
     Boolean forceTest = forceTestOn.get(id);
     return prefs.getBoolean(px+"en", false) + "|" + prefs.getInt(px+"vis", 0) + "|"
+        + prefs.getBoolean("glass_on", false) + "|"
         + prefs.getInt(px+"pos", 0) + "|" + prefs.getInt(px+"color_idx", 0) + "|"
         + prefs.getInt(px+"size", 700) + "|" + prefs.getInt(px+"thick", 40) + "|"
         + prefs.getInt(px+"alpha", 200) + "|" + prefs.getInt(px+"handle_alpha", 255) + "|"
@@ -536,10 +538,11 @@ private void buildPanelBody(String id) {
     LinearLayout panel = new LinearLayout(ctx);
 panel.setOrientation(LinearLayout.VERTICAL);
 panel.setGravity(Gravity.CENTER);
-GradientDrawable pgd = new GradientDrawable();
-    pgd.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
-    pgd.setStroke(4, Color.argb(180, Color.red(color), Color.green(color), Color.blue(color)));
-    pgd.setCornerRadius(panelR);
+GlassFx.Surface pgd = new GlassFx.Surface(color);
+pgd.refresh(prefs); pgd.setGlassRgb(color);   // Panel dùng màu riêng của Data Pack cả khi glass
+pgd.setColor(Color.argb(alpha, 0, 0, 0));
+pgd.setStroke(4, Color.argb(180, Color.red(color), Color.green(color), Color.blue(color)));
+pgd.setCornerRadius(panelR);
     panel.setBackground(pgd);
     panel.setVisibility(View.GONE);
 
