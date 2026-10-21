@@ -142,7 +142,7 @@ private void resetNoticBarDrawers() { barDrawerCnt = 0; syncNoticSuppress(); }
     private java.util.Set<String> frontierSelectedItems = new java.util.LinkedHashSet<>();
 private boolean prulesSelectMode = false;
 private java.util.Set<String> prulesSelectedItems = new java.util.LinkedHashSet<>();
-    private final String CURRENT_VERSION = "🕸️ 19.12.3.6.44";
+    private final String CURRENT_VERSION = "🧊 19.12.3.6.44";
     private RelativeLayout rootLayout;
     private Button btnDeviceAdmin;
     private Button btnWriteSettings; // MỚI
@@ -3851,103 +3851,119 @@ final ActBlob blobB = loadBlob(srcId + "B");
 final boolean[] andOn = { !srcId.isEmpty() && prefs.getBoolean("prule_" + srcId + "_and", false) };
 final LinearLayout actHost = new LinearLayout(this);
 actHost.setOrientation(LinearLayout.VERTICAL);
-// Thêm actHost vào content (hoặc root) – biến đã có sẵn trong hàm
-content.addView(actHost);   // hoặc root.addView(actHost);
-final Runnable[] renderAct = new Runnable[1];
-renderAct[0] = () -> {
-    actHost.removeAllViews();
-    if (!andOn[0]) {
-        actHost.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG"));
-        // giữ thẻ ở chế độ chung -> tách AND (trái/phải), mỗi nửa là bản sao của action hiện tại
-        Runnable splitAnd = single.or ? null : () -> {
-            blobCopy(single, blobA); blobCopy(single, blobB);
-            andOn[0] = true; renderAct[0].run();
+// Thêm actHost v        // UX: Khởi tạo vTrig và vAct trước để tránh lỗi scope "cannot find symbol"
+        final LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
+        final LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
+
+        // UX: Setup actHost nằm TRONG vAct để nó chỉ hiện khi chọn tab Action, không hiện ở Trigger
+        final LinearLayout actHost = new LinearLayout(this);
+        actHost.setOrientation(LinearLayout.VERTICAL);
+        vAct.addView(actHost); 
+        
+        final Runnable[] renderAct = new Runnable[1];
+        renderAct[0] = () -> {
+            actHost.removeAllViews();
+            if (!andOn[0]) {
+                actHost.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG"));
+                Runnable splitAnd = single.or ? null : () -> {
+                    blobCopy(single, blobA); blobCopy(single, blobB);
+                    andOn[0] = true; renderAct[0].run();
+                };
+                actHost.addView(buildBlobView(single, "Data Pack Action", renderAct[0], splitAnd));
+            } else {
+                actHost.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (TRÁI AND PHẢI)"));
+                LinearLayout andRow = new LinearLayout(this);
+                andRow.setOrientation(LinearLayout.HORIZONTAL);
+                andRow.setGravity(Gravity.CENTER_VERTICAL);
+                View left = buildBlobView(blobA, "⬅ Trái/Đỉnh", renderAct[0], () -> showBlobHalfOptions(blobA, renderAct[0]));
+                View right = buildBlobView(blobB, "Phải/Đáy ➡", renderAct[0], () -> showBlobHalfOptions(blobB, renderAct[0]));
+                left.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+                right.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+                andRow.addView(left);
+                andRow.addView(buildAndBridge(() -> { 
+                    blobCopy(blobA, single); andOn[0] = false; renderAct[0].run();
+                }));
+                andRow.addView(right);
+                actHost.addView(andRow);
+            }
         };
-        actHost.addView(buildBlobView(single, "Data Pack Action", renderAct[0], splitAnd));
-    } else {
-        actHost.addView(createSectionTitle("2. CHỌN HÀNH ĐỘNG (TRÁI AND PHẢI)"));
-        LinearLayout andRow = new LinearLayout(this);
-        andRow.setOrientation(LinearLayout.HORIZONTAL);
-        andRow.setGravity(Gravity.CENTER_VERTICAL);
-        View left = buildBlobView(blobA, "⬅ Trái/Đỉnh", renderAct[0], () -> showBlobHalfOptions(blobA, renderAct[0]));
-        View right = buildBlobView(blobB, "Phải/Đáy ➡", renderAct[0], () -> showBlobHalfOptions(blobB, renderAct[0]));
-        left.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        right.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        andRow.addView(left);
-        andRow.addView(buildAndBridge(() -> {            // nhấn giữ AND = gộp, giữ nửa trái
-            blobCopy(blobA, single); andOn[0] = false; renderAct[0].run();
-        }));
-        andRow.addView(right);
-        actHost.addView(andRow);
-    }
-};
-renderAct[0].run();
-LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
-    ArrayList<CheckBox> gestureBoxes = new ArrayList<>();
-    String savedGestures = sourceId != null ? prefs.getString("prule_" + sourceId + "_gestures", "") : "";
-    int safeLimit = Math.min(C_GESTURES.length, C_GESTURE_NAMES.length);
-    
-    LinearLayout gestureContainer = new LinearLayout(this);
-    gestureContainer.setOrientation(LinearLayout.VERTICAL);
-    gestureContainer.setPadding(20, 10, 20, 20);
-    
-    for (int i = 0; i < safeLimit; i++) {
-        CheckBox cb = new CheckBox(this);
-        cb.setText(C_GESTURE_NAMES[i]);
-        cb.setTextColor(Color.WHITE);
-        cb.setPadding(0, 20, 0, 20);
-        cb.setChecked(("," + savedGestures + ",").contains("," + C_GESTURES[i] + ","));
-        gestureBoxes.add(cb);
-        gestureContainer.addView(cb);
-    }
-    vTrig.addView(createDrawer("1. CHỌN CỬ CHỈ (OR LOGIC)", gestureContainer));
-    LinearLayout vAct = new LinearLayout(this); vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
-    TextView tvOpt = new TextView(this);
-    tvOpt.setText(T("2. CHOOSE OPTIONS", "2. CHỌN TÙY CHỌN"));
-    tvOpt.setTextColor(Color.parseColor("#E91E63"));
-    tvOpt.setPadding(30, 30, 30, 30);
-    tvOpt.setTextSize(16);
-    tvOpt.setBackground(getRounded("#222222", 20f));
-    LinearLayout.LayoutParams optLp = new LinearLayout.LayoutParams(-1, -2);
-    optLp.setMargins(0, 20, 0, 10);
-    tvOpt.setLayoutParams(optLp);
-    vTrig.addView(tvOpt);
-    CheckBox cbJump = new CheckBox(this);
-    cbJump.setText("Icon Jump (Icon nhảy khi kích hoạt)");
-    cbJump.setTextColor(Color.WHITE);
-    cbJump.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_jump_on", true));
-    vTrig.addView(cbJump);
-    CheckBox cbVib = new CheckBox(this);
-    cbVib.setText("Bật Rung (Haptic Feedback)");
-    cbVib.setTextColor(Color.WHITE);
-    cbVib.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_vib", true));
-    vTrig.addView(cbVib);
+        renderAct[0].run();
+
+        // UX: Setup tab Trigger (chỉ chứa component, cử chỉ và tuỳ chọn rung/âm)
+        ArrayList<CheckBox> gestureBoxes = new ArrayList<>();
+        String savedGestures = sourceId != null ? prefs.getString("prule_" + sourceId + "_gestures", "") : "";
+        int safeLimit = Math.min(C_GESTURES.length, C_GESTURE_NAMES.length);
+        
+        LinearLayout gestureContainer = new LinearLayout(this);
+        gestureContainer.setOrientation(LinearLayout.VERTICAL);
+        gestureContainer.setPadding(20, 10, 20, 20);
+        
+        for (int i = 0; i < safeLimit; i++) {
+            CheckBox cb = new CheckBox(this);
+            cb.setText(C_GESTURE_NAMES[i]);
+            cb.setTextColor(Color.WHITE);
+            cb.setPadding(0, 20, 0, 20);
+            cb.setChecked(("," + savedGestures + ",").contains("," + C_GESTURES[i] + ","));
+            gestureBoxes.add(cb);
+            gestureContainer.addView(cb);
+        }
+        vTrig.addView(createDrawer("1. CHỌN CỬ CHỈ (OR LOGIC)", gestureContainer));
+        
+        TextView tvOpt = new TextView(this);
+        tvOpt.setText(T("2. CHOOSE OPTIONS", "2. CHỌN TÙY CHỌN"));
+        tvOpt.setTextColor(Color.parseColor("#E91E63"));
+        tvOpt.setPadding(30, 30, 30, 30);
+        tvOpt.setTextSize(16);
+        tvOpt.setBackground(getRounded("#222222", 20f));
+        LinearLayout.LayoutParams optLp = new LinearLayout.LayoutParams(-1, -2);
+        optLp.setMargins(0, 20, 0, 10);
+        tvOpt.setLayoutParams(optLp);
+        vTrig.addView(tvOpt);
+        
+        CheckBox cbJump = new CheckBox(this);
+        cbJump.setText("Icon Jump (Icon nhảy khi kích hoạt)");
+        cbJump.setTextColor(Color.WHITE);
+        cbJump.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_jump_on", true));
+        vTrig.addView(cbJump);
+        
+        CheckBox cbVib = new CheckBox(this);
+        cbVib.setText("Bật Rung (Haptic Feedback)");
+        cbVib.setTextColor(Color.WHITE);
+        cbVib.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_vib", true));
+        vTrig.addView(cbVib);
+        
         CheckBox cbSnd = new CheckBox(this);
-    cbSnd.setText(T("Touch Sound", "Âm chạm (Touch Sound)"));
-    cbSnd.setTextColor(Color.WHITE);
-    cbSnd.setChecked(sourceId != null && prefs.getBoolean("prule_" + sourceId + "_snd", false));
-    vTrig.addView(cbSnd);
-    CheckBox cbAnim = new CheckBox(this);
-    cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)");
-    cbAnim.setTextColor(Color.WHITE);
-    cbAnim.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_anim", true));
-    vTrig.addView(cbAnim);
-CheckBox cbOs = new CheckBox(this);
-cbOs.setText("Ẩn Overlay Này (Tạm thời)");
-cbOs.setTextColor(Color.parseColor("#FFC107"));
-cbOs.setChecked(sourceId != null && prefs.getBoolean("prule_" + sourceId + "_os", false));
-vTrig.addView(cbOs);
-    content.addView(vTrig); content.addView(vAct);
-    View.OnClickListener tabClick = v -> {
-        bTrig.setBackground(getRounded(v==bTrig?"#8AB4F8":"#222222", 15f));
-        bTrig.setTextColor(v==bTrig?Color.BLACK:Color.WHITE);
-        bAct.setBackground(getRounded(v==bAct?"#8AB4F8":"#222222", 15f));
-        bAct.setTextColor(v==bAct?Color.BLACK:Color.WHITE);
-        vTrig.setVisibility(v==bTrig?View.VISIBLE:View.GONE);
-        vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE);
-    };
-    bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick);
-    bTrig.performClick();
+        cbSnd.setText(T("Touch Sound", "Âm chạm (Touch Sound)"));
+        cbSnd.setTextColor(Color.WHITE);
+        cbSnd.setChecked(sourceId != null && prefs.getBoolean("prule_" + sourceId + "_snd", false));
+        vTrig.addView(cbSnd);
+        
+        CheckBox cbAnim = new CheckBox(this);
+        cbAnim.setText("Bật Hiệu ứng Ánh sáng (Animation)");
+        cbAnim.setTextColor(Color.WHITE);
+        cbAnim.setChecked(sourceId == null || prefs.getBoolean("prule_" + sourceId + "_anim", true));
+        vTrig.addView(cbAnim);
+        
+        CheckBox cbOs = new CheckBox(this);
+        cbOs.setText("Ẩn Overlay Này (Tạm thời)");
+        cbOs.setTextColor(Color.parseColor("#FFC107"));
+        cbOs.setChecked(sourceId != null && prefs.getBoolean("prule_" + sourceId + "_os", false));
+        vTrig.addView(cbOs);
+
+        // UX: Add cả 2 vào content, ẩn/hiện bằng View.GONE/VISIBLE để tối ưu RAM
+        content.addView(vTrig); 
+        content.addView(vAct);
+
+        View.OnClickListener tabClick = v -> {
+            bTrig.setBackground(getRounded(v==bTrig?"#8AB4F8":"#222222", 15f));
+            bTrig.setTextColor(v==bTrig?Color.BLACK:Color.WHITE);
+            bAct.setBackground(getRounded(v==bAct?"#8AB4F8":"#222222", 15f));
+            bAct.setTextColor(v==bAct?Color.BLACK:Color.WHITE);
+            vTrig.setVisibility(v==bTrig?View.VISIBLE:View.GONE);
+            vAct.setVisibility(v==bAct?View.VISIBLE:View.GONE);
+        };
+        bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick);
+        bTrig.performClick();
     LinearLayout footer = new LinearLayout(this);
     footer.setOrientation(LinearLayout.HORIZONTAL);
     footer.setPadding(0, 20, 0, 0);
