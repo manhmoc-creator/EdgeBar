@@ -327,8 +327,8 @@ private boolean isLeftMember(String m){ return m.equals("l")||m.equals("t_l")||m
         if (prefs.getBoolean(key + "_snd", false)) TouchSoundHelper.play(this, prefs);
         for (String a : action.split(",")) {
             String at = a.trim();
-            if (at.equals("LAUNCH_APP")) launchPkg(prefs.getString(key + "_launch_pkg", ""));
-            else if (at.equals("RUN_SHORTCUT")) runShortcut(prefs.getString(key + "_shortcut_id", ""));
+            if (at.equals("LAUNCH_APP")) launchPkg(prefs.getString(rk + "_launch_pkg", ""));
+            else if (at.equals("RUN_SHORTCUT")) runShortcut(prefs.getString(rk + "_shortcut_id", ""));
             else exec(at);
         }
     }
@@ -454,8 +454,8 @@ private boolean isLeftMember(String m){ return m.equals("l")||m.equals("t_l")||m
                     break;
                 }
                 case "HIDE_SOME_OVERLAY": {
-                    String t = prefs.getString("lock_bar_hide_targets", "") + "," + prefs.getString("lock_corner_hide_targets", "");
-                    for (String s : t.split(",")) { String x = s.trim(); if (!x.isEmpty()) hiddenKeys.add(x); }
+                    for (String b : BARS) if (readOrInt("lock_", b, true, "bl", "_hide", 0) == 1) hiddenKeys.add(b);
+                    for (String cn : CORNERS) if (readOrInt("lock_", cn, false, "bl", "hide", 0) == 1) hiddenKeys.add("corner_" + cn);
                     applyVisibility(); break;
                 }
                 case "SHOW_ALL_OVERLAY": hiddenKeys.clear(); applyVisibility(); break;

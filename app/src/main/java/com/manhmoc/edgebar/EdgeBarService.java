@@ -178,20 +178,18 @@ private volatile boolean isCapturingIconColorScreenshot = false;
 private volatile long iconColorCaptureStartMs = 0L;
 private static final long ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS = 1500; 
 private static final long ICON_COLOR_EVENT_GATE_MS = 3000;
-private static final long ICON_COLOR_MIN_GAP_MS = 1500;      // MỚI: giãn cách tối thiểu giữa 2 lần takeScreenshot
+private static final long ICON_COLOR_MIN_GAP_MS =750;      // MỚI: giãn cách tối thiểu giữa 2 lần takeScreenshot
 
 private static final long ICON_COLOR_INTERVAL_MIN_MS = 400;
 private static final long ICON_COLOR_INTERVAL_MAX_MS = 5000;
 private long iconColorCurrentIntervalMs = ICON_COLOR_INTERVAL_MIN_MS;
-private boolean iconColorFollowUpPending = false;
 private static final int ICON_COLOR_LIGHT_THRESHOLD = 175;
 private static final int ICON_COLOR_HYSTERESIS = 15; // chống nhấp nháy quanh ngưỡng
 private final java.util.Map<String, Integer> lastBarTintState = new java.util.HashMap<>(); // 1=đen,0=trắng
 private Bitmap fallbackFullCopy = null;
-
+private final int[] lumBuf = new int[64]; // chỉ dùng trên iconColorExecutor (1 thread) nên không cần đồng bộ
 private boolean isAutoColorOff(String prefix, String barKey) {
-    String off = prefs.getString(prefix + "bar_auto_icon_color_off", "");
-    return ("," + off + ",").contains("," + barKey + ",");
+    return prefs.getInt(prefix + barKey + "_autocol", 0) != 1; // UX: mặc định tắt -> không tốn pin nếu chưa bật
 }
 private boolean anyAutoColorLayer() {
     for (java.util.Map.Entry<String, IconLayerView> e : iconLayers.entrySet()) {
@@ -206,25 +204,21 @@ private void requestIconColorSampleLight() {
     if (iconLayers.isEmpty() || !anyAutoColorLayer()) return;
     doSampleIconColors(true);
 }
+private final Runnable colorSampleRun = () -> doSampleIconColors(false);
 private void requestIconColorSample() {
-    if (iconLayers.isEmpty() || !anyAutoColorLayer()) return; // không bar nào có icon -> zero cost
-    doSampleIconColors(false);
+    if (iconLayers.isEmpty() || !anyAutoColorLayer()) return;
+    iconColorHandler.removeCallbacks(colorSampleRun);
+    iconColorHandler.postDelayed(colorSampleRun, 350);   // UX: chờ animation mở app xong mới chụp, tránh chụp trúng khung chuyển cảnh
+    iconColorHandler.postDelayed(colorSampleRun, 1100);  // soát lại cho nền load chậm
 }
 private void doSampleIconColors(boolean isFollowUp) {
     if (Build.VERSION.SDK_INT < 30) return;
-    if (MyPlaylistService.isRunning || VoiceRecorderService.isRunning || ScreenRecorderService.isRunning) return;
+        if (VoiceRecorderService.isRunning || ScreenRecorderService.isRunning) return; // bỏ MyPlaylistService: nghe nhạc không được chặn đổi màu
     android.os.PowerManager pmSample = (android.os.PowerManager) getSystemService(POWER_SERVICE);
     if (pmSample != null && !pmSample.isInteractive()) return;
     if (isCapturingIconColorScreenshot) {
         if (System.currentTimeMillis() - iconColorCaptureStartMs > ICON_COLOR_CAPTURE_STUCK_TIMEOUT_MS)
             isCapturingIconColorScreenshot = false;
-if (!isFollowUp && !iconColorFollowUpPending) {
-    iconColorFollowUpPending = true;
-    iconColorHandler.postDelayed(() -> {
-        iconColorFollowUpPending = false;
-        doSampleIconColors(true);
-    }, 400);
-}
         else return;
     }
     final java.util.List<Object[]> lockJobs = buildColorSampleJobs("lock_");
@@ -352,18 +346,19 @@ private int sampleRegionLuminance(Bitmap screenHw, int x, int y, int rw, int rh)
         } catch (Exception ignored2) { return -1; }
     }
     if (crop == null) return -1;
-    long sum = 0; int count = 0;
-    int stepX = Math.max(1, rw / 8), stepY = Math.max(1, rh / 8);
+    int count = 0;
+    int stepX = Math.max(1, (rw + 7) / 8), stepY = Math.max(1, (rh + 7) / 8); // tối đa 8x8 = 64 mẫu
     for (int py = 0; py < rh; py += stepY) {
         for (int px = 0; px < rw; px += stepX) {
             int pixel = crop.getPixel(px, py);
             int r = (pixel >> 16) & 0xFF, g = (pixel >> 8) & 0xFF, b = pixel & 0xFF;
-            sum += (r * 299 + g * 587 + b * 114) / 1000;
-            count++;
+            lumBuf[count++] = (r * 299 + g * 587 + b * 114) / 1000;
         }
     }
     if (crop != fallbackFullCopy) crop.recycle();
-    return count == 0 ? -1 : (int) (sum / count);
+    if (count == 0) return -1;
+    java.util.Arrays.sort(lumBuf, 0, count);
+    return lumBuf[count / 2]; // UX: median bỏ qua pixel của chính icon trên bar (trắng/đen) -> hết nhấp nháy quanh ngưỡng
 }
 private boolean lastAccHomeRunningState = false;
 private long lastHomaccUpdateMs = 0;
@@ -1179,6 +1174,7 @@ private boolean needBouncerTracking() {
         }
         lp.width = barLp.width; lp.height = barLp.height; lp.x = barLp.x; lp.y = barLp.y; lp.gravity = barLp.gravity;
         layer.setIcons(bmps, iconAlpha);
+        if (isAutoColorOff(prefix, BARS[i])) { layer.setTint(Color.WHITE); lastBarTintState.remove(key); } // UX: chuyển về "Luôn trắng" thì trả màu ngay
         if (isNew) {
             try { wm.addView(layer, lp); iconLayers.put(key, layer); } catch (Exception ignored) { return; }
         } else {
@@ -1412,6 +1408,7 @@ try {
 refreshFingerprintRegistration();
 lastAppliedEventMask = -1;
 refreshEventSubscription();
+requestIconColorSample(); // UX: bật Auto trong Data Pack lúc đang ở app thì đổi màu ngay
     } // <-- ĐÂY MỚI LÀ DẤU ĐÓNG ĐÚNG CỦA onServiceConnected()
 @Override
 public void onInterrupt() {
@@ -2339,42 +2336,27 @@ private void dispatchTwoFingerAccMenuGesture() {
     }, null);
 }
 private void hideSomeOverlay(String key) {
-        String prefix = key.startsWith("home_") ? "home_" : "lock_";
-        String targetsBar = prefs.getString(prefix + "bar_hide_targets", "");
-        String targetsCorner = prefs.getString(prefix + "corner_hide_targets", "");
-        String targets = targetsBar + (targetsBar.isEmpty() || targetsCorner.isEmpty() ? "" : ",") + targetsCorner;
-        
-        if (targets.isEmpty()) return;
-        boolean isHomacc = prefix.equals("home_");
-        View[] barArr = isHomacc ? accHomeBars : bars;
-        View[] cornerArr = isHomacc ? accHomeCorners : corners;
-        SharedPreferences.Editor ed = prefs.edit();
-        boolean changed = false;
-        for (String t : targets.split(",")) {
-            String tt = t.trim();
-            if (tt.isEmpty()) continue;
-                        // Nếu target là member A của cặp → ẩn luôn cả 2 bên cùng lúc
-            String pairId = TwinPairStore.findPairOf(tt, !(tt.startsWith("corner_") || tt.equals("tl")||tt.equals("tr")||tt.equals("bl")||tt.equals("br")));
-            if (pairId != null) {
-                boolean isBar = pairId.startsWith("barPair_");
-                String[] ms = TwinPairStore.getMembers(pairId, isBar);
-                for (String m : ms) {
-                    String mid = isBar ? m : ("corner_" + m);
-                    String k = prefix + mid + "_manual_hide";
-                    if (!prefs.getBoolean(k, false)) { ed.putBoolean(k, true); changed = true; }
-                    if (isBar) {
-                        int idx = java.util.Arrays.asList(BARS).indexOf(m);
-                        if (idx >= 0 && barArr[idx] != null) barArr[idx].setVisibility(View.GONE);
-                        setIconLayerShown(prefix + m, false);
-                    } else {
-                        int idx = java.util.Arrays.asList(CORNERS).indexOf(m);
-                        if (idx >= 0 && cornerArr[idx] != null) cornerArr[idx].setVisibility(View.GONE);
-                    }
-                }
-            }
-        }
-        if (changed) ed.apply();
+    String prefix = key.startsWith("home_") ? "home_" : "lock_";
+    boolean isHomacc = prefix.equals("home_");
+    View[] barArr = isHomacc ? accHomeBars : bars;
+    View[] cornerArr = isHomacc ? accHomeCorners : corners;
+    SharedPreferences.Editor ed = prefs.edit();
+    boolean changed = false;
+    for (int i = 0; i < 12; i++) {
+        if (prefs.getInt(prefix + BARS[i] + "_hide", 0) != 1) continue;
+        String k = prefix + BARS[i] + "_manual_hide";
+        if (!prefs.getBoolean(k, false)) { ed.putBoolean(k, true); changed = true; }
+        if (barArr[i] != null) barArr[i].setVisibility(View.GONE);
+        setIconLayerShown(prefix + BARS[i], false);
     }
+    for (int i = 0; i < 4; i++) {
+        if (prefs.getInt(prefix + "corner_" + CORNERS[i] + "_hide", 0) != 1) continue;
+        String k = prefix + "corner_" + CORNERS[i] + "_manual_hide";
+        if (!prefs.getBoolean(k, false)) { ed.putBoolean(k, true); changed = true; }
+        if (cornerArr[i] != null) cornerArr[i].setVisibility(View.GONE);
+    }
+    if (changed) ed.apply();
+}
     private void showAllOverlay(String key) {
         // [MỚI] Hồi sinh hoàn toàn: Hủy mọi cờ xuyên thấu/giả lập đang kẹt
         isDispatchingSyntheticGesture = false;
@@ -2929,7 +2911,8 @@ if (key != null && key.startsWith("homacc_")
     String fallback = "home_" + key.substring("homacc_".length());
     if (!prefs.getString(fallback, "NONE").equals("NONE")) key = fallback;
 }
-        String action = prefs.getString(key, "NONE");
+        final String rk = prefs.getBoolean(key + "_dual", false) ? key + "_lim" : key;
+String action = prefs.getString(rk, "NONE");
         boolean isOn = prefs.getBoolean(key + "_on", true);
         android.util.Log.d("EdgeBar_Gesture",
             "handleAction key=" + key + " action=" + action + " isOn=" + isOn);

@@ -1537,34 +1537,23 @@ String readKey = isDual ? (key + "_lim") : key;
             } else exec(at);
         }
     }
-    // [MỚI] Homeb chỉ có đúng 1 không gian "home_" nên không cần suy luận prefix.
-            private void hideSomeOverlay(String key) {
-        String targetsBar = prefs.getString("home_bar_hide_targets", "");
-        String targetsCorner = prefs.getString("home_corner_hide_targets", "");
-        String targets = targetsBar + (targetsBar.isEmpty() || targetsCorner.isEmpty() ? "" : ",") + targetsCorner;
-        
-        if (targets.isEmpty()) return;
-        // [TỐI ƯU] Ẩn TRỰC TIẾP đúng view, không gọi lại updateVisibility() toàn bộ.
-        boolean changed = false;
-        SharedPreferences.Editor ed = prefs.edit();
-        for (String t : targets.split(",")) {
-            String tt = t.trim();
-            if (tt.isEmpty()) continue;
-            boolean isCorner = tt.equals("br") || tt.equals("bl") || tt.equals("tr") || tt.equals("tl");
-            String mid = isCorner ? "corner_" + tt : tt;
-            String k = "home_" + mid + "_manual_hide";
-            if (!prefs.getBoolean(k, false)) { ed.putBoolean(k, true); changed = true; }
-            if (isCorner) {
-                int idx = java.util.Arrays.asList(CORNERS).indexOf(tt);
-                if (idx >= 0 && corners[idx] != null) corners[idx].setVisibility(View.GONE);
-            } else {
-                int idx = java.util.Arrays.asList(BARS).indexOf(tt);
-                if (idx >= 0 && bars[idx] != null) bars[idx].setVisibility(View.GONE);
-            }
-        }
-        if (changed) ed.apply();
+    private void hideSomeOverlay(String key) {
+    boolean changed = false;
+    SharedPreferences.Editor ed = prefs.edit();
+    for (int i = 0; i < Math.min(bars.length, BARS.length); i++) {
+        if (prefs.getInt("home_" + BARS[i] + "_hide", 0) != 1) continue;
+        String k = "home_" + BARS[i] + "_manual_hide";
+        if (!prefs.getBoolean(k, false)) { ed.putBoolean(k, true); changed = true; }
+        if (bars[i] != null) bars[i].setVisibility(View.GONE);
     }
-    // [MỚI] Homeb chỉ có đúng 1 không gian ("home_") nên không cần suy luận prefix.
+    for (int i = 0; i < Math.min(corners.length, CORNERS.length); i++) {
+        if (prefs.getInt("home_corner_" + CORNERS[i] + "_hide", 0) != 1) continue;
+        String k = "home_corner_" + CORNERS[i] + "_manual_hide";
+        if (!prefs.getBoolean(k, false)) { ed.putBoolean(k, true); changed = true; }
+        if (corners[i] != null) corners[i].setVisibility(View.GONE);
+    }
+    if (changed) ed.apply();
+}
     private void showAllOverlay() {
         boolean changed = false;
         SharedPreferences.Editor ed = prefs.edit();

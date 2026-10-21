@@ -906,18 +906,7 @@ int effectiveIconSize = Math.round(iconSize * prefs.getInt("bubble_node_icon_pct
 LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
 iconBox.setLayoutParams(ibLp);
 
-        int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
-        GradientDrawable boxBg = new GradientDrawable();
-        boxBg.setCornerRadius(100f); 
-        // [MỚI] Nền TRẮNG cho node chưa-chọn (khớp App Shortcut). Node đang chọn giữ
-        // highlight xanh #8AB4F8 để báo trạng thái "đang chờ đổi chỗ".
-        // [FIX QS] Nền xám #3A3A3A giống Quick Settings Android (không còn trắng hẳn)
-boxBg.setColor(selectedMainIdx != null && selectedMainIdx == idx
-    ? Color.parseColor("#8AB4F8")
-    : Color.argb(nodeAlpha, 58, 58, 58));
-
-        iconBox.setBackground(boxBg);
-
+        iconBox.setBackground(nodeBg(selectedMainIdx != null && selectedMainIdx == idx, prefs.getInt("bubble_node_bg_alpha", 255)));
         ImageView iv = new ImageView(ctx);
         FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(effectiveIconSize, effectiveIconSize, Gravity.CENTER);
 iv.setLayoutParams(ivLp);
@@ -979,7 +968,17 @@ tv.setTextSize(12f);
         });
         return box;
     }
-
+    private Drawable nodeBg(boolean selected, int nodeAlpha) {
+        if (!selected && GlassFx.on(prefs)) {
+            GlassFx.Surface s = new GlassFx.Surface(0x3A3A3A);
+            s.refresh(prefs); s.setOval(); s.setColor(Color.argb(nodeAlpha, 0, 0, 0));
+            return s;
+        }
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(100f);
+        g.setColor(selected ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 58, 58, 58));
+        return g;
+    }
     private void buildSubmenuGrid(LinearLayout card, String type) {
     List<String> items = getSubItems(type);
     for (int i = 0; i < 3; i++) {
@@ -1010,17 +1009,8 @@ int effectiveIconSize = Math.round(iconSize * prefs.getInt("bubble_node_icon_pct
 LinearLayout.LayoutParams ibLp = new LinearLayout.LayoutParams(iconSize + 40, iconSize + 40);
 iconBox.setLayoutParams(ibLp);
 
-        int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
-        GradientDrawable boxBg = new GradientDrawable();
-        boxBg.setCornerRadius(100f); 
-        // [MỚI] Nền TRẮNG cho node chưa-chọn (khớp App Shortcut + đồng bộ với buildMainButton).
-        boxBg.setColor(selectedSubIdx != null && selectedSubIdx == idx
-    ? Color.parseColor("#8AB4F8")
-    : Color.argb(nodeAlpha, 58, 58, 58));
-
-        iconBox.setBackground(boxBg);
-
-                if (!ref.isEmpty()) {
+        iconBox.setBackground(nodeBg(selectedSubIdx != null && selectedSubIdx == idx, prefs.getInt("bubble_node_bg_alpha", 255)));
+            if (!ref.isEmpty()) {
             ImageView iv = new ImageView(ctx);
             FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(effectiveIconSize, effectiveIconSize, Gravity.CENTER);
 iv.setLayoutParams(ivLp);
@@ -1739,7 +1729,6 @@ for (String[] item : allItems) {
     private Runnable spinHoldRunnable;
     private float lastSpinVelocity = 0f;
     private class CircleMenuView extends View {
-    private final RectF gArc = new RectF();
     private List<String[]> items = new ArrayList<>();
         private final Paint pRingBg = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -1749,7 +1738,9 @@ for (String[] item : allItems) {
     private final Paint pIconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pCenterBg = new Paint(Paint.ANTI_ALIAS_FLAG);     // [MỚI] nền tròn của bong bóng ở tâm
     private final Paint pCenterStroke = new Paint(Paint.ANTI_ALIAS_FLAG); // [MỚI] viền xanh của bong bóng ở tâm
-        private float lastTouchAngle = 0f;
+    private final GlassFx.Surface nodeSurf = new GlassFx.Surface(0x3A3A3A);
+    private final GlassFx.Surface centerSurf = new GlassFx.Surface(0x202124);
+    private float lastTouchAngle = 0f;
     private boolean dragging = false;
     private final VelocityAngleTracker angTracker = new VelocityAngleTracker();
 
@@ -1767,11 +1758,13 @@ for (String[] item : allItems) {
         pRingBg.setStyle(Paint.Style.STROKE);
         pStroke.setStyle(Paint.Style.STROKE);
         pNodeStroke.setStyle(Paint.Style.STROKE);
-                pText.setTextAlign(Paint.Align.CENTER);
+        pText.setTextAlign(Paint.Align.CENTER);
         pText.setColor(Color.parseColor("#8AB4F8"));
         pText.setShadowLayer(5f, 0f, 2f, Color.argb(220, 0, 0, 0));
         pCenterBg.setStyle(Paint.Style.FILL);       // [MỚI]
         pCenterStroke.setStyle(Paint.Style.STROKE); // [MỚI]
+        nodeSurf.setOval(); nodeSurf.refresh(prefs);
+        centerSurf.setOval(); centerSurf.refresh(prefs);
     }
 
     public void setItems(List<String[]> newItems) {
@@ -1879,22 +1872,19 @@ pStroke.setColor(gl ? Color.argb((int) (200 * gk), 255, 255, 255) : Color.parseC
 pStroke.setStrokeWidth(4f);
 canvas.drawCircle(cx, cy, ringR + bgWidth / 2f, pStroke);
 canvas.drawCircle(cx, cy, ringR - bgWidth / 2f, pStroke);
-if (gl) {   // vệt sáng cung trên của vòng, mờ theo thanh kéo
-    pStroke.setColor(Color.argb((int) (110 * gk), 255, 255, 255));
-    pStroke.setStrokeWidth(bgWidth * 0.25f);
-    gArc.set(cx - ringR, cy - ringR, cx + ringR, cy + ringR);
-    canvas.drawArc(gArc, 200f, 140f, false, pStroke);
-    pStroke.setStrokeWidth(4f);
-}
-                // [MỚI] Vẽ nền tròn + viền xanh giống hệt bong bóng chat thật (buildBubble())
-        // trước khi vẽ icon lên trên — đây chính là "vòng xanh" mà trước đây bị thiếu.
         float centerR = prefs.getInt("bubble_size", 120) / 2f;
-        pCenterBg.setColor(Color.parseColor("#DD202124"));
-        canvas.drawCircle(cx, cy, centerR, pCenterBg);
-        pCenterStroke.setColor(Color.parseColor("#8AB4F8"));
-        pCenterStroke.setStrokeWidth(4f);
-        canvas.drawCircle(cx, cy, centerR - 2f, pCenterStroke);
-
+                if (gl) {
+            int cd = Math.round(centerR * 2f);
+            centerSurf.setBounds(-cd / 2, -cd / 2, cd - cd / 2, cd - cd / 2); // bounds cố định -> không dựng lại gradient mỗi frame
+            centerSurf.setColor(Color.argb(Math.round(prefs.getInt("bubble_alpha_pct", 87) * 255 / 100f), 0, 0, 0));
+            canvas.save(); canvas.translate(cx, cy); centerSurf.draw(canvas); canvas.restore();
+        } else {
+            pCenterBg.setColor(Color.parseColor("#DD202124"));
+            canvas.drawCircle(cx, cy, centerR, pCenterBg);
+            pCenterStroke.setColor(Color.parseColor("#8AB4F8"));
+            pCenterStroke.setStrokeWidth(4f);
+            canvas.drawCircle(cx, cy, centerR - 2f, pCenterStroke);
+        }
         if (centerIconBmp != null) {
             canvas.drawBitmap(centerIconBmp, cx - centerIconBmp.getWidth() / 2f, cy - centerIconBmp.getHeight() / 2f, pIconPaint);
         }
@@ -1904,20 +1894,23 @@ if (gl) {   // vệt sáng cung trên của vòng, mờ theo thanh kéo
         float nodeSize = prefs.getInt("bubble_icon_size", 100) * nodeScale;
         pText.setTextSize(nodeSize * 0.30f);
         int nodeAlpha = prefs.getInt("bubble_node_bg_alpha", 255);
+        int nd = Math.round(nodeSize);
+        if (gl) { nodeSurf.setBounds(-nd / 2, -nd / 2, nd - nd / 2, nd - nd / 2); nodeSurf.setColor(Color.argb(nodeAlpha, 0, 0, 0)); }
         for (int i = 0; i < n; i++) {
             float angle = (float) Math.toRadians(circleRotationDeg + i * (360f / n) - 90);
             float nx = cx + ringR * (float) Math.cos(angle);
             float ny = cy + ringR * (float) Math.sin(angle);
 
             boolean selected = selectedNodeIdx != null && selectedNodeIdx == i;
-            pNodeBg.setColor(selected ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 58, 58, 58));
-            canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeBg);
-            pNodeStroke.setColor(selected ? Color.WHITE : Color.argb(90, 0x55, 0x55, 0x55));
-
-
-            pNodeStroke.setStrokeWidth(selected ? 5f : 3f);
-            canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeStroke);
-
+            if (gl && !selected) {
+                canvas.save(); canvas.translate(nx, ny); nodeSurf.draw(canvas); canvas.restore();
+            } else {
+                pNodeBg.setColor(selected ? Color.parseColor("#8AB4F8") : Color.argb(nodeAlpha, 58, 58, 58));
+                canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeBg);
+                pNodeStroke.setColor(selected ? Color.WHITE : Color.argb(90, 0x55, 0x55, 0x55));
+                pNodeStroke.setStrokeWidth(selected ? 5f : 3f);
+                canvas.drawCircle(nx, ny, nodeSize / 2f, pNodeStroke);
+            }
             Bitmap icon = nodeIcons.get(i);
             if (icon != null) {
                 canvas.drawBitmap(icon, nx - icon.getWidth() / 2f, ny - icon.getHeight() / 2f, pIconPaint);

@@ -1008,12 +1008,20 @@ public void clearDemo() {
         if (items.isEmpty() || !screenOn) return;
         if (!bindHost()) {
             h.removeCallbacks(noHostRun);
-            h.postDelayed(noHostRun, 300);
+            h.postDelayed(noHostRun, 60);
             return;
         }
         h.removeCallbacks(noHostRun);
         noHostRetry = 0;
-                String s = geoKey();
+        if (pill != null && !pill.hidden && !closing && !previewForce && pillHostKey != null && !pillHostKey.equals(hostKey)) {
+            h.removeCallbacks(geoRun); pendingGeo = "";
+            pillHostKey = hostKey;
+            if (popup != null && popupLp != null) { lastGeo = geoKey(); slidePopupToNewHost(); return; }
+            removePill();   // UX: Lock<->Home gỡ pill cũ tức thì (không co lại, không debounce) rồi sinh pill mới từ tâm
+            announce();
+            return;
+        }
+        String s = geoKey();
         if (pill != null && s.equals(lastGeo)) {
             hostChanged = false;
             pillHostKey = hostKey;
@@ -1025,7 +1033,9 @@ public void clearDemo() {
         if (!s.equals(pendingGeo)) {
             pendingGeo = s; geoTries = 0;
             h.removeCallbacks(geoRun);
-            if (previewForce) geoRun.run();          // kéo slider: pill bám tay ngay, không debounce
+            // UX: đổi host Lock<->Home thì chạy ngay, không debounce; chỉ debounce khi hình học còn đang trôi
+            boolean hostSwitching = pillHostKey != null && !pillHostKey.equals(hostKey);
+            if (previewForce || hostSwitching) geoRun.run();
             else h.postDelayed(geoRun, 80);
         }
     }
@@ -1241,7 +1251,7 @@ int w = (int) Math.ceil(sw + badgeExtra()), hh = (int) Math.ceil(sh);
     if (closing) { reopen = true; return; }
 if (!statusVisible) return;
 if (!bindHost()) {   // UX: chưa có host (đang đổi Lock<->Home) thì tự thử lại, không bỏ cuộc
-    h.removeCallbacks(noHostRun); h.postDelayed(noHostRun, 300);
+    h.removeCallbacks(noHostRun); h.postDelayed(noHostRun, 60);
     return;
 }
     userHidden = false;
@@ -1392,11 +1402,8 @@ private void applyGeo(String s) {
     boolean first = lastGeo.isEmpty();
     lastGeo = s;
         if (hostSwitch && !previewForce) {
-        if (popup != null && popupLp != null) {
-            slidePopupToNewHost();
-        } else {
-            shrinkRemove(true, false);
-        }
+        if (popup != null && popupLp != null) slidePopupToNewHost();
+        else { removePill(); announce(); }   // UX: không co lại pill cũ; gỡ tức thì rồi sinh pill mới từ tâm ở Home
         return;
     }
     final boolean want = expanded || pill.towardsExpanded() || pill.animating();
