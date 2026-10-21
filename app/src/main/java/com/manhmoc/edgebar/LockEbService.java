@@ -63,15 +63,17 @@ public class LockEbService extends Service {
     private boolean rxOn = false;
     private long unlockGraceUntil = 0;
 private static final long UNLOCK_GRACE_MS = 2500;
-private final Runnable reapplyRunnable = this::applyVisibility;
-BarView(Context c, int alpha, float radius) {
-    super(c);
-    GlassFx.Surface gd = new GlassFx.Surface();
-    gd.refresh(c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE));
-    gd.setCornerRadius(radius);
-    gd.setColor(Color.argb(alpha, 0, 0, 0));
-    setBackground(gd);
-  }
+    private final Runnable reapplyRunnable = this::applyVisibility;
+
+private static class BarView extends View {
+    BarView(Context c, int alpha, float radius) {
+        super(c);
+        GlassFx.Surface gd = new GlassFx.Surface();
+        gd.refresh(c.getSharedPreferences("EdgeBarPrefs", Context.MODE_PRIVATE));
+        gd.setCornerRadius(radius);
+        gd.setColor(Color.argb(alpha, 0, 0, 0));
+        setBackground(gd);
+    }
 }
         private static class CornerView extends View {
         private final Paint pFill = new Paint(Paint.ANTI_ALIAS_FLAG), pStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
