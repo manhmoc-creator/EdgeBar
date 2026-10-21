@@ -3965,60 +3965,59 @@ vTrig.addView(cbOs);
     footer.addView(bCancel);
     footer.addView(bSave);
     root.addView(footer);
-    bCancel.setOnClickListener(v -> d.dismiss());
+            bCancel.setOnClickListener(v -> d.dismiss());
         bSave.setOnClickListener(v -> {
-        bSave.setOnClickListener(v -> {
-    ArrayList<String> gestures = new ArrayList<>();
-    for (int i = 0; i < gestureBoxes.size(); i++)
-        if (gestureBoxes.get(i).isChecked()) gestures.add(C_GESTURES[i]);
-    if (gestures.isEmpty()) {
-        Toast.makeText(this, "Hãy chọn ít nhất 1 Cử chỉ!", Toast.LENGTH_SHORT).show();
-        return;
-    }
-    final ActBlob[] used = andOn[0] ? new ActBlob[]{blobA, blobB} : new ActBlob[]{single};
-    java.util.LinkedHashSet<String> union = new java.util.LinkedHashSet<>();
-    for (ActBlob b : used) {
-        if (b.or) { union.addAll(b.hacc); union.addAll(b.hbeb); } else union.addAll(b.shared);
-    }
-    if (union.isEmpty()) {
-        Toast.makeText(this, "Cần ít nhất 1 action", Toast.LENGTH_SHORT).show();
-        return;
-    }
-    final String space = isHomebSpace ? "home_" : "lock_";
-    if (editId == null) {
-        String listKey = rulesKey(space, appliedItemKey);
-        List<String> curRules = getDynamicIds(listKey);
-        curRules.add(ruleId);
-        prefs.edit().putString(listKey, TextUtils.join(",", curRules)).apply();
-    }
-    final String px = "prule_" + ruleId + "_";
-    SharedPreferences.Editor ed = prefs.edit();
-    if (andOn[0]) {
-        saveBlob(ed, blobA, ruleId + "A");
-        saveBlob(ed, blobB, ruleId + "B");
-        ed.putBoolean(px + "dual", false)
-          .putString(px + "launch_pkg", blobPkg(blobA).isEmpty() ? blobPkg(blobB) : blobPkg(blobA))
-          .putString(px + "shortcut_id", blobSc(blobA).isEmpty() ? blobSc(blobB) : blobSc(blobA));
-    } else {
-        saveBlob(ed, single, ruleId);
-    }
-    ed.putBoolean(px + "and", andOn[0])
-      .putString(px + "gestures", TextUtils.join(",", gestures))
-      .putString(px + "acts", TextUtils.join(",", union))     // union dùng cho nhãn/scrub
-      .putBoolean(px + "jump_on", cbJump.isChecked())
-      .putBoolean(px + "vib", cbVib.isChecked())
-      .putBoolean(px + "snd", cbSnd.isChecked())
-      .putBoolean(px + "anim", cbAnim.isChecked())
-      .putBoolean(px + "os", cbOs.isChecked())
-      .putBoolean(px + "en", true)
-      .apply();
-    reapplyPackIfEnabledByItemKey(appliedItemKey, space);
-    if (onRefresh != null) onRefresh.run();
-    d.dismiss();
-});
-    d.setContentView(root);
-    d.show();
-}
+            ArrayList<String> gestures = new ArrayList<>();
+            for (int i = 0; i < gestureBoxes.size(); i++)
+                if (gestureBoxes.get(i).isChecked()) gestures.add(C_GESTURES[i]);
+            if (gestures.isEmpty()) {
+                Toast.makeText(this, "Hãy chọn ít nhất 1 Cử chỉ!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            final ActBlob[] used = andOn[0] ? new ActBlob[]{blobA, blobB} : new ActBlob[]{single};
+            java.util.LinkedHashSet<String> union = new java.util.LinkedHashSet<>();
+            for (ActBlob b : used) {
+                if (b.or) { union.addAll(b.hacc); union.addAll(b.hbeb); } else union.addAll(b.shared);
+            }
+            if (union.isEmpty()) {
+                Toast.makeText(this, "Cần ít nhất 1 action", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            final String space = isHomebSpace ? "home_" : "lock_";
+            if (editId == null) {
+                String listKey = rulesKey(space, appliedItemKey);
+                List<String> curRules = getDynamicIds(listKey);
+                curRules.add(ruleId);
+                prefs.edit().putString(listKey, TextUtils.join(",", curRules)).apply();
+            }
+            final String px = "prule_" + ruleId + "_";
+            SharedPreferences.Editor ed = prefs.edit();
+            if (andOn[0]) {
+                saveBlob(ed, blobA, ruleId + "A");
+                saveBlob(ed, blobB, ruleId + "B");
+                ed.putBoolean(px + "dual", false)
+                  .putString(px + "launch_pkg", blobPkg(blobA).isEmpty() ? blobPkg(blobB) : blobPkg(blobA))
+                  .putString(px + "shortcut_id", blobSc(blobA).isEmpty() ? blobSc(blobB) : blobSc(blobA));
+            } else {
+                saveBlob(ed, single, ruleId);
+            }
+            ed.putBoolean(px + "and", andOn[0])
+              .putString(px + "gestures", TextUtils.join(",", gestures))
+              .putString(px + "acts", TextUtils.join(",", union))     // union dùng cho nhãn/scrub
+              .putBoolean(px + "jump_on", cbJump.isChecked())
+              .putBoolean(px + "vib", cbVib.isChecked())
+              .putBoolean(px + "snd", cbSnd.isChecked())
+              .putBoolean(px + "anim", cbAnim.isChecked())
+              .putBoolean(px + "os", cbOs.isChecked())
+              .putBoolean(px + "en", true)
+              .apply();
+            reapplyPackIfEnabledByItemKey(appliedItemKey, space);
+            if (onRefresh != null) onRefresh.run();
+            d.dismiss();
+        }); // <-- Đã đóng đúng cách
+        d.setContentView(root);
+        d.show();
+    } // <-- Đã đóng đúng hàm openPackRuleEditor
 private void applyPackRulesToSpace(String itemKey, String targetPrefix, String compKey, int side) {
     final SharedPreferences.Editor ed = prefs.edit();
     for (String g : C_GESTURES) {
