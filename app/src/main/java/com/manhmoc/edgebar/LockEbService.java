@@ -480,5 +480,4 @@ private boolean isLeftMember(String m){ return m.equals("l")||m.equals("t_l")||m
         for (int i = 0; i < 12; i++) if (bars[i] != null) { try { wm.removeView(bars[i]); } catch (Exception ignored) {} bars[i] = null; }
         for (int i = 0; i < 4; i++) if (corners[i] != null) { try { wm.removeView(corners[i]); } catch (Exception ignored) {} corners[i] = null; }
         super.onDestroy();
-    }
 }
