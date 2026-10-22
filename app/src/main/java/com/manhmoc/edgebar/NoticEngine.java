@@ -1119,8 +1119,7 @@ if (hr <= hl || hb <= ht) {
     float barW = hr - hl, barH = hb - ht;
     pillH = Math.min(barH, Math.max(8 * dens, Math.min(barH, 44 * dens) * hP));
     badgeLeft = prefs.getBoolean("notic_badge_left", false);
-    // UX: chừa chỗ badge ĐỐI XỨNG 2 phía -> kéo Length luôn nở đều trái/phải quanh tâm, tới khi chạm giới hạ bar mới dừng
-    float maxW = Math.max(pillH, Math.min(barW, scrW - 16 * dens) - 2f * badgeExtra());
+    float maxW = Math.max(pillH, barW - 2f * badgeExtra());   // UX: chỉ bị giới hạn bởi bar (bar được phép tràn ra ngoài mép máy), không còn bị cắt theo màn hình
     ew = Math.min(maxW, pillH * 4.0f * wP);   // một độ dài duy nhất cho MỌI loại thông báo
     ewApp = ew;
     cw = ew;
@@ -1211,12 +1210,15 @@ private void clearAll() {
     // Cửa sổ phải phủ CẢ vị trí cũ lẫn mới của pill, nếu không khung đầu bị cắt -> giật khi Lock <-> Home
     float y0 = (float) Math.floor(Math.min(Math.min(ht, cy - pillH / 2f), pill.ccy - pill.h / 2f)) - 2;
     float y1 = (float) Math.ceil(Math.max(Math.max(hb, cy + pillH / 2f), pill.ccy + pill.h / 2f)) + 2;
-    pillLp.x = 0;
     pillLp.y = (int) y0;
-    pillLp.width = (int) scrW;
     pillLp.height = (int) (y1 - y0);
     pillLp.flags |= NOT_TOUCHABLE;
-    pill.ox = 0;
+    // UX: cửa sổ pill phải phủ cả phần tràn ra ngoài mép máy, nếu không pill bị cắt khi đang animate
+float x0 = (float) Math.floor(Math.min(0f, Math.min(px - ew / 2f, pill.ccx - pill.w / 2f) - badgeExtra())) - 2;
+float x1 = (float) Math.ceil(Math.max(scrW, Math.max(px + ew / 2f, pill.ccx + pill.w / 2f) + badgeExtra())) + 2;
+pillLp.x = (int) x0;
+pillLp.width = (int) (x1 - x0);
+pill.ox = x0;
     pill.oy = y0;
     fullWin = true;
     try { wm.updateViewLayout(pill, pillLp); } catch (Exception ignored) {}
@@ -1500,9 +1502,9 @@ if (closing || pill.animating()) { if (force) { final boolean hh = history; h.po
     openPopup();
     scheduleAutoClose();   // UX: mọi đường mở popup đều tự thu gọn sau notic_hold_sec giây
 }
-private int popW() {   // UX: 100% = gần full màn (lề 12dp mỗi bên); trước đây cap 420dp nên kéo >92% không đổi
+private int popW() {   // UX: không còn kẹp theo màn hình; 100% = gần full màn, >100% cho phép tràn (cửa sổ có FLAG_LAYOUT_NO_LIMITS)
     float full = scrW - dp(12);
-    return Math.round(Math.max(dp(160), Math.min(full, full * prefs.getInt("notic_pop_w_pct", 100) / 100f)));
+    return Math.round(Math.max(dp(160), full * prefs.getInt("notic_pop_w_pct", 100) / 100f));
 }
 private int popX(int pw) { return Math.round((scrW - pw) / 2f); }   // UX: luôn cách đều 2 mép; notic lệch bao nhiêu cũng không kéo bảng lệch theo
 private int popY(int ph) {
@@ -1510,7 +1512,7 @@ private int popY(int ph) {
     int y;
     if (g == 0) y = cy < scrH / 2f ? (int) (cy - pillH / 2f) : (int) (cy + pillH / 2f - ph);
     else y = cy < scrH / 2f ? (int) (cy + pillH / 2f) + g : (int) (cy - pillH / 2f) - g - ph;
-    return (int) Math.max(dp(4), Math.min(scrH - ph - dp(4), y));
+    return y;   // UX: bảng bám theo pill/bar, không bị ép vào trong màn hình
 }
 private int popMaxH() { return Math.round(scrH * prefs.getInt("notic_pop_h_pct", 55) / 100f); }
 private void openPopup() {
@@ -2457,19 +2459,18 @@ sp.setStrokeWidth(1.6f * dens);
     long period = Math.max(300L, (long) (2200f / (cLedSpeed / 100f)));
     float a = (SystemClock.uptimeMillis() % period) / (float) period;
     a = 0.5f - 0.5f * (float) Math.cos(a * 2 * Math.PI);
-    a = a * a * (3f - 2f * a); // UX: smoothstep dồn sáng/tối về 2 đầu, giữa không lửng lơ
+    a = a * a * (3f - 2f * a);
     lp2.setColor(color);
-    float rad = d * 0.42f; // UX: gộp 2 vòng cũ (0.5d / 0.27d) thành 1 bán kính trung gian
     if (glassMode) {
-        // UX: glass mode — LED dùng đúng ngôn ngữ thị giác của pill (sheen + rim phản quang)
-        lp2.setAlpha((int) (90 + 130 * a));
+        // UX: giống hệt đĩa trái: cùng bán kính d/2, thân màu mờ ~150, viền kính ĐỨNG YÊN; chỉ phần màu thở
+        float rad = d * 0.5f;
+        lp2.setAlpha((int) (105 + 95 * a));
         c.drawCircle(mx, cyy, rad, lp2);
         rect.set(mx - rad, cyy - rad, mx + rad, cyy + rad);
-        glass.draw(c, rect, rad, cGlass, a * cPillA / 100f);
+        glass.draw(c, rect, rad, cGlass, Math.min(1f, mix) * cPillA / 100f);
     } else {
-        // UX: 1 drawCircle duy nhất thay 2 vòng đậm-nhạt cũ — giảm 50% draw call cho GPU Adreno 540
         lp2.setAlpha((int) (6 + 249 * a));
-        c.drawCircle(mx, cyy, rad, lp2);
+        c.drawCircle(mx, cyy, d * 0.42f, lp2);
     }
 }
         void set(float cx, float cyy, float ww, float hh, float rr, float m, float ta) {
@@ -2489,7 +2490,7 @@ sp.setStrokeWidth(1.6f * dens);
     String s = it.title == null ? "" : it.title;
     if (it.text != null && !it.text.isEmpty()) s = s.isEmpty() ? it.text : s + ": " + it.text;
     s = s.replace('\n', ' ');
-    line = TextUtils.ellipsize(s, tp, Math.max(expandedW - pillH * 1.32f, 10f), TextUtils.TruncateAt.END).toString();
+    line = TextUtils.ellipsize(s, tp, Math.max(expandedW - pillH * 2.2f, 10f), TextUtils.TruncateAt.END).toString();   // UX: chừa thêm chỗ cho LED bên phải để chữ event không đè lên LED
 }
         void cancelAnim() {
             if (anim != null) { ValueAnimator a = anim; anim = null; a.cancel(); }
@@ -2552,7 +2553,7 @@ sp.setStrokeWidth(1.6f * dens);
     if (w < pillH * 1.4f || h < pillH * 0.8f) return;
     float isz = h * 0.62f;
     boolean spin = item.media && cSpin, viz = item.media && cViz;
-    boolean led = cLed && !item.media && !item.transientItem && w >= pillH * 1.8f;
+    boolean led = cLed && !item.media && w >= pillH * 1.8f;   // UX: event hệ thống cũng có LED bên phải (màu Google đã gán ở it.color)
     boolean gl = cPillMode == PM_GLASS;
     float vw = h * 0.95f;
     float rightW = led ? isz : (viz ? vw : 0f);
