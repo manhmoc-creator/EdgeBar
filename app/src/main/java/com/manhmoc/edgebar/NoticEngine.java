@@ -589,7 +589,15 @@ private Drawable eventDrawable(String id) {
         : id.equals("ring") ? android.R.drawable.ic_lock_silent_mode_off : android.R.drawable.ic_dialog_info;
     try { return ctx.getDrawable(res); } catch (Exception e) { return null; }
 }
-
+// UX: 4 màu Google. Muốn đổi màu cho event nào chỉ sửa switch này; không cấp phát, không đọc prefs.
+private static int evColor(String id) {
+    switch (id) {
+        case "charging": case "full": case "wifi": case "vpn": case "headset": return 0xFF34A853;      // lục
+        case "bt": case "hotspot": case "airplane": case "dnd": case "screenon": case "unlock": case "screenshot": return 0xFF4285F4; // lam
+        case "low": case "storage": case "silent": case "vibrate": case "ring": case "mic": case "camera": return 0xFFFBBC05;       // vàng
+        default: return 0xFFEA4335;                                                                     // đỏ: nonet, rec...
+    }
+}
 private Bitmap eventIcon(String id) {
     String k = "ev:" + id;
     Bitmap b = iconCache.get(k);
@@ -602,7 +610,7 @@ private Bitmap eventIcon(String id) {
     b = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888);
     Canvas c = new Canvas(b);
     Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-    p.setColor(CARD_GRAY);
+    p.setColor(evColor(id));   // đĩa icon mang màu Google của event (bitmap cache theo id nên chỉ vẽ 1 lần)
     c.drawCircle(48, 48, 48, p);
     if (g != null) { c.drawBitmap(g, 0, 0, null); g.recycle(); }
     iconCache.put(k, b);
@@ -841,6 +849,7 @@ if (camBusy.add(id)) {
         it.appName = "Edge Bar";
         it.sig = title + text + SystemClock.elapsedRealtime();
         it.icon = eventIcon(id);
+        it.color = evColor(id);   // UX: viền, LED và tint card của event dùng đúng màu Google thay vì sampleColor() trên icon xám
         it.transientItem = true;
         post(it, false, false);
     }
@@ -1110,12 +1119,13 @@ if (hr <= hl || hb <= ht) {
     float barW = hr - hl, barH = hb - ht;
     pillH = Math.min(barH, Math.max(8 * dens, Math.min(barH, 44 * dens) * hP));
     badgeLeft = prefs.getBoolean("notic_badge_left", false);
-    float maxW = Math.max(pillH, Math.min(barW, scrW - 16 * dens) - badgeExtra());
+    // UX: chừa chỗ badge ĐỐI XỨNG 2 phía -> kéo Length luôn nở đều trái/phải quanh tâm, tới khi chạm giới hạ bar mới dừng
+    float maxW = Math.max(pillH, Math.min(barW, scrW - 16 * dens) - 2f * badgeExtra());
     ew = Math.min(maxW, pillH * 4.0f * wP);   // một độ dài duy nhất cho MỌI loại thông báo
     ewApp = ew;
     cw = ew;
-    float lo = hl + ew / 2f + (badgeLeft ? badgeExtra() : 0f);
-    float hi = hr - ew / 2f - (badgeLeft ? 0f : badgeExtra());
+    float lo = hl + ew / 2f + badgeExtra();
+    float hi = hr - ew / 2f - badgeExtra();
     float cxw = (hl + hr) / 2f + prefs.getInt("notic_off_x", 0);
     px = lo > hi ? (hl + hr) / 2f : Math.max(lo, Math.min(hi, cxw));
     float cyw = (ht + hb) / 2f + prefs.getInt("notic_off_y", 0);
@@ -2443,16 +2453,24 @@ final Runnable tick = () -> invalidate();
             sp.setStyle(Paint.Style.STROKE);
 sp.setStrokeWidth(1.6f * dens);
         }
-        void drawLaser(Canvas c, float mx, float cyy, float d, int color) {
+        void drawLaser(Canvas c, float mx, float cyy, float d, int color, boolean glassMode) {
     long period = Math.max(300L, (long) (2200f / (cLedSpeed / 100f)));
     float a = (SystemClock.uptimeMillis() % period) / (float) period;
     a = 0.5f - 0.5f * (float) Math.cos(a * 2 * Math.PI);
-    a = a * a * (3f - 2f * a); // UX: smoothstep dồn thời gian vào 2 đầu = sáng hẳn / tối hẳn, không lửng lơ ở giữa
+    a = a * a * (3f - 2f * a); // UX: smoothstep dồn sáng/tối về 2 đầu, giữa không lửng lơ
     lp2.setColor(color);
-    lp2.setAlpha((int) (110 * a));
-    c.drawCircle(mx, cyy, d * 0.5f, lp2);          // quầng sáng
-    lp2.setAlpha((int) (6 + 249 * a));
-    c.drawCircle(mx, cyy, d * 0.27f, lp2);         // lõi LED: tối ~2% → sáng 100%
+    float rad = d * 0.42f; // UX: gộp 2 vòng cũ (0.5d / 0.27d) thành 1 bán kính trung gian
+    if (glassMode) {
+        // UX: glass mode — LED dùng đúng ngôn ngữ thị giác của pill (sheen + rim phản quang)
+        lp2.setAlpha((int) (90 + 130 * a));
+        c.drawCircle(mx, cyy, rad, lp2);
+        rect.set(mx - rad, cyy - rad, mx + rad, cyy + rad);
+        glass.draw(c, rect, rad, cGlass, a * cPillA / 100f);
+    } else {
+        // UX: 1 drawCircle duy nhất thay 2 vòng đậm-nhạt cũ — giảm 50% draw call cho GPU Adreno 540
+        lp2.setAlpha((int) (6 + 249 * a));
+        c.drawCircle(mx, cyy, rad, lp2);
+    }
 }
         void set(float cx, float cyy, float ww, float hh, float rr, float m, float ta) {
             cancelAnim();
@@ -2555,10 +2573,10 @@ sp.setStrokeWidth(1.6f * dens);
     }
     float textR = rr - h * 0.3f;
     if (led) {
-        float lx = rr - pad - isz;
-        drawLaser(c, lx + isz / 2f, cyy, isz, appColor(item));
-        textR = Math.min(textR, lx - h * 0.15f);
-    }
+    float lx = rr - pad - isz;
+    drawLaser(c, lx + isz / 2f, cyy, isz, appColor(item), gl);
+    textR = Math.min(textR, lx - h * 0.15f);
+}
     float vl = rr - pad - vw;
     if (viz) { drawViz(c, bp, vl, cyy, vw, h * 0.5f, vizColor(item), item.playing, speed(), 0.05f); textR = Math.min(textR, vl - h * 0.15f); }
     if (count > 1 && cBadge) {
