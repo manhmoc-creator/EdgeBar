@@ -105,7 +105,7 @@ static void setSuppressed(boolean on) {
     public static synchronized boolean consumeSelfCancel(String k) { return selfCancel.remove(k); }
 public static class Item {
     String key, pkg, title, text, sig, appName;
-    Bitmap icon, art, artCircle, senderBmp, appDisc;
+    Bitmap icon, art, artCircle, senderBmp;
     Icon largeIcon;
     PendingIntent intent;
     Notification.Action[] actions;
@@ -248,6 +248,7 @@ private int cPill = Color.BLACK, cRadPct = 100, cPillMode = PM_SOLID, cPillA = 1
     cCardMode, cGlass = 60, cPopGap, cLedSpeed = 100;
     private int cPillTint;   // 0 = glass trung tính, khác 0 = glass có màu
 private boolean cLed = true;
+private int cEdgePad = 20;
 private boolean badgeLeft, popMorphing;
 private boolean closing, reopen, swiping;
 private float morphF;
@@ -266,10 +267,6 @@ public void setForegroundPkg(String pkg) {
     if (hit == appHidden) return;
     appHidden = hit;
     syncVisible();
-}
-private Bitmap appDisc(Item it) {
-    if (it.appDisc == null && it.icon != null) it.appDisc = makeAppDisc(it.icon, appColor(it));
-    return it.appDisc;
 }
 private boolean canFallbackReply(Item it) {   // app không có RemoteInput (Claude, Gemini...): chép chữ + mở app
     return it.reply == null && !it.media && !it.call && !it.transientItem && !isDemo(it) && it.intent != null
@@ -299,6 +296,7 @@ cGlass = Math.max(0, Math.min(100, prefs.getInt("notic_glass_relief", 60)));
 cPopGap = Math.max(0, prefs.getInt("notic_pop_gap", 0));
 cLed = prefs.getBoolean("notic_led_en", true);
 cLedSpeed = Math.max(20, prefs.getInt("notic_led_speed", 100));
+cEdgePad = Math.max(5, Math.min(60, prefs.getInt("notic_edge_pad", 20)));
 }
 
 /* UX: mọi duration Notic đi qua đây — 1 slider duy nhất scale toàn hệ thống
@@ -2434,7 +2432,6 @@ final Runnable tick = () -> invalidate();
         final TextPaint np = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         final RectF rect = new RectF();
         final RectF irect = new RectF();
-        final RectF lr = new RectF();
         PillView(Context c) {
             super(c);
             tp.setColor(Color.WHITE);
@@ -2446,21 +2443,16 @@ final Runnable tick = () -> invalidate();
             sp.setStyle(Paint.Style.STROKE);
 sp.setStrokeWidth(1.6f * dens);
         }
-        void drawLaser(Canvas c, float x, float cyy, float d, Bitmap disc, int color) {
+        void drawLaser(Canvas c, float mx, float cyy, float d, int color) {
     long period = Math.max(300L, (long) (2200f / (cLedSpeed / 100f)));
-    float ph = (SystemClock.uptimeMillis() % period) / (float) period;
-    float a = 0.18f + 0.82f * (0.5f - 0.5f * (float) Math.cos(ph * 2 * Math.PI));
-    float mx = x + d / 2f;
-    lr.set(x, cyy - d / 2f, x + d, cyy + d / 2f);
-    boolean gl = cPillMode == PM_GLASS;
-    if (cPillMode != PM_CLEAR) { bp.setColor(pillFill()); c.drawCircle(mx, cyy, d / 2f, bp); }   // nền cùng kiểu với viên notic
-    if (disc != null) { ip.setAlpha(gl ? 120 : 255); c.drawBitmap(disc, null, lr, ip); ip.setAlpha(255); }   // glass: icon app mờ để thấy lớp kính
+    float a = (SystemClock.uptimeMillis() % period) / (float) period;
+    a = 0.5f - 0.5f * (float) Math.cos(a * 2 * Math.PI);
+    a = a * a * (3f - 2f * a); // UX: smoothstep dồn thời gian vào 2 đầu = sáng hẳn / tối hẳn, không lửng lơ ở giữa
     lp2.setColor(color);
-    lp2.setAlpha((int) (40 + 150 * a));
-    c.drawCircle(mx, cyy, d / 2f, lp2);
-    lp2.setAlpha((int) (80 * a));
-    c.drawCircle(mx, cyy, d * 0.58f, lp2);
-    if (gl) glass.draw(c, lr, d / 2f, cGlass, cPillA / 100f);   // bóng + viền phản quang đè lên trên cùng
+    lp2.setAlpha((int) (110 * a));
+    c.drawCircle(mx, cyy, d * 0.5f, lp2);          // quầng sáng
+    lp2.setAlpha((int) (6 + 249 * a));
+    c.drawCircle(mx, cyy, d * 0.27f, lp2);         // lõi LED: tối ~2% → sáng 100%
 }
         void set(float cx, float cyy, float ww, float hh, float rr, float m, float ta) {
             cancelAnim();
@@ -2540,23 +2532,34 @@ sp.setStrokeWidth(1.6f * dens);
         }
     }
     if (w < pillH * 1.4f || h < pillH * 0.8f) return;
-    float isz = h * 0.62f, ix = l + h * 0.2f;
+    float isz = h * 0.62f;
     boolean spin = item.media && cSpin, viz = item.media && cViz;
     boolean led = cLed && !item.media && !item.transientItem && w >= pillH * 1.8f;
+    boolean gl = cPillMode == PM_GLASS;
+    float vw = h * 0.95f;
+    float rightW = led ? isz : (viz ? vw : 0f);
+    float pad = h * cEdgePad / 100f;
+    // UX: kẹp pad theo bề rộng pill -> đĩa trái và LED/visualizer phải không bao giờ chồng nhau hay lọt ra ngoài notic
+    pad = Math.max(0f, Math.min(pad, (w - isz - rightW - (rightW > 0f ? h * 0.15f : 0f)) / 2f));
+    float ix = l + pad;
     Bitmap sender = (!item.media && !item.transientItem) ? item.senderBmp : null;
     Bitmap lead = item.media ? circleArt(item) : (sender != null ? sender : item.icon);
     if (lead != null) {
         irect.set(ix, cyy - isz / 2f, ix + isz, cyy + isz / 2f);
+        ip.setAlpha(gl ? 150 : 255);   // UX: glass thì ảnh mờ bớt để thấy lớp kính
         if (spin) { c.save(); c.rotate(spinAngle(item), ix + isz / 2f, cyy); c.drawBitmap(lead, null, irect, ip); c.restore(); }
         else c.drawBitmap(lead, null, irect, ip);
+        ip.setAlpha(255);
+        // UX: glass vẽ SAU restore để vệt sáng đứng yên, không quay theo đĩa
+        if (gl) glass.draw(c, irect, isz / 2f, cGlass, Math.min(1f, mix) * cPillA / 100f);
     }
     float textR = rr - h * 0.3f;
     if (led) {
-    float lw = isz, lx = rr - h * 0.2f - lw;   // cùng kích thước với đĩa trái
-    drawLaser(c, lx, cyy, lw, appDisc(item), appColor(item));
-    textR = Math.min(textR, lx - h * 0.15f);
-}
-    float vw = h * 0.95f, vl = rr - h * 0.25f - vw;
+        float lx = rr - pad - isz;
+        drawLaser(c, lx + isz / 2f, cyy, isz, appColor(item));
+        textR = Math.min(textR, lx - h * 0.15f);
+    }
+    float vl = rr - pad - vw;
     if (viz) { drawViz(c, bp, vl, cyy, vw, h * 0.5f, vizColor(item), item.playing, speed(), 0.05f); textR = Math.min(textR, vl - h * 0.15f); }
     if (count > 1 && cBadge) {
         float ba = Math.max(0f, Math.min(1f, (w - pillH * 1.4f) / (pillH * 0.6f)));
