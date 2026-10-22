@@ -8335,7 +8335,7 @@ content.addView(createDrawer("🙈 " + T("TEMPORARILY HIDE NOTIC", "ẨN NOTIC T
     bP.addView(createSignedSlider(T("Length (%)", "Chiều dài (%)"), "notic_w_pct", 50, 500, 100));
     bP.addView(createSignedSlider(T("Thickness (%)", "Độ dày (%)"), "notic_h_pct", 50, 200, 100));
     bP.addView(createSignedSlider(T("Roundness (%)", "Độ bo cong (%)"), "notic_rad_pct", 0, 100, 100));
-    bP.addView(createSignedSlider(T("Disc & LED edge padding (%) — lower = further apart", "Khoảng cách đĩa & LED tới mép Notic (%) — nhỏ = xa nhau"), "notic_edge_pad", 5, 60, 20));
+    bP.addView(createSignedSlider(T("Disc & LED edge padding (%) — lower = further apart", "Khoảng cách đĩa & LED tới mép Notic (%) — nhỏ = xa nhau"), "notic_edge_pad", 5, 240, 20));
     bP.addView(createSectionTitle(T("EXPANDED PANEL", "BẢNG THÔNG BÁO MỞ RỘNG")));
     bP.addView(createSignedSlider(T("Max length (%)", "Chiều dài tối đa (%)"), "notic_pop_h_pct", 20, 200, 55));
     bP.addView(createSlider(T("Gap to Notic (dp, 0 = attached)", "Khoảng cách tới Notic (dp, 0 = dính liền)"), "notic_pop_gap", 150, 0));
