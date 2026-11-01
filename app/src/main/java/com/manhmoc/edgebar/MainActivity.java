@@ -2501,22 +2501,6 @@ private void openTextureActionPicker(String key, String title) {
                 }
             }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
 }
-private void openVolKeyActionPicker(String key, String title) {
-    reloadActionLabels();
-    new AlertDialog.Builder(this).setTitle(title)
-        .setSingleChoiceItems(ACT_LABS, -1, (d, which) -> {
-            prefs.edit().putString(key, ACT_KEYS[which]).apply();
-            d.dismiss();
-            if (ACT_KEYS[which].equals("LAUNCH_APP")) {
-                showSingleAppPickerDialogCallback(pkg -> {
-                    prefs.edit().putString(key + "_launch_pkg", pkg).apply();
-                    syncVolumeService(); renderVolKeyRules();
-                });
-            } else {
-                syncVolumeService(); renderVolKeyRules();
-            }
-        }).setNegativeButton("HỦY", null).show();
-}
 private void syncProximityService() {
     boolean need = ProximityWaveService.hasAnyRule(prefs);
     Intent i = new Intent(this, ProximityWaveService.class);
