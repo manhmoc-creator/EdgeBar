@@ -105,7 +105,7 @@ private void removeRippleViewIfIdle() {
     if (rippleView == null) return;
     try {
         if (rippleView instanceof GestureRippleView) {
-            ((GestureRippleView) rippleView).shutdown();
+            rippleView.shutdown();
         }
     } catch (Exception ignored) {}
     try { wm.removeView(rippleView); } catch (Exception ignored) {}
@@ -3443,8 +3443,8 @@ public void onDestroy() {
     try { removeAllIconLayers(); } catch (Exception ignored) {}
     try { removeAccessibleHome(); } catch (Exception ignored) {}
     try { removeYtdlOverlay(); } catch (Exception ignored) {}
-    if (rippleView instanceof GestureRippleView) {
-    try { ((GestureRippleView) rippleView).shutdown(); } catch (Exception ignored) {}
+    if (rippleView != null) {
+    try { rippleView.shutdown(); } catch (Exception ignored) {}
 }
 try { removeRippleViewIfIdle(); } catch (Exception ignored) {}
     if (recBlinkAnim != null) recBlinkAnim.cancel();

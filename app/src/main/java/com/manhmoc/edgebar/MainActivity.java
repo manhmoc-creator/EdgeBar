@@ -2484,7 +2484,6 @@ private void openVolKeyActionPicker(String key, String title) {
                 }
             }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
 }
-
 private void openTextureActionPicker(String key, String title) {
     reloadActionLabels();
     new AlertDialog.Builder(this).setTitle(title)
@@ -2492,7 +2491,7 @@ private void openTextureActionPicker(String key, String title) {
                 prefs.edit().putString(key, ACT_KEYS[which]).apply();
                 d.dismiss();
                 if (ACT_KEYS[which].equals("LAUNCH_APP")) {
-                    showSingleAppPickerCallback(pkg -> {
+                    showSingleAppPickerDialogCallback(pkg -> {
                         prefs.edit().putString(key + "_launch_pkg", pkg).apply();
                         renderTextureRules();
                     });
