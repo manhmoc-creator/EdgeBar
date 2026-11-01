@@ -1955,211 +1955,6 @@ private String getSpacePrefix() {
         default: return "home_";
     }
 }
-// UX: VolKey dùng 6 card phẳng cố định — user thấy ngay phím nào đang gán hành động gì.
-// Zero alloc thêm: card tái dùng getRounded() + buildActionIconColumn() có sẵn.
-private void renderVolKeyRules() {
-    listRules.removeAllViews();
-    String[] vKeys  = {"up_tap", "down_tap", "up_dtap", "down_dtap", "up_combo", "down_combo"};
-    String[] vNames = {
-        "Nhấn Volume Up (1 Lần)", "Nhấn Volume Down (1 Lần)",
-        "Nhấn Volume Up (2 Lần)", "Nhấn Volume Down (2 Lần)",
-        "Combo: Vol Up rồi Down", "Combo: Vol Down rồi Up"
-    };
-    for (int idx = 0; idx < vKeys.length; idx++) {
-        final String key = "volkey_" + vKeys[idx];
-        final String vName = vNames[idx];
-        String action = prefs.getString(key, "NONE");
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setBackground(getRounded(SURFACE_COLOR, 24f));
-        card.setPadding(15, 24, 10, 24);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(6, 6, 6, 6);
-        card.setLayoutParams(lp);
-
-        card.addView(buildActionIconColumn(key, ""));   // icon v44 giữ nguyên, không đổi
-
-        LinearLayout infoCol = new LinearLayout(this);
-        infoCol.setOrientation(LinearLayout.VERTICAL);
-        infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView t1 = stdLine(vName, "#E8EAED", 16f);
-        TextView t2 = stdLine(getActionLabelSmart(action, prefs.getString(key + "_launch_pkg", "")),
-                ACCENT_COLOR, 14f);
-        t2.setPadding(0, 5, 0, 5);
-
-        LinearLayout optRow = new LinearLayout(this);
-        optRow.setOrientation(LinearLayout.HORIZONTAL);
-        optRow.setPadding(0, 6, 0, 0);
-        CheckBox cbVib = new CheckBox(this);
-        cbVib.setText(T("Vibrate", "Rung"));
-        cbVib.setTextColor(Color.WHITE);
-        cbVib.setTextSize(11.5f);
-        cbVib.setChecked(prefs.getBoolean(key + "_vib", true));
-        cbVib.setOnCheckedChangeListener((vv, cc) -> prefs.edit().putBoolean(key + "_vib", cc).apply());
-        CheckBox cbSnd = new CheckBox(this);
-        cbSnd.setText(T("Sound", "Âm chạm"));
-        cbSnd.setTextColor(Color.WHITE);
-        cbSnd.setTextSize(11.5f);
-        cbSnd.setChecked(prefs.getBoolean(key + "_snd", false));
-        cbSnd.setOnCheckedChangeListener((vv, cc) -> prefs.edit().putBoolean(key + "_snd", cc).apply());
-        optRow.addView(cbVib);
-        optRow.addView(cbSnd);
-
-        infoCol.addView(t1);
-        infoCol.addView(t2);
-        infoCol.addView(optRow);
-        card.addView(infoCol);
-
-        Button btnTest = stdCardBtn("TEST", "#FFC107", Color.BLACK);
-        btnTest.setOnClickListener(v -> fireTestActions(
-                java.util.Arrays.asList(action.split(",")),
-                prefs.getString(key + "_launch_pkg", ""),
-                prefs.getString(key + "_shortcut_id", "")));
-        card.addView(btnTest);
-
-        card.setOnClickListener(v -> openVolKeyActionPicker(key, vName));
-        card.setOnLongClickListener(v -> {
-            new AlertDialog.Builder(this)
-                    .setTitle(T("Delete this rule?", "Xoá rule này?"))
-                    .setPositiveButton(T("DELETE", "XOÁ"), (d, w) -> {
-                        prefs.edit().putString(key, "NONE").apply();
-                        syncVolumeService();
-                        renderVolKeyRules();
-                    })
-                    .setNegativeButton(T("CANCEL", "HỦY"), null).show();
-            return true;
-        });
-        listRules.addView(card);
-    }
-    TextView note = new TextView(this);
-    note.setText("⚠ " + T("Only works when screen is OFF. When screen is on, volume keys behave normally.",
-            "Chỉ hoạt động khi MÀN HÌNH TẮT. Khi màn sáng, phím Âm lượng hoạt động bình thường."));
-    note.setTextColor(Color.GRAY);
-    note.setTextSize(12f);
-    note.setPadding(20, 20, 20, 20);
-    listRules.addView(note);
-}
-
-// UX: Texture dùng 4 card phẳng cố định — cùng layout VolKey, chỉ khác key prefix + không có combo.
-private void renderTextureRules() {
-    listRules.removeAllViews();
-    String[] tKeys = {"up", "down", "left", "right"};
-    String[] tNames = {
-        "Vuốt Lên trên Vân Tay", "Vuốt Xuống trên Vân Tay",
-        "Vuốt Trái trên Vân Tay", "Vuốt Phải trên Vân Tay"
-    };
-    for (int idx = 0; idx < tKeys.length; idx++) {
-        final String key = "texture_fingerprint_" + tKeys[idx];
-        final String vName = tNames[idx];
-        String action = prefs.getString(key, "NONE");
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setBackground(getRounded(SURFACE_COLOR, 24f));
-        card.setPadding(15, 24, 10, 24);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(6, 6, 6, 6);
-        card.setLayoutParams(lp);
-
-        card.addView(buildActionIconColumn(key, ""));
-
-        LinearLayout infoCol = new LinearLayout(this);
-        infoCol.setOrientation(LinearLayout.VERTICAL);
-        infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView t1 = stdLine(vName, "#E8EAED", 16f);
-        TextView t2 = stdLine(getActionLabelSmart(action, prefs.getString(key + "_launch_pkg", "")),
-                ACCENT_COLOR, 14f);
-        t2.setPadding(0, 5, 0, 5);
-
-        LinearLayout optRow = new LinearLayout(this);
-        optRow.setOrientation(LinearLayout.HORIZONTAL);
-        optRow.setPadding(0, 6, 0, 0);
-        CheckBox cbVib = new CheckBox(this);
-        cbVib.setText(T("Vibrate", "Rung"));
-        cbVib.setTextColor(Color.WHITE);
-        cbVib.setTextSize(11.5f);
-        cbVib.setChecked(prefs.getBoolean(key + "_vib", true));
-        cbVib.setOnCheckedChangeListener((vv, cc) -> prefs.edit().putBoolean(key + "_vib", cc).apply());
-        CheckBox cbSnd = new CheckBox(this);
-        cbSnd.setText(T("Sound", "Âm chạm"));
-        cbSnd.setTextColor(Color.WHITE);
-        cbSnd.setTextSize(11.5f);
-        cbSnd.setChecked(prefs.getBoolean(key + "_snd", false));
-        cbSnd.setOnCheckedChangeListener((vv, cc) -> prefs.edit().putBoolean(key + "_snd", cc).apply());
-        optRow.addView(cbVib);
-        optRow.addView(cbSnd);
-
-        infoCol.addView(t1);
-        infoCol.addView(t2);
-        infoCol.addView(optRow);
-        card.addView(infoCol);
-
-        Button btnTest = stdCardBtn("TEST", "#FFC107", Color.BLACK);
-        btnTest.setOnClickListener(v -> fireTestActions(
-                java.util.Arrays.asList(action.split(",")),
-                prefs.getString(key + "_launch_pkg", ""),
-                prefs.getString(key + "_shortcut_id", "")));
-        card.addView(btnTest);
-
-        card.setOnClickListener(v -> openTextureActionPicker(key, vName));
-        card.setOnLongClickListener(v -> {
-            new AlertDialog.Builder(this)
-                    .setTitle(T("Delete this rule?", "Xoá rule này?"))
-                    .setPositiveButton(T("DELETE", "XOÁ"), (d, w) -> {
-                        prefs.edit().putString(key, "NONE").apply();
-                        renderTextureRules();
-                    })
-                    .setNegativeButton(T("CANCEL", "HỦY"), null).show();
-            return true;
-        });
-        listRules.addView(card);
-    }
-    TextView note = new TextView(this);
-    note.setText("⚠ " + T("Fingerprint swipe only works when screen is OFF and requires a device with a fingerprint sensor that supports gestures.",
-            "Vuốt vân tay chỉ hoạt động khi MÀN HÌNH TẮT và cần máy có cảm biến vân tay hỗ trợ cử chỉ."));
-    note.setTextColor(Color.GRAY);
-    note.setTextSize(12f);
-    note.setPadding(20, 20, 20, 20);
-    listRules.addView(note);
-}
-
-// UX: picker đơn giản (list 1 cột) — nhanh hơn dialog đa tầng, phù hợp cho rule đơn lẻ.
-private void openVolKeyActionPicker(String key, String title) {
-    reloadActionLabels();
-    new AlertDialog.Builder(this).setTitle(title)
-            .setSingleChoiceItems(ACT_LABS, -1, (d, which) -> {
-                prefs.edit().putString(key, ACT_KEYS[which]).apply();
-                d.dismiss();
-                if (ACT_KEYS[which].equals("LAUNCH_APP")) {
-                    showSingleAppPickerDialogCallback(pkg -> {
-                        prefs.edit().putString(key + "_launch_pkg", pkg).apply();
-                        syncVolumeService();
-                        renderVolKeyRules();
-                    });
-                } else {
-                    syncVolumeService();
-                    renderVolKeyRules();
-                }
-            }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
-}
-
-private void openTextureActionPicker(String key, String title) {
-    reloadActionLabels();
-    new AlertDialog.Builder(this).setTitle(title)
-            .setSingleChoiceItems(ACT_LABS, -1, (d, which) -> {
-                prefs.edit().putString(key, ACT_KEYS[which]).apply();
-                d.dismiss();
-                if (ACT_KEYS[which].equals("LAUNCH_APP")) {
-                    showSingleAppPickerCallback(pkg -> {
-                        prefs.edit().putString(key + "_launch_pkg", pkg).apply();
-                        renderTextureRules();
-                    });
-                } else {
-                    renderTextureRules();
-                }
-            }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
-}
 private void renderRulesList() {
     if (currentGesTab == 5) {
         if (frontierBackRowRef != null && frontierBackRowRef.getVisibility() == View.VISIBLE) {
@@ -2500,6 +2295,75 @@ body.addView(createSlider(T("Jump Icon Opacity", "Độ đậm Icon Nhảy"), "h
     });
 
     return drawer;
+}
+private void renderVolKeyRules() {
+    listRules.removeAllViews();
+    String[] vKeys  = {"up_tap","down_tap","up_dtap","down_dtap","up_combo","down_combo"};
+    String[] vNames = {
+        "Nhấn Volume Up (1 Lần)", "Nhấn Volume Down (1 Lần)", 
+        "Nhấn Volume Up (2 Lần)", "Nhấn Volume Down (2 Lần)", 
+        "Combo: Vol Up rồi Down", "Combo: Vol Down rồi Up"
+    };
+for (int idx=0; idx<vKeys.length; idx++) {
+    final String key = "volkey_" + vKeys[idx];
+    final String vName = vNames[idx];
+    String action = prefs.getString(key, "NONE");
+    LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
+    card.setBackground(getRounded("#1E1E1E", 25f)); card.setPadding(35,35,35,35);
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.setMargins(15,15,15,15); card.setLayoutParams(lp);
+    TextView t1 = new TextView(this); t1.setText(vName); t1.setTextColor(Color.parseColor("#FFC107")); t1.setTextSize(15);
+    TextView t2 = new TextView(this); t2.setText(getActionLabelSmart(action, prefs.getString(key + "_launch_pkg", ""))); t2.setTextColor(Color.parseColor("#8AB4F8")); t2.setTextSize(13); t2.setPadding(0,10,0,10);
+    card.addView(t1); card.addView(t2);
+
+    LinearLayout optRow = new LinearLayout(this);
+    optRow.setOrientation(LinearLayout.HORIZONTAL);
+    optRow.setPadding(0, 8, 0, 8);
+
+    CheckBox cbVib = new CheckBox(this);
+    cbVib.setText(T("Vibrate", "Rung"));
+    cbVib.setTextColor(Color.WHITE); cbVib.setTextSize(12.5f);
+    cbVib.setChecked(prefs.getBoolean(key + "_vib", true));
+    cbVib.setOnCheckedChangeListener((vv, cc) -> prefs.edit().putBoolean(key + "_vib", cc).apply());
+
+    CheckBox cbSnd = new CheckBox(this);
+    cbSnd.setText(T("Sound", "Âm chạm"));
+    cbSnd.setTextColor(Color.WHITE); cbSnd.setTextSize(12.5f);
+    cbSnd.setChecked(prefs.getBoolean(key + "_snd", false));
+    cbSnd.setOnCheckedChangeListener((vv, cc) -> prefs.edit().putBoolean(key + "_snd", cc).apply());
+
+    optRow.addView(cbVib); optRow.addView(cbSnd);
+    card.addView(optRow);
+
+    card.setOnClickListener(v -> openVolKeyActionPicker(key, vName)); 
+    card.setOnLongClickListener(v -> {
+        new AlertDialog.Builder(this).setTitle("Xoá?").setPositiveButton("XOÁ", (d,w)->{
+            prefs.edit().putString(key, "NONE").apply(); syncVolumeService(); renderVolKeyRules();
+        }).setNegativeButton("HỦY", null).show();
+        return true;
+    });
+    listRules.addView(card);
+}
+    TextView note = new TextView(this);
+    note.setText("⚠ Chỉ hoạt động khi MÀN HÌNH TẮT. Khi màn sáng, phím Âm lượng hoạt động bình thường.\nMỗi phím chỉ chạy 1 hành động.");
+    note.setTextColor(Color.GRAY); note.setTextSize(12); note.setPadding(20,20,20,20);
+    listRules.addView(note);
+}
+
+private void openVolKeyActionPicker(String key, String title) {
+    reloadActionLabels();
+    new AlertDialog.Builder(this).setTitle(title)
+        .setSingleChoiceItems(ACT_LABS, -1, (d, which) -> {
+            prefs.edit().putString(key, ACT_KEYS[which]).apply();
+            d.dismiss();
+            if (ACT_KEYS[which].equals("LAUNCH_APP")) {
+                showSingleAppPickerDialogCallback(pkg -> {
+                    prefs.edit().putString(key + "_launch_pkg", pkg).apply();
+                    syncVolumeService(); renderVolKeyRules();
+                });
+            } else {
+                syncVolumeService(); renderVolKeyRules();
+            }
+        }).setNegativeButton("HỦY", null).show();
 }
 private void syncProximityService() {
     boolean need = ProximityWaveService.hasAnyRule(prefs);
