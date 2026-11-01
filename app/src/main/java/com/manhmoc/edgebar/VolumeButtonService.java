@@ -204,22 +204,27 @@ private void fire(String key) {
         } catch (Exception ignored) {}
     }
     if (prefs.getBoolean(key + "_snd", false)) TouchSoundHelper.play(this, prefs);
-    String act = action.split(",")[0].trim();
+    final String[] actList = action.split(",");
+final String lpkg = prefs.getString(key + "_launch_pkg", "");
+final String lsc = prefs.getString(key + "_shortcut_id", "");
+boolean needScreen = false;
+for (String a0 : actList) if (SCREEN_REQUIRED_ACTS.contains(a0.trim())) { needScreen = true; break; }
 
-    Runnable doFire = () -> {
+Runnable doFire = () -> {
+    for (String a1 : actList) {
+        String act = a1.trim();
+        if (act.isEmpty()) continue;
         Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-        if (act.startsWith("RUN_SHORTCUT_")) {
-            ipc.putExtra("act", "RUN_SHORTCUT");
-            ipc.putExtra("shortcut_id", act.substring("RUN_SHORTCUT_".length()));
-        } else {
-            ipc.putExtra("act", act);
-        }
+        if (act.equals("LAUNCH_APP")) { ipc.putExtra("act", "LAUNCH_APP"); ipc.putExtra("launch_pkg", lpkg); }
+        else if (act.equals("RUN_SHORTCUT")) { ipc.putExtra("act", "RUN_SHORTCUT"); ipc.putExtra("shortcut_id", lsc); }
+        else if (act.startsWith("RUN_SHORTCUT_")) { ipc.putExtra("act", "RUN_SHORTCUT"); ipc.putExtra("shortcut_id", act.substring("RUN_SHORTCUT_".length())); }
+        else ipc.putExtra("act", act);
         sendBroadcast(ipc);
-    };
-
+    }
+};
     android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
     boolean screenOff = pm != null && !pm.isInteractive();
-    if (screenOff && SCREEN_REQUIRED_ACTS.contains(act)) {
+    if (screenOff && needScreen) {
         try {
             android.os.PowerManager.WakeLock wl = pm.newWakeLock(
                 android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,

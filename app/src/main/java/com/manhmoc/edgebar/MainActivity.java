@@ -979,11 +979,7 @@ String[] bL = {T("None", "Không có"), T("Back", "Quay lại"), T("Home", "Màn
         T("Trigger: Diagonal + Hold", "Giả Lập: Chéo + Giữ"),
         T("Previous App (Recents x2)", "Về app trước (Đa nhiệm)"),
         T("2-Finger Accessibility Menu (Nav Bar)", "Giả Lập: 2 Ngón Gọi Trợ Năng (Nav Bar)")};
-for(int i=0; i<bK.length; i++) { ACT_KEYS[i]=bK[i]; ACT_LABS[i]=bL[i]; }
-// [XÓA] 2 vòng for sinh "INTENT_1".."INTENT_15" và "MACRO_1".."MACRO_5" — đây chính là
-// LỖI GỐC (đọc key "intent_1_name" trong khi Intent thật lưu ở "intent_<uuid>_name").
-// Đã thay bằng buildDynamicPackItems("intent_ids"/"macro_ids", ...) ở nơi dùng.
-// V19.12.3.6.10: bỏ vol_on/vol_off khỏi component chung (đã có không gian VOLKEY riêng)
+ACT_KEYS = bK; ACT_LABS = bL; // UX: mảng đúng 46 phần tử, không còn ô null gây NPE khi cuộn/bấm picker
 ALL_COMP_NAMES = new String[]{
     T("Bottom Right", "Thanh Đáy Phải"),
     T("Bottom Left", "Thanh Đáy Trái"),
@@ -1400,7 +1396,10 @@ if (currentMainTab == 0) {
         } else {
 
             fab.setVisibility(View.VISIBLE);
-            fab.setOnClickListener(v -> openRuleBuilderDialog(null, -1, -1, ""));
+            fab.setOnClickListener(v -> {
+    if (currentGesTab == 3 || currentGesTab == 4) openFlatRuleEditor(null);
+    else openRuleBuilderDialog(null, -1, -1, "");
+});
         }
         } else if (currentMainTab == 2) { // Ecosystem Space
         fab.setVisibility(View.VISIBLE);
@@ -1966,10 +1965,7 @@ private void renderRulesList() {
         if (!sensorSpaceBuilt) { listRules.removeAllViews(); buildSensorSpaceOnce(); }
         return;
     }
-    // UX: VolKey/Texture dùng UI card phẳng giống v42 (6 card / 4 card), KHÔNG dùng drawer
-    // để user thấy ngay hành động đang gán — tránh phải bấm mở drawer mới xem được.
-    if (currentGesTab == 3) { renderVolKeyRules(); return; }
-    if (currentGesTab == 4) { renderTextureRules(); return; }
+    if (currentGesTab == 3 || currentGesTab == 4) { renderFlatPackRules(); return; }
     listRules.removeAllViews();
     final boolean isVolKeyMode  = (currentGesTab == 3);
     final boolean isTextureMode = (currentGesTab == 4);
@@ -2095,7 +2091,7 @@ private void renderRulesList() {
 
         // Nút "Deep Customize" — chỉ hiện khi chọn đúng 1 pack CHƯA dual
         Button btnDeep = null;
-        if (gestureSelectedItems.size() == 1) {
+        if (gestureSelectedItems.size() == 1 && currentGesTab != 3 && currentGesTab != 4) {
             String singleKey = gestureSelectedItems.iterator().next();
             if (!prefs.getBoolean(singleKey + "_dual", false)) {
                 btnDeep = new Button(this);
@@ -2150,6 +2146,7 @@ private void renderRulesList() {
                     for (String k : new java.util.ArrayList<>(gestureSelectedItems)) {
                         prefs.edit().putString(k, "NONE").apply();
                     }
+                    if (currentGesTab == 3) syncVolumeService();
                     gestureSelectMode = false;
                     gestureSelectedItems.clear();
                     renderRulesList();
@@ -2296,209 +2293,266 @@ body.addView(createSlider(T("Jump Icon Opacity", "Độ đậm Icon Nhảy"), "h
 
     return drawer;
 }
-// UX: VolKey dùng 6 card phẳng cố định — user thấy ngay phím nào đang gán hành động gì.
-// Zero alloc thêm: card tái dùng getRounded() + buildActionIconColumn() có sẵn.
-private void renderVolKeyRules() {
+// ==================== VOLKEY / TEXTURE: DATA PACK ĐỒNG BỘ HOME/LOCK ====================
+private String[] flatComps() { return currentGesTab == 3 ? VOLKEY_COMPS : new String[]{"fingerprint"}; }
+private String[] flatGestures() { return currentGesTab == 3 ? VOLKEY_GESTURES : new String[]{"up", "down", "left", "right"}; }
+private String[] flatCompNames() { return currentGesTab == 3 ? VOLKEY_COMP_NAMES : new String[]{T("Fingerprint", "Vân Tay")}; }
+private String[] flatGestureNames() {
+    if (currentGesTab == 3) return VOLKEY_GESTURE_NAMES;
+    return new String[]{T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"),
+        T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải")};
+}
+
+private void renderFlatPackRules() {
     listRules.removeAllViews();
-    String[] vKeys  = {"up_tap", "down_tap", "up_dtap", "down_dtap", "up_combo", "down_combo"};
-    String[] vNames = {
-        "Nhấn Volume Up (1 Lần)", "Nhấn Volume Down (1 Lần)",
-        "Nhấn Volume Up (2 Lần)", "Nhấn Volume Down (2 Lần)",
-        "Combo: Vol Up rồi Down", "Combo: Vol Down rồi Up"
-    };
-    for (int idx = 0; idx < vKeys.length; idx++) {
-        final String key = "volkey_" + vKeys[idx];
-        final String vName = vNames[idx];
-        String action = prefs.getString(key, "NONE");
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setBackground(getRounded(SURFACE_COLOR, 24f));
-        card.setPadding(15, 24, 10, 24);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(6, 6, 6, 6);
-        card.setLayoutParams(lp);
+    final boolean isVol = (currentGesTab == 3);
+    final String prefix = getSpacePrefix();
+    final String orderKey = "rule_order_" + prefix;
+    final String[] comps = flatComps(), cNames = flatCompNames(), gests = flatGestures(), gNames = flatGestureNames();
+    if (gestureSelectMode) listRules.addView(buildGestureSelectionToolbar(prefix));
 
-        card.addView(buildActionIconColumn(key, ""));   // icon v44 giữ nguyên, không đổi
+    final List<String[]> rows = new ArrayList<>(); // {key, tênVùng, tênCửChỉ}
+    for (int c = 0; c < comps.length; c++)
+        for (int g = 0; g < gests.length; g++) {
+            String k = prefix + comps[c] + "_" + gests[g];
+            if (!prefs.getString(k, "NONE").equals("NONE")) rows.add(new String[]{k, cNames[c], gNames[g]});
+        }
+    final List<String> saved = getDynamicIds(orderKey);
+    rows.sort((a, b) -> {
+        int ia = saved.indexOf(a[0]), ib = saved.indexOf(b[0]);
+        return Integer.compare(ia < 0 ? 9999 : ia, ib < 0 ? 9999 : ib);
+    });
+    final List<String> order = new ArrayList<>();
+    for (String[] r : rows) order.add(r[0]);
 
-        LinearLayout infoCol = new LinearLayout(this);
-        infoCol.setOrientation(LinearLayout.VERTICAL);
-        infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView t1 = stdLine(vName, "#E8EAED", 16f);
-        TextView t2 = stdLine(getActionLabelSmart(action, prefs.getString(key + "_launch_pkg", "")),
-                ACCENT_COLOR, 14f);
-        t2.setPadding(0, 5, 0, 5);
-
-        LinearLayout optRow = new LinearLayout(this);
-        optRow.setOrientation(LinearLayout.HORIZONTAL);
-        optRow.setPadding(0, 6, 0, 0);
-        CheckBox cbVib = new CheckBox(this);
-        cbVib.setText(T("Vibrate", "Rung"));
-        cbVib.setTextColor(Color.WHITE);
-        cbVib.setTextSize(11.5f);
-        cbVib.setChecked(prefs.getBoolean(key + "_vib", true));
-        cbVib.setOnCheckedChangeListener((vv, cc) -> prefs.edit().putBoolean(key + "_vib", cc).apply());
-        CheckBox cbSnd = new CheckBox(this);
-        cbSnd.setText(T("Sound", "Âm chạm"));
-        cbSnd.setTextColor(Color.WHITE);
-        cbSnd.setTextSize(11.5f);
-        cbSnd.setChecked(prefs.getBoolean(key + "_snd", false));
-        cbSnd.setOnCheckedChangeListener((vv, cc) -> prefs.edit().putBoolean(key + "_snd", cc).apply());
-        optRow.addView(cbVib);
-        optRow.addView(cbSnd);
-
-        infoCol.addView(t1);
-        infoCol.addView(t2);
-        infoCol.addView(optRow);
-        card.addView(infoCol);
-
-        Button btnTest = stdCardBtn("TEST", "#FFC107", Color.BLACK);
-        btnTest.setOnClickListener(v -> fireTestActions(
-                java.util.Arrays.asList(action.split(",")),
-                prefs.getString(key + "_launch_pkg", ""),
-                prefs.getString(key + "_shortcut_id", "")));
-        card.addView(btnTest);
-
-        card.setOnClickListener(v -> openVolKeyActionPicker(key, vName));
-        card.setOnLongClickListener(v -> {
-            new AlertDialog.Builder(this)
-                    .setTitle(T("Delete this rule?", "Xoá rule này?"))
-                    .setPositiveButton(T("DELETE", "XOÁ"), (d, w) -> {
-                        prefs.edit().putString(key, "NONE").apply();
-                        syncVolumeService();
-                        renderVolKeyRules();
-                    })
-                    .setNegativeButton(T("CANCEL", "HỦY"), null).show();
-            return true;
-        });
-        listRules.addView(card);
+    if (rows.isEmpty()) {
+        TextView empty = new TextView(this);
+        empty.setText(T("No rules yet.\nPress the round button to create a Data Pack.",
+                        "Chưa có Data Pack nào.\nBấm nút tròn để tạo."));
+        empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER); empty.setPadding(0, 60, 0, 60);
+        listRules.addView(empty);
+    } else {
+        final SpanFlow flow = new SpanFlow(listRules);
+        for (String[] r : rows) {
+            View card = buildFlatRuleCard(r[0], r[1], r[2]);
+            attachDragReorder(card, order, orderKey, this::renderRulesList);
+            flow.add(card, getPackSpanUnits("ui_span_" + orderKey + "_" + r[0]));
+        }
+        flow.finish();
     }
     TextView note = new TextView(this);
-    note.setText("⚠ " + T("Only works when screen is OFF. When screen is on, volume keys behave normally.",
-            "Chỉ hoạt động khi MÀN HÌNH TẮT. Khi màn sáng, phím Âm lượng hoạt động bình thường."));
-    note.setTextColor(Color.GRAY);
-    note.setTextSize(12f);
-    note.setPadding(20, 20, 20, 20);
+    note.setText("⚠ " + (isVol
+        ? T("Only works when screen is OFF. When screen is on, volume keys behave normally.",
+            "Chỉ hoạt động khi MÀN HÌNH TẮT. Khi màn sáng, phím Âm lượng hoạt động bình thường.")
+        : T("Fingerprint swipe only works with Accessibility ON and a sensor that supports gestures.",
+            "Vuốt vân tay chỉ chạy khi Trợ năng BẬT và máy có cảm biến vân tay hỗ trợ cử chỉ.")));
+    note.setTextColor(Color.GRAY); note.setTextSize(12f); note.setPadding(20, 20, 20, 20);
     listRules.addView(note);
 }
 
-// UX: Texture dùng 4 card phẳng cố định — cùng layout VolKey, chỉ khác key prefix + không có combo.
-private void renderTextureRules() {
-    listRules.removeAllViews();
-    String[] tKeys = {"up", "down", "left", "right"};
-    String[] tNames = {
-        "Vuốt Lên trên Vân Tay", "Vuốt Xuống trên Vân Tay",
-        "Vuốt Trái trên Vân Tay", "Vuốt Phải trên Vân Tay"
-    };
-    for (int idx = 0; idx < tKeys.length; idx++) {
-        final String key = "texture_fingerprint_" + tKeys[idx];
-        final String vName = tNames[idx];
-        String action = prefs.getString(key, "NONE");
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setBackground(getRounded(SURFACE_COLOR, 24f));
-        card.setPadding(15, 24, 10, 24);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(6, 6, 6, 6);
-        card.setLayoutParams(lp);
+private View buildFlatRuleCard(final String key, String compName, String gestureName) {
+    final String acts = prefs.getString(key, "NONE");
+    final String pkg = prefs.getString(key + "_launch_pkg", "");
+    final String sc = prefs.getString(key + "_shortcut_id", "");
+    final String spanKey = "ui_span_rule_order_" + getSpacePrefix() + "_" + key;
 
-        card.addView(buildActionIconColumn(key, ""));
+    Button btnTest = stdCardBtn("TEST", "#FFC107", Color.BLACK);
+    btnTest.setOnClickListener(v -> fireTestActions(java.util.Arrays.asList(acts.split(",")), pkg, sc));
+    LinearLayout card = buildStdPackCard(buildActionIconColumnFromActs(acts, key + "_"),
+        compName + " · " + gestureName, null, formatActionCsvLabel(acts, pkg, sc), btnTest);
+    FrameLayout wrap = wrapPackCard(card, key);
 
-        LinearLayout infoCol = new LinearLayout(this);
-        infoCol.setOrientation(LinearLayout.VERTICAL);
-        infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView t1 = stdLine(vName, "#E8EAED", 16f);
-        TextView t2 = stdLine(getActionLabelSmart(action, prefs.getString(key + "_launch_pkg", "")),
-                ACCENT_COLOR, 14f);
-        t2.setPadding(0, 5, 0, 5);
-
-        LinearLayout optRow = new LinearLayout(this);
-        optRow.setOrientation(LinearLayout.HORIZONTAL);
-        optRow.setPadding(0, 6, 0, 0);
-        CheckBox cbVib = new CheckBox(this);
-        cbVib.setText(T("Vibrate", "Rung"));
-        cbVib.setTextColor(Color.WHITE);
-        cbVib.setTextSize(11.5f);
-        cbVib.setChecked(prefs.getBoolean(key + "_vib", true));
-        cbVib.setOnCheckedChangeListener((vv, cc) -> prefs.edit().putBoolean(key + "_vib", cc).apply());
-        CheckBox cbSnd = new CheckBox(this);
-        cbSnd.setText(T("Sound", "Âm chạm"));
-        cbSnd.setTextColor(Color.WHITE);
-        cbSnd.setTextSize(11.5f);
-        cbSnd.setChecked(prefs.getBoolean(key + "_snd", false));
-        cbSnd.setOnCheckedChangeListener((vv, cc) -> prefs.edit().putBoolean(key + "_snd", cc).apply());
-        optRow.addView(cbVib);
-        optRow.addView(cbSnd);
-
-        infoCol.addView(t1);
-        infoCol.addView(t2);
-        infoCol.addView(optRow);
-        card.addView(infoCol);
-
-        Button btnTest = stdCardBtn("TEST", "#FFC107", Color.BLACK);
-        btnTest.setOnClickListener(v -> fireTestActions(
-                java.util.Arrays.asList(action.split(",")),
-                prefs.getString(key + "_launch_pkg", ""),
-                prefs.getString(key + "_shortcut_id", "")));
-        card.addView(btnTest);
-
-        card.setOnClickListener(v -> openTextureActionPicker(key, vName));
+    if (gestureSelectMode) {
+        addSelDot(wrap, gestureSelectedItems.contains(key));
+        card.setOnClickListener(v -> {
+            if (!gestureSelectedItems.remove(key)) gestureSelectedItems.add(key);
+            renderRulesList();
+        });
+        card.setOnLongClickListener(v -> true);
+    } else {
+        card.setOnClickListener(v -> openFlatRuleEditor(key));
         card.setOnLongClickListener(v -> {
-            new AlertDialog.Builder(this)
-                    .setTitle(T("Delete this rule?", "Xoá rule này?"))
-                    .setPositiveButton(T("DELETE", "XOÁ"), (d, w) -> {
-                        prefs.edit().putString(key, "NONE").apply();
-                        renderTextureRules();
-                    })
-                    .setNegativeButton(T("CANCEL", "HỦY"), null).show();
+            showPackLongPressMenu(v, spanKey, () -> {   // 1/2/3 pack mỗi hàng + chọn nhiều
+                gestureSelectMode = true; gestureSelectedItems.clear(); gestureSelectedItems.add(key);
+                renderRulesList();
+            }, this::renderRulesList);
             return true;
         });
-        listRules.addView(card);
     }
-    TextView note = new TextView(this);
-    note.setText("⚠ " + T("Fingerprint swipe only works when screen is OFF and requires a device with a fingerprint sensor that supports gestures.",
-            "Vuốt vân tay chỉ hoạt động khi MÀN HÌNH TẮT và cần máy có cảm biến vân tay hỗ trợ cử chỉ."));
-    note.setTextColor(Color.GRAY);
-    note.setTextSize(12f);
-    note.setPadding(20, 20, 20, 20);
-    listRules.addView(note);
+    return wrap;
 }
 
-// UX: picker đơn giản (list 1 cột) — nhanh hơn dialog đa tầng, phù hợp cho rule đơn lẻ.
-private void openVolKeyActionPicker(String key, String title) {
+/** editKey == null: tạo Data Pack mới. Ghi thẳng vào key volkey_<up|down>_<tap|dtap|combo> / texture_fingerprint_<dir>
+ *  nên VolumeButtonService + EdgeBarService không phải đổi cách đọc. Không có OR/AND. */
+private void openFlatRuleEditor(final String editKey) {
     reloadActionLabels();
-    new AlertDialog.Builder(this).setTitle(title)
-            .setSingleChoiceItems(ACT_LABS, -1, (d, which) -> {
-                prefs.edit().putString(key, ACT_KEYS[which]).apply();
-                d.dismiss();
-                if (ACT_KEYS[which].equals("LAUNCH_APP")) {
-                    showSingleAppPickerDialogCallback(pkg -> {
-                        prefs.edit().putString(key + "_launch_pkg", pkg).apply();
-                        syncVolumeService();
-                        renderVolKeyRules();
-                    });
-                } else {
-                    syncVolumeService();
-                    renderVolKeyRules();
-                }
-            }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
-}
-private void openTextureActionPicker(String key, String title) {
-    reloadActionLabels();
-    new AlertDialog.Builder(this).setTitle(title)
-            .setSingleChoiceItems(ACT_LABS, -1, (d, which) -> {
-                prefs.edit().putString(key, ACT_KEYS[which]).apply();
-                d.dismiss();
-                if (ACT_KEYS[which].equals("LAUNCH_APP")) {
-                    showSingleAppPickerDialogCallback(pkg -> {
-                        prefs.edit().putString(key + "_launch_pkg", pkg).apply();
-                        renderTextureRules();
-                    });
-                } else {
-                    renderTextureRules();
-                }
-            }).setNegativeButton(T("CANCEL", "HỦY"), null).show();
+    final boolean isVol = (currentGesTab == 3);
+    final String prefix = getSpacePrefix();
+    final String[] comps = flatComps(), cNames = flatCompNames(), gests = flatGestures(), gNames = flatGestureNames();
+    final String kind = isVol ? "VOLKEY" : "FULL";
+
+    final java.util.LinkedHashSet<String> selComps = new java.util.LinkedHashSet<>();
+    final java.util.LinkedHashSet<String> selGests = new java.util.LinkedHashSet<>();
+    final java.util.LinkedHashSet<String> acts = new java.util.LinkedHashSet<>();
+    final String[] pkg = {""}, sc = {""};
+    boolean vib0 = true, snd0 = false, anim0 = true;
+    if (editKey != null) {
+        String rest = editKey.substring(prefix.length());
+        int us = rest.indexOf('_');
+        if (us > 0) { selComps.add(rest.substring(0, us)); selGests.add(rest.substring(us + 1)); }
+        for (String s : prefs.getString(editKey, "").split(","))
+            if (!s.trim().isEmpty() && !s.trim().equals("NONE")) acts.add(s.trim());
+        pkg[0] = prefs.getString(editKey + "_launch_pkg", "");
+        sc[0] = prefs.getString(editKey + "_shortcut_id", "");
+        vib0 = prefs.getBoolean(editKey + "_vib", true);
+        snd0 = prefs.getBoolean(editKey + "_snd", false);
+        anim0 = prefs.getBoolean(editKey + "_anim", true);
+    }
+    if (!isVol) selComps.add("fingerprint"); // Texture chỉ có 1 vùng
+
+    Dialog d = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setBackgroundColor(Color.parseColor("#121212"));
+    root.setPadding(30, 120, 30, 30);
+
+    LinearLayout tabs = new LinearLayout(this);
+    tabs.setOrientation(LinearLayout.HORIZONTAL);
+    Button bTrig = createTabBtn("TRIGGER"), bAct = createTabBtn("ACTION");
+    LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(0, -2, 1f);
+    tabLp.setMargins(10, 0, 10, 0);
+    bTrig.setLayoutParams(tabLp); bAct.setLayoutParams(tabLp);
+    tabs.addView(bTrig); tabs.addView(bAct); root.addView(tabs);
+
+    ScrollView scroll = new ScrollView(this);
+    scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+    LinearLayout content = new LinearLayout(this);
+    content.setOrientation(LinearLayout.VERTICAL);
+    content.setPadding(0, 40, 0, 0);
+    scroll.addView(content); root.addView(scroll);
+
+    // ---------- TAB TRIGGER: 1 Trigger · 2 Gesture · 3 Options ----------
+    final LinearLayout vTrig = new LinearLayout(this); vTrig.setOrientation(LinearLayout.VERTICAL);
+    LinearLayout compBox = new LinearLayout(this); compBox.setOrientation(LinearLayout.VERTICAL); compBox.setPadding(20, 10, 20, 20);
+    for (int i = 0; i < comps.length; i++) {
+        final String ck = comps[i];
+        CheckBox cb = new CheckBox(this);
+        cb.setText(cNames[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0, 20, 0, 20);
+        cb.setChecked(selComps.contains(ck));
+        cb.setEnabled(isVol); // Texture: vùng cố định
+        cb.setOnCheckedChangeListener((b, c) -> { if (c) selComps.add(ck); else selComps.remove(ck); });
+        compBox.addView(cb);
+    }
+    vTrig.addView(createDrawer("1. " + T("CHOOSE TRIGGER", "CHỌN TRIGGER"), compBox));
+
+    LinearLayout gBox = new LinearLayout(this); gBox.setOrientation(LinearLayout.VERTICAL); gBox.setPadding(20, 10, 20, 20);
+    for (int i = 0; i < gests.length; i++) {
+        final String gk = gests[i];
+        CheckBox cb = new CheckBox(this);
+        cb.setText(gNames[i]); cb.setTextColor(Color.WHITE); cb.setPadding(0, 20, 0, 20);
+        cb.setChecked(selGests.contains(gk));
+        cb.setOnCheckedChangeListener((b, c) -> { if (c) selGests.add(gk); else selGests.remove(gk); });
+        gBox.addView(cb);
+    }
+    vTrig.addView(createDrawer("2. " + T("CHOOSE GESTURE", "CHỌN CỬ CHỈ"), gBox));
+
+    TextView tvOpt = new TextView(this);
+    tvOpt.setText(T("3. CHOOSE OPTIONS", "3. CHỌN TÙY CHỌN"));
+    tvOpt.setTextColor(Color.parseColor("#E91E63")); tvOpt.setPadding(30, 30, 30, 30); tvOpt.setTextSize(16);
+    tvOpt.setBackground(getRounded("#222222", 20f));
+    LinearLayout.LayoutParams optLp = new LinearLayout.LayoutParams(-1, -2);
+    optLp.setMargins(0, 20, 0, 10);
+    tvOpt.setLayoutParams(optLp);
+    vTrig.addView(tvOpt);
+    final CheckBox cbVib = new CheckBox(this), cbSnd = new CheckBox(this), cbAnim = new CheckBox(this);
+    cbVib.setText(T("Haptic Feedback", "Bật Rung (Haptic Feedback)")); cbVib.setChecked(vib0);
+    cbSnd.setText(T("Touch Sound", "Âm chạm (Touch Sound)")); cbSnd.setChecked(snd0);
+    cbAnim.setText(T("Show Animation", "Bật Hiệu ứng Ánh sáng (Animation)")); cbAnim.setChecked(anim0);
+    for (CheckBox cb : new CheckBox[]{cbVib, cbSnd, cbAnim}) cb.setTextColor(Color.WHITE);
+    vTrig.addView(cbVib); vTrig.addView(cbSnd);
+    if (!isVol) vTrig.addView(cbAnim); // VolKey chạy lúc tắt màn nên không có Animation
+
+    // ---------- TAB ACTION: dùng chung picker 6 danh mục của Home/Lock ----------
+    final LinearLayout vAct = new LinearLayout(this);
+    vAct.setOrientation(LinearLayout.VERTICAL); vAct.setVisibility(View.GONE);
+    final LinearLayout actHost = new LinearLayout(this); actHost.setOrientation(LinearLayout.VERTICAL);
+    vAct.addView(actHost);
+    final Runnable[] renderAct = new Runnable[1];
+    renderAct[0] = () -> {
+        actHost.removeAllViews();
+        actHost.addView(createSectionTitle(T("CHOOSE ACTION", "CHỌN HÀNH ĐỘNG")));
+        Button test = stdCardBtn("TEST", "#FFC107", Color.BLACK);
+        test.setOnClickListener(v -> fireTestActions(acts, pkg[0], sc[0]));
+        LinearLayout card = buildStdPackCard(null, "Data Pack Action",
+            isVol ? T("Runs when screen is off", "Chạy khi màn hình đã tắt")
+                  : T("Runs on Accessibility (Homacc)", "Chạy ở Trợ năng (Homacc)"),
+            formatActionCsvLabel(TextUtils.join(",", acts), pkg[0], sc[0]), test);
+        card.setOnClickListener(v -> {
+            final java.util.LinkedHashSet<String> tmp = new java.util.LinkedHashSet<>(acts); // Huỷ picker thì không đổi gì
+            final String[] tp = {pkg[0]}, ts = {sc[0]};
+            openHalfActionPicker(true, kind, tmp, tp, ts, () -> {
+                acts.clear(); acts.addAll(tmp); pkg[0] = tp[0]; sc[0] = ts[0];
+                renderAct[0].run();
+            });
+        });
+        actHost.addView(wrapPackCard(card, "act"));
+    };
+    renderAct[0].run();
+
+    content.addView(vTrig); content.addView(vAct);
+    View.OnClickListener tabClick = v -> {
+        bTrig.setBackground(getRounded(v == bTrig ? "#8AB4F8" : "#222222", 15f));
+        bTrig.setTextColor(v == bTrig ? Color.BLACK : Color.WHITE);
+        bAct.setBackground(getRounded(v == bAct ? "#8AB4F8" : "#222222", 15f));
+        bAct.setTextColor(v == bAct ? Color.BLACK : Color.WHITE);
+        vTrig.setVisibility(v == bTrig ? View.VISIBLE : View.GONE);
+        vAct.setVisibility(v == bAct ? View.VISIBLE : View.GONE);
+    };
+    bTrig.setOnClickListener(tabClick); bAct.setOnClickListener(tabClick);
+    bTrig.performClick();
+
+    LinearLayout footer = new LinearLayout(this);
+    footer.setOrientation(LinearLayout.HORIZONTAL); footer.setPadding(0, 20, 0, 0);
+    Button bCancel = new Button(this); bCancel.setText(T("CANCEL", "HỦY"));
+    bCancel.setBackground(getRounded("#333333", 20f)); bCancel.setTextColor(Color.WHITE);
+    bCancel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+    Button bSave = new Button(this); bSave.setText(T("SAVE RULE", "LƯU QUY TẮC"));
+    bSave.setBackground(getRounded("#4CAF50", 20f)); bSave.setTextColor(Color.WHITE);
+    LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, -2, 1f); slp.setMargins(20, 0, 0, 0);
+    bSave.setLayoutParams(slp);
+    footer.addView(bCancel); footer.addView(bSave); root.addView(footer);
+
+    bCancel.setOnClickListener(v -> d.dismiss());
+    bSave.setOnClickListener(v -> {
+        if (selComps.isEmpty() || selGests.isEmpty()) {
+            Toast.makeText(this, T("Select at least 1 Trigger and 1 Gesture!", "Hãy chọn ít nhất 1 Trigger và 1 Cử chỉ!"), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (acts.isEmpty()) {
+            Toast.makeText(this, T("Select at least 1 Action!", "Hãy chọn ít nhất 1 Hành động!"), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (acts.contains("LAUNCH_APP") && pkg[0].isEmpty() || acts.contains("RUN_SHORTCUT") && sc[0].isEmpty()) {
+            Toast.makeText(this, T("Pick the app / shortcut first!", "Hãy chọn app / shortcut trước!"), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String joined = TextUtils.join(",", acts);
+        SharedPreferences.Editor ed = prefs.edit();
+        if (editKey != null) ed.putString(editKey, "NONE"); // dọn key cũ; nếu nằm trong lựa chọn mới sẽ bị ghi đè ngay bên dưới
+        for (String ck : selComps) for (String gk : selGests) {
+            String k = prefix + ck + "_" + gk;
+            ed.putString(k, joined)
+              .putString(k + "_launch_pkg", pkg[0]).putString(k + "_shortcut_id", sc[0])
+              .putBoolean(k + "_vib", cbVib.isChecked()).putBoolean(k + "_snd", cbSnd.isChecked())
+              .putBoolean(k + "_anim", !isVol && cbAnim.isChecked())
+              .putBoolean(k + "_jump_on", false).putBoolean(k + "_os", false); // jump_on=false để thẻ không hiện icon tên lửa
+        }
+        ed.apply();
+        if (isVol) syncVolumeService();
+        renderRulesList();
+        d.dismiss();
+    });
+    d.setContentView(root); d.show();
 }
 private void syncProximityService() {
     boolean need = ProximityWaveService.hasAnyRule(prefs);
@@ -2509,10 +2563,8 @@ private void syncProximityService() {
         stopService(i);
     }
 }
-
 private void syncVolumeService() {
     if (prefs.getBoolean("edgebar_permanently_stopped", false)) return;
-
     boolean need = VolumeButtonService.hasAnyRule(prefs);
     Intent i = new Intent(this, VolumeButtonService.class);
     if (need && !VolumeButtonService.isRunning) {
@@ -3680,11 +3732,16 @@ private void openHalfActionPicker(boolean isLeft, String kind,
     content.setPadding(0, 20, 0, 20);
     scroll.addView(content);
     root.addView(scroll);
-
-    String[] sysKeys = isLimited ? PACK_SYS_KEYS_COMMON : PACK_SYS_KEYS_FULL;
+private static final String[] PACK_SYS_KEYS_VOLKEY = new String[]{
+    "SCREEN_ON", "SCREEN_OFF", "FLASH", "CAMERA", "VOLUME", "SCREENSHOT", "NOTIFICATIONS",
+    "QUICK_SETTINGS", "HOME", "BACK", "RECENTS", "POWER_DIALOG", "SPLIT_SCREEN",
+    "SCREEN_RECORD", "AUTO_ROTATE_TOGGLE"};
+    final boolean isVol = "VOLKEY".equals(kind);
+String[] sysKeys = isVol ? PACK_SYS_KEYS_VOLKEY : (isLimited ? PACK_SYS_KEYS_COMMON : PACK_SYS_KEYS_FULL);
     List<String[]> SYS_ITEMS = buildItemsForKeys(sysKeys, ACT_KEYS, ACT_LABS);
-    List<String[]> UTIL_ITEMS = buildItemsForKeys(new String[]{
-        "HIDE_SOME_OVERLAY","SHOW_ALL_OVERLAY","TOGGLE_OVERLAY","TOGGLE_RECORD",
+    List<String[]> UTIL_ITEMS = buildItemsForKeys(isVol
+    ? new String[]{"TOGGLE_RECORD","PAUSE_RECORD","TOGGLE_OVERLAY","PLAY_MY_PLAYLIST"}
+    : new String[]{"HIDE_SOME_OVERLAY","SHOW_ALL_OVERLAY","TOGGLE_OVERLAY","TOGGLE_RECORD",
         "PAUSE_RECORD","YTDL_DOWNLOAD","TOGGLE_WORK_PROFILE","OPEN_STORAGE_SCAN",
         "SCAN_QR","PLAY_MY_PLAYLIST"}, ACT_KEYS, ACT_LABS);
     List<String[]> PANEL_ITEMS = buildDynamicPackItems("pack_panel_ids","pack_panel_","PANEL_","Panel Mới");
@@ -3693,7 +3750,7 @@ private void openHalfActionPicker(boolean isLeft, String kind,
 
         content.addView(buildActionCategoryDrawer("SYSTEM", "⚙️", "#4CAF50", SYS_ITEMS, targetSet, null, true));
     content.addView(buildActionCategoryDrawer("UTILITIES", "🛠️", "#FF9800", UTIL_ITEMS, targetSet, null, true));
-    if (!isLimited) {
+    if (!isLimited && !isVol) {
         List<String[]> TRIGGER_ITEMS_PACK = buildItemsForKeys(new String[]{
             "TRIGGER_TAP","TRIGGER_DTAP","TRIGGER_LONG",
             "TRIGGER_UP","TRIGGER_DOWN","TRIGGER_LEFT","TRIGGER_RIGHT","TRIGGER_DIAG",
@@ -3702,7 +3759,7 @@ private void openHalfActionPicker(boolean isLeft, String kind,
         }, ACT_KEYS, ACT_LABS);
         content.addView(buildActionCategoryDrawer("GESTURES", "🌀", "#009688", TRIGGER_ITEMS_PACK, targetSet, null, true));
     }
-    content.addView(buildActionCategoryDrawer("PANEL", "🗂️", "#9C27B0", PANEL_ITEMS, targetSet, null, true));
+    if (!isVol) content.addView(buildActionCategoryDrawer("PANEL", "🗂️", "#9C27B0", PANEL_ITEMS, targetSet, null, true)); // màn tắt thì Panel vô nghĩa
     content.addView(buildActionCategoryDrawer("INTENTS", "⚡", "#D32F2F", INTENT_ITEMS, targetSet, null, true));
     content.addView(buildActionCategoryDrawer("MACROS", "🤖", "#2196F3", MACRO_ITEMS, targetSet, null, true));
 
@@ -12424,11 +12481,13 @@ private View buildActionCategoryButton(String title, String emoji,
     return container;
 }
 private LinearLayout buildActionIconColumn(String rId, String px) {
+    return buildActionIconColumnFromActs(readPruleActsJoined(rId), px);
+}
+private LinearLayout buildActionIconColumnFromActs(String acts, String px) {
     LinearLayout col = new LinearLayout(this);
     col.setOrientation(LinearLayout.VERTICAL);
     col.setGravity(Gravity.CENTER);
     col.setPadding(0, 0, 15, 0);
-    String acts = readPruleActsJoined(rId);
     boolean hasAction = !acts.isEmpty() && !acts.equals("NONE");
     if (hasAction) {
         java.util.LinkedHashSet<String> kinds = new java.util.LinkedHashSet<>();
