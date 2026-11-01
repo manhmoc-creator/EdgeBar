@@ -204,41 +204,48 @@ private void fire(String key) {
         } catch (Exception ignored) {}
     }
     if (prefs.getBoolean(key + "_snd", false)) TouchSoundHelper.play(this, prefs);
-    final String[] actList = action.split(",");
-final String lpkg = prefs.getString(key + "_launch_pkg", "");
-final String lsc = prefs.getString(key + "_shortcut_id", "");
-boolean needScreen = false;
-for (String a0 : actList) if (SCREEN_REQUIRED_ACTS.contains(a0.trim())) { needScreen = true; break; }
 
-Runnable doFire = () -> {
-    for (String a1 : actList) {
-        String act = a1.trim();
-        if (act.isEmpty()) continue;
-        Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
-        if (act.equals("LAUNCH_APP")) { ipc.putExtra("act", "LAUNCH_APP"); ipc.putExtra("launch_pkg", lpkg); }
-        else if (act.equals("RUN_SHORTCUT")) { ipc.putExtra("act", "RUN_SHORTCUT"); ipc.putExtra("shortcut_id", lsc); }
-        else if (act.startsWith("RUN_SHORTCUT_")) { ipc.putExtra("act", "RUN_SHORTCUT"); ipc.putExtra("shortcut_id", act.substring("RUN_SHORTCUT_".length())); }
-        else ipc.putExtra("act", act);
-        sendBroadcast(ipc);
-    }
-};
+    final String[] acts = action.split(",");
+    final String pkg = prefs.getString(key + "_launch_pkg", "");
+    final String scId = prefs.getString(key + "_shortcut_id", "");
+    boolean needScreen = false;
+    for (String a : acts) if (SCREEN_REQUIRED_ACTS.contains(a.trim())) { needScreen = true; break; }
+
     android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
     boolean screenOff = pm != null && !pm.isInteractive();
-    if (screenOff && needScreen) {
+    final boolean waitScreen = screenOff && needScreen;
+    if (waitScreen) {
         try {
-            android.os.PowerManager.WakeLock wl = pm.newWakeLock(
-                android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                "EdgeBar:VolKeyWake");
-            wl.acquire(3000);
+            pm.newWakeLock(android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK
+                | android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP, "EdgeBar:VolKeyWake").acquire(3000);
         } catch (Exception ignored) {}
-        // Đợi 350ms để màn hình + Lock bar kịp bật ổn định rồi mới bắn action,
-        // tránh trường hợp action chạy trước khi Trợ năng/Homeb kịp vẽ overlay.
-        new Handler(android.os.Looper.getMainLooper()).postDelayed(doFire, 350);
-    } else {
-        doFire.run();
     }
-}
 
+    Runnable doFire = () -> {
+        int delay = 0;
+        for (String raw : acts) {
+            final String act = raw.trim();
+            if (act.isEmpty() || act.equals("NONE")) continue;
+            h.postDelayed(() -> {
+                Intent ipc = new Intent("com.manhmoc.edgebar.IPC_ACTION");
+                if (act.startsWith("RUN_SHORTCUT_")) {
+                    ipc.putExtra("act", "RUN_SHORTCUT");
+                    ipc.putExtra("shortcut_id", act.substring("RUN_SHORTCUT_".length()));
+                } else if (act.equals("RUN_SHORTCUT")) {
+                    ipc.putExtra("act", "RUN_SHORTCUT");
+                    ipc.putExtra("shortcut_id", scId);
+                } else if (act.equals("LAUNCH_APP")) {
+                    ipc.putExtra("act", "LAUNCH_APP");
+                    ipc.putExtra("launch_pkg", pkg);
+                } else ipc.putExtra("act", act);
+                sendBroadcast(ipc);
+            }, delay);
+            delay += 120;
+        }
+    };
+    // UX: action cần UI phải chờ màn + overlay bật ổn định (350ms) rồi mới bắn
+    if (waitScreen) h.postDelayed(doFire, 350); else doFire.run();
+}
     private boolean startForegroundQuiet() {
         try {
             String cid = "eb_volkey";
