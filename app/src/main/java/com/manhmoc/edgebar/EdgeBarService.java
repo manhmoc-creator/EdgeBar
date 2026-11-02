@@ -929,15 +929,18 @@ void shutdown() {
                 invalidate();
             });
             jumpUpAnim.addListener(new AnimatorListenerAdapter() {
+    boolean cancelled;
+    @Override public void onAnimationCancel(Animator a) { cancelled = true; }
     @Override public void onAnimationEnd(Animator a) {
-        if (isShuttingDown || isDetached || !isAttachedToWindow()) return;
-        try {
-            int holdMs = Math.max(50, prefs.getInt("homacc_jump_hold_ms", 2000));
-            jumpHandler.postDelayed(() -> {
-                if (isShuttingDown || isDetached || !isAttachedToWindow()) return;
-                try { startFall(); } catch (Exception ignored) {}
-            }, holdMs);
-        } catch (Exception ignored) {}
+        // UX: cancel cũng gọi onAnimationEnd; không chặn thì lần nhảy cũ làm icon mới rơi sớm
+        if (cancelled || isShuttingDown || isDetached || !isAttachedToWindow()) return;
+        long holdMs = 2000;
+        // UX: prefs lỗi kiểu dữ liệu vẫn phải rơi xuống, không được kẹt icon trên màn hình
+        try { holdMs = Math.max(50, prefs.getInt("homacc_jump_hold_dur", 2000)); } catch (Exception ignored) {}
+        jumpHandler.postDelayed(() -> {
+            if (isShuttingDown || isDetached || !isAttachedToWindow()) return;
+            try { startFall(); } catch (Exception ignored) {}
+        }, holdMs);
     }
 });
             jumpUpAnim.start();
@@ -2972,6 +2975,10 @@ if (key != null && key.startsWith("homacc_")
         }
     }
     private class SidebarTouchListener implements View.OnTouchListener {
+        // UX: chỉ giành cử chỉ khi người dùng thật sự có rule, tránh nuốt swipe thường
+        private boolean hasRule(String suffix) {
+        return !prefs.getString(prefKeyBase + "_" + suffix, "NONE").equals("NONE");
+        }
         private String prefKeyBase;
         private View myView;
         private float sx, sy, lastX, lastY;
@@ -3034,31 +3041,28 @@ private void checkAndYieldOS(String actionKey) {
         }
 
         private final Runnable holdCheckRunnable = () -> {
-            float cdx = lastX - sx, cdy = lastY - sy;
-            if (Math.abs(cdx) > SWIPE_CANCEL_SLOP_PX || Math.abs(cdy) > SWIPE_CANCEL_SLOP_PX) {
-                // [SWIPE + HOLD CŨ] Đã vuốt ra xa rồi đứng im
-                longFired = true; 
-                String actionName;
-                if (myView instanceof CornerView && Math.abs(cdx) > 40 && Math.abs(cdy) > 40) actionName = "diag_hold";
-                else {
-                    if (Math.abs(cdx) > Math.abs(cdy)) actionName = cdx > 0 ? "right_hold" : "left_hold";
-                    else actionName = cdy > 0 ? "down_hold" : "up_hold";
-                }
-                                handleAction(prefKeyBase + "_" + actionName);
-                checkAndYieldOS(prefKeyBase + "_" + actionName); // THÊM DÒNG NÀY
-                if (rippleView != null) {
-                    float swipeMag = (float) Math.sqrt(cdx * cdx + cdy * cdy);
-                    float dirX = swipeMag > 0.001f ? cdx / swipeMag : 0f;
-                    float dirY = swipeMag > 0.001f ? cdy / swipeMag : 0f;
-                    rippleView.jumpIcon(sx, sy, actionName, Color.argb(180, 96, 125, 139), dirX, dirY);
-                }
-                        } else {
-                // [GÀI SỐ MỚI] Tay đứng im tại chỗ -> Rung báo hiệu vào trạng thái "Giữ + Vuốt"
-                isHolding = true;
-                holdAnchorX = lastX; holdAnchorY = lastY; 
-                doVibrate(30);
-            }
-        };
+    float cdx = lastX - sx, cdy = lastY - sy;
+    if (Math.abs(cdx) > SWIPE_CANCEL_SLOP_PX || Math.abs(cdy) > SWIPE_CANCEL_SLOP_PX) {
+        String actionName;
+        if (myView instanceof CornerView && Math.abs(cdx) > 40 && Math.abs(cdy) > 40) actionName = "diag_hold";
+        else if (Math.abs(cdx) > Math.abs(cdy)) actionName = cdx > 0 ? "right_hold" : "left_hold";
+        else actionName = cdy > 0 ? "down_hold" : "up_hold";
+        // UX: không có rule *_hold thì để lúc nhả tay xử lý như swipe thường
+        if (!hasRule(actionName)) return;
+        longFired = true;
+        handleAction(prefKeyBase + "_" + actionName);
+        checkAndYieldOS(prefKeyBase + "_" + actionName);
+        if (rippleView != null) {
+            float swipeMag = (float) Math.sqrt(cdx * cdx + cdy * cdy);
+            float dirX = swipeMag > 0.001f ? cdx / swipeMag : 0f;
+            float dirY = swipeMag > 0.001f ? cdy / swipeMag : 0f;
+            rippleView.jumpIcon(sx, sy, actionName, Color.argb(180, 96, 125, 139), dirX, dirY);
+        }
+    } else {
+        isHolding = true;
+        if (hasRule("long")) doVibrate(30); // UX: không rung "ảo" khi không có rule long
+    }
+};
 private boolean isHolding = false;
 private float holdAnchorX = 0f, holdAnchorY = 0f; 
 private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
@@ -3126,20 +3130,9 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     String actionName = "";
                     boolean isDiag = (myView instanceof CornerView && absDx > 40 && absDy > 40);
 
-                     if (isHolding) {
-                        float holdDx = lastX - holdAnchorX, holdDy = lastY - holdAnchorY;
-                        float holdAbsDx = Math.abs(holdDx), holdAbsDy = Math.abs(holdDy);
-                        if (holdAbsDx < SWIPE_CANCEL_SLOP_PX && holdAbsDy < SWIPE_CANCEL_SLOP_PX) {
-                            actionName = "long";
-                        } else {
-                            boolean isDiagHold = (myView instanceof CornerView && holdAbsDx > 40 && holdAbsDy > 40);
-                            if (isDiagHold) actionName = "diag_hold";
-                            else {
-                                if (holdAbsDx > holdAbsDy) actionName = holdDx > 0 ? "hold_right" : "hold_left";
-                                else actionName = holdDy > 0 ? "hold_down" : "hold_up";
-                            }
-                        }
-                    } else {
+                    if (isHolding) {
+    actionName = "long"; // UX: giữ xong rồi trượt vẫn coi là long, không còn cử chỉ "gài số"
+} else {
                         if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
                                                         long now = System.currentTimeMillis();
                             // [MỚI - BƯỚC 4] Fallback _dtap từ "home_*" (rule Homacc
@@ -3215,12 +3208,12 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                             return true;
                         } else {
                             if (!isDiag) {
-                                if (minDy < -COMBO_THRESHOLD_PX && finalDy > minDy + COMBO_RETURN_SLOP_PX) actionName = "up_down";
-                                else if (maxDy > COMBO_THRESHOLD_PX && finalDy < maxDy - COMBO_RETURN_SLOP_PX) actionName = "down_up";
-                                else if (minDx < -COMBO_THRESHOLD_PX && finalDx > minDx + COMBO_RETURN_SLOP_PX) actionName = "left_right";
-                                else if (maxDx > COMBO_THRESHOLD_PX && finalDx < maxDx - COMBO_RETURN_SLOP_PX) actionName = "right_left";
-                                else if (absDx > absDy) actionName = finalDx > 0 ? "right" : "left";
-                                else actionName = finalDy > 0 ? "down" : "up";
+                                // UX: combo cần đủ 3 điều kiện (có rule, quay lại ≥50% quãng đã đi, xong trong 600ms); thiếu một cái thì là swipe thường, không bao giờ nuốt swipe
+boolean quick = System.currentTimeMillis() - st < 600;
+if (quick && hasRule("up_down") && minDy < -COMBO_THRESHOLD_PX && finalDy > minDy * 0.5f) actionName = "up_down";
+else if (quick && hasRule("down_up") && maxDy > COMBO_THRESHOLD_PX && finalDy < maxDy * 0.5f) actionName = "down_up";
+else if (absDx > absDy) actionName = finalDx > 0 ? "right" : "left";
+else actionName = finalDy > 0 ? "down" : "up";
                             } else {
                                 actionName = "diag";
                             }

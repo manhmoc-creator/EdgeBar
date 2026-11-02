@@ -61,12 +61,11 @@ private String[] VOLKEY_GESTURE_NAMES;
 private String[] M_BARS = {"r", "l", "t_r", "t_l", "t_c", "m_b_c", "m_mid_t", "m_mid_b"};
 private String[] M_BAR_NAMES;
 private String[] C_GESTURES = {
-    "tap", "dtap", "long", 
+    "tap", "dtap", "long",
     "up", "down", "left", "right", "diag",
     "up_hold", "down_hold", "left_hold", "right_hold", "diag_hold",
-    "up_down", "down_up", "left_right", "right_left",
-    "hold_up", "hold_down", "hold_left", "hold_right", "hold_diag"
-}; 
+    "up_down", "down_up"
+};
 private String[] C_GESTURE_NAMES = {
     "1 Chạm", "2 Chạm", "Nhấn Giữ (Long)", 
     "Vuốt Lên", "Vuốt Xuống", "Vuốt Trái", "Vuốt Phải", "Vuốt Chéo",
@@ -1003,12 +1002,10 @@ VOLKEY_COMP_NAMES = new String[]{T("Button Up", "Phím Tăng Âm"), T("Button Do
 VOLKEY_GESTURE_NAMES = new String[]{T("Press Once", "Nhấn 1 Lần"), T("Press Twice", "Nhấn 2 Lần"), T("Then Press Other", "Bấm phím còn lại (Combo)")};
 M_BAR_NAMES = new String[]{T("Bottom Right", "Đáy phải"), T("Bottom Left", "Đáy trái"), T("Top Right", "Cạnh Phải"), T("Top Left", "Cạnh Trái"), T("Top Center", "Đỉnh giữa"), T("Bottom Center", "Đáy Giữa"), T("Top Half Center", "Trung Tâm Trên"), T("Bottom Half Center", "Trung Tâm Dưới")};
 C_GESTURE_NAMES = new String[]{
-    T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"), 
-    T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Diagonal", "Vuốt Chéo"), 
+    T("Tap", "1 Chạm"), T("Double Tap", "2 Chạm"), T("Long Press", "Nhấn Giữ"),
+    T("Swipe Up", "Vuốt Lên"), T("Swipe Down", "Vuốt Xuống"), T("Swipe Left", "Vuốt Trái"), T("Swipe Right", "Vuốt Phải"), T("Diagonal", "Vuốt Chéo"),
     T("Up + Hold", "Vuốt Lên + Giữ"), T("Down + Hold", "Vuốt Xuống + Giữ"), T("Left + Hold", "Vuốt Trái + Giữ"), T("Right + Hold", "Vuốt Phải + Giữ"), T("Diagonal + Hold", "Vuốt Chéo + Giữ"),
-    T("Combo: Up-Down", "Combo: Lên - Xuống"), T("Combo: Down-Up", "Combo: Xuống - Lên"), T("Combo: Left-Right", "Combo: Trái - Phải"), T("Combo: Right-Left", "Combo: Phải - Trái"),
-    T("Hold + Up", "Gài số: Giữ + Vuốt Lên"), T("Hold + Down", "Gài số: Giữ + Vuốt Xuống"), T("Hold + Left", "Gài số: Giữ + Vuốt Trái"), T("Hold + Right", "Gài số: Giữ + Vuốt Phải"),
-    T("Hold + Diagonal", "Gài số: Giữ + Vuốt Chéo")
+    T("Combo: Up-Down", "Combo: Lên - Xuống"), T("Combo: Down-Up", "Combo: Xuống - Lên")
 };
 BAR_NAMES = new String[]{
 T("Top/Bottom Center", "Đỉnh/Đáy giữa"), T("Top Left/Right", "Cạnh đỉnh Trái/Phải"), T("Bottom Left/Right", "Cạnh đáy Trái/Phải"),
@@ -1035,6 +1032,10 @@ private String[] getVolKeyActLabs() {
     arr[ACT_LABS.length] = T("Screen On", "Bật màn hình");
     return arr;
 }
+// UX: chỉ timestamp thật mới là Long. Key kiểu "_hold_ms" là độ dài Int, ép Long sẽ làm getInt() ném ClassCastException
+private boolean isLongPrefKey(String k) {
+    return k.endsWith("_ts") || k.equals("update_last_check_ms") || k.equals("blacklist_lock_start_ms");
+}
     @Override public void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
         // [TỐI ƯU PIXEL 2XL] Bỏ chặn data.getData() != null ở cấp cao nhất
@@ -1057,7 +1058,7 @@ private String[] getVolKeyActLabs() {
                     while(k.hasNext()) {
                         String key = k.next(); Object v = j.get(key);
                         if(v instanceof Boolean) ed.putBoolean(key, (Boolean)v);
-                        else if (key.endsWith("_ts") || key.endsWith("_ms")) ed.putLong(key, ((Number)v).longValue());
+                        else if (isLongPrefKey(key)) ed.putLong(key, ((Number)v).longValue());
                         else if (v instanceof Integer) ed.putInt(key, (Integer)v);
                         else if (v instanceof Long) ed.putLong(key, (Long)v);
                         else if (v instanceof String) ed.putString(key, (String)v);
@@ -2256,7 +2257,7 @@ private LinearLayout buildGestureIconDrawer() {
             body.addView(createSlider(T("Jump Icon Size", "Kích thước Icon Nhảy"), "homacc_jump_icon_size", 160, 90));
 body.addView(createSlider(T("Jump Icon Opacity", "Độ đậm Icon Nhảy"), "homacc_jump_icon_alpha", 255, 255));
             body.addView(createSlider(T("Jump Up/Fall Duration (ms)", "Thời gian nhảy lên/rơi (ms)"), "homacc_jump_anim_dur", 3000, 1000));
-            body.addView(createSlider(T("Jump Hold Duration (ms)","Thời gian giữ trên đỉnh (ms)"), "homacc_jump_hold_ms", 3000, 2000));
+            body.addView(createSlider(T("Jump Hold Duration (ms)","Thời gian giữ trên đỉnh (ms)"), "homacc_jump_hold_dur", 3000, 2000));
             body.addView(createSlider(T("Jump Distance (px)","Khoảng cách nhảy Icon (px)"), "homacc_jump_dist", 400, 160));
             for (int i = 0; i < C_GESTURES.length; i++) {
                 final String gKey = "homacc_gesture_icon_" + C_GESTURES[i];

@@ -446,10 +446,15 @@ jumpIconBmp = resolveGestureIconBitmap(gestureKey, jSize);
                 invalidate();
             });
             jumpUpAnim.addListener(new AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(Animator a) {
-                    jumpHandler.postDelayed(() -> startFall(), prefs.getInt("homacc_jump_hold_ms", 2000));
-                }
-            });
+    boolean cancelled;
+    @Override public void onAnimationCancel(Animator a) { cancelled = true; }
+    @Override public void onAnimationEnd(Animator a) {
+        if (cancelled) return;
+        long holdMs = 2000;
+        try { holdMs = Math.max(50, prefs.getInt("homacc_jump_hold_dur", 2000)); } catch (Exception ignored) {}
+        jumpHandler.postDelayed(() -> startFall(), holdMs);
+    }
+});
             jumpUpAnim.start();
         }
         private void startFall() {
@@ -467,12 +472,19 @@ jumpIconBmp = resolveGestureIconBitmap(gestureKey, jSize);
                 invalidate();
             });
             fallAnim.addListener(new AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(Animator a) {
-                    jumpIconBmp = null;
-                    if (rippleAlpha <= 0f) setVisibility(View.GONE);
-                    invalidate();
-                }
-            });
+    boolean cancelled;
+    @Override public void onAnimationCancel(Animator a) { cancelled = true; }
+    @Override public void onAnimationEnd(Animator a) {
+        if (cancelled) return;
+        jumpIconBmp = null;
+        if (rippleAlpha <= 0f) {
+            setVisibility(View.GONE);
+            // UX: Homeb trước đây giữ view full-màn hình mãi mãi (tốn layer GPU). Gỡ khi rảnh, post để không removeView trong callback của chính nó
+            post(() -> { if (rippleView == GestureRippleView.this && rippleAlpha <= 0f && jumpIconBmp == null) removeRippleViewIfIdle(); });
+        }
+        invalidate();
+    }
+});
             fallAnim.start();
         }
 
@@ -1853,6 +1865,11 @@ default:
     }
 
     private class SidebarTouchListener implements View.OnTouchListener {
+        private boolean hasRule(String suffix) {
+    String k = prefKeyBase + "_" + suffix;
+    if (!prefs.getString(k, "NONE").equals("NONE")) return true;
+    return prefs.getBoolean(k + "_dual", false) && !prefs.getString(k + "_lim", "NONE").equals("NONE");
+}
         private String prefKeyBase;
         private View myView;
         private float sx, sy, lastX, lastY;
@@ -1913,17 +1930,15 @@ String osKey = prefs.getBoolean(actionKey + "_dual", false)
                 default: return new float[]{dxDir, dyDir};
             }
         }
-
         private final Runnable holdCheckRunnable = () -> {
-            longFired = true;
-            float cdx = lastX - sx, cdy = lastY - sy;
-            if (Math.abs(cdx) > SWIPE_CANCEL_SLOP_PX || Math.abs(cdy) > SWIPE_CANCEL_SLOP_PX) {
-                String actionName;
-                if (myView instanceof CornerView && Math.abs(cdx) > 40 && Math.abs(cdy) > 40) actionName = "diag_hold";
-                else {
-                    if (Math.abs(cdx) > Math.abs(cdy)) actionName = cdx > 0 ? "right_hold" : "left_hold";
-                    else actionName = cdy > 0 ? "down_hold" : "up_hold";
-                }
+        float cdx = lastX - sx, cdy = lastY - sy;
+        if (Math.abs(cdx) > SWIPE_CANCEL_SLOP_PX || Math.abs(cdy) > SWIPE_CANCEL_SLOP_PX) {
+        String actionName;
+        if (myView instanceof CornerView && Math.abs(cdx) > 40 && Math.abs(cdy) > 40) actionName = "diag_hold";
+        else if (Math.abs(cdx) > Math.abs(cdy)) actionName = cdx > 0 ? "right_hold" : "left_hold";
+        else actionName = cdy > 0 ? "down_hold" : "up_hold";
+        if (!hasRule(actionName)) return; // UX: nhường cho swipe thường lúc nhả tay
+        longFired = true;
                 handleAction(prefKeyBase + "_" + actionName);
                 checkAndYieldOS(prefKeyBase + "_" + actionName);
                 if (rippleView != null && prefs.getBoolean(prefKeyBase + "_" + actionName + "_jump_on", true)) {
@@ -1933,6 +1948,7 @@ String osKey = prefs.getBoolean(actionKey + "_dual", false)
                     rippleView.jumpIcon(sx, sy, actionName, Color.argb(180, 96, 125, 139), dirX, dirY);
                 }
             } else {
+                longFired = true;
                 handleAction(prefKeyBase + "_long");
                 checkAndYieldOS(prefKeyBase + "_long"); // THÊM DÒNG NÀY
                 if (rippleView != null && prefs.getBoolean(prefKeyBase + "_long" + "_jump_on", true)) {
@@ -2008,7 +2024,6 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                     float absDx = Math.abs(finalDx), absDy = Math.abs(finalDy);
                     String actionName = "";
                     boolean isDiag = (myView instanceof CornerView && absDx > 40 && absDy > 40);
-
              if (isHolding) {
                  float holdDx = lastX - holdAnchorX, holdDy = lastY - holdAnchorY;
                  float holdAbsDx = Math.abs(holdDx), holdAbsDy = Math.abs(holdDy);
@@ -2023,7 +2038,6 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                      }
                  }
              } else {
-
                         if (absDx < SWIPE_CANCEL_SLOP_PX && absDy < SWIPE_CANCEL_SLOP_PX) {
                             long now = System.currentTimeMillis();
                             boolean hasDtap = !prefs.getString(prefKeyBase + "_dtap", "NONE").equals("NONE");
@@ -2091,12 +2105,12 @@ private float minDx = 0f, maxDx = 0f, minDy = 0f, maxDy = 0f;
                             return true;
                         } else {
                             if (!isDiag) {
-                                                                if (minDy < -COMBO_THRESHOLD_PX && finalDy > minDy + COMBO_RETURN_SLOP_PX) actionName = "up_down";
-                                else if (maxDy > COMBO_THRESHOLD_PX && finalDy < maxDy - COMBO_RETURN_SLOP_PX) actionName = "down_up";
-                                else if (minDx < -COMBO_THRESHOLD_PX && finalDx > minDx + COMBO_RETURN_SLOP_PX) actionName = "left_right";
-                                else if (maxDx > COMBO_THRESHOLD_PX && finalDx < maxDx - COMBO_RETURN_SLOP_PX) actionName = "right_left";
-                                else if (absDx > absDy) actionName = finalDx > 0 ? "right" : "left";
-                                else actionName = finalDy > 0 ? "down" : "up";
+                            // UX: combo cần đủ 3 điều kiện (có rule, quay lại ≥50% quãng đã đi, xong trong 600ms); thiếu một cái thì là swipe thường, không bao giờ nuốt swipe
+boolean quick = System.currentTimeMillis() - st < 600;
+if (quick && hasRule("up_down") && minDy < -COMBO_THRESHOLD_PX && finalDy > minDy * 0.5f) actionName = "up_down";
+else if (quick && hasRule("down_up") && maxDy > COMBO_THRESHOLD_PX && finalDy < maxDy * 0.5f) actionName = "down_up";
+else if (absDx > absDy) actionName = finalDx > 0 ? "right" : "left";
+else actionName = finalDy > 0 ? "down" : "up";
                             } else {
                                 actionName = "diag";
                             }
