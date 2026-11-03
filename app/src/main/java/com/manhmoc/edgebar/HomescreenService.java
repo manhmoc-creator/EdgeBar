@@ -924,7 +924,6 @@ if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                 lastSyncMs = nowSync;
 
                 isKbd = i.getBooleanExtra("isKbd", false);
-                isBl = i.getBooleanExtra("isBl", false);
                 lastKbdHeight = i.getIntExtra("kbd_height", 0);
                 String incomingPkg = i.getStringExtra("foreground_pkg");
                 if (incomingPkg != null && !incomingPkg.isEmpty()) {
@@ -1069,8 +1068,11 @@ if (Intent.ACTION_SCREEN_OFF.equals(action)) {
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         isRunning = true;
-        sendSyncState();
-        return START_STICKY;
+sendSyncState();
+// UX: lúc mới chuyển, EdgeBarService chưa tháo xong nên isAccEnabled() vẫn true; vẽ lại sau khi nó chết hẳn
+debounceHandler.postDelayed(this::updateVisibility, 350);
+debounceHandler.postDelayed(this::updateVisibility, 1200);
+return START_STICKY;
     }
 private boolean isAccEnabled() {
     if (EdgeBarService.isConnected) return true; // fast path: zero IPC
@@ -1303,7 +1305,7 @@ private void updateGeoLive() {
 
         boolean isUnlocked = !km.isKeyguardLocked();
         boolean avoidKbd = prefs.getBoolean("avoid_kbd", true);
-        boolean hideNormal = isBl;
+        boolean hideNormal = false; // UX: Homeb chạy không Trợ năng chính là để dùng trong app Blacklist, không được ẩn theo isBl
         boolean pushForKbd = avoidKbd && lastKbdHeight > 0;
 
         // DUAL-SOUL: Chỉ 1 trong 2 động cơ được phép vẽ tại 1 thời điểm

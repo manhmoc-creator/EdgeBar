@@ -54,6 +54,13 @@ private android.view.View[] accHomeBars = new android.view.View[12];
 private android.view.View[] accHomeCorners = new android.view.View[4];
 private android.content.BroadcastReceiver accHomeReceiver;
 public static volatile boolean isConnected = false;
+private volatile boolean handoffToHomeb = false;
+private String blCsvRaw = null, blCsvWrapped = ",";
+private boolean isBlacklistedPkg(String p) {
+    String raw = prefs.getString("blacklist", "");
+    if (!raw.equals(blCsvRaw)) { blCsvRaw = raw; blCsvWrapped = "," + raw + ","; }
+    return blCsvWrapped.length() > 2 && blCsvWrapped.contains("," + p + ",");
+}
 private long lastHomaccHealMs = 0;
 private volatile long forceUnlockedUntilMs = 0; // [MỚI] chống flicker Lock lúc vừa mở khoá
 private boolean lockLayerShown = false; // true nếu đang có Bar/Corner Lock VISIBLE (để hạ nhanh khi Home hiện)
@@ -1301,6 +1308,7 @@ private boolean needBouncerTracking() {
         super.onServiceConnected();
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         isConnected = true;
+        handoffToHomeb = false;
         km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
                 prefs = getSharedPreferences("EdgeBarPrefs", MODE_PRIVATE);
         long uptimeMs = android.os.SystemClock.elapsedRealtime();
@@ -1418,6 +1426,7 @@ public void onInterrupt() {
 }
 @Override public void onAccessibilityEvent(AccessibilityEvent event) {
 int eventType = event.getEventType();
+if (handoffToHomeb) return; // UX: đã giao cho Homeb, Trợ năng chỉ còn chờ bị hệ thống tháo
 if (recentsBlur != null) recentsBlur.onEvent(event);
 if (eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED || eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) scheduleShadeCheck();   // [P4]
 if ((eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
@@ -1488,6 +1497,13 @@ if (km != null && km.isKeyguardLocked()
         if (hit != null) triggerBlacklistLockRevokeAcc(hit);
     }
 }
+    if (!pName.isEmpty() && !pName.equals(getPackageName()) && isBlacklistedPkg(pName)
+        && prefs.getBoolean("blacklist_auto_homeb_en", false)
+        && !prefs.getBoolean("blacklist_lock_active", false)
+        && !(km != null && km.isKeyguardLocked() && prefs.getBoolean("blacklist_lock_revoke_acc_en", false))) {
+    triggerBlacklistAutoHomeb(); // UX: đặt trước throttle để không bao giờ lỡ nhịp vào app Blacklist
+    return;
+}
     if (nowMs - lastEventMs < EVENT_THROTTLE_MS) {
         if (!evTrailingPending) { evTrailingPending = true; debounceHandler.postDelayed(evTrailingRun, EVENT_THROTTLE_MS); }
         return;
@@ -1503,13 +1519,6 @@ if (accShouldRun) healHomaccIfNeeded(); // tự hồi sinh, sự kiện đã thr
     boolean newIsKbd = newKbdHeight > 0;
 String bl = prefs.getString("blacklist", "");
 boolean newIsBl = !pName.isEmpty() && bl.contains(pName);
-// [MỚI] Blacklist Auto-Homeb: app blacklist vừa mở (false→true)
-if (newIsBl && !lastIsBl_cache && prefs.getBoolean("blacklist_auto_homeb_en", false)
-    && !prefs.getBoolean("blacklist_lock_active", false)
-    && !(km != null && km.isKeyguardLocked() && prefs.getBoolean("blacklist_lock_revoke_acc_en", false))) {
-    triggerBlacklistAutoHomeb();
-}
-
 boolean prevBouncerState = isBouncerVisible;
 if (km != null && needBouncerTracking() && km.isKeyguardLocked()) {
     checkBouncerVisible(pName);
@@ -1525,10 +1534,9 @@ boolean stateChanged = newIsKbd != lastIsKbd_cache
 isKbd = newIsKbd;
 isBl = newIsBl;
 cachedKbdHeight = newKbdHeight;
-if (HomescreenService.isRunning) {
+if (HomescreenService.isRunning && !handoffToHomeb) {
     stopService(new Intent(this, HomescreenService.class));
 }
-
 if (!stateChanged) return;
     lastEventPkg = pName;
     if (noticEngine != null) noticEngine.setForegroundPkg(pName);
@@ -1810,17 +1818,17 @@ if (!BlacklistLockWatchdogService.begin(this, pkg, false)) return false;
     }, 400);
     return true;
 }
-
 private void triggerBlacklistAutoHomeb() {
+    if (handoffToHomeb) return;
     try {
         String mySvc = getPackageName() + "/" + EdgeBarService.class.getName();
         String cur = android.provider.Settings.Secure.getString(
             getContentResolver(), android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         if (cur == null || !cur.contains(mySvc)) return;
-
+        handoffToHomeb = true;
         prefs.edit().putBoolean("acc_off_by_blacklist_auto", true).apply();
-        HomeEngineManager.turnOnHomeb(this); // đã tự tắt Trợ năng bên trong — KHÔNG ghi lại lần 2
-    } catch (Exception ignored) {}
+        HomeEngineManager.turnOnHomeb(getApplicationContext()); // UX: dùng app context vì service này sắp bị tháo
+    } catch (Exception ignored) { handoffToHomeb = false; }
 }
     private void showScreenRecordOptionsThenCapture() {
         LinearLayout box = new LinearLayout(this);
